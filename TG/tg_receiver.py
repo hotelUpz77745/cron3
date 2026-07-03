@@ -1009,8 +1009,15 @@ class TelegramReceiver:
             is_act = fsm_state.grid.get(str(lvl), {}).get("is_active", False) if fsm_state else False
             warn = "\n\n⚠️ <i>Внимание: Этот уровень уже отработал! Сброс цены не произойдет. Новые настройки применятся только для следующих циклов позиции.</i>" if is_act else ""
             
+            runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side, {})
+            grid_cfg = runtime_cfg.get("grid", {}).get(str(lvl), {})
+            cur_vol = grid_cfg.get("volume", 0)
+            cur_ind = grid_cfg.get("indent", 0)
+            
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
-            msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
+            msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\n"
+            msg += f"Текущие значения:\n🔹 Объем: <b>{cur_vol}</b>\n🔹 Индент: <b>{cur_ind}</b>\n\n"
+            msg += f"Введите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_avg_params)
 
@@ -1109,8 +1116,15 @@ class TelegramReceiver:
             is_act = fsm_state.tp_map.get(str(lvl), {}).get("is_active", False) if fsm_state else False
             warn = "\n\n⚠️ <i>Внимание: Этот тейк-профит уже отработал! Новые настройки применятся только для следующих циклов.</i>" if is_act else ""
             
+            runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side, {})
+            tp_cfg = runtime_cfg.get("tp_map", {}).get(str(lvl), {})
+            cur_ind = tp_cfg.get("indent", 0)
+            cur_fb = tp_cfg.get("fallback_indent", 0)
+            
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
-            msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
+            msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\n"
+            msg += f"Текущие значения:\n🔹 Indent: <b>{cur_ind}</b>\n🔹 Fallback: <b>{cur_fb}</b>\n\n"
+            msg += f"Введите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_tp_params)
 

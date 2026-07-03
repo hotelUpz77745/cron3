@@ -1,15 +1,15 @@
 {
     "start_balance_usdt": 84.96,
-    "cur_balance_usdt": 84.1772,
+    "cur_balance_usdt": 84.1465,
     "total_trades": 148,
     "winning_trades": 144,
     "winrate_pct": 97.3,
     "realized_pnl_usdt": 11.5948,
-    "net_profit_usdt": -0.7828,
-    "unrealized_pnl_usdt": -10.78,
+    "net_profit_usdt": -0.8135,
+    "unrealized_pnl_usdt": -10.8107,
     "per_coin": {
         "HYPERUSDT": {
-            "current_drawdown": -0.5138,
+            "current_drawdown": -0.5054,
             "total_trades": 11,
             "winning_trades": 11,
             "winrate_pct": 100.0,
@@ -19,7 +19,7 @@
             "realized_pnl_net_usdt": 0.8326,
             "max_drawdown": -1.4014,
             "min_drawdown": -0.2396,
-            "net_profit_usdt": 0.3188,
+            "net_profit_usdt": 0.3272,
             "max_net_profit": 0.3663,
             "min_net_profit": -0.7311,
             "avg_daily_profit": 0.8326,
@@ -29,7 +29,7 @@
             "MDME": 0.0257
         },
         "DASHUSDT": {
-            "current_drawdown": -2.3781,
+            "current_drawdown": -2.4076,
             "total_trades": 20,
             "winning_trades": 20,
             "winrate_pct": 100.0,
@@ -39,7 +39,7 @@
             "realized_pnl_net_usdt": 1.281,
             "max_drawdown": -3.1055,
             "min_drawdown": -0.3421,
-            "net_profit_usdt": -1.0971,
+            "net_profit_usdt": -1.1266,
             "max_net_profit": 0.3213,
             "min_net_profit": -1.8884,
             "avg_daily_profit": 1.281,
@@ -49,7 +49,7 @@
             "MDME": 0.0556
         },
         "SOLUSDT": {
-            "current_drawdown": -2.9373,
+            "current_drawdown": -2.9271,
             "total_trades": 24,
             "winning_trades": 24,
             "winrate_pct": 100.0,
@@ -59,7 +59,7 @@
             "realized_pnl_net_usdt": 2.1575,
             "max_drawdown": -3.6368,
             "min_drawdown": -0.6788,
-            "net_profit_usdt": -0.7798,
+            "net_profit_usdt": -0.7696,
             "max_net_profit": 0.3373,
             "min_net_profit": -1.5226,
             "avg_daily_profit": 2.1575,
@@ -89,7 +89,7 @@
             "MDME": 0.0
         },
         "XPLUSDT": {
-            "current_drawdown": -2.4043,
+            "current_drawdown": -2.4367,
             "total_trades": 44,
             "winning_trades": 44,
             "winrate_pct": 100.0,
@@ -99,7 +99,7 @@
             "realized_pnl_net_usdt": 4.1472,
             "max_drawdown": -3.5856,
             "min_drawdown": -0.5188,
-            "net_profit_usdt": 1.7429,
+            "net_profit_usdt": 1.7105,
             "max_net_profit": 3.0653,
             "min_net_profit": -1.1318,
             "avg_daily_profit": 4.1472,
@@ -109,7 +109,7 @@
             "MDME": 0.0348
         },
         "STABLEUSDT": {
-            "current_drawdown": -2.5466,
+            "current_drawdown": -2.5339,
             "total_trades": 30,
             "winning_trades": 30,
             "winrate_pct": 100.0,
@@ -119,7 +119,7 @@
             "realized_pnl_net_usdt": 1.9296,
             "max_drawdown": -4.4959,
             "min_drawdown": -2.4582,
-            "net_profit_usdt": -0.617,
+            "net_profit_usdt": -0.6043,
             "max_net_profit": -0.5264,
             "min_net_profit": -2.5859,
             "avg_daily_profit": 1.9296,
@@ -130,13 +130,13 @@
         }
     },
     "realized_pnl_net_usdt": 9.9972,
-    "roi_pct": -0.92,
+    "roi_pct": -0.96,
     "load_ratio": 0.93,
     "_current_trough_usdt": 82.4332,
     "max_drawdown_usdt": -4.8811,
     "performance_usdt": 0.9764,
     "recovery_factor": 2.38,
-    "last_updated_ts": 1783066520817,
+    "last_updated_ts": 1783066552288,
     "_help": {
         "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
         "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
