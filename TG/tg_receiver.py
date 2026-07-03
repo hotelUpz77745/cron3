@@ -969,7 +969,9 @@ class TelegramReceiver:
             buttons = []
             row = []
             for lvl in levels:
-                row.append(InlineKeyboardButton(text=f"Уровень {lvl}", callback_data=f"ed_lvl_avg_{symbol}_{side}_{lvl}"))
+                is_act = grid.get(str(lvl), {}).get("is_active", False)
+                btn_text = f"Уровень {lvl} {'(✅)' if is_act else ''}"
+                row.append(InlineKeyboardButton(text=btn_text, callback_data=f"ed_lvl_avg_{symbol}_{side}_{lvl}"))
                 if len(row) == 2:
                     buttons.append(row)
                     row = []
@@ -987,8 +989,12 @@ class TelegramReceiver:
             side = data_parts[4]
             lvl = data_parts[5]
             
+            fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+            is_act = fsm_state.grid.get(str(lvl), {}).get("is_active", False) if fsm_state else False
+            warn = "\n\n⚠️ <i>Внимание: Этот уровень уже отработал! Сброс цены не произойдет. Новые настройки применятся только для следующих циклов позиции.</i>" if is_act else ""
+            
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
-            msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.\nВведите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
+            msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
             await state.set_state(TGStates.waiting_for_avg_params)
 
@@ -1063,7 +1069,9 @@ class TelegramReceiver:
             buttons = []
             row = []
             for lvl in levels:
-                row.append(InlineKeyboardButton(text=f"Уровень {lvl}", callback_data=f"ed_lvl_tp_{symbol}_{side}_{lvl}"))
+                is_act = tp_map.get(str(lvl), {}).get("is_active", False)
+                btn_text = f"Уровень {lvl} {'(✅)' if is_act else ''}"
+                row.append(InlineKeyboardButton(text=btn_text, callback_data=f"ed_lvl_tp_{symbol}_{side}_{lvl}"))
                 if len(row) == 2:
                     buttons.append(row)
                     row = []
@@ -1081,8 +1089,12 @@ class TelegramReceiver:
             side = data_parts[4]
             lvl = data_parts[5]
             
+            fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+            is_act = fsm_state.tp_map.get(str(lvl), {}).get("is_active", False) if fsm_state else False
+            warn = "\n\n⚠️ <i>Внимание: Этот тейк-профит уже отработал! Новые настройки применятся только для следующих циклов.</i>" if is_act else ""
+            
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
-            msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.\nВведите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
+            msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
             await state.set_state(TGStates.waiting_for_tp_params)
 
