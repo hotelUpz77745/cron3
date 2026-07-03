@@ -891,16 +891,32 @@ class TelegramReceiver:
                 sz = side_data.get("invest_size", 0)
                 lev = side_data.get("leverage", 0)
                 
-                # Fetch level 0 for display
-                grid0 = side_data.get("grid", {}).get("0", {})
-                tp0 = side_data.get("tp_map", {}).get("0", {})
+                # Fetch all grid levels for display
+                grid_cfg = side_data.get("grid", {})
+                grid_lines = ["📊 <b>Grid (Avg):</b>"]
+                for k in sorted(grid_cfg.keys(), key=lambda x: int(x)):
+                    lvl_data = grid_cfg[k]
+                    vol = lvl_data.get('volume', 0)
+                    ind = lvl_data.get('indent', 0)
+                    si = lvl_data.get('super_indent')
+                    si_text = f" (Super: {si})" if si is not None else ""
+                    grid_lines.append(f"  • Lvl {k}: Vol <b>{vol}</b> | Indent <b>{ind}</b>{si_text}")
                 
+                # Fetch all TP levels for display
+                tp_cfg = side_data.get("tp_map", {})
+                tp_lines = ["🎯 <b>Take Profits (TP):</b>"]
+                for k in sorted(tp_cfg.keys(), key=lambda x: int(x)):
+                    lvl_data = tp_cfg[k]
+                    ind = lvl_data.get('indent', 0)
+                    fb = lvl_data.get('fallback_indent', 0)
+                    tp_lines.append(f"  • Lvl {k}: Indent <b>{ind}</b> | Fallback <b>{fb}</b>")
+
                 msg_text = (
                     f"⚙️ <b>{symbol} - {side}</b>\n"
                     f"Status: {'✅ On' if en else '❌ Off'}\n\n"
-                    f"💰 Invest Size: <b>{sz}</b> USDT (Lev: {lev}x)\n"
-                    f"📊 Avg (Level 0): Vol <b>{grid0.get('volume', 0)}</b> | Indent <b>{grid0.get('indent', 0)}</b>\n"
-                    f"🎯 TP (Level 0): Indent <b>{tp0.get('indent', 0)}</b> | Fallback <b>{tp0.get('fallback_indent', 0)}</b>\n"
+                    f"💰 Invest Size: <b>{sz}</b> USDT (Lev: {lev}x)\n\n"
+                    + "\n".join(grid_lines) + "\n\n"
+                    + "\n".join(tp_lines)
                 )
                 
                 toggle_text = "⏸ Отключить (ON)" if en else "▶️ Включить (OFF)"
