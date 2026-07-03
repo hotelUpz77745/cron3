@@ -135,17 +135,21 @@ class AnalyticsManager:
                     
             cdata["max_position_size"] = round(max(cdata.get("max_position_size", 0.0), current_margin), 4)
             
-            cumulative_drme = cdata.get("cumulative_drme", 0.0)
+            # 1. Establish the "Old Good Formula" as the baseline
+            safe_max = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
+            global_drme = cdata.get("avg_daily_profit", 0.0) / safe_max
+            global_mdme = abs(cdata.get("max_drawdown", 0.0)) / safe_max
             
-            # DRME1 / MDME1 (Incremental On-the-Fly Method)
-            cdata["DRME1"] = round(cumulative_drme / days_active, 4)
-            cdata["MDME1"] = cdata.get("MDME", 0.0) # From _update_drawdowns
+            if "baseline" not in cdata:
+                cdata["baseline"] = {
+                    "drme": round(global_drme, 4),
+                    "mdme": round(global_mdme, 4),
+                    "days": round(days_active, 4)
+                }
             
-            # Legacy fields preservation just in case
-            cdata["DRME"] = cdata["DRME1"]
-            cdata["MDME"] = cdata["MDME1"]
+            baseline = cdata["baseline"]
             
-            # DRME2 / MDME2 (Epoch Window Method)
+            # Variant A: DRME1 / MDME1 (Epoch Window Method)
             if "epoch_state" in cdata:
                 est = cdata["epoch_state"]
                 current_profit = cdata.get("realized_pnl_usdt", 0.0) - est.get("pnl_at_start", 0.0)
@@ -156,7 +160,6 @@ class AnalyticsManager:
                 cur_drme = 0.0
                 cur_mdme = 0.0
                 
-                # If current epoch is mature (>24h), include it in the average
                 if current_duration >= 1.0:
                     safe_sz = est.get("size", 1.0) if est.get("size", 0.0) > 0 else 1.0
                     cur_drme = (current_profit / current_duration) / safe_sz
@@ -164,14 +167,30 @@ class AnalyticsManager:
                     active_count += 1
                 
                 if active_count > 0:
-                    cdata["DRME2"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
-                    cdata["MDME2"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
+                    cdata["DRME1"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
+                    cdata["MDME1"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
                 else:
-                    cdata["DRME2"] = cdata["DRME1"]
-                    cdata["MDME2"] = cdata["MDME1"]
+                    cdata["DRME1"] = round(global_drme, 4)
+                    cdata["MDME1"] = round(global_mdme, 4)
             else:
-                cdata["DRME2"] = cdata["DRME1"]
-                cdata["MDME2"] = cdata["MDME1"]
+                cdata["DRME1"] = round(global_drme, 4)
+                cdata["MDME1"] = round(global_mdme, 4)
+                
+            # Variant B: DRME2 / MDME2 (Incremental On-the-Fly Method)
+            inc_trades = cdata.get("incremental_trades", 0)
+            if inc_trades > 0 and days_active > 0:
+                cumulative_drme = cdata.get("cumulative_drme", 0.0)
+                # DRME2 is the daily average of the sum of the historical baseline sum + new incremental sum
+                total_sum = (baseline["drme"] * baseline["days"]) + cumulative_drme
+                cdata["DRME2"] = round(total_sum / days_active, 4)
+                cdata["MDME2"] = cdata.get("MDME", 0.0) # MDME tracks incrementally live
+            else:
+                cdata["DRME2"] = round(global_drme, 4)
+                cdata["MDME2"] = round(global_mdme, 4)
+                
+            # Legacy fields preservation just in case
+            cdata["DRME"] = cdata["DRME1"]
+            cdata["MDME"] = cdata["MDME1"]
 
     def _write_data(self, data: dict):
         try:
@@ -375,7 +394,7 @@ class AnalyticsManager:
                 global_pending_delta = 0.0
                 trade_id_counter = 1
                 
-                # Pre-fetch current margins for fallback
+                # Pre-fetch current margins for completely new trades
                 current_margins = {}
                 for sym in tracked_symbols:
                     rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
@@ -392,6 +411,28 @@ class AnalyticsManager:
                             pass
                     current_margins[sym] = vol
                     by_symbol[sym]["cumulative_drme"] = 0.0
+                    by_symbol[sym]["incremental_trades"] = 0
+                
+                old_volumes = {}
+                legacy_trades = set()
+                try:
+                    if self.txt_file.exists():
+                        with open(self.txt_file, "r", encoding="utf-8") as f:
+                            reader = csv.reader(f, delimiter=";")
+                            header = next(reader, None)
+                            has_vol = header and len(header) >= 8 and "Volume" in header[7]
+                            for row in reader:
+                                if len(row) >= 6:
+                                    r_sym = row[1]
+                                    r_ts = row[3]
+                                    r_pnl = row[5]
+                                    key = f"{r_sym}_{r_ts}_{r_pnl}"
+                                    if has_vol and len(row) >= 8:
+                                        old_volumes[key] = float(row[7])
+                                    else:
+                                        legacy_trades.add(key)
+                except Exception:
+                    pass
                 
                 # Reconstruct Ledger sequentially
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
@@ -418,10 +459,17 @@ class AnalyticsManager:
                             
                         current_balance += global_pending_delta
                         
-                        trade_vol = old_volumes.get(f"{sym}_{round(global_pending_delta, 4)}", current_margins.get(sym, 1.0))
-                        if trade_vol <= 0: trade_vol = 1.0
+                        trade_key = f"{sym}_{dt_str}_{round(global_pending_delta, 4)}"
+                        if trade_key in old_volumes:
+                            trade_vol = old_volumes[trade_key]
+                        elif trade_key in legacy_trades:
+                            trade_vol = 0.0 # Legacy trade, do not hallucinate volume
+                        else:
+                            trade_vol = current_margins.get(sym, 1.0) # Completely new trade
                         
-                        by_symbol[sym]["cumulative_drme"] += (global_pending_delta / trade_vol)
+                        if trade_vol > 0:
+                            by_symbol[sym]["cumulative_drme"] += (global_pending_delta / trade_vol)
+                            by_symbol[sym]["incremental_trades"] += 1
                         
                         ledger_rows.append([
                             trade_id_counter, 
