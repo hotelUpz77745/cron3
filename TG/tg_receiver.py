@@ -531,7 +531,10 @@ class TelegramReceiver:
                 lines.append(f"  Total Funding: {fund} USDT")
                 lines.append(f"  Unrealized PnL: {data.get('unrealized_pnl_usdt', 0)} USDT")
                 lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0)} USDT")
+                lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0)} USDT")
                 lines.append(f"  ROI: {data.get('roi_pct', 0)}%")
+                lines.append(f"  Load Ratio: {data.get('load_ratio', 0)}")
+                lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0)}")
                 lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0)}%)\n")
                 
                 if "per_coin" in data:
