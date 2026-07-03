@@ -104,7 +104,7 @@ class TelegramReceiver:
                 KeyboardButton(text="⚙️ Set Coins")
             ],
             [
-                KeyboardButton(text="🔙 Cancel")
+                KeyboardButton(text="🔙 Back")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -112,7 +112,7 @@ class TelegramReceiver:
     def _get_cancel_keyboard(self):
         keyboard = [
             [
-                KeyboardButton(text="🔙 Cancel")
+                KeyboardButton(text="🔙 Back")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -186,7 +186,7 @@ class TelegramReceiver:
             
             await message.answer("<b>Подтвердите настройки запуска:</b>", reply_markup=self._get_confirm_start_keyboard(), parse_mode="HTML")
 
-        @self.dp.message(F.text == "🔙 Cancel")
+        @self.dp.message(F.text == "🔙 Back")
         async def on_cancel(message: Message, state: FSMContext):
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
@@ -279,12 +279,12 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🗑️ Сбросить аналитику")
         async def on_reset_analytics(message: Message, state: FSMContext):
             await state.clear()
-            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Cancel для отмены.", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
+            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
             await state.set_state(TGStates.waiting_for_reset_confirm)
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
         async def process_reset_analytics_confirm(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Сброс аналитики отменен.", reply_markup=self._get_main_keyboard())
                 return
@@ -304,7 +304,7 @@ class TelegramReceiver:
                 else:
                     await message.answer("⚠️ Файл аналитики не найден.", reply_markup=self._get_main_keyboard())
             else:
-                await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Cancel.", parse_mode="HTML")
+                await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
         @self.dp.message(F.text == "💰 Задать нач. баланс")
         async def on_set_initial_balance(message: Message, state: FSMContext):
             await state.clear()
@@ -313,7 +313,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
         async def process_initial_balance(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Действие отменено.", reply_markup=self._get_main_keyboard())
                 return
@@ -323,7 +323,7 @@ class TelegramReceiver:
                 if new_balance < 0:
                     raise ValueError("Баланс не может быть отрицательным.")
             except ValueError:
-                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Cancel:")
+                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Back:")
                 return
                 
             import json
@@ -758,7 +758,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_add_symbol)
         async def process_add_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
             symbol = message.text.strip().upper()
@@ -797,7 +797,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_del_symbol)
         async def process_del_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
             symbol = message.text.strip().upper()
@@ -836,7 +836,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_edit_symbol)
         async def process_edit_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
             symbol = message.text.strip().upper()
@@ -947,7 +947,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_invest_size)
         async def handle_invest_size(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
                 
@@ -1016,7 +1016,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_avg_params)
         async def handle_avg_params(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
                 
@@ -1116,7 +1116,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_tp_params)
         async def handle_tp_params(message: Message, state: FSMContext):
-            if message.text == "🔙 Cancel":
+            if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
                 
@@ -1175,7 +1175,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_base_json)
         async def process_base_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Cancel":
+            if message.text and message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
             json_str = ""
@@ -1246,7 +1246,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_super_grid_json)
         async def process_super_grid_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Cancel":
+            if message.text and message.text == "🔙 Back":
                 await state.clear()
                 status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
                 await message.answer(f"<b>Control Panel</b>\nCurrent Status: {status}", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
@@ -1363,7 +1363,7 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_scanner_json)
         async def process_scanner_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Cancel":
+            if message.text and message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Отменено.", reply_markup=self._get_main_keyboard())
                 return
