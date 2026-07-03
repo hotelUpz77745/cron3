@@ -135,10 +135,12 @@ class AnalyticsManager:
                     
             cdata["max_position_size"] = round(max(cdata.get("max_position_size", 0.0), current_margin), 4)
             
-            safe_max_pos = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
+            cumulative_drme = cdata.get("cumulative_drme", 0.0)
+            cdata["DRME"] = round(cumulative_drme / days_active, 4)
             
-            cdata["DRME"] = round(avg_daily_profit / safe_max_pos, 4)
-            cdata["MDME"] = round(max_dd / safe_max_pos, 4)
+            # MDME is now updated dynamically in _update_drawdowns
+            if "MDME" not in cdata:
+                cdata["MDME"] = 0.0
 
     def _write_data(self, data: dict):
         try:
@@ -250,6 +252,7 @@ class AnalyticsManager:
                     active_symbols = []
                 
                 ledger_symbols = []
+                old_volumes = {}
                 try:
                     if self.txt_file.exists():
                         import csv
@@ -258,6 +261,11 @@ class AnalyticsManager:
                             for row in reader:
                                 if len(row) > 1 and row[1] != "Symbol":
                                     ledger_symbols.append(row[1])
+                                    if len(row) >= 8:
+                                        try:
+                                            old_volumes[f"{row[1]}_{row[4]}"] = float(row[7])
+                                        except ValueError:
+                                            pass
                 except Exception:
                     pass
                 
@@ -336,6 +344,24 @@ class AnalyticsManager:
                 global_pending_delta = 0.0
                 trade_id_counter = 1
                 
+                # Pre-fetch current margins for fallback
+                current_margins = {}
+                for sym in tracked_symbols:
+                    rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                    vol = 0.0
+                    if rt_path.exists():
+                        try:
+                            rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
+                            for side in ("LONG", "SHORT"):
+                                if side in rt_data and rt_data[side].get("enable"):
+                                    v = float(rt_data[side].get("total_volume", 0.0))
+                                    p = float(rt_data[side].get("avg_entry_price", 0.0))
+                                    vol += abs(v) * p
+                        except Exception:
+                            pass
+                    current_margins[sym] = vol
+                    by_symbol[sym]["cumulative_drme"] = 0.0
+                
                 # Reconstruct Ledger sequentially
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
                     from datetime import datetime
@@ -359,8 +385,13 @@ class AnalyticsManager:
                         if g["pnl"] > 0:
                             by_symbol[sym]["wins"] += 1
                             
-                        # Write row with NET profit
                         current_balance += global_pending_delta
+                        
+                        trade_vol = old_volumes.get(f"{sym}_{round(global_pending_delta, 4)}", current_margins.get(sym, 1.0))
+                        if trade_vol <= 0: trade_vol = 1.0
+                        
+                        by_symbol[sym]["cumulative_drme"] += (global_pending_delta / trade_vol)
+                        
                         ledger_rows.append([
                             trade_id_counter, 
                             sym, 
@@ -368,7 +399,8 @@ class AnalyticsManager:
                             dt_str, 
                             dt_str, 
                             round(global_pending_delta, 4), 
-                            round(current_balance, 4)
+                            round(current_balance, 4),
+                            round(trade_vol, 4)
                         ])
                         trade_id_counter += 1
                         global_pending_delta = 0.0
@@ -381,7 +413,7 @@ class AnalyticsManager:
                 async with self._csv_lock:
                     with open(self.txt_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
-                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance", "Volume (USDT)"])
                         writer.writerows(ledger_rows)
                         
                 # Reconstruct JSON
@@ -419,6 +451,7 @@ class AnalyticsManager:
                         c["commission_usdt"] = c_comm
                         c["funding_usdt"] = c_fund
                         c["realized_pnl_net_usdt"] = round(c_gross + c_comm + c_fund, 4)
+                        c["cumulative_drme"] = stats.get("cumulative_drme", 0.0)
                         
                 # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
                 await self._update_drawdowns(client, data)
@@ -452,6 +485,25 @@ class AnalyticsManager:
                 cdata["current_drawdown"] = round(drawdown, 4)
                 cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
                 cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
+                
+                # Adaptive MDME calculation
+                rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                current_margin = 0.0
+                if rt_path.exists():
+                    try:
+                        rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
+                        for side in ("LONG", "SHORT"):
+                            if side in rt_data and rt_data[side].get("enable"):
+                                v = float(rt_data[side].get("total_volume", 0.0))
+                                p = float(rt_data[side].get("avg_entry_price", 0.0))
+                                current_margin += abs(v) * p
+                    except Exception:
+                        pass
+                
+                safe_margin = current_margin if current_margin > 0 else 1.0
+                current_mdme = abs(drawdown) / safe_margin
+                cdata["MDME"] = round(max(cdata.get("MDME", 0.0), current_mdme), 4)
+                
                 bot_unrealized += drawdown
                     
             # unrealized_pnl_usdt = Сум по current_drawdown
