@@ -109,7 +109,7 @@ class TelegramReceiver:
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-    def _get_cancel_keyboard(self):
+    def _get_back_keyboard(self):
         keyboard = [
             [
                 KeyboardButton(text="🔙 Back")
@@ -279,7 +279,7 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🗑️ Сбросить аналитику")
         async def on_reset_analytics(message: Message, state: FSMContext):
             await state.clear()
-            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
+            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await state.set_state(TGStates.waiting_for_reset_confirm)
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
@@ -308,7 +308,7 @@ class TelegramReceiver:
         @self.dp.message(F.text == "💰 Задать нач. баланс")
         async def on_set_initial_balance(message: Message, state: FSMContext):
             await state.clear()
-            await message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_cancel_keyboard())
+            await message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_initial_balance)
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
@@ -753,7 +753,7 @@ class TelegramReceiver:
         # =========================================================
         @self.dp.message(F.text == "➕ Add")
         async def on_add_btn(message: Message, state: FSMContext):
-            await message.answer("Введите символ монеты для добавления (например: WIFUSDT):", reply_markup=self._get_cancel_keyboard())
+            await message.answer("Введите символ монеты для добавления (например: WIFUSDT):", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_add_symbol)
 
         @self.dp.message(TGStates.waiting_for_add_symbol)
@@ -792,7 +792,7 @@ class TelegramReceiver:
             active_coins = ", ".join(self.bot_core.symbols)
             if not active_coins:
                 active_coins = "Нет активных монет"
-            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для УДАЛЕНИЯ (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для УДАЛЕНИЯ (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_del_symbol)
 
         @self.dp.message(TGStates.waiting_for_del_symbol)
@@ -818,7 +818,7 @@ class TelegramReceiver:
             active_coins = ", ".join(self.bot_core.symbols)
             if not active_coins:
                 active_coins = "Нет активных монет"
-            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для редактирования (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для редактирования (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_edit_symbol)
 
         @self.dp.callback_query(F.data.startswith("edit_back_to_coin_"))
@@ -942,7 +942,7 @@ class TelegramReceiver:
             side = data_parts[4]
             
             await state.update_data(edit_symbol=symbol, edit_side=side)
-            await callback.message.answer(f"Введите новый <b>Invest Size</b> (USDT) для {symbol} {side} (например: 15.5):", parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await callback.message.answer(f"Введите новый <b>Invest Size</b> (USDT) для {symbol} {side} (например: 15.5):", parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_invest_size)
 
         @self.dp.message(TGStates.waiting_for_invest_size)
@@ -1011,7 +1011,7 @@ class TelegramReceiver:
             
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
             msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
-            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_avg_params)
 
         @self.dp.message(TGStates.waiting_for_avg_params)
@@ -1111,7 +1111,7 @@ class TelegramReceiver:
             
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
             msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\nВведите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
-            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_tp_params)
 
         @self.dp.message(TGStates.waiting_for_tp_params)
@@ -1169,7 +1169,7 @@ class TelegramReceiver:
             with open(dump_path, "w", encoding="utf-8") as f:
                 f.write(base_str)
                 
-            await message.answer("<b>Текущий базовый шаблон _base.json:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
+            await message.answer("<b>Текущий базовый шаблон _base.json:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await message.answer_document(FSInputFile(dump_path))
             await state.set_state(TGStates.waiting_for_base_json)
 
@@ -1240,7 +1240,7 @@ class TelegramReceiver:
             with open(dump_path, "w", encoding="utf-8") as f:
                 f.write(super_grid_str)
                 
-            await message.answer("<b>Текущие настройки Super Grid (Volatility):</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
+            await message.answer("<b>Текущие настройки Super Grid (Volatility):</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await message.answer_document(FSInputFile(dump_path))
             await state.set_state(TGStates.waiting_for_super_grid_json)
 
@@ -1357,7 +1357,7 @@ class TelegramReceiver:
             with open(dump_path, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, indent=4)
                 
-            await callback.message.answer("<b>Текущие настройки сканера:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
+            await callback.message.answer("<b>Текущие настройки сканера:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await callback.message.answer_document(FSInputFile(dump_path))
             await state.set_state(TGStates.waiting_for_scanner_json)
 
