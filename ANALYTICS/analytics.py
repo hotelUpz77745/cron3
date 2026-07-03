@@ -135,10 +135,11 @@ class AnalyticsManager:
                     
             cdata["max_position_size"] = round(max(cdata.get("max_position_size", 0.0), current_margin), 4)
             
-            # DRME1 / MDME1 (Old simple formula using global size)
-            safe_max_size = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
-            cdata["DRME1"] = round(cdata.get("avg_daily_profit", 0.0) / safe_max_size, 4)
-            cdata["MDME1"] = cdata.get("MDME", 0.0) # Set from _update_drawdowns
+            cumulative_drme = cdata.get("cumulative_drme", 0.0)
+            
+            # DRME1 / MDME1 (Incremental On-the-Fly Method)
+            cdata["DRME1"] = round(cumulative_drme / days_active, 4)
+            cdata["MDME1"] = cdata.get("MDME", 0.0) # From _update_drawdowns
             
             # Legacy fields preservation just in case
             cdata["DRME"] = cdata["DRME1"]
@@ -369,10 +370,28 @@ class AnalyticsManager:
                     elif inc_type == "FUNDING_FEE":
                         grouped[key]["fund"] += val
 
-                ledger_rows = [["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"]]
+                ledger_rows = []
                 current_balance = start_balance
                 global_pending_delta = 0.0
                 trade_id_counter = 1
+                
+                # Pre-fetch current margins for fallback
+                current_margins = {}
+                for sym in tracked_symbols:
+                    rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                    vol = 0.0
+                    if rt_path.exists():
+                        try:
+                            rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
+                            for side in ("LONG", "SHORT"):
+                                if side in rt_data and rt_data[side].get("enable"):
+                                    v = float(rt_data[side].get("total_volume", 0.0))
+                                    p = float(rt_data[side].get("avg_entry_price", 0.0))
+                                    vol += abs(v) * p
+                        except Exception:
+                            pass
+                    current_margins[sym] = vol
+                    by_symbol[sym]["cumulative_drme"] = 0.0
                 
                 # Reconstruct Ledger sequentially
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
@@ -399,6 +418,11 @@ class AnalyticsManager:
                             
                         current_balance += global_pending_delta
                         
+                        trade_vol = old_volumes.get(f"{sym}_{round(global_pending_delta, 4)}", current_margins.get(sym, 1.0))
+                        if trade_vol <= 0: trade_vol = 1.0
+                        
+                        by_symbol[sym]["cumulative_drme"] += (global_pending_delta / trade_vol)
+                        
                         ledger_rows.append([
                             trade_id_counter, 
                             sym, 
@@ -406,7 +430,8 @@ class AnalyticsManager:
                             dt_str, 
                             dt_str, 
                             round(global_pending_delta, 4), 
-                            round(current_balance, 4)
+                            round(current_balance, 4),
+                            round(trade_vol, 4)
                         ])
                         trade_id_counter += 1
                         global_pending_delta = 0.0
@@ -419,7 +444,7 @@ class AnalyticsManager:
                 async with self._csv_lock:
                     with open(self.txt_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
-                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance", "Volume (USDT)"])
                         writer.writerows(ledger_rows)
                         
                 # Reconstruct JSON
