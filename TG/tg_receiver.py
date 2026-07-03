@@ -558,10 +558,8 @@ class TelegramReceiver:
                         lines.append(f"  Unrealized PnL: {cdata.get('current_drawdown', 0)} USDT")
                         lines.append(f"  Hist. Drawdown: Max {cdata.get('max_drawdown', 0)} / Min {cdata.get('min_drawdown', 0)}")
                         lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0)} USDT")
-                        lines.append(f"  Avg Daily Return (TWR): +{cdata.get('avg_daily_return_pct', 0)}%")
-                        lines.append(f"  Max Drawdown (TWR): {cdata.get('max_drawdown_pct', 0)}%")
-                        lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
                         lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
+                        lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
                         lines.append(f"  DRME: {cdata.get('DRME', 0)}")
                         lines.append(f"  MDME: {cdata.get('MDME', 0)}\n")
                 
@@ -712,10 +710,8 @@ class TelegramReceiver:
                         msg_coins += f"  • Unrealized PnL: <b>{cdata.get('current_drawdown', 0)}</b> USDT\n"
                         msg_coins += f"  • Hist. Drawdown: Max <b>{cdata.get('max_drawdown', 0)}</b> / Min <b>{cdata.get('min_drawdown', 0)}</b>\n"
                         msg_coins += f"  • Avg Daily Profit (Net): <b>{cdata.get('avg_daily_profit', 0)}</b> USDT\n"
-                        msg_coins += f"  • Avg Daily Return (TWR): <b>+{cdata.get('avg_daily_return_pct', 0)}%</b>\n"
-                        msg_coins += f"  • Max Drawdown (TWR): <b>{cdata.get('max_drawdown_pct', 0)}%</b>\n"
-                        msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
                         msg_coins += f"  • Max Position Size: <b>{cdata.get('max_position_size', 0)}</b> USDT\n"
+                        msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
                         msg_coins += f"  • DRME: <b>{cdata.get('DRME', 0)}</b> | MDME: <b>{cdata.get('MDME', 0)}</b>\n\n"
                         await callback.message.answer(msg_coins, parse_mode="HTML")
                 except Exception as e:
