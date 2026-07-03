@@ -413,27 +413,7 @@ class AnalyticsManager:
                     by_symbol[sym]["cumulative_drme"] = 0.0
                     by_symbol[sym]["incremental_trades"] = 0
                 
-                old_volumes = {}
-                legacy_trades = set()
-                try:
-                    if self.txt_file.exists():
-                        with open(self.txt_file, "r", encoding="utf-8") as f:
-                            reader = csv.reader(f, delimiter=";")
-                            header = next(reader, None)
-                            has_vol = header and len(header) >= 8 and "Volume" in header[7]
-                            for row in reader:
-                                if len(row) >= 6:
-                                    r_sym = row[1]
-                                    r_ts = row[3]
-                                    r_pnl = row[5]
-                                    key = f"{r_sym}_{r_ts}_{r_pnl}"
-                                    if has_vol and len(row) >= 8:
-                                        old_volumes[key] = float(row[7])
-                                    else:
-                                        legacy_trades.add(key)
-                except Exception:
-                    pass
-                
+                # 8th column logic removed entirely
                 # Reconstruct Ledger sequentially
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
                     from datetime import datetime
@@ -458,19 +438,6 @@ class AnalyticsManager:
                             by_symbol[sym]["wins"] += 1
                             
                         current_balance += global_pending_delta
-                        
-                        trade_key = f"{sym}_{dt_str}_{round(global_pending_delta, 4)}"
-                        if trade_key in old_volumes:
-                            trade_vol = old_volumes[trade_key]
-                        elif trade_key in legacy_trades:
-                            trade_vol = 0.0 # Legacy trade, do not hallucinate volume
-                        else:
-                            trade_vol = current_margins.get(sym, 1.0) # Completely new trade
-                        
-                        if trade_vol > 0:
-                            by_symbol[sym]["cumulative_drme"] += (global_pending_delta / trade_vol)
-                            by_symbol[sym]["incremental_trades"] += 1
-                        
                         ledger_rows.append([
                             trade_id_counter, 
                             sym, 
@@ -478,8 +445,7 @@ class AnalyticsManager:
                             dt_str, 
                             dt_str, 
                             round(global_pending_delta, 4), 
-                            round(current_balance, 4),
-                            round(trade_vol, 4)
+                            round(current_balance, 4)
                         ])
                         trade_id_counter += 1
                         global_pending_delta = 0.0
@@ -492,7 +458,7 @@ class AnalyticsManager:
                 async with self._csv_lock:
                     with open(self.txt_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
-                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance", "Volume (USDT)"])
+                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
                         writer.writerows(ledger_rows)
                         
                 # Reconstruct JSON
@@ -524,14 +490,20 @@ class AnalyticsManager:
                         c["winrate_pct"] = round((stats["wins"] / stats["trades"] * 100) if stats["trades"] > 0 else 0, 2)
                         
                         c_gross = round(stats["pnl"], 4)
+                        old_pnl = c.get("realized_pnl_usdt", 0.0)
                         c["realized_pnl_usdt"] = c_gross
                         c_comm = round(stats["comm"], 4)
                         c_fund = round(stats["fund"], 4)
                         c["commission_usdt"] = c_comm
                         c["funding_usdt"] = c_fund
                         c["realized_pnl_net_usdt"] = round(c_gross + c_comm + c_fund, 4)
-                        c["cumulative_drme"] = stats.get("cumulative_drme", 0.0)
                         
+                        # Variant B (Incremental) calculated on-the-fly without ledger 8th column
+                        delta_pnl = c_gross - old_pnl
+                        if abs(delta_pnl) > 0.0001:
+                            safe_margin = current_margins.get(sym, 1.0) if current_margins.get(sym, 0.0) > 0 else 1.0
+                            c["cumulative_drme"] = c.get("cumulative_drme", 0.0) + (delta_pnl / safe_margin)
+                            c["incremental_trades"] = c.get("incremental_trades", 0) + 1
                 # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
                 await self._update_drawdowns(client, data)
                 
