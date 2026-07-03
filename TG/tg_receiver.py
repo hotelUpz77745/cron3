@@ -958,8 +958,37 @@ class TelegramReceiver:
             symbol = data_parts[3]
             side = data_parts[4]
             
-            await state.update_data(edit_symbol=symbol, edit_side=side)
-            msg = f"Установка параметров усреднения для <b>{symbol} {side}</b>.\nВведите: <code>Уровень, Объем, Индент</code>\nНапример: <code>0, 15.5, 0</code> или <code>1, 20.0, -5.0</code>:"
+            fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+            if not fsm_state:
+                await callback.message.answer("❌ FSM state не найден.")
+                return
+                
+            grid = fsm_state.grid
+            levels = sorted([int(k) for k in grid.keys()]) if grid else [0]
+            
+            buttons = []
+            row = []
+            for lvl in levels:
+                row.append(InlineKeyboardButton(text=f"Уровень {lvl}", callback_data=f"ed_lvl_avg_{symbol}_{side}_{lvl}"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            buttons.append([InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")])
+            
+            await callback.message.edit_text(f"⚙️ <b>{symbol} {side}</b>\nВыберите уровень для редактирования <b>Set Avg</b>:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("ed_lvl_avg_"))
+        async def process_ed_lvl_avg(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            lvl = data_parts[5]
+            
+            await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
+            msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.\nВведите: <code>Объем, Индент</code>\nНапример: <code>15.5, -1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
             await state.set_state(TGStates.waiting_for_avg_params)
 
@@ -971,15 +1000,15 @@ class TelegramReceiver:
                 
             try:
                 parts = message.text.replace(' ', '').split(',')
-                if len(parts) != 3:
-                    raise ValueError("Нужно ровно 3 значения")
-                lvl = str(int(parts[0]))
-                vol = float(parts[1])
-                ind = float(parts[2])
+                if len(parts) != 2:
+                    raise ValueError("Нужно ровно 2 значения: Объем, Индент")
+                vol = float(parts[0])
+                ind = float(parts[1])
                 
                 data = await state.get_data()
                 symbol = data['edit_symbol']
                 side = data['edit_side']
+                lvl = data['edit_lvl']
                 
                 fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
                 runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side)
@@ -998,16 +1027,23 @@ class TelegramReceiver:
                     runtime_cfg["grid"][lvl]["indent"] = ind
                     
                     if old_ind != ind:
-                        fsm_state.grid[lvl]["price"] = None
-                        runtime_cfg["grid"][lvl]["price"] = None
+                        if not fsm_state.grid[lvl].get("is_active"):
+                            fsm_state.grid[lvl]["price"] = None
+                            runtime_cfg["grid"][lvl]["price"] = None
                         fsm_state.next_avg_price = None
                         
                     if hasattr(self.bot_core, 'fsm_states') and hasattr(self.bot_core, 'runtime_manager'):
                         await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
-                    await message.answer(f"✅ Уровень {lvl} обновлен.", reply_markup=self._get_set_coins_keyboard())
+                        
+                    # Recalculate super_grid if it's running
+                    if hasattr(self.bot_core, 'volatility_manager') and self.bot_core.volatility_manager.is_running:
+                        import asyncio
+                        asyncio.create_task(self.bot_core.volatility_manager.process_all())
+                        
+                    await message.answer(f"✅ Set Avg | Уровень {lvl} обновлен.", reply_markup=self._get_set_coins_keyboard())
                 await state.clear()
             except ValueError as e:
-                await message.answer(f"❌ Ошибка парсинга ({e}). Пример: 0, 15.5, 0")
+                await message.answer(f"❌ Ошибка парсинга ({e}). Пример: 15.5, -1.0")
 
         @self.dp.callback_query(F.data.startswith("edit_act_tp_"))
         async def process_edit_tp(callback: CallbackQuery, state: FSMContext):
@@ -1016,8 +1052,37 @@ class TelegramReceiver:
             symbol = data_parts[3]
             side = data_parts[4]
             
-            await state.update_data(edit_symbol=symbol, edit_side=side)
-            msg = f"Установка тейк-профита для <b>{symbol} {side}</b>.\nВведите: <code>Уровень, Indent, Fallback</code>\nНапример: <code>0, 0.6, 1.0</code>:"
+            fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+            if not fsm_state:
+                await callback.message.answer("❌ FSM state не найден.")
+                return
+                
+            tp_map = fsm_state.tp_map
+            levels = sorted([int(k) for k in tp_map.keys()]) if tp_map else [0]
+            
+            buttons = []
+            row = []
+            for lvl in levels:
+                row.append(InlineKeyboardButton(text=f"Уровень {lvl}", callback_data=f"ed_lvl_tp_{symbol}_{side}_{lvl}"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            buttons.append([InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")])
+            
+            await callback.message.edit_text(f"⚙️ <b>{symbol} {side}</b>\nВыберите уровень для редактирования <b>Set TP</b>:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("ed_lvl_tp_"))
+        async def process_ed_lvl_tp(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            lvl = data_parts[5]
+            
+            await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
+            msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.\nВведите: <code>Indent, Fallback</code>\nНапример: <code>0.6, 1.0</code>:"
             await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
             await state.set_state(TGStates.waiting_for_tp_params)
 
@@ -1029,15 +1094,15 @@ class TelegramReceiver:
                 
             try:
                 parts = message.text.replace(' ', '').split(',')
-                if len(parts) != 3:
-                    raise ValueError("Нужно ровно 3 значения")
-                lvl = str(int(parts[0]))
-                ind = float(parts[1])
-                fb = float(parts[2])
+                if len(parts) != 2:
+                    raise ValueError("Нужно ровно 2 значения: Indent, Fallback")
+                ind = float(parts[0])
+                fb = float(parts[1])
                 
                 data = await state.get_data()
                 symbol = data['edit_symbol']
                 side = data['edit_side']
+                lvl = data['edit_lvl']
                 
                 fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
                 runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side)
