@@ -815,44 +815,53 @@ class TelegramReceiver:
         # =========================================================
         @self.dp.message(F.text == "✏️ Edit")
         async def on_edit_btn(message: Message, state: FSMContext):
-            active_coins = ", ".join(self.bot_core.symbols)
-            if not active_coins:
-                active_coins = "Нет активных монет"
-            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для редактирования (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_back_keyboard())
-            await state.set_state(TGStates.waiting_for_edit_symbol)
+            await state.clear()
+            await _show_edit_coin_list(message)
 
-        @self.dp.callback_query(F.data.startswith("edit_back_to_coin_"))
-        async def process_edit_back_to_coin(callback: CallbackQuery, state: FSMContext):
+        @self.dp.callback_query(F.data == "edit_coin_list")
+        async def process_edit_coin_list(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            symbol = callback.data.replace("edit_back_to_coin_", "")
+            await _show_edit_coin_list(callback.message, edit=True)
+
+        async def _show_edit_coin_list(message: Message, edit=False):
+            active_coins = message.bot.get("bot_core", self.bot_core).symbols if not hasattr(self, 'bot_core') else self.bot_core.symbols
+            if not active_coins:
+                text = "Нет активных монет для редактирования."
+                if edit:
+                    await message.edit_text(text)
+                else:
+                    await message.answer(text)
+                return
+            
+            buttons = []
+            row = []
+            for coin in sorted(active_coins):
+                row.append(InlineKeyboardButton(text=f"🪙 {coin}", callback_data=f"edit_coin_{coin}"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            buttons.append([InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")])
+            
+            text = "Выберите монету для редактирования:"
+            if edit:
+                await message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+            else:
+                await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+
+        @self.dp.callback_query(F.data.startswith("edit_coin_") & ~F.data.startswith("edit_coin_list"))
+        async def process_edit_coin_select(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("edit_coin_", "")
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
                     InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
                 ],
-                [InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")]
+                [InlineKeyboardButton(text="🔙 Back", callback_data="edit_coin_list")]
             ])
             await callback.message.edit_text(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
-
-        @self.dp.message(TGStates.waiting_for_edit_symbol)
-        async def process_edit_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Back":
-                return await on_set_coins(message, state)
-                
-            symbol = message.text.strip().upper()
-            if symbol not in self.bot_core.symbols:
-                await message.answer(f"❌ Монета {symbol} не найдена в активных.")
-                return
-
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
-                    InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
-                ],
-                [InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")]
-            ])
-            await message.answer(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
-            await state.clear()
 
         @self.dp.callback_query(F.data == "edit_side_cancel")
         async def process_edit_side_cancel(callback: CallbackQuery, state: FSMContext):
@@ -900,7 +909,7 @@ class TelegramReceiver:
                     [InlineKeyboardButton(text="💰 Edit Invest Size", callback_data=f"edit_act_size_{symbol}_{side}")],
                     [InlineKeyboardButton(text="📊 Edit Set Avg", callback_data=f"edit_act_avg_{symbol}_{side}")],
                     [InlineKeyboardButton(text="🎯 Edit Set TP", callback_data=f"edit_act_tp_{symbol}_{side}")],
-                    [InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_back_to_coin_{symbol}")]
+                    [InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_coin_{symbol}")]
                 ])
                 
                 try:
