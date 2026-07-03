@@ -490,7 +490,11 @@ class AnalyticsManager:
                         c["winrate_pct"] = round((stats["wins"] / stats["trades"] * 100) if stats["trades"] > 0 else 0, 2)
                         
                         c_gross = round(stats["pnl"], 4)
+                        
+                        # Identify if this is a fresh sync/restoration for this coin
+                        is_new_coin = "realized_pnl_usdt" not in c
                         old_pnl = c.get("realized_pnl_usdt", 0.0)
+                        
                         c["realized_pnl_usdt"] = c_gross
                         c_comm = round(stats["comm"], 4)
                         c_fund = round(stats["fund"], 4)
@@ -499,8 +503,9 @@ class AnalyticsManager:
                         c["realized_pnl_net_usdt"] = round(c_gross + c_comm + c_fund, 4)
                         
                         # Variant B (Incremental) calculated on-the-fly without ledger 8th column
+                        # ONLY apply if this is a real incremental delta, NOT a mass restoration!
                         delta_pnl = c_gross - old_pnl
-                        if abs(delta_pnl) > 0.0001:
+                        if not is_new_coin and abs(delta_pnl) > 0.0001:
                             safe_margin = current_margins.get(sym, 1.0) if current_margins.get(sym, 0.0) > 0 else 1.0
                             c["cumulative_drme"] = c.get("cumulative_drme", 0.0) + (delta_pnl / safe_margin)
                             c["incremental_trades"] = c.get("incremental_trades", 0) + 1
