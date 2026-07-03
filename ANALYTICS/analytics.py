@@ -9,7 +9,7 @@ import logging
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, ANALYTICS_CSV_MAX_ROWS
+from consts import ANALYTICS_DIR, ANALYTICS_CSV_MAX_ROWS, DATA_DIR
 
 logger = logging.getLogger("Analytics")
 
