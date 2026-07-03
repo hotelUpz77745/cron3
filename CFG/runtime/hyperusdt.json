@@ -11,42 +11,42 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 0.08205
+                "price": 0.08191
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": -4.5035,
                 "is_active": false,
-                "price": 0.07795
+                "price": 0.07781
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": -7.2056,
                 "is_active": false,
-                "price": 0.07549
+                "price": 0.07536
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": -11.7091,
                 "is_active": false,
-                "price": 0.07138
+                "price": 0.07126
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": -18.9147,
                 "is_active": false,
-                "price": 0.06482
+                "price": 0.06471
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": -30.6237,
                 "is_active": false,
-                "price": 0.05415
+                "price": 0.05406
             }
         },
         "tp_map": {
@@ -82,12 +82,12 @@
             }
         },
         "total_volume": 158.0,
-        "avg_entry_price": 0.08205,
+        "avg_entry_price": 0.08191,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 0.08205,
-        "open_time": 1783079390867,
-        "next_avg_price": 0.07795,
-        "fallback_price": 0.08287,
+        "initial_entry_price": 0.08191,
+        "open_time": 1783113290310,
+        "next_avg_price": 0.07781,
+        "fallback_price": 0.08273,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,

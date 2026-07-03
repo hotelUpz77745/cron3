@@ -4,23 +4,23 @@ GLOBAL ANALYTICS REPORT
 
 Balances:
   Start: 84.96 USDT
-  Current: 78.7154 USDT
+  Current: 79.0389 USDT
   Peak: 85.9364 USDT
   Min (Bottom): 73.281 USDT
 
 Performance:
-  Net Profit: -6.2446 USDT
-  Realized PnL (Gross): 15.4082 USDT
-  Realized PnL (Net): 13.306 USDT
-  Total Commission: -2.1544 USDT
+  Net Profit: -5.9211 USDT
+  Realized PnL (Gross): 15.5632 USDT
+  Realized PnL (Net): 13.4558 USDT
+  Total Commission: -2.1596 USDT
   Total Funding: 0.0522 USDT
-  Unrealized PnL: -19.5506 USDT
+  Unrealized PnL: -19.3769 USDT
   Max Drawdown: -12.6554 USDT
   Performance (Peak-Start): 0.9764 USDT
-  ROI: -7.35%
-  Load Ratio: 1.27
+  ROI: -6.97%
+  Load Ratio: 1.25
   Recovery Factor: 1.22
-  Trades: 177 (Wins: 173 | 97.74%)
+  Trades: 178 (Wins: 174 | 97.75%)
 
 ==================================================
 PER-COIN METRICS
@@ -28,59 +28,59 @@ PER-COIN METRICS
 
 --- DASHUSDT ---
   Trades: 23 (Wins: 23 | 100.0%)
-  Net Profit: -1.4918 USDT
+  Net Profit: -1.614 USDT
   Realized (Gross): 1.7027 USDT
   Realized (Net): 1.4841 USDT
   Fees: Comm -0.2363 / Fund 0.0177
-  Unrealized PnL: -2.9759 USDT
+  Unrealized PnL: -3.0981 USDT
   Hist. Drawdown: Max -3.9695 / Min -0.3421
   Avg Daily Profit (Net): 1.4841 USDT
   Max Position Size: 73.0842 USDT
   Risk/Reward Ratio: 2.67
-  DRME1: 0.0202 | DRME2: 0.0202
-  MDME1: 0.0543 | MDME2: 0.0543
+  DRME1 (Epochs): 0.0203 | DRME2 (Inc): 0.0203
+  MDME1 (Epochs): 0.0543 | MDME2 (Inc): 0.0543
 
 --- HYPERUSDT ---
   Trades: 12 (Wins: 12 | 100.0%)
-  Net Profit: 0.1417 USDT
+  Net Profit: 0.1348 USDT
   Realized (Gross): 1.0466 USDT
   Realized (Net): 0.8996 USDT
   Fees: Comm -0.1391 / Fund -0.0079
-  Unrealized PnL: -0.7579 USDT
+  Unrealized PnL: -0.7648 USDT
   Hist. Drawdown: Max -1.4014 / Min -0.2396
   Avg Daily Profit (Net): 0.8996 USDT
   Max Position Size: 40.1721 USDT
   Risk/Reward Ratio: 1.56
-  DRME1: 0.0225 | DRME2: 0.0225
-  MDME1: 0.0349 | MDME2: 0.0349
+  DRME1 (Epochs): 0.0224 | DRME2 (Inc): 0.0224
+  MDME1 (Epochs): 0.0349 | MDME2 (Inc): 0.0349
 
 --- SOLUSDT ---
-  Trades: 24 (Wins: 24 | 100.0%)
-  Net Profit: -1.1316 USDT
-  Realized (Gross): 2.4854 USDT
-  Realized (Net): 2.1563 USDT
-  Fees: Comm -0.3326 / Fund 0.0035
-  Unrealized PnL: -3.2879 USDT
-  Hist. Drawdown: Max -3.6368 / Min -0.6788
-  Avg Daily Profit (Net): 2.1563 USDT
+  Trades: 25 (Wins: 25 | 100.0%)
+  Net Profit: -1.6317 USDT
+  Realized (Gross): 2.6404 USDT
+  Realized (Net): 2.3061 USDT
+  Fees: Comm -0.3378 / Fund 0.0035
+  Unrealized PnL: -3.9378 USDT
+  Hist. Drawdown: Max -3.9378 / Min -0.6788
+  Avg Daily Profit (Net): 2.3061 USDT
   Max Position Size: 84.0087 USDT
-  Risk/Reward Ratio: 1.69
-  DRME1: 0.026 | DRME2: 0.026
-  MDME1: 0.0433 | MDME2: 0.0433
+  Risk/Reward Ratio: 1.71
+  DRME1 (Epochs): 0.0275 | DRME2 (Inc): 0.0543
+  MDME1 (Epochs): 0.0469 | MDME2 (Inc): 0.0674
 
 --- STABLEUSDT ---
   Trades: 30 (Wins: 30 | 100.0%)
-  Net Profit: -0.8042 USDT
+  Net Profit: -0.7253 USDT
   Realized (Gross): 2.1808 USDT
   Realized (Net): 1.9263 USDT
   Fees: Comm -0.2973 / Fund 0.0428
-  Unrealized PnL: -2.7305 USDT
+  Unrealized PnL: -2.6516 USDT
   Hist. Drawdown: Max -4.4959 / Min -2.1267
   Avg Daily Profit (Net): 1.9263 USDT
   Max Position Size: 87.3965 USDT
   Risk/Reward Ratio: 2.33
-  DRME1: 0.0218 | DRME2: 0.0218
-  MDME1: 0.0514 | MDME2: 0.0514
+  DRME1 (Epochs): 0.022 | DRME2 (Inc): 0.022
+  MDME1 (Epochs): 0.0514 | MDME2 (Inc): 0.0514
 
 --- VVVUSDT ---
   Trades: 19 (Wins: 15 | 78.95%)
@@ -93,19 +93,19 @@ PER-COIN METRICS
   Avg Daily Profit (Net): -0.3508 USDT
   Max Position Size: 0.0 USDT
   Risk/Reward Ratio: 0.0
-  DRME1: -0.3695 | DRME2: -0.3695
-  MDME1: 0.0 | MDME2: 0.0
+  DRME1 (Epochs): -0.3508 | DRME2 (Inc): -0.3508
+  MDME1 (Epochs): 0.0 | MDME2 (Inc): 0.0
 
 --- XPLUSDT ---
   Trades: 69 (Wins: 69 | 100.0%)
-  Net Profit: -2.6079 USDT
+  Net Profit: -1.7341 USDT
   Realized (Gross): 8.1503 USDT
   Realized (Net): 7.1905 USDT
   Fees: Comm -0.9566 / Fund -0.0032
-  Unrealized PnL: -9.7984 USDT
+  Unrealized PnL: -8.9246 USDT
   Hist. Drawdown: Max -15.7728 / Min -0.5188
   Avg Daily Profit (Net): 7.1905 USDT
   Max Position Size: 169.7716 USDT
   Risk/Reward Ratio: 2.19
-  DRME1: 0.0426 | DRME2: 0.0426
-  MDME1: 0.1116 | MDME2: 0.1116
+  DRME1 (Epochs): 0.0424 | DRME2 (Inc): 0.0424
+  MDME1 (Epochs): 0.0929 | MDME2 (Inc): 0.0929
