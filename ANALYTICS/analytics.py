@@ -81,7 +81,10 @@ class AnalyticsManager:
             "max_net_profit": "[Per-Coin] Historical maximum of the coin's fixed net profit.",
             "min_net_profit": "[Per-Coin] Historical minimum of the coin's fixed net profit.",
             "max_drawdown": "[Per-Coin] Historical maximum floating drawdown for this coin.",
-            "min_drawdown": "[Per-Coin] Historical minimum floating drawdown for this coin."
+            "min_drawdown": "[Per-Coin] Historical minimum floating drawdown for this coin.",
+            "max_position_size": "[Per-Coin] Max historical notional size actually reached (total volume * price).",
+            "DRME": "[Per-Coin] Daily Return on Max Exposure: avg_daily_profit / max_position_size.",
+            "MDME": "[Per-Coin] Max Drawdown on Max Exposure: abs(max_drawdown) / max_position_size."
         }
         
         if "per_coin" not in data:
@@ -121,10 +124,17 @@ class AnalyticsManager:
             else:
                 cdata["risk_reward_ratio"] = 0.0
                 
+            # Absolute metrics
+            max_dd_abs = abs(cdata.get("max_drawdown", 0.0))
+            safe_max_pos = cdata.get("max_position_size", 1.0)
+            if safe_max_pos <= 0: safe_max_pos = 1.0
+            
+            cdata["DRME"] = round(avg_daily_profit / safe_max_pos, 4)
+            cdata["MDME"] = round(max_dd_abs / safe_max_pos, 4)
+            
             # Clean up old deprecated metrics if they exist
-            for old_key in ["reward_risk_surplus_pct", "max_position_size", "DRME", "MDME"]:
-                if old_key in cdata:
-                    del cdata[old_key]
+            if "reward_risk_surplus_pct" in cdata:
+                del cdata["reward_risk_surplus_pct"]
 
     def _write_data(self, data: dict):
         try:
@@ -236,6 +246,7 @@ class AnalyticsManager:
                     active_symbols = []
                 
                 ledger_symbols = []
+                old_volumes = {}
                 try:
                     if self.txt_file.exists():
                         import csv
@@ -243,7 +254,15 @@ class AnalyticsManager:
                             reader = csv.reader(f, delimiter=';')
                             for row in reader:
                                 if len(row) > 1 and row[1] != "Symbol":
-                                    ledger_symbols.append(row[1])
+                                    sym = row[1]
+                                    ledger_symbols.append(sym)
+                                    if len(row) > 7:
+                                        try:
+                                            dt_str = row[4].strip()
+                                            vol = float(row[7])
+                                            old_volumes[(dt_str, sym)] = vol
+                                        except Exception:
+                                            pass
                 except Exception:
                     pass
                 
@@ -275,7 +294,25 @@ class AnalyticsManager:
                 
                 # Reconstruct Ledger and Stats
                 total_pnl, total_comm, total_fund = 0.0, 0.0, 0.0
-                by_symbol = {sym: {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0} for sym in tracked_symbols}
+                by_symbol = {sym: {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0, "cumulative_return_pct": 0.0, "max_position_size": 0.0} for sym in tracked_symbols}
+                
+                # Fetch current runtime margins as fallback for missing volumes
+                from consts import DATA_DIR
+                current_margins = {}
+                for sym in tracked_symbols:
+                    runtime_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                    margin = 0.0
+                    if runtime_path.exists():
+                        try:
+                            rt_data = json.loads(runtime_path.read_text(encoding="utf-8"))
+                            for side in ("LONG", "SHORT"):
+                                if side in rt_data and rt_data[side].get("enable"):
+                                    vol = float(rt_data[side].get("total_volume", 0.0))
+                                    price = float(rt_data[side].get("avg_entry_price", 0.0))
+                                    margin += abs(vol) * price
+                        except Exception:
+                            pass
+                    current_margins[sym] = margin
                 
                 # Sort records chronologically
                 income_records.sort(key=lambda x: x.get("time", 0))
@@ -294,7 +331,8 @@ class AnalyticsManager:
                         continue
                         
                     if sym not in by_symbol:
-                        by_symbol[sym] = {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0, "cumulative_return_pct": 0.0}
+                        by_symbol[sym] = {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0, "cumulative_return_pct": 0.0, "max_position_size": 0.0}
+                        current_margins[sym] = 0.0
                         
                     ts = int(r.get("time", 0))
                     info = r.get("info", "")
@@ -350,6 +388,10 @@ class AnalyticsManager:
                         if g["pnl"] > 0:
                             by_symbol[sym]["wins"] += 1
                             
+                        # Retrieve historical volume if available, else current config margin
+                        vol = old_volumes.get((dt_str, sym), current_margins.get(sym, 0.0))
+                        by_symbol[sym]["max_position_size"] = max(by_symbol[sym]["max_position_size"], vol)
+                        
                         # Write row with NET profit
                         current_balance += global_pending_delta
                         ledger_rows.append([
@@ -359,7 +401,8 @@ class AnalyticsManager:
                             dt_str, 
                             dt_str, 
                             round(global_pending_delta, 4), 
-                            round(current_balance, 4)
+                            round(current_balance, 4),
+                            round(vol, 4)
                         ])
                         trade_id_counter += 1
                         global_pending_delta = 0.0
@@ -372,7 +415,7 @@ class AnalyticsManager:
                 async with self._csv_lock:
                     with open(self.txt_file, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
-                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance", "Volume (USDT)"])
                         writer.writerows(ledger_rows)
                         
                 # Reconstruct JSON
@@ -411,6 +454,7 @@ class AnalyticsManager:
                         c["funding_usdt"] = c_fund
                         c["realized_pnl_net_usdt"] = round(c_gross + c_comm + c_fund, 4)
                         c["cumulative_return_pct"] = round(stats["cumulative_return_pct"], 4)
+                        c["max_position_size"] = round(stats["max_position_size"], 4)
                         
                 # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
                 await self._update_drawdowns(client, data)
