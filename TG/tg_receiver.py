@@ -881,8 +881,9 @@ class TelegramReceiver:
                     f"🎯 TP (Level 0): Indent <b>{tp0.get('indent', 0)}</b> | Fallback <b>{tp0.get('fallback_indent', 0)}</b>\n"
                 )
                 
+                toggle_text = "⏸ Отключить (ON)" if en else "▶️ Включить (OFF)"
                 keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="🔄 Toggle On/Off", callback_data=f"edit_act_toggle_{symbol}_{side}")],
+                    [InlineKeyboardButton(text=toggle_text, callback_data=f"edit_act_toggle_{symbol}_{side}")],
                     [InlineKeyboardButton(text="💰 Edit Invest Size", callback_data=f"edit_act_size_{symbol}_{side}")],
                     [InlineKeyboardButton(text="📊 Edit Set Avg", callback_data=f"edit_act_avg_{symbol}_{side}")],
                     [InlineKeyboardButton(text="🎯 Edit Set TP", callback_data=f"edit_act_tp_{symbol}_{side}")],
@@ -914,6 +915,8 @@ class TelegramReceiver:
             if runtime_cfg and side in runtime_cfg:
                 current = runtime_cfg[side].get("enable", False)
                 runtime_cfg[side]["enable"] = not current
+                msg = f"{side} Включен! ✅" if not current else f"{side} Отключен! ❌"
+                await callback.answer(msg, show_alert=False)
                 await _apply_instant_update(symbol, side, callback)
             else:
                 await callback.answer("Runtime config not found in RAM")

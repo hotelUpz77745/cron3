@@ -1,7 +1,7 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 100,
+        "invest_size": 200.0,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
