@@ -136,11 +136,42 @@ class AnalyticsManager:
             cdata["max_position_size"] = round(max(cdata.get("max_position_size", 0.0), current_margin), 4)
             
             cumulative_drme = cdata.get("cumulative_drme", 0.0)
-            cdata["DRME"] = round(cumulative_drme / days_active, 4)
             
-            # MDME is now updated dynamically in _update_drawdowns
-            if "MDME" not in cdata:
-                cdata["MDME"] = 0.0
+            # DRME1 / MDME1 (Incremental On-the-Fly Method)
+            cdata["DRME1"] = round(cumulative_drme / days_active, 4)
+            cdata["MDME1"] = cdata.get("MDME", 0.0) # From _update_drawdowns
+            
+            # Legacy fields preservation just in case
+            cdata["DRME"] = cdata["DRME1"]
+            cdata["MDME"] = cdata["MDME1"]
+            
+            # DRME2 / MDME2 (Epoch Window Method)
+            if "epoch_state" in cdata:
+                est = cdata["epoch_state"]
+                current_profit = cdata.get("realized_pnl_usdt", 0.0) - est.get("pnl_at_start", 0.0)
+                import time
+                current_duration = (int(time.time() * 1000) - est.get("start_ts", 0)) / 86400000
+                
+                active_count = est.get("closed_count", 0)
+                cur_drme = 0.0
+                cur_mdme = 0.0
+                
+                # If current epoch is mature (>24h), include it in the average
+                if current_duration >= 1.0:
+                    safe_sz = est.get("size", 1.0) if est.get("size", 0.0) > 0 else 1.0
+                    cur_drme = (current_profit / current_duration) / safe_sz
+                    cur_mdme = abs(est.get("max_dd", 0.0)) / safe_sz
+                    active_count += 1
+                
+                if active_count > 0:
+                    cdata["DRME2"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
+                    cdata["MDME2"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
+                else:
+                    cdata["DRME2"] = cdata["DRME1"]
+                    cdata["MDME2"] = cdata["MDME1"]
+            else:
+                cdata["DRME2"] = cdata["DRME1"]
+                cdata["MDME2"] = cdata["MDME1"]
 
     def _write_data(self, data: dict):
         try:
@@ -503,6 +534,44 @@ class AnalyticsManager:
                 safe_margin = current_margin if current_margin > 0 else 1.0
                 current_mdme = abs(drawdown) / safe_margin
                 cdata["MDME"] = round(max(cdata.get("MDME", 0.0), current_mdme), 4)
+                
+                import time
+                now_ms = int(time.time() * 1000)
+                
+                if "epoch_state" not in cdata:
+                    cdata["epoch_state"] = {
+                        "size": current_margin,
+                        "start_ts": now_ms,
+                        "pnl_at_start": cdata.get("realized_pnl_usdt", 0.0),
+                        "max_dd": drawdown,
+                        "closed_drme_sum": cdata.get("DRME1", cdata.get("DRME", 0.0)),
+                        "closed_mdme_sum": cdata.get("MDME1", cdata.get("MDME", 0.0)),
+                        "closed_count": 1 if cdata.get("DRME1", cdata.get("DRME", 0.0)) > 0 else 0
+                    }
+                else:
+                    est = cdata["epoch_state"]
+                    # Update max_dd for current epoch
+                    est["max_dd"] = min(est.get("max_dd", 0.0), drawdown)
+                    
+                    # Detect size change (>10%)
+                    if current_margin > 0 and abs(current_margin - est.get("size", current_margin)) > current_margin * 0.1:
+                        duration_days = (now_ms - est.get("start_ts", now_ms)) / 86400000
+                        if duration_days >= 1.0:
+                            epoch_profit = cdata.get("realized_pnl_usdt", 0.0) - est.get("pnl_at_start", 0.0)
+                            safe_sz = est.get("size", 1.0) if est.get("size", 0.0) > 0 else 1.0
+                            
+                            epoch_drme = (epoch_profit / duration_days) / safe_sz
+                            epoch_mdme = abs(est.get("max_dd", 0.0)) / safe_sz
+                            
+                            est["closed_drme_sum"] = est.get("closed_drme_sum", 0.0) + epoch_drme
+                            est["closed_mdme_sum"] = est.get("closed_mdme_sum", 0.0) + epoch_mdme
+                            est["closed_count"] = est.get("closed_count", 0) + 1
+                            
+                        # Reset epoch
+                        est["size"] = current_margin
+                        est["start_ts"] = now_ms
+                        est["pnl_at_start"] = cdata.get("realized_pnl_usdt", 0.0)
+                        est["max_dd"] = drawdown
                 
                 bot_unrealized += drawdown
                     

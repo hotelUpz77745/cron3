@@ -560,8 +560,8 @@ class TelegramReceiver:
                         lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0)} USDT")
                         lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
                         lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
-                        lines.append(f"  DRME: {cdata.get('DRME', 0)}")
-                        lines.append(f"  MDME: {cdata.get('MDME', 0)}\n")
+                        lines.append(f"  DRME1: {cdata.get('DRME1', cdata.get('DRME', 0))} | DRME2: {cdata.get('DRME2', cdata.get('DRME', 0))}")
+                        lines.append(f"  MDME1: {cdata.get('MDME1', cdata.get('MDME', 0))} | MDME2: {cdata.get('MDME2', cdata.get('MDME', 0))}\n")
                 
                 report_path = ANALYTICS_DIR / "full_analytics_report.txt"
                 report_path.write_text("\n".join(lines), encoding="utf-8")
@@ -712,7 +712,8 @@ class TelegramReceiver:
                         msg_coins += f"  • Avg Daily Profit (Net): <b>{cdata.get('avg_daily_profit', 0)}</b> USDT\n"
                         msg_coins += f"  • Max Position Size: <b>{cdata.get('max_position_size', 0)}</b> USDT\n"
                         msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
-                        msg_coins += f"  • DRME: <b>{cdata.get('DRME', 0)}</b> | MDME: <b>{cdata.get('MDME', 0)}</b>\n\n"
+                        msg_coins += f"  • DRME1: <b>{cdata.get('DRME1', cdata.get('DRME', 0))}</b> | DRME2: <b>{cdata.get('DRME2', cdata.get('DRME', 0))}</b>\n"
+                        msg_coins += f"  • MDME1: <b>{cdata.get('MDME1', cdata.get('MDME', 0))}</b> | MDME2: <b>{cdata.get('MDME2', cdata.get('MDME', 0))}</b>\n\n"
                         await callback.message.answer(msg_coins, parse_mode="HTML")
                 except Exception as e:
                     logger.error(f"Error reading per_coin data for {symbol}: {e}")
