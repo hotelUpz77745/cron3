@@ -1,5 +1,0 @@
-Line 462: msg += f"▪️ Net Profit: <b>{data.get('net_profit_usdt', 0)}</b> USDT\n"
-Line 463: msg += f"▪️ Realized PnL: <b>{data.get('realized_pnl_usdt', 0)}</b> USDT\n"
-Line 464: msg += f"▪️ Total Commission: <b>{data.get('total_commission_usdt', 0)}</b> USDT\n"
-Line 465: msg += f"▪️ Total Funding: <b>{data.get('total_funding_usdt', 0)}</b> USDT\n"
-Line 466: msg += f"▪️ Unrealized PnL: <b>{data.get('unrealized_pnl_usdt', 0)}</b> USDT\n"

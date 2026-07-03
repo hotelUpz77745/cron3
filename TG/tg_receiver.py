@@ -21,7 +21,9 @@ class TGStates(StatesGroup):
     waiting_for_add_symbol = State()
     waiting_for_del_symbol = State()
     waiting_for_edit_symbol = State()
-    waiting_for_edit_json = State()
+    waiting_for_invest_size = State()
+    waiting_for_avg_params = State()
+    waiting_for_tp_params = State()
     waiting_for_base_json = State()
     waiting_for_super_grid_json = State()
     waiting_for_initial_balance = State()
@@ -829,69 +831,235 @@ class TelegramReceiver:
                 await message.answer(f"❌ Монета {symbol} не найдена в активных.")
                 return
 
-            runtime_path = self.template_manager.runtime_dir / f"{symbol.lower()}.json"
-            if runtime_path.exists():
-                import json
-                try:
-                    with open(runtime_path, 'r', encoding='utf-8') as f:
-                        rt_data = json.load(f)
-                    
-                    # We create an editable template from runtime
-                    editable = {"symbol": symbol}
-                    for side in ("LONG", "SHORT"):
-                        if side in rt_data:
-                            editable[side] = rt_data[side]
-                    
-                    rt_str = json.dumps(editable, indent=4)
-                    
-                    dump_path = os.path.join("logs", f"{symbol.lower()}_edit.json")
-                    os.makedirs("logs", exist_ok=True)
-                    with open(dump_path, "w", encoding="utf-8") as f:
-                        f.write(rt_str)
-                        
-                    await message.answer("<b>Текущие настройки монеты:</b>\nОтредактируйте этот файл в любом редакторе и отправьте его обратно мне документом (либо скиньте текст).", reply_markup=self._get_cancel_keyboard(), parse_mode="HTML")
-                    await message.answer_document(FSInputFile(dump_path))
-                        
-                    await state.update_data(symbol=symbol)
-                    await state.set_state(TGStates.waiting_for_edit_json)
-                except Exception as e:
-                    await message.answer(f"❌ Ошибка чтения конфига: {e}", reply_markup=self._get_set_coins_keyboard())
-                    await state.clear()
-            else:
-                await message.answer("❌ Файл конфигурации не найден.", reply_markup=self._get_set_coins_keyboard())
-                await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
+                    InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
+                ],
+                [InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")]
+            ])
+            await message.answer(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
+            await state.clear()
 
-        @self.dp.message(TGStates.waiting_for_edit_json)
-        async def process_edit_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Cancel":
+        @self.dp.callback_query(F.data == "edit_side_cancel")
+        async def process_edit_side_cancel(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await callback.message.delete()
+
+        @self.dp.callback_query(F.data.startswith("edit_side_"))
+        async def process_edit_side(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            if len(data_parts) != 4:
+                return
+            symbol = data_parts[2]
+            side = data_parts[3]
+
+            runtime_path = self.template_manager.runtime_dir / f"{symbol.lower()}.json"
+            if not runtime_path.exists():
+                await callback.message.answer(f"❌ Конфиг {symbol} не найден.")
+                return
+
+            import json
+            try:
+                rt_data = json.loads(runtime_path.read_text(encoding="utf-8"))
+                side_data = rt_data.get(side, {})
+                
+                en = side_data.get("enable", False)
+                sz = side_data.get("invest_size", 0)
+                lev = side_data.get("leverage", 0)
+                
+                # Fetch level 0 for display
+                grid0 = side_data.get("grid", {}).get("0", {})
+                tp0 = side_data.get("tp_map", {}).get("0", {})
+                
+                msg_text = (
+                    f"⚙️ <b>{symbol} - {side}</b>\n"
+                    f"Status: {'✅ On' if en else '❌ Off'}\n\n"
+                    f"💰 Invest Size: <b>{sz}</b> USDT (Lev: {lev}x)\n"
+                    f"📊 Avg (Level 0): Vol <b>{grid0.get('volume', 0)}</b> | Indent <b>{grid0.get('indent', 0)}</b>\n"
+                    f"🎯 TP (Level 0): Indent <b>{tp0.get('indent', 0)}</b> | Fallback <b>{tp0.get('fallback_indent', 0)}</b>\n"
+                )
+                
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="🔄 Toggle On/Off", callback_data=f"edit_act_toggle_{symbol}_{side}")],
+                    [InlineKeyboardButton(text="💰 Edit Invest Size", callback_data=f"edit_act_size_{symbol}_{side}")],
+                    [InlineKeyboardButton(text="📊 Edit Set Avg", callback_data=f"edit_act_avg_{symbol}_{side}")],
+                    [InlineKeyboardButton(text="🎯 Edit Set TP", callback_data=f"edit_act_tp_{symbol}_{side}")],
+                    [InlineKeyboardButton(text="🔙 Back to Side Select", callback_data=f"edit_side_cancel")] # simple close for now
+                ])
+                
+                try:
+                    await callback.message.edit_text(msg_text, reply_markup=keyboard, parse_mode="HTML")
+                except Exception as e:
+                    if "message is not modified" not in str(e).lower():
+                        await callback.message.answer(msg_text, reply_markup=keyboard, parse_mode="HTML")
+            except Exception as e:
+                await callback.message.answer(f"Ошибка чтения: {e}")
+
+        async def _apply_instant_update(symbol: str, side: str, callback: CallbackQuery):
+            # Instant sync of RAM to HDD and UI refresh
+            if hasattr(self.bot_core, 'fsm_states') and hasattr(self.bot_core, 'runtime_manager'):
+                await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
+            # Re-trigger UI refresh
+            await process_edit_side(callback, None)
+
+        @self.dp.callback_query(F.data.startswith("edit_act_toggle_"))
+        async def process_edit_toggle(callback: CallbackQuery, state: FSMContext):
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            
+            runtime_cfg = self.bot_core.runtime_configs.get(symbol)
+            if runtime_cfg and side in runtime_cfg:
+                current = runtime_cfg[side].get("enable", False)
+                runtime_cfg[side]["enable"] = not current
+                await _apply_instant_update(symbol, side, callback)
+            else:
+                await callback.answer("Runtime config not found in RAM")
+
+        @self.dp.callback_query(F.data.startswith("edit_act_size_"))
+        async def process_edit_size(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            
+            await state.update_data(edit_symbol=symbol, edit_side=side)
+            await callback.message.answer(f"Введите новый <b>Invest Size</b> (USDT) для {symbol} {side} (например: 15.5):", parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await state.set_state(TGStates.waiting_for_invest_size)
+
+        @self.dp.message(TGStates.waiting_for_invest_size)
+        async def handle_invest_size(message: Message, state: FSMContext):
+            if message.text == "🔙 Cancel":
+                await state.clear()
                 return await on_set_coins(message, state)
                 
-            json_str = ""
-            if message.document:
-                import io
-                file = await self.bot.get_file(message.document.file_id)
-                out = io.BytesIO()
-                await self.bot.download_file(file.file_path, out)
-                json_str = out.getvalue().decode('utf-8')
-            elif message.text:
-                json_str = message.text.strip()
-            else:
-                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
-                return
-            
-            async with self._lock:
-                success, msg = self.template_manager.apply_tg_template(json_str)
-            
-            if success:
-                # Reload runtime caches for the bot
-                self.bot_core.runtime_manager.load_initial_caches(self.bot_core.symbols)
-                self.bot_core.runtime_configs = self.bot_core.runtime_manager.caches
-                self.bot_core.runtime_manager.populate_fsm_from_cache(self.bot_core.fsm_states)
+            try:
+                val = float(message.text.replace(',', '.'))
+                data = await state.get_data()
+                symbol = data['edit_symbol']
+                side = data['edit_side']
                 
-                await message.answer("✅ Настройки успешно обновлены и применены на лету!", reply_markup=self._get_set_coins_keyboard())
+                runtime_cfg = self.bot_core.runtime_configs.get(symbol)
+                if runtime_cfg and side in runtime_cfg:
+                    runtime_cfg[side]["invest_size"] = val
+                    if hasattr(self.bot_core, 'fsm_states') and hasattr(self.bot_core, 'runtime_manager'):
+                        await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
+                    await message.answer(f"✅ Invest Size обновлен до {val}.", reply_markup=self._get_set_coins_keyboard())
                 await state.clear()
-            else:
-                await message.answer(f"❌ Ошибка: {msg}\nИсправьте JSON и отправьте снова.")
+            except ValueError:
+                await message.answer("❌ Некорректное число.")
+
+        @self.dp.callback_query(F.data.startswith("edit_act_avg_"))
+        async def process_edit_avg(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            
+            await state.update_data(edit_symbol=symbol, edit_side=side)
+            msg = f"Установка параметров усреднения для <b>{symbol} {side}</b>.\nВведите: <code>Уровень, Объем, Индент</code>\nНапример: <code>0, 15.5, 0</code> или <code>1, 20.0, -5.0</code>:"
+            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await state.set_state(TGStates.waiting_for_avg_params)
+
+        @self.dp.message(TGStates.waiting_for_avg_params)
+        async def handle_avg_params(message: Message, state: FSMContext):
+            if message.text == "🔙 Cancel":
+                await state.clear()
+                return await on_set_coins(message, state)
+                
+            try:
+                parts = message.text.replace(' ', '').split(',')
+                if len(parts) != 3:
+                    raise ValueError("Нужно ровно 3 значения")
+                lvl = str(int(parts[0]))
+                vol = float(parts[1])
+                ind = float(parts[2])
+                
+                data = await state.get_data()
+                symbol = data['edit_symbol']
+                side = data['edit_side']
+                
+                fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+                runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side)
+                
+                if fsm_state and runtime_cfg:
+                    if lvl not in fsm_state.grid:
+                        fsm_state.grid[lvl] = {}
+                    if lvl not in runtime_cfg.get("grid", {}):
+                        if "grid" not in runtime_cfg: runtime_cfg["grid"] = {}
+                        runtime_cfg["grid"][lvl] = {}
+                        
+                    old_ind = fsm_state.grid[lvl].get("indent")
+                    fsm_state.grid[lvl]["volume"] = vol
+                    fsm_state.grid[lvl]["indent"] = ind
+                    runtime_cfg["grid"][lvl]["volume"] = vol
+                    runtime_cfg["grid"][lvl]["indent"] = ind
+                    
+                    if old_ind != ind:
+                        fsm_state.grid[lvl]["price"] = None
+                        runtime_cfg["grid"][lvl]["price"] = None
+                        fsm_state.next_avg_price = None
+                        
+                    if hasattr(self.bot_core, 'fsm_states') and hasattr(self.bot_core, 'runtime_manager'):
+                        await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
+                    await message.answer(f"✅ Уровень {lvl} обновлен.", reply_markup=self._get_set_coins_keyboard())
+                await state.clear()
+            except ValueError as e:
+                await message.answer(f"❌ Ошибка парсинга ({e}). Пример: 0, 15.5, 0")
+
+        @self.dp.callback_query(F.data.startswith("edit_act_tp_"))
+        async def process_edit_tp(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            
+            await state.update_data(edit_symbol=symbol, edit_side=side)
+            msg = f"Установка тейк-профита для <b>{symbol} {side}</b>.\nВведите: <code>Уровень, Indent, Fallback</code>\nНапример: <code>0, 0.6, 1.0</code>:"
+            await callback.message.answer(msg, parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
+            await state.set_state(TGStates.waiting_for_tp_params)
+
+        @self.dp.message(TGStates.waiting_for_tp_params)
+        async def handle_tp_params(message: Message, state: FSMContext):
+            if message.text == "🔙 Cancel":
+                await state.clear()
+                return await on_set_coins(message, state)
+                
+            try:
+                parts = message.text.replace(' ', '').split(',')
+                if len(parts) != 3:
+                    raise ValueError("Нужно ровно 3 значения")
+                lvl = str(int(parts[0]))
+                ind = float(parts[1])
+                fb = float(parts[2])
+                
+                data = await state.get_data()
+                symbol = data['edit_symbol']
+                side = data['edit_side']
+                
+                fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+                runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side)
+                
+                if fsm_state and runtime_cfg:
+                    if lvl not in fsm_state.tp_map:
+                        fsm_state.tp_map[lvl] = {}
+                    if lvl not in runtime_cfg.get("tp_map", {}):
+                        if "tp_map" not in runtime_cfg: runtime_cfg["tp_map"] = {}
+                        runtime_cfg["tp_map"][lvl] = {}
+                        
+                    fsm_state.tp_map[lvl]["indent"] = ind
+                    fsm_state.tp_map[lvl]["fallback_indent"] = fb
+                    runtime_cfg["tp_map"][lvl]["indent"] = ind
+                    runtime_cfg["tp_map"][lvl]["fallback_indent"] = fb
+                    
+                    if hasattr(self.bot_core, 'fsm_states') and hasattr(self.bot_core, 'runtime_manager'):
+                        await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
+                    await message.answer(f"✅ TP Уровень {lvl} обновлен.", reply_markup=self._get_set_coins_keyboard())
+                await state.clear()
+            except ValueError as e:
+                await message.answer(f"❌ Ошибка парсинга ({e}). Пример: 0, 0.6, 1.0")
 
         # =========================================================
         # EDIT _BASE TEMPLATE
