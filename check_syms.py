@@ -4,7 +4,6 @@ from consts import API_KEY, API_SECRET
 
 async def main():
     client = BinanceClient(API_KEY, API_SECRET)
-    # Fetch income from 2026-06-29 00:00:00 UTC
     start_ts = 1782777600000 
     inc_res = await client._request(
         "GET", 
@@ -13,9 +12,11 @@ async def main():
         signed=True
     )
     if inc_res.success:
+        symbols = set()
         for r in inc_res.data:
-            if r.get("incomeType") == "REALIZED_PNL":
-                print(r)
+            if r["incomeType"] == "REALIZED_PNL":
+                symbols.add(r["symbol"])
+        print(f"Symbols with PnL: {symbols}")
     else:
         print("Error fetching", inc_res)
 

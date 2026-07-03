@@ -11,5 +11,10 @@ async def main():
     client = BinanceClient(API_KEY, API_SECRET)
     manager = AnalyticsManager()
     await manager.deep_sync_analytics(client)
+    
+    # Read and count
+    with open('ANALYTICS/trades_ledger.txt', 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        print(f"Total trades in ledger now: {len(lines) - 1}")
 
 asyncio.run(main())

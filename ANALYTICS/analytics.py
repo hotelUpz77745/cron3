@@ -300,7 +300,7 @@ class AnalyticsManager:
                 if p_res.success:
                     bnb_price = float(p_res.data.get("price", 0.0))
 
-                # Group by exact time and symbol to merge PnL, Comm, Funding
+                # Group by exact time, symbol, and info (tradeId) to prevent merging partial fills
                 grouped = {}
                 for r in income_records:
                     sym = r.get("symbol")
@@ -311,7 +311,8 @@ class AnalyticsManager:
                         by_symbol[sym] = {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0}
                         
                     ts = int(r.get("time", 0))
-                    key = (ts, sym)
+                    info = r.get("info", "")
+                    key = (ts, sym, info)
                     if key not in grouped:
                         grouped[key] = {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "has_trade": False}
                         
@@ -336,7 +337,7 @@ class AnalyticsManager:
                 trade_id_counter = 1
                 
                 # Reconstruct Ledger sequentially
-                for (ts, sym), g in sorted(grouped.items(), key=lambda x: x[0][0]):
+                for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
                     from datetime import datetime
                     dt_str = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d %H:%M:%S")
                     
