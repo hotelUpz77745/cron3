@@ -821,6 +821,19 @@ class TelegramReceiver:
             await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для редактирования (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_cancel_keyboard())
             await state.set_state(TGStates.waiting_for_edit_symbol)
 
+        @self.dp.callback_query(F.data.startswith("edit_back_to_coin_"))
+        async def process_edit_back_to_coin(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("edit_back_to_coin_", "")
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
+                    InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
+                ],
+                [InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")]
+            ])
+            await callback.message.edit_text(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
+
         @self.dp.message(TGStates.waiting_for_edit_symbol)
         async def process_edit_symbol(message: Message, state: FSMContext):
             if message.text == "🔙 Cancel":
@@ -836,7 +849,7 @@ class TelegramReceiver:
                     InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
                     InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
                 ],
-                [InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")]
+                [InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")]
             ])
             await message.answer(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
             await state.clear()
@@ -887,7 +900,7 @@ class TelegramReceiver:
                     [InlineKeyboardButton(text="💰 Edit Invest Size", callback_data=f"edit_act_size_{symbol}_{side}")],
                     [InlineKeyboardButton(text="📊 Edit Set Avg", callback_data=f"edit_act_avg_{symbol}_{side}")],
                     [InlineKeyboardButton(text="🎯 Edit Set TP", callback_data=f"edit_act_tp_{symbol}_{side}")],
-                    [InlineKeyboardButton(text="🔙 Back to Side Select", callback_data=f"edit_side_cancel")] # simple close for now
+                    [InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_back_to_coin_{symbol}")]
                 ])
                 
                 try:
@@ -980,7 +993,7 @@ class TelegramReceiver:
                     row = []
             if row:
                 buttons.append(row)
-            buttons.append([InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")])
+            buttons.append([InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_side_{symbol}_{side}")])
             
             await callback.message.edit_text(f"⚙️ <b>{symbol} {side}</b>\nВыберите уровень для редактирования <b>Set Avg</b>:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
@@ -1080,7 +1093,7 @@ class TelegramReceiver:
                     row = []
             if row:
                 buttons.append(row)
-            buttons.append([InlineKeyboardButton(text="🔙 Cancel", callback_data="edit_side_cancel")])
+            buttons.append([InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_side_{symbol}_{side}")])
             
             await callback.message.edit_text(f"⚙️ <b>{symbol} {side}</b>\nВыберите уровень для редактирования <b>Set TP</b>:", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
