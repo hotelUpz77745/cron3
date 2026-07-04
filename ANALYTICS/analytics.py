@@ -115,9 +115,17 @@ class AnalyticsManager:
             else:
                 cdata["risk_reward_ratio"] = 0.0
                 
-            # If the old key exists, remove it
-            if "reward_risk_surplus_pct" in cdata:
-                del cdata["reward_risk_surplus_pct"]
+            # Remove obsolete legacy fields that are confusing the output
+            legacy_keys = [
+                "reward_risk_surplus_pct", 
+                "avg_daily_return_pct", 
+                "cumulative_return_pct", 
+                "current_drawdown_pct", 
+                "max_drawdown_pct"
+            ]
+            for lk in legacy_keys:
+                if lk in cdata:
+                    del cdata[lk]
                 
             # Calculate actual historical Max Position Size from runtime config
             runtime_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
