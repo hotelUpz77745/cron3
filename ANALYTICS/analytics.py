@@ -152,7 +152,7 @@ class AnalyticsManager:
             # Variant A: DRME1 / MDME1 (Epoch Window Method)
             if "epoch_state" in cdata:
                 est = cdata["epoch_state"]
-                current_profit = cdata.get("realized_pnl_usdt", 0.0) - est.get("pnl_at_start", 0.0)
+                current_profit = cdata.get("realized_pnl_net_usdt", 0.0) - est.get("pnl_at_start", 0.0)
                 import time
                 current_duration = (int(time.time() * 1000) - est.get("start_ts", 0)) / 86400000
                 
@@ -347,7 +347,7 @@ class AnalyticsManager:
                 
                 # Reconstruct Ledger and Stats
                 total_pnl, total_comm, total_fund = 0.0, 0.0, 0.0
-                by_symbol = {sym: {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0} for sym in tracked_symbols}
+                by_symbol = {sym: {"pnl": 0.0, "comm": 0.0, "fund": 0.0, "trades": 0, "wins": 0, "first_ts": None} for sym in tracked_symbols}
                 
                 # Sort records chronologically
                 income_records.sort(key=lambda x: x.get("time", 0))
@@ -434,6 +434,8 @@ class AnalyticsManager:
                     
                     if g["has_trade"]:
                         by_symbol[sym]["trades"] += 1
+                        if by_symbol[sym]["first_ts"] is None:
+                            by_symbol[sym]["first_ts"] = ts
                         if g["pnl"] > 0:
                             by_symbol[sym]["wins"] += 1
                             
@@ -489,25 +491,30 @@ class AnalyticsManager:
                         c["winning_trades"] = stats["wins"]
                         c["winrate_pct"] = round((stats["wins"] / stats["trades"] * 100) if stats["trades"] > 0 else 0, 2)
                         
+                        if stats.get("first_ts"):
+                            if "first_trade_ts" not in c or c["first_trade_ts"] > stats["first_ts"]:
+                                c["first_trade_ts"] = stats["first_ts"]
+                        
                         c_gross = round(stats["pnl"], 4)
                         
                         # Identify if this is a fresh sync/restoration for this coin
                         is_new_coin = "realized_pnl_usdt" not in c
-                        old_pnl = c.get("realized_pnl_usdt", 0.0)
+                        old_pnl_net = c.get("realized_pnl_net_usdt", 0.0)
                         
                         c["realized_pnl_usdt"] = c_gross
                         c_comm = round(stats["comm"], 4)
                         c_fund = round(stats["fund"], 4)
                         c["commission_usdt"] = c_comm
                         c["funding_usdt"] = c_fund
-                        c["realized_pnl_net_usdt"] = round(c_gross + c_comm + c_fund, 4)
+                        c_net = round(c_gross + c_comm + c_fund, 4)
+                        c["realized_pnl_net_usdt"] = c_net
                         
                         # Variant B (Incremental) calculated on-the-fly without ledger 8th column
                         # ONLY apply if this is a real incremental delta, NOT a mass restoration!
-                        delta_pnl = c_gross - old_pnl
-                        if not is_new_coin and abs(delta_pnl) > 0.0001:
+                        delta_pnl_net = c_net - old_pnl_net
+                        if not is_new_coin and abs(delta_pnl_net) > 0.0001:
                             safe_margin = current_margins.get(sym, 1.0) if current_margins.get(sym, 0.0) > 0 else 1.0
-                            c["cumulative_drme"] = c.get("cumulative_drme", 0.0) + (delta_pnl / safe_margin)
+                            c["cumulative_drme"] = c.get("cumulative_drme", 0.0) + (delta_pnl_net / safe_margin)
                             c["incremental_trades"] = c.get("incremental_trades", 0) + 1
                 # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
                 await self._update_drawdowns(client, data)
@@ -567,7 +574,7 @@ class AnalyticsManager:
                     cdata["epoch_state"] = {
                         "size": current_margin,
                         "start_ts": now_ms,
-                        "pnl_at_start": cdata.get("realized_pnl_usdt", 0.0),
+                        "pnl_at_start": cdata.get("realized_pnl_net_usdt", 0.0),
                         "max_dd": drawdown,
                         "closed_drme_sum": cdata.get("DRME1", cdata.get("DRME", 0.0)),
                         "closed_mdme_sum": cdata.get("MDME1", cdata.get("MDME", 0.0)),
@@ -582,7 +589,7 @@ class AnalyticsManager:
                     if current_margin > 0 and abs(current_margin - est.get("size", current_margin)) > current_margin * 0.1:
                         duration_days = (now_ms - est.get("start_ts", now_ms)) / 86400000
                         if duration_days >= 1.0:
-                            epoch_profit = cdata.get("realized_pnl_usdt", 0.0) - est.get("pnl_at_start", 0.0)
+                            epoch_profit = cdata.get("realized_pnl_net_usdt", 0.0) - est.get("pnl_at_start", 0.0)
                             safe_sz = est.get("size", 1.0) if est.get("size", 0.0) > 0 else 1.0
                             
                             epoch_drme = (epoch_profit / duration_days) / safe_sz
@@ -595,7 +602,7 @@ class AnalyticsManager:
                         # Reset epoch
                         est["size"] = current_margin
                         est["start_ts"] = now_ms
-                        est["pnl_at_start"] = cdata.get("realized_pnl_usdt", 0.0)
+                        est["pnl_at_start"] = cdata.get("realized_pnl_net_usdt", 0.0)
                         est["max_dd"] = drawdown
                 
                 bot_unrealized += drawdown
