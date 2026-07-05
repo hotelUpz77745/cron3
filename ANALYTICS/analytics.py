@@ -133,29 +133,20 @@ class AnalyticsManager:
             if runtime_path.exists():
                 try:
                     rt_data = json.loads(runtime_path.read_text(encoding="utf-8"))
-                    for side in ("LONG", "SHORT"):
-                        if side in rt_data and rt_data[side].get("enable"):
-                            vol = float(rt_data[side].get("total_volume", 0.0))
-                            price = float(rt_data[side].get("avg_entry_price", 0.0))
-                            current_margin += abs(vol) * price
+                    long_size = float(rt_data.get("LONG", {}).get("invest_size", 0.0)) if rt_data.get("LONG", {}).get("enable") else 0.0
+                    short_size = float(rt_data.get("SHORT", {}).get("invest_size", 0.0)) if rt_data.get("SHORT", {}).get("enable") else 0.0
+                    current_margin = (long_size + short_size) / 2.0
                 except Exception:
                     pass
                     
-            cdata["max_position_size"] = round(max(cdata.get("max_position_size", 0.0), current_margin), 4)
+            cdata["max_position_size"] = round(current_margin, 4)
             
             # 1. Establish the "Old Good Formula" as the baseline
             safe_max = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
             global_drme = cdata.get("avg_daily_profit", 0.0) / safe_max
             global_mdme = abs(cdata.get("max_drawdown", 0.0)) / safe_max
             
-            if "baseline" not in cdata:
-                cdata["baseline"] = {
-                    "drme": round(global_drme, 4),
-                    "mdme": round(global_mdme, 4),
-                    "days": round(days_active, 4)
-                }
             
-            baseline = cdata["baseline"]
             
             # Variant A: DRME1 / MDME1 (Epoch Window Method)
             if "epoch_state" in cdata:
@@ -175,30 +166,14 @@ class AnalyticsManager:
                     active_count += 1
                 
                 if active_count > 0:
-                    cdata["DRME1"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
-                    cdata["MDME1"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
+                    cdata["DRME"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
+                    cdata["MDME"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
                 else:
-                    cdata["DRME1"] = round(global_drme, 4)
-                    cdata["MDME1"] = round(global_mdme, 4)
+                    cdata["DRME"] = round(global_drme, 4)
+                    cdata["MDME"] = round(global_mdme, 4)
             else:
-                cdata["DRME1"] = round(global_drme, 4)
-                cdata["MDME1"] = round(global_mdme, 4)
-                
-            # Variant B: DRME2 / MDME2 (Incremental On-the-Fly Method)
-            inc_trades = cdata.get("incremental_trades", 0)
-            if inc_trades > 0 and days_active > 0:
-                cumulative_drme = cdata.get("cumulative_drme", 0.0)
-                # DRME2 is the daily average of the sum of the historical baseline sum + new incremental sum
-                total_sum = (baseline["drme"] * baseline["days"]) + cumulative_drme
-                cdata["DRME2"] = round(total_sum / days_active, 4)
-                cdata["MDME2"] = cdata.get("MDME", 0.0) # MDME tracks incrementally live
-            else:
-                cdata["DRME2"] = round(global_drme, 4)
-                cdata["MDME2"] = round(global_mdme, 4)
-                
-            # Legacy fields preservation just in case
-            cdata["DRME"] = cdata["DRME1"]
-            cdata["MDME"] = cdata["MDME1"]
+                cdata["DRME"] = round(global_drme, 4)
+                cdata["MDME"] = round(global_mdme, 4)
 
     def _write_data(self, data: dict):
         try:
@@ -410,16 +385,13 @@ class AnalyticsManager:
                     if rt_path.exists():
                         try:
                             rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
-                            for side in ("LONG", "SHORT"):
-                                if side in rt_data and rt_data[side].get("enable"):
-                                    v = float(rt_data[side].get("total_volume", 0.0))
-                                    p = float(rt_data[side].get("avg_entry_price", 0.0))
-                                    vol += abs(v) * p
+                            long_size = float(rt_data.get("LONG", {}).get("invest_size", 0.0)) if rt_data.get("LONG", {}).get("enable") else 0.0
+                            short_size = float(rt_data.get("SHORT", {}).get("invest_size", 0.0)) if rt_data.get("SHORT", {}).get("enable") else 0.0
+                            vol = (long_size + short_size) / 2.0
                         except Exception:
                             pass
                     current_margins[sym] = vol
-                    by_symbol[sym]["cumulative_drme"] = 0.0
-                    by_symbol[sym]["incremental_trades"] = 0
+                    current_margins[sym] = vol
                 
                 # 8th column logic removed entirely
                 # Reconstruct Ledger sequentially
@@ -504,11 +476,6 @@ class AnalyticsManager:
                                 c["first_trade_ts"] = stats["first_ts"]
                         
                         c_gross = round(stats["pnl"], 4)
-                        
-                        # Identify if this is a fresh sync/restoration for this coin
-                        is_new_coin = "realized_pnl_usdt" not in c
-                        old_pnl_net = c.get("realized_pnl_net_usdt", 0.0)
-                        
                         c["realized_pnl_usdt"] = c_gross
                         c_comm = round(stats["comm"], 4)
                         c_fund = round(stats["fund"], 4)
@@ -516,14 +483,6 @@ class AnalyticsManager:
                         c["funding_usdt"] = c_fund
                         c_net = round(c_gross + c_comm + c_fund, 4)
                         c["realized_pnl_net_usdt"] = c_net
-                        
-                        # Variant B (Incremental) calculated on-the-fly without ledger 8th column
-                        # ONLY apply if this is a real incremental delta, NOT a mass restoration!
-                        delta_pnl_net = c_net - old_pnl_net
-                        if not is_new_coin and abs(delta_pnl_net) > 0.0001:
-                            safe_margin = current_margins.get(sym, 1.0) if current_margins.get(sym, 0.0) > 0 else 1.0
-                            c["cumulative_drme"] = c.get("cumulative_drme", 0.0) + (delta_pnl_net / safe_margin)
-                            c["incremental_trades"] = c.get("incremental_trades", 0) + 1
                 # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
                 await self._update_drawdowns(client, data)
                 
@@ -563,11 +522,9 @@ class AnalyticsManager:
                 if rt_path.exists():
                     try:
                         rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
-                        for side in ("LONG", "SHORT"):
-                            if side in rt_data and rt_data[side].get("enable"):
-                                v = float(rt_data[side].get("total_volume", 0.0))
-                                p = float(rt_data[side].get("avg_entry_price", 0.0))
-                                current_margin += abs(v) * p
+                        long_size = float(rt_data.get("LONG", {}).get("invest_size", 0.0)) if rt_data.get("LONG", {}).get("enable") else 0.0
+                        short_size = float(rt_data.get("SHORT", {}).get("invest_size", 0.0)) if rt_data.get("SHORT", {}).get("enable") else 0.0
+                        current_margin = (long_size + short_size) / 2.0
                     except Exception:
                         pass
                 
@@ -581,12 +538,12 @@ class AnalyticsManager:
                 if "epoch_state" not in cdata:
                     cdata["epoch_state"] = {
                         "size": current_margin,
-                        "start_ts": now_ms,
-                        "pnl_at_start": cdata.get("realized_pnl_net_usdt", 0.0),
+                        "start_ts": cdata.get("first_trade_ts", now_ms),
+                        "pnl_at_start": 0.0,
                         "max_dd": drawdown,
-                        "closed_drme_sum": cdata.get("DRME1", cdata.get("DRME", 0.0)),
-                        "closed_mdme_sum": cdata.get("MDME1", cdata.get("MDME", 0.0)),
-                        "closed_count": 1 if cdata.get("DRME1", cdata.get("DRME", 0.0)) > 0 else 0
+                        "closed_drme_sum": 0.0,
+                        "closed_mdme_sum": 0.0,
+                        "closed_count": 0
                     }
                 else:
                     est = cdata["epoch_state"]

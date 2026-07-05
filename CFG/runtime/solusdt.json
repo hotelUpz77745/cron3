@@ -11,41 +11,41 @@
                 "volume": 12.96,
                 "super_indent": null,
                 "is_active": true,
-                "price": 83.05
+                "price": 83.75
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": null,
-                "price": 78.9,
+                "price": 79.56,
                 "is_active": false
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": null,
-                "price": 76.41,
+                "price": 77.05,
                 "is_active": false
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": null,
-                "price": 72.25,
+                "price": 72.86,
                 "is_active": false
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": null,
-                "price": 65.61,
+                "price": 66.16,
                 "is_active": false
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": null,
-                "price": 54.81,
+                "price": 55.27,
                 "is_active": false
             }
         },
@@ -82,17 +82,17 @@
             }
         },
         "total_volume": 0.31,
-        "avg_entry_price": 83.05,
+        "avg_entry_price": 83.75,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 83.05,
-        "open_time": 1783107590973,
+        "initial_entry_price": 83.75,
+        "open_time": 1783139990680,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
         "pending_rolling_tp": false,
-        "next_avg_price": 78.9,
-        "fallback_price": 83.88
+        "next_avg_price": 79.56,
+        "fallback_price": 84.59
     },
     "SHORT": {
         "enable": true,
@@ -127,7 +127,7 @@
                 "volume": 17.25,
                 "super_indent": null,
                 "price": 83.46,
-                "is_active": false
+                "is_active": true
             },
             "4": {
                 "indent": -21.0,
@@ -163,7 +163,7 @@
             "3": {
                 "indent": 1.4,
                 "fallback_indent": 3.0,
-                "is_active": false
+                "is_active": true
             },
             "4": {
                 "indent": 1.9,
@@ -176,9 +176,9 @@
                 "is_active": false
             }
         },
-        "total_volume": -0.75,
-        "avg_entry_price": 77.84960000000001,
-        "pre_avg_price": 75.78,
+        "total_volume": -1.16,
+        "avg_entry_price": 79.81844827586207,
+        "pre_avg_price": 77.84960000000001,
         "initial_entry_price": 73.86,
         "open_time": 1782870590815,
         "in_position": true,
@@ -186,8 +186,8 @@
         "is_finished": false,
         "pending_avg": false,
         "pending_rolling_tp": false,
-        "next_avg_price": 83.46,
-        "fallback_price": 76.06
+        "next_avg_price": 89.37,
+        "fallback_price": 77.42
     },
     "super_grid": {
         "enabled": false

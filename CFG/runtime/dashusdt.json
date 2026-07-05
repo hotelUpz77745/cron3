@@ -11,42 +11,42 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 36.43
+                "price": 35.69
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": -3.6332,
                 "is_active": false,
-                "price": 34.61
+                "price": 33.91
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": -5.8132,
                 "is_active": false,
-                "price": 33.52
+                "price": 32.83
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": -9.4464,
                 "is_active": false,
-                "price": 31.69
+                "price": 31.05
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": -15.2596,
                 "is_active": false,
-                "price": 28.78
+                "price": 28.2
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": -24.706,
                 "is_active": false,
-                "price": 24.04
+                "price": 23.56
             }
         },
         "tp_map": {
@@ -81,13 +81,13 @@
                 "is_active": false
             }
         },
-        "total_volume": 0.356,
-        "avg_entry_price": 36.43,
+        "total_volume": 0.363,
+        "avg_entry_price": 35.69,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 36.43,
-        "open_time": 1783080028417,
-        "next_avg_price": 34.61,
-        "fallback_price": 36.79,
+        "initial_entry_price": 35.69,
+        "open_time": 1783290642183,
+        "next_avg_price": 33.91,
+        "fallback_price": 36.05,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
