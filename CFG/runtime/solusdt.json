@@ -11,41 +11,41 @@
                 "volume": 12.96,
                 "super_indent": null,
                 "is_active": true,
-                "price": 83.75
+                "price": 81.93
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": null,
-                "price": 79.56,
-                "is_active": true
+                "price": 77.83,
+                "is_active": false
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": null,
-                "price": 77.05,
+                "price": 75.38,
                 "is_active": false
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": null,
-                "price": 72.86,
+                "price": 71.28,
                 "is_active": false
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": null,
-                "price": 66.16,
+                "price": 64.72,
                 "is_active": false
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": null,
-                "price": 55.27,
+                "price": 54.07,
                 "is_active": false
             }
         },
@@ -58,7 +58,7 @@
             "1": {
                 "indent": 0.7,
                 "fallback_indent": 1.6,
-                "is_active": true
+                "is_active": false
             },
             "2": {
                 "indent": 1.0,
@@ -81,18 +81,18 @@
                 "is_active": false
             }
         },
-        "total_volume": 0.67,
-        "avg_entry_price": 81.42880597014926,
-        "pre_avg_price": 83.75,
-        "initial_entry_price": 83.75,
-        "open_time": 1783139990680,
+        "total_volume": 0.32,
+        "avg_entry_price": 81.93,
+        "pre_avg_price": 0.0,
+        "initial_entry_price": 81.93,
+        "open_time": 1783354190865,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
         "pending_rolling_tp": false,
-        "next_avg_price": 77.05,
-        "fallback_price": 82.73
+        "next_avg_price": 77.83,
+        "fallback_price": 82.75
     },
     "SHORT": {
         "enable": true,

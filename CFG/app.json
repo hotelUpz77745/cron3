@@ -31,7 +31,8 @@
     "DASHUSDT",
     "XPLUSDT",
     "SOLUSDT",
-    "HYPERUSDT"
+    "HYPERUSDT",
+    "XNYUSDT"
   ],
   "telegram": {
     "enabled": true,
