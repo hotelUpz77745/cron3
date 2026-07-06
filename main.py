@@ -108,6 +108,9 @@ if __name__ == "__main__":
 # Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
 # 1;XPLUSDT;SYNC;2026-06-30 03:26:05;2026-06-30 03:26:05;0.0231;84.9831
 
+# Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
+# 1;XPLUSDT;SYNC;2026-06-30 03:26:05;2026-06-30 03:26:05;0.0231;298,98
+
 
 # Slavik
 # Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
