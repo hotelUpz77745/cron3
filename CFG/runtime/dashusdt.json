@@ -16,35 +16,35 @@
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -3.6332,
+                "super_indent": -3.3245,
                 "is_active": false,
                 "price": 33.91
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -5.8132,
+                "super_indent": -5.3191,
                 "is_active": false,
                 "price": 32.83
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -9.4464,
+                "super_indent": -8.6436,
                 "is_active": false,
                 "price": 31.05
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -15.2596,
+                "super_indent": -13.9627,
                 "is_active": false,
                 "price": 28.2
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -24.706,
+                "super_indent": -22.6063,
                 "is_active": false,
                 "price": 23.56
             }
@@ -111,35 +111,35 @@
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -3.6332,
+                "super_indent": -3.3245,
                 "is_active": true,
                 "price": 33.68
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -5.8132,
+                "super_indent": -5.3191,
                 "is_active": true,
                 "price": 34.65
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -9.4464,
+                "super_indent": -8.6436,
                 "is_active": true,
                 "price": 36.25
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -15.2596,
+                "super_indent": -13.9627,
                 "is_active": false,
                 "price": 38.82
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -24.706,
+                "super_indent": -22.6063,
                 "is_active": false,
                 "price": 42.99
             }

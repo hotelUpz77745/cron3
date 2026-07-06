@@ -10,6 +10,8 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
+from aiogram.types import ErrorEvent
 
 from c_log import UnifiedLogger
 from consts import TG_TOKEN, ANALYTICS_DIR, TG_ALLOWED_USERS
@@ -118,6 +120,17 @@ class TelegramReceiver:
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
     def _register_handlers(self):
+        @self.dp.errors()
+        async def global_error_handler(event: ErrorEvent):
+            if isinstance(event.exception, TelegramNetworkError):
+                logger.warning(f"[TG] Network Error (suppressed): {event.exception}")
+                return True
+            if isinstance(event.exception, TelegramRetryAfter):
+                logger.warning(f"[TG] Rate Limit exceeded, retry after {event.exception.retry_after}s")
+                return True
+            logger.error(f"[TG] Unhandled exception: {event.exception}")
+            return False
+
         @self.dp.message(Command("start"))
         async def start_cmd(message: Message, state: FSMContext):
             await state.clear()
