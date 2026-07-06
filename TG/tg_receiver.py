@@ -1426,13 +1426,19 @@ class TelegramReceiver:
                 import sys
                 import subprocess
                 from consts import DATA_DIR
-                
-                # Запускаем как отдельный процесс, чтобы не блочить бота
-                script_path = os.path.join(os.getcwd(), "run_scanner.py")
+                output_path = DATA_DIR / "volatile_symbols.json"
+                if output_path.exists():
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                        
+                # Запускаем как модуль из корня, чтобы корректно подтянулись импорты (c_log и др.)
                 process = await asyncio.create_subprocess_exec(
-                    sys.executable, script_path,
+                    sys.executable, "-m", "CORE.ADVANCED.volatility_scanner",
                     stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd()
                 )
                 stdout, stderr = await process.communicate()
                 

@@ -45,7 +45,7 @@ class AnalyticsManager:
         if not self.txt_file.exists():
             with open(self.txt_file, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=';')
-                writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
 
     def _read_data(self) -> dict:
         if not self.log_file.exists():
@@ -292,13 +292,15 @@ class AnalyticsManager:
                         with open(self.txt_file, 'r', encoding='utf-8') as f:
                             reader = csv.reader(f, delimiter=';')
                             for row in reader:
-                                if len(row) > 1 and row[1] != "Symbol":
-                                    ledger_symbols.append(row[1])
-                                    if len(row) >= 8:
-                                        try:
-                                            old_volumes[f"{row[1]}_{row[4]}"] = float(row[7])
-                                        except ValueError:
-                                            pass
+                                if not row or row[0] in ("Id", "Symbol"):
+                                    continue
+                                sym = row[1] if row[0].isdigit() else row[0]
+                                ledger_symbols.append(sym)
+                                if len(row) >= 8:
+                                    try:
+                                        old_volumes[f"{row[1]}_{row[4]}"] = float(row[7])
+                                    except ValueError:
+                                        pass
                 except Exception:
                     pass
                 
@@ -745,6 +747,18 @@ class AnalyticsManager:
         to completely reconstruct analytics and ledger.
         """
         logger.info(f"[{symbol}] Trade closed. Waiting 5s before Absolute Deep Sync...")
+        
+        # FIX: Ensure first_trade_ts is set BEFORE we run deep_sync
+        # This allows the system to seamlessly start writing analytics from a clean "Reset" state
+        # without requiring a manual Restore.
+        if open_time:
+            async with self._lock:
+                data = self._read_data()
+                if not data.get("first_trade_ts"):
+                    logger.info(f"[ANALYTICS] Empty ledger detected. Initializing first_trade_ts to {open_time} from {symbol} {side}...")
+                    data["first_trade_ts"] = open_time
+                    self._write_data(data)
+                    
         await asyncio.sleep(5.0)
         await self.deep_sync_analytics(client)
         logger.info(f"[ANALYTICS] Position synced: {symbol} {side}")
