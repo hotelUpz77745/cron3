@@ -1,7 +1,7 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 200,
+        "invest_size": 500,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -59,14 +59,14 @@
                 "fallback_indent": 3.6
             },
             "5": {
-                "indent": 1.9,
-                "fallback_indent": 3.6
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 200,
+        "invest_size": 500,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -124,8 +124,8 @@
                 "fallback_indent": 3.6
             },
             "5": {
-                "indent": 1.9,
-                "fallback_indent": 3.6
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
