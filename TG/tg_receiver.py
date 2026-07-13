@@ -230,11 +230,22 @@ class TelegramReceiver:
         @self.dp.message(F.text == "⏸️ Stop")
         async def on_stop_trade(message: Message, state: FSMContext):
             await state.clear()
+            
+            # Save auto_start = False to app.json
+            from consts import DATA_DIR
+            from c_utils import Utils
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path)
+            if "app" not in app_data:
+                app_data["app"] = {}
+            app_data["app"]["auto_start"] = False
+            Utils.write_json_file(app_json_path, app_data)
+            
             if self.bot_core.is_paused:
                 await message.answer("Trading is already paused!", reply_markup=self._get_main_keyboard())
                 return
             self.bot_core.is_paused = True
-            logger.info("[TG] User stopped trading loops.")
+            logger.info("[TG] User stopped trading loops. auto_start flag saved to False.")
             await message.answer("<b>Control Panel</b>\nCurrent Status: ⏸️ Paused", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         @self.dp.message(F.text == "ℹ️ Status")
