@@ -1457,6 +1457,11 @@ class TelegramReceiver:
 
         @self.dp.callback_query(F.data == "cb_run_flat_scanner")
         async def process_cb_run_flat_scanner(callback: CallbackQuery, state: FSMContext):
+            from consts import DATA_DIR
+            if not (DATA_DIR / "volatile_symbols.txt").exists() and not (DATA_DIR / "volatile_symbols.json").exists():
+                await callback.answer("🛑 Нет данных от ATR Screener! Сперва запустите его.", show_alert=True)
+                return
+
             await callback.answer("Запускаю Flat Screener...")
             msg = await callback.message.answer("⏳ Анализ плоских коридоров запущен, пожалуйста подождите...")
             
