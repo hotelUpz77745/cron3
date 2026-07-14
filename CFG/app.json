@@ -1,71 +1,71 @@
 {
-  "app": {
-    "time_zone": "UTC",
-    "precision": 18,
-    "spec_ttl_sec": 60,
-    "time_slack_sec": 0.15,
-    "req_timeout_sec": 10.0,
-    "avoid_check_runtime_cfg": false,
-    "api_rate_limit_sec": 0.1,
-    "api_concurrent_rate_limit_sec": 0.01,
-    "rest_failsafe_sec": 1.0,
-    "auto_start": false
-  },
-  "signal": {
-    "timeframe": "5m"
-  },
-  "analytics": {
-    "csv_max_rows": 1000
-  },
-  "logging": {
-    "debug": true,
-    "info": true,
-    "warning": true,
-    "error": true,
-    "max_log_lines": 10000,
-    "log_to_console": true,
-    "log_to_file": true
-  },
-  "symbols": [
-    "XPLUSDT",
-    "MMTUSDT",
-    "KGENUSDT",
-    "JUPUSDT"
-  ],
-  "telegram": {
-    "enabled": true,
-    "allowed_users": [
-      1059524161,
-      610822492
-    ]
-  },
-  "notifications": {
-    "enabled": true,
-    "negative_threshold": -100.0,
-    "positive_threshold": 100.0
-  },
-  "super_grid": {
-    "enabled": true,
-    "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-    "timeframe": "1w",
-    "window": 12,
-    "multiplier": 1.0,
-    "min_volatility_pct": 15.0,
-    "max_volatility_pct": null,
-    "update_interval_hours": 24
-  },
-  "volatility_scanner": {
-    "timeframe": "1w",
-    "window": 12,
-    "min_volatility_pct": 25.0,
-    "max_volatility_pct": 40.0,
-    "strict_window": true,
-    "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-    "_comment_cache_lifetime": "Accepts int or float. e.g. 1 (1 hour), 0.25 (15 min). 0 disables cache.",
-    "cache_lifetime_hours": 1
-  },
-  "flat_scanner": {
-    "_comment_max_flatness": "Values usually 0.0 to 100.0. E.g. 35.0 means net movement is max 35% of total range. Lower is flatter.",
-    "max_flatness_pct": 35.0
-  }
+    "app": {
+        "time_zone": "UTC",
+        "precision": 18,
+        "spec_ttl_sec": 60,
+        "time_slack_sec": 0.15,
+        "req_timeout_sec": 10.0,
+        "avoid_check_runtime_cfg": false,
+        "api_rate_limit_sec": 0.1,
+        "api_concurrent_rate_limit_sec": 0.01,
+        "rest_failsafe_sec": 1.0,
+        "auto_start": false
+    },
+    "signal": {
+        "timeframe": "5m"
+    },
+    "analytics": {
+        "csv_max_rows": 1000
+    },
+    "logging": {
+        "debug": true,
+        "info": true,
+        "warning": true,
+        "error": true,
+        "max_log_lines": 10000,
+        "log_to_console": true,
+        "log_to_file": true
+    },
+    "symbols": [
+        "XPLUSDT",
+        "MMTUSDT",
+        "KGENUSDT",
+        "JUPUSDT"
+    ],
+    "telegram": {
+        "enabled": true,
+        "allowed_users": [
+            1059524161,
+            610822492
+        ]
+    },
+    "notifications": {
+        "enabled": true,
+        "negative_threshold": -50.0,
+        "positive_threshold": 100.0
+    },
+    "super_grid": {
+        "enabled": true,
+        "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
+        "timeframe": "1w",
+        "window": 12,
+        "multiplier": 1.0,
+        "min_volatility_pct": 15.0,
+        "max_volatility_pct": null,
+        "update_interval_hours": 24
+    },
+    "volatility_scanner": {
+        "timeframe": "1w",
+        "window": 12,
+        "min_volatility_pct": 25.0,
+        "max_volatility_pct": 40.0,
+        "strict_window": true,
+        "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
+        "_comment_cache_lifetime": "Accepts int or float. e.g. 1 (1 hour), 0.25 (15 min). 0 disables cache.",
+        "cache_lifetime_hours": 1
+    },
+    "flat_scanner": {
+        "_comment_max_flatness": "Values usually 0.0 to 100.0. E.g. 35.0 means net movement is max 35% of total range. Lower is flatter.",
+        "max_flatness_pct": 35.0
+    }
 }

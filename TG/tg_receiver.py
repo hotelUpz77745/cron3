@@ -1710,6 +1710,8 @@ class TelegramReceiver:
         async def process_notif_neg_val(message: Message, state: FSMContext):
             try:
                 val = float(message.text)
+                val = -abs(val)  # Validation: always negative or zero
+                
                 from consts import DATA_DIR
                 from c_utils import Utils
                 app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
@@ -1717,7 +1719,7 @@ class TelegramReceiver:
                 app_cfg["notifications"]["negative_threshold"] = val
                 Utils.write_json_file(DATA_DIR / "app.json", app_cfg)
                 
-                await message.answer(f"✅ Отрицательный порог установлен на {val} USDT.")
+                await message.answer(f"✅ Отрицательный порог применен со значением {val} USDT.")
                 await state.clear()
             except ValueError:
                 await message.answer("❌ Ошибка! Введите числовое значение.")
@@ -1726,6 +1728,8 @@ class TelegramReceiver:
         async def process_notif_pos_val(message: Message, state: FSMContext):
             try:
                 val = float(message.text)
+                val = abs(val)  # Validation: always positive or zero
+                
                 from consts import DATA_DIR
                 from c_utils import Utils
                 app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
@@ -1733,7 +1737,7 @@ class TelegramReceiver:
                 app_cfg["notifications"]["positive_threshold"] = val
                 Utils.write_json_file(DATA_DIR / "app.json", app_cfg)
                 
-                await message.answer(f"✅ Положительный порог установлен на {val} USDT.")
+                await message.answer(f"✅ Положительный порог применен со значением {val} USDT.")
                 await state.clear()
             except ValueError:
                 await message.answer("❌ Ошибка! Введите числовое значение.")
