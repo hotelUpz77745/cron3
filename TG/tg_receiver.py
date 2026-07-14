@@ -78,6 +78,9 @@ class TelegramReceiver:
             [
                 KeyboardButton(text="💰 Задать нач. баланс"),
                 KeyboardButton(text="🗑️ Сбросить аналитику")
+            ],
+            [
+                KeyboardButton(text="🔍 ATR SCREENER")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -1420,6 +1423,7 @@ class TelegramReceiver:
         # /sonnik - VOLATILITY SCANNER
         # =========================================================
         @self.dp.message(Command("sonnik"))
+        @self.dp.message(F.text == "🔍 ATR SCREENER")
         async def on_sonnik_cmd(message: Message, state: FSMContext):
             await state.clear()
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
