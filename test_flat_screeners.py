@@ -99,8 +99,9 @@ async def main():
                 symbols_to_check.append(sym)
                 vol_data_map[sym] = item
     else:
-        logger.error("No volatile symbols data found.")
-        return
+        import sys
+        sys.stderr.write("🛑 Отсутствуют исходные данные! Сперва обязательно запустите скринер волатильности (ATR SCREENER).\n")
+        sys.exit(1)
 
     logger.info(f"Loaded {len(symbols_to_check)} symbols from ATR screener.")
     
