@@ -8,7 +8,7 @@ import asyncio
 import json
 from pathlib import Path
 from c_log import UnifiedLogger
-from consts import DATA_DIR
+from consts import DATA_DIR, CACHE_DIR
 from c_utils import Utils
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.client import BinanceClient
@@ -18,7 +18,7 @@ logger = UnifiedLogger("VolatilityScanner")
 class VolatilityScanner:
     def __init__(self):
         self.config_path = DATA_DIR / "app.json"
-        self.output_path = DATA_DIR / "volatile_symbols.txt"
+        self.output_path = CACHE_DIR / "volatile_symbols.txt"
         
         # We need a BinanceClient to get klines. In an isolated script, we can initialize it without keys.
         self.client = BinanceClient("", "")

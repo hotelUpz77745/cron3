@@ -72,8 +72,8 @@ async def main():
     max_flatness_pct = flat_cfg.get("max_flatness_pct", 35.0)
     max_flatness_ratio = max_flatness_pct / 100.0
     
-    vol_file = DATA_DIR / "volatile_symbols.txt"
-    vol_json_file = DATA_DIR / "volatile_symbols.json"
+    vol_file = CACHE_DIR / "volatile_symbols.txt"
+    vol_json_file = CACHE_DIR / "volatile_symbols.json"
     
     symbols_to_check = []
     vol_data_map = {}
@@ -131,7 +131,7 @@ async def main():
             
     flat_symbols.sort(key=lambda x: x["volatility"], reverse=True)
     
-    output_file = DATA_DIR / "flat_symbols.txt"
+    output_file = CACHE_DIR / "flat_symbols.txt"
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("# ==========================================\n")
         f.write("# FLAT SCREENER RESULTS\n")

@@ -1457,8 +1457,8 @@ class TelegramReceiver:
 
         @self.dp.callback_query(F.data == "cb_run_flat_scanner")
         async def process_cb_run_flat_scanner(callback: CallbackQuery, state: FSMContext):
-            from consts import DATA_DIR
-            if not (DATA_DIR / "volatile_symbols.txt").exists() and not (DATA_DIR / "volatile_symbols.json").exists():
+            from consts import DATA_DIR, CACHE_DIR
+            if not (CACHE_DIR / "volatile_symbols.txt").exists() and not (CACHE_DIR / "volatile_symbols.json").exists():
                 await callback.answer("🛑 Нет данных от ATR Screener! Сперва запустите его.", show_alert=True)
                 return
 
@@ -1484,6 +1484,8 @@ class TelegramReceiver:
                 )
                 stdout, stderr = await process.communicate()
                 
+                from consts import CACHE_DIR
+                output_path = CACHE_DIR / "flat_symbols.txt"
                 if output_path.exists():
                     await msg.delete()
                     await callback.message.answer_document(FSInputFile(output_path), caption="✅ Flat Screener завершен. Результаты в файле.")
@@ -1554,8 +1556,8 @@ class TelegramReceiver:
             try:
                 import sys
                 import subprocess
-                from consts import DATA_DIR
-                output_path = DATA_DIR / "volatile_symbols.txt"
+                from consts import CACHE_DIR
+                output_path = CACHE_DIR / "volatile_symbols.txt"
                 if output_path.exists():
                     try:
                         os.remove(output_path)
@@ -1571,7 +1573,8 @@ class TelegramReceiver:
                 )
                 stdout, stderr = await process.communicate()
                 
-                output_path = DATA_DIR / "volatile_symbols.txt"
+                from consts import CACHE_DIR
+                output_path = CACHE_DIR / "volatile_symbols.txt"
                 if output_path.exists():
                     await msg.delete()
                     await callback.message.answer_document(FSInputFile(output_path), caption="✅ Сканирование завершено. Результаты в файле.")
