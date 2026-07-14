@@ -79,16 +79,29 @@ class TelegramReceiver:
                 KeyboardButton(text="🔧 Super Grid")
             ],
             [
-                KeyboardButton(text="💰 Задать нач. баланс"),
-                KeyboardButton(text="🗑️ Сбросить аналитику")
+                KeyboardButton(text="🔍 SCREENERS")
             ],
             [
-                KeyboardButton(text="🔍 ATR SCREENER"),
+                KeyboardButton(text="🔔 SET INFO")
+            ]
+        ]
+        return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+    def _get_screeners_keyboard(self):
+        keyboard = [
+            [
+                KeyboardButton(text="🔍 ATR SCREENER")
+            ],
+            [
                 KeyboardButton(text="📉 FLAT SCREENER"),
                 KeyboardButton(text="📉 FLAT V2 (Боковик)")
             ],
             [
-                KeyboardButton(text="🔔 SET INFO")
+                KeyboardButton(text="📈 ADX SCREENER"),
+                KeyboardButton(text="🌊 CHOP SCREENER")
+            ],
+            [
+                KeyboardButton(text="🔙 Back")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -304,17 +317,18 @@ class TelegramReceiver:
                 for file_path in runtime_dir.glob("*.json"):
                     dump_data["runtime"][file_path.name] = Utils.read_json_file(file_path)
                     
-            dump_path = os.path.join("logs", "all_configs.json")
-            os.makedirs("logs", exist_ok=True)
+            dump_path = os.path.join("CACHE", "all_configs.json")
+            os.makedirs("CACHE", exist_ok=True)
             with open(dump_path, "w", encoding="utf-8") as f:
                 json.dump(dump_data, f, indent=4)
                 
             await message.answer_document(FSInputFile(dump_path))
 
-        @self.dp.message(F.text == "🗑️ Сбросить аналитику")
-        async def on_reset_analytics(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data == "cb_reset_analytics")
+        async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
             await state.clear()
-            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
+            await callback.message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await state.set_state(TGStates.waiting_for_reset_confirm)
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
@@ -343,10 +357,11 @@ class TelegramReceiver:
                     await message.answer("⚠️ Файл аналитики не найден.", reply_markup=self._get_main_keyboard())
             else:
                 await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
-        @self.dp.message(F.text == "💰 Задать нач. баланс")
-        async def on_set_initial_balance(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data == "cb_set_balance")
+        async def on_set_initial_balance(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
             await state.clear()
-            await message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
+            await callback.message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_initial_balance)
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
@@ -416,7 +431,8 @@ class TelegramReceiver:
                 [InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking")],
                 [InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt")],
                 [InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report")],
-                [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")]
+                [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")],
+                [InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="cb_set_balance"), InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="cb_reset_analytics")]
             ])
             await message.answer("Выберите раздел аналитики:", reply_markup=keyboard)
 
@@ -1449,6 +1465,14 @@ class TelegramReceiver:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
 
         # =========================================================
+        # SCREENERS DOMAIN
+        # =========================================================
+        @self.dp.message(F.text == "🔍 SCREENERS")
+        async def on_screeners_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            await message.answer("Выберите скринер для запуска:", reply_markup=self._get_screeners_keyboard())
+
+        # =========================================================
         # FLAT SCREENER
         # =========================================================
         @self.dp.message(F.text == "📉 FLAT SCREENER")
@@ -1549,42 +1573,73 @@ class TelegramReceiver:
 
         @self.dp.callback_query(F.data == "cb_run_flat_v2")
         async def process_cb_run_flat_v2(callback: CallbackQuery, state: FSMContext):
-            from consts import CACHE_DIR
-            if not (CACHE_DIR / "volatile_symbols.txt").exists() and not (CACHE_DIR / "volatile_symbols.json").exists():
-                await callback.answer("🛑 Нет данных от ATR Screener! Сперва запустите его.", show_alert=True)
-                return
+            await self._run_screener_subprocess(callback, 'SCREENERS/flat_v2.py', 'flat_symbols_v2.txt', 'Flat Screener V2', '⏳ Анализ плоских коридоров V2 запущен, пожалуйста подождите...')
 
-            await callback.answer("Запускаю Flat Screener V2...")
-            msg = await callback.message.answer("⏳ Анализ плоских коридоров V2 запущен, пожалуйста подождите...")
+        # =========================================================
+        # ADX SCREENER
+        # =========================================================
+        @self.dp.message(F.text == "📈 ADX SCREENER")
+        async def on_adx_cmd(message: Message, state: FSMContext):
+            await state.clear()
             
-            try:
-                import sys
-                import subprocess
-                import os
-                from aiogram.types import FSInputFile
-                
-                output_path = CACHE_DIR / "flat_symbols_v2.txt"
-                if output_path.exists():
-                    try:
-                        os.remove(output_path)
-                    except:
-                        pass
-                        
-                process = await asyncio.create_subprocess_exec(
-                    sys.executable, "test_flat_screeners_v2.py",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=os.getcwd()
-                )
-                stdout, stderr = await process.communicate()
-                
-                if output_path.exists():
-                    await msg.delete()
-                    await callback.message.answer_document(FSInputFile(output_path), caption="✅ Flat Screener V2 завершен. Результаты в файле.")
-                else:
-                    await msg.edit_text(f"❌ Ошибка сканирования (файл не создан).\n\nЛоги:\n{stderr.decode('utf-8')}")
-            except Exception as e:
-                await msg.edit_text(f"❌ Ошибка выполнения скринера: {e}")
+            from c_utils import Utils
+            from consts import DATA_DIR
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            adx_cfg = app_cfg.get("adx_scanner", {})
+            max_adx = adx_cfg.get("max_adx_value", 25.0)
+            window = adx_cfg.get("window", 14)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📈 Запустить ADX Screener", callback_data="cb_run_adx")]
+            ])
+            text = (
+                "<b>ADX Screener (Индекс направленного движения)</b>\n\n"
+                "⚠️ <b>ВНИМАНИЕ:</b> Использует данные от скринера волатильности (ATR SCREENER).\n\n"
+                "💡 <i>Логика:</i>\n"
+                f"Находит монеты, чей ADX ниже заданного порога, что говорит об отсутствии направленного тренда.\n\n"
+                f"Текущие настройки:\n"
+                f"- Окно: <b>{window}</b>\n"
+                f"- Макс. ADX: <b>{max_adx}</b>\n\n"
+                "<i>Настроить параметры можно в файле app.json (секция adx_scanner).</i>"
+            )
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_run_adx")
+        async def process_cb_run_adx(callback: CallbackQuery, state: FSMContext):
+            await self._run_screener_subprocess(callback, 'SCREENERS/adx.py', 'adx_symbols.txt', 'ADX Screener', '⏳ Анализ трендов ADX запущен, пожалуйста подождите (это может занять время)...')
+
+        # =========================================================
+        # CHOP SCREENER
+        # =========================================================
+        @self.dp.message(F.text == "🌊 CHOP SCREENER")
+        async def on_chop_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            
+            from c_utils import Utils
+            from consts import DATA_DIR
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            chop_cfg = app_cfg.get("chop_scanner", {})
+            min_chop = chop_cfg.get("min_chop_value", 61.8)
+            window = chop_cfg.get("window", 14)
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🌊 Запустить CHOP Screener", callback_data="cb_run_chop")]
+            ])
+            text = (
+                "<b>CHOP Screener (Индекс Чоппистости / Рваный рынок)</b>\n\n"
+                "⚠️ <b>ВНИМАНИЕ:</b> Использует данные от скринера волатильности (ATR SCREENER).\n\n"
+                "💡 <i>Логика:</i>\n"
+                f"Находит монеты, чей индекс CHOP выше заданного порога, что говорит о сильном боковом (рваном) движении.\n\n"
+                f"Текущие настройки:\n"
+                f"- Окно: <b>{window}</b>\n"
+                f"- Мин. CHOP: <b>{min_chop}</b> (стандарт > 61.8)\n\n"
+                "<i>Настроить параметры можно в файле app.json (секция chop_scanner).</i>"
+            )
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_run_chop")
+        async def process_cb_run_chop(callback: CallbackQuery, state: FSMContext):
+            await self._run_screener_subprocess(callback, 'SCREENERS/chop.py', 'chop_symbols.txt', 'CHOP Screener', '⏳ Анализ индекса CHOP запущен, пожалуйста подождите...')
 
         @self.dp.callback_query(F.data == "cb_edit_flatness")
         async def process_cb_edit_flatness(callback: CallbackQuery, state: FSMContext):
@@ -1657,9 +1712,9 @@ class TelegramReceiver:
                     except:
                         pass
                         
-                # Запускаем как модуль из корня, чтобы корректно подтянулись импорты (c_log и др.)
+                # Запускаем через наш алиас из домена SCREENERS
                 process = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "CORE.ADVANCED.volatility_scanner",
+                    sys.executable, "SCREENERS/atr.py",
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     cwd=os.getcwd()
@@ -1701,8 +1756,8 @@ class TelegramReceiver:
                 except:
                     pass
                     
-            dump_path = os.path.join("logs", "scanner_app.json")
-            os.makedirs("logs", exist_ok=True)
+            dump_path = os.path.join("CACHE", "scanner_app.json")
+            os.makedirs("CACHE", exist_ok=True)
             with open(dump_path, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, indent=4)
                 

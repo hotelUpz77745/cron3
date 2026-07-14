@@ -1,0 +1,47 @@
+# ==========================================
+# ADX SCREENER (Average Directional Index)
+# Найдено символов: 37
+# 
+# Условия фильтрации (Таймфрейм: 1w, Окно: 14):
+# - ADX <= 25.0 (Отсутствие направленного тренда)
+# ==========================================
+
+Symbol          | Volatility   | ADX
+--------------------------------------------------
+TAKEUSDT        | 38.30%       | 4.36
+SQDUSDT         | 27.26%       | 6.02
+CLANKERUSDT     | 27.69%       | 6.83
+PROMPTUSDT      | 26.80%       | 8.68
+COLLECTUSDT     | 39.02%       | 9.46
+ACTUSDT         | 36.32%       | 10.60
+B2USDT          | 26.04%       | 11.16
+LYNUSDT         | 29.99%       | 12.49
+THEUSDT         | 28.11%       | 13.02
+CYSUSDT         | 25.23%       | 14.10
+GUNUSDT         | 28.96%       | 14.61
+AGLDUSDT        | 38.08%       | 15.27
+ZROUSDT         | 25.27%       | 16.40
+ICNTUSDT        | 30.44%       | 16.54
+VELODROMEUSDT   | 27.52%       | 16.87
+USELESSUSDT     | 38.79%       | 17.11
+1000000BOBUSDT  | 36.76%       | 19.21
+CHZUSDT         | 26.18%       | 19.37
+PARTIUSDT       | 32.92%       | 19.76
+SCRTUSDT        | 29.59%       | 19.99
+PHAUSDT         | 28.74%       | 20.66
+AVAAIUSDT       | 30.38%       | 21.09
+1000LUNCUSDT    | 28.23%       | 21.39
+GPSUSDT         | 25.17%       | 21.39
+DYMUSDT         | 37.47%       | 22.02
+GRIFFAINUSDT    | 27.76%       | 22.15
+ZKPUSDT         | 26.94%       | 22.60
+DODOXUSDT       | 32.41%       | 22.66
+BANANAS31USDT   | 33.26%       | 22.83
+AERGOUSDT       | 27.62%       | 23.01
+PUMPBTCUSDT     | 37.32%       | 23.33
+ZBTUSDT         | 31.76%       | 23.49
+BIOUSDT         | 38.10%       | 23.99
+ICPUSDT         | 25.32%       | 24.25
+ORCAUSDT        | 29.30%       | 24.48
+NEARUSDT        | 29.14%       | 24.72
+IRYSUSDT        | 35.32%       | 24.77

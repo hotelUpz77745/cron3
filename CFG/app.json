@@ -35,7 +35,6 @@
   "telegram": {
     "enabled": true,
     "allowed_users": [
-      1059524161,
       610822492
     ]
   },
@@ -72,5 +71,15 @@
     "_comment_v2": "min_alt_touches = required alternating touches of top/bottom 25% of range. min_sma_crosses = required SMA crossings.",
     "min_alt_touches": 2,
     "min_sma_crosses": 3
+  },
+  "adx_scanner": {
+    "_comment_adx": "Window size for ADX calculation. max_adx_value is the threshold (e.g. < 25 means no trend).",
+    "window": 14,
+    "max_adx_value": 25.0
+  },
+  "chop_scanner": {
+    "_comment_chop": "Window size for CHOP calculation. min_chop_value is the threshold (e.g. > 61.8 means strong sideways).",
+    "window": 14,
+    "min_chop_value": 61.8
   }
 }

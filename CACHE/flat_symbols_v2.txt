@@ -1,0 +1,53 @@
+# ==========================================
+# FLAT SCREENER V2 (Истинный Боковик)
+# Найдено символов: 42
+# 
+# Условия фильтрации (Таймфрейм: {timeframe}, Окно: {window}):
+# - Пинг-Понг: Минимум 2 чередующихся касания верхних 25% и нижних 25% диапазона.
+# - Пила: Минимум 3 пересечения средней цены (SMA).
+# ==========================================
+
+Symbol          | Volatility   | PingPong   | SMA Crosses
+-----------------------------------------------------------------
+XNYUSDT         | 39.98%       | 3          | 3
+AIAUSDT         | 39.81%       | 6          | 4
+AIOUSDT         | 39.03%       | 2          | 3
+COLLECTUSDT     | 39.02%       | 2          | 4
+BELUSDT         | 38.62%       | 2          | 5
+VVVUSDT         | 38.47%       | 2          | 4
+DYMUSDT         | 37.47%       | 4          | 4
+UAIUSDT         | 37.23%       | 6          | 4
+IDUSDT          | 36.87%       | 2          | 5
+1000000BOBUSDT  | 36.76%       | 4          | 3
+FIGHTUSDT       | 36.69%       | 5          | 5
+NOTUSDT         | 36.08%       | 2          | 4
+DYDXUSDT        | 35.21%       | 2          | 5
+IOUSDT          | 34.79%       | 5          | 5
+XPLUSDT         | 34.47%       | 2          | 5
+POWERUSDT       | 33.21%       | 4          | 4
+XANUSDT         | 32.39%       | 5          | 3
+ALICEUSDT       | 31.60%       | 2          | 7
+BANKUSDT        | 31.44%       | 2          | 5
+PIEVERSEUSDT    | 31.13%       | 4          | 4
+我踏马来了USDT       | 30.80%       | 3          | 3
+AKTUSDT         | 30.47%       | 4          | 4
+CATIUSDT        | 29.85%       | 3          | 5
+JELLYJELLYUSDT  | 29.42%       | 2          | 4
+JUPUSDT         | 29.02%       | 5          | 5
+TNSRUSDT        | 28.96%       | 5          | 3
+PLUMEUSDT       | 28.84%       | 5          | 4
+PHAUSDT         | 28.74%       | 2          | 3
+APRUSDT         | 28.47%       | 3          | 3
+KOMAUSDT        | 27.96%       | 6          | 8
+OPENUSDT        | 27.92%       | 3          | 3
+XLMUSDT         | 27.54%       | 4          | 4
+SQDUSDT         | 27.26%       | 2          | 4
+ONDOUSDT        | 27.14%       | 4          | 4
+AEROUSDT        | 26.19%       | 4          | 3
+INJUSDT         | 26.15%       | 2          | 3
+KGENUSDT        | 26.07%       | 2          | 5
+B2USDT          | 26.04%       | 3          | 5
+SENTUSDT        | 25.87%       | 3          | 3
+BANUSDT         | 25.60%       | 2          | 6
+ICPUSDT         | 25.32%       | 4          | 4
+CUSDT           | 25.13%       | 2          | 4

@@ -103,3 +103,9 @@ if __name__ == "__main__":
 # taskkill /F /IM python.exe
 
 # # claude
+
+
+    # "allowed_users": [
+    #   1059524161,
+    #   610822492
+    # ]
