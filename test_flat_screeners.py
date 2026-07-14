@@ -12,7 +12,7 @@ from API.BINANCE.public import BinancePublic
 
 logger = UnifiedLogger("FlatScreener")
 
-async def fetch_klines(symbol: str, timeframe: str, window: int, cache_dir: Path, cache_lifetime: int) -> list:
+async def fetch_klines(symbol: str, timeframe: str, window: int, cache_dir: Path, cache_lifetime: int) -> tuple[list, bool]:
     # Check cache
     cache_file = cache_dir / f"{symbol}.json"
     if cache_file.exists():
@@ -20,16 +20,15 @@ async def fetch_klines(symbol: str, timeframe: str, window: int, cache_dir: Path
             try:
                 data = Utils.read_json_file(cache_file)
                 if data and len(data) >= window:
-                    # logger.info(f"Loaded {symbol} from cache") # uncomment for very verbose logging
-                    return data
+                    return data, True
             except Exception:
                 pass
                 
     data = await BinancePublic.get_klines(symbol, timeframe, window)
     if data:
         Utils.write_json_file(cache_file, data)
-        return data
-    return []
+        return data, False
+    return [], False
 
 def calculate_flatness(klines: list) -> float:
     if not klines or len(klines) < 2:
@@ -113,7 +112,11 @@ async def main():
         
     results = await asyncio.gather(*tasks)
     
-    for idx, klines in enumerate(results):
+    cache_hits = 0
+    for idx, (klines, is_cached) in enumerate(results):
+        if is_cached:
+            cache_hits += 1
+            
         sym = symbols_to_check[idx]
         original_item = vol_data_map[sym]
         
@@ -143,6 +146,7 @@ async def main():
         for item in flat_symbols:
             f.write(f"{item['symbol']:<15} | {item['volatility']:>5.2f}%       | {item['flatness']:.4f}\n")
             
+    logger.info(f"Cache stats: {cache_hits} / {len(symbols_to_check)} symbols loaded from cache.")
     logger.info(f"Flat Screener finished! Found {len(flat_symbols)} flat symbols out of {len(symbols_to_check)}.")
     logger.info(f"Results saved to {output_file}")
 
