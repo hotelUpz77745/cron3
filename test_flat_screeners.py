@@ -12,18 +12,15 @@ from API.BINANCE.public import BinancePublic
 
 logger = UnifiedLogger("FlatScreener")
 
-CACHE_FLAT_DIR = CACHE_DIR / "flat_klines"
-CACHE_FLAT_DIR.mkdir(parents=True, exist_ok=True)
-CACHE_LIFETIME = 3600  # 1 hour
-
-async def fetch_klines(symbol: str, timeframe: str, window: int) -> list:
+async def fetch_klines(symbol: str, timeframe: str, window: int, cache_dir: Path, cache_lifetime: int) -> list:
     # Check cache
-    cache_file = CACHE_FLAT_DIR / f"{symbol}.json"
+    cache_file = cache_dir / f"{symbol}.json"
     if cache_file.exists():
-        if time.time() - cache_file.stat().st_mtime < CACHE_LIFETIME:
+        if time.time() - cache_file.stat().st_mtime < cache_lifetime:
             try:
                 data = Utils.read_json_file(cache_file)
                 if data and len(data) >= window:
+                    # logger.info(f"Loaded {symbol} from cache") # uncomment for very verbose logging
                     return data
             except Exception:
                 pass
@@ -66,6 +63,11 @@ async def main():
     scanner_cfg = app_cfg.get("volatility_scanner", {})
     timeframe = scanner_cfg.get("timeframe", "1w")
     window = scanner_cfg.get("window", 12)
+    cache_lifetime_hours = scanner_cfg.get("cache_lifetime_hours", 1)
+    cache_lifetime_sec = int(cache_lifetime_hours * 3600)
+    
+    cache_dir = CACHE_DIR / f"flat_klines_{timeframe}"
+    cache_dir.mkdir(parents=True, exist_ok=True)
     
     flat_cfg = app_cfg.get("flat_scanner", {})
     max_flatness_pct = flat_cfg.get("max_flatness_pct", 35.0)
@@ -106,7 +108,7 @@ async def main():
     
     tasks = []
     for sym in symbols_to_check:
-        tasks.append(fetch_klines(sym, timeframe, window))
+        tasks.append(fetch_klines(sym, timeframe, window, cache_dir, cache_lifetime_sec))
         
     results = await asyncio.gather(*tasks)
     

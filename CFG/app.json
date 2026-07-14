@@ -59,7 +59,8 @@
     "window": 12,
     "min_volatility_pct": 25.0,
     "max_volatility_pct": 40.0,
-    "strict_window": true
+    "strict_window": true,
+    "cache_lifetime_hours": 1
   },
   "flat_scanner": {
     "max_flatness_pct": 35.0
