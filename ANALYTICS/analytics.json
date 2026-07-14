@@ -33,8 +33,8 @@
             "net_profit_usdt": 5.2504,
             "max_net_profit": 8.9913,
             "min_net_profit": 0.2159,
-            "avg_daily_profit": 0.3554,
-            "risk_reward_ratio": 53.73,
+            "avg_daily_profit": 0.3521,
+            "risk_reward_ratio": 54.23,
             "max_position_size": 400.0,
             "DRME": 0.0025
         },
@@ -50,7 +50,7 @@
             "realized_pnl_net_usdt": 0.1322,
             "max_drawdown": -4.9966,
             "min_drawdown": 0.0,
-            "MDME": 0.0498,
+            "MDME": 0.0249,
             "epoch_state": {
                 "size": 200.0,
                 "start_ts": 1783975820079,
@@ -63,10 +63,10 @@
             "net_profit_usdt": 0.1322,
             "max_net_profit": 0.5973,
             "min_net_profit": -2.0478,
-            "avg_daily_profit": 0.009,
-            "risk_reward_ratio": 555.18,
+            "avg_daily_profit": 0.0089,
+            "risk_reward_ratio": 561.42,
             "max_position_size": 200.0,
-            "DRME": 0.0002
+            "DRME": -0.0003
         },
         "VVVUSDT": {
             "current_drawdown": 0.0,
@@ -93,7 +93,7 @@
             "net_profit_usdt": -0.3508,
             "max_net_profit": -0.3508,
             "min_net_profit": -0.3508,
-            "avg_daily_profit": -0.0237,
+            "avg_daily_profit": -0.0235,
             "risk_reward_ratio": 0.0,
             "max_position_size": 0.0,
             "DRME": -0.0002
@@ -123,10 +123,10 @@
             "net_profit_usdt": -4.991,
             "max_net_profit": 0.9379,
             "min_net_profit": -6.9117,
-            "avg_daily_profit": -0.387,
+            "avg_daily_profit": -0.383,
             "risk_reward_ratio": 0.0,
             "max_position_size": 0.0,
-            "DRME": -0.0027
+            "DRME": -0.0026
         },
         "SOLUSDT": {
             "current_drawdown": 0.0,
@@ -153,8 +153,8 @@
             "net_profit_usdt": 3.0043,
             "max_net_profit": 3.4286,
             "min_net_profit": -1.334,
-            "avg_daily_profit": 0.2142,
-            "risk_reward_ratio": 20.52,
+            "avg_daily_profit": 0.2121,
+            "risk_reward_ratio": 20.73,
             "max_position_size": 0.0,
             "DRME": 0.0011
         },
@@ -183,8 +183,8 @@
             "net_profit_usdt": 1.2736,
             "max_net_profit": 1.4934,
             "min_net_profit": -3.1909,
-            "avg_daily_profit": 0.0862,
-            "risk_reward_ratio": 61.8,
+            "avg_daily_profit": 0.0854,
+            "risk_reward_ratio": 62.38,
             "max_position_size": 0.0,
             "DRME": 0.0009
         },
@@ -213,10 +213,10 @@
             "net_profit_usdt": 16.6505,
             "max_net_profit": 17.2948,
             "min_net_profit": -4.3275,
-            "avg_daily_profit": 2.0792,
-            "risk_reward_ratio": 8.68,
+            "avg_daily_profit": 2.0444,
+            "risk_reward_ratio": 8.83,
             "max_position_size": 0.0,
-            "DRME": 0.0051
+            "DRME": 0.005
         },
         "MMTUSDT": {
             "current_drawdown": 0.0,
@@ -313,7 +313,7 @@
     "max_drawdown_usdt": -21.5073,
     "performance_usdt": 22.1783,
     "recovery_factor": 1.31,
-    "last_updated_ts": 1784055613461,
+    "last_updated_ts": 1784067371790,
     "_help": {
         "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
         "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
