@@ -1,7 +1,7 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 100,
+        "invest_size": 200,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -16,35 +16,35 @@
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -3.6998,
+                "super_indent": -7.5117,
                 "is_active": false,
                 "price": null
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -5.9197,
+                "super_indent": -12.0187,
                 "is_active": false,
                 "price": null
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -9.6196,
+                "super_indent": -19.5304,
                 "is_active": false,
                 "price": null
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -15.5393,
+                "super_indent": -31.5491,
                 "is_active": false,
                 "price": null
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -25.1589,
+                "super_indent": -51.0795,
                 "is_active": false,
                 "price": null
             }
@@ -96,7 +96,7 @@
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 100,
+        "invest_size": 200,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -111,35 +111,35 @@
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -3.6998,
+                "super_indent": -7.5117,
                 "is_active": false,
                 "price": null
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -5.9197,
+                "super_indent": -12.0187,
                 "is_active": false,
                 "price": null
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -9.6196,
+                "super_indent": -19.5304,
                 "is_active": false,
                 "price": null
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -15.5393,
+                "super_indent": -31.5491,
                 "is_active": false,
                 "price": null
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -25.1589,
+                "super_indent": -51.0795,
                 "is_active": false,
                 "price": null
             }

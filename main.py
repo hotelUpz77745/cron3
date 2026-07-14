@@ -124,3 +124,14 @@ if __name__ == "__main__":
 #     "XAGUSDT",
 #     "JUPUSDT"
 #   ],
+
+
+
+    # "symbols": [
+    #     "STABLEUSDT",
+    #     "DASHUSDT",
+    #     "XPLUSDT",
+    #     "SOLUSDT",
+    #     "HYPERUSDT",
+    #     "XNYUSDT"
+    # ],
