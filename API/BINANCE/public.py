@@ -131,6 +131,19 @@ class BinancePublic:
         return None
 
     @staticmethod
+    async def get_klines(symbol: str, interval: str, limit: int) -> Optional[List[list]]:
+        """GET /fapi/v1/klines"""
+        params = {
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "limit": limit
+        }
+        data = await BinancePublic._get("/fapi/v1/klines", params=params)
+        if isinstance(data, list):
+            return data
+        return None
+
+    @staticmethod
     async def get_prices_bulk(symbols: List[str]) -> Dict[str, float]:
         """Один запрос, возвращает цены только по нужным symbols."""
 

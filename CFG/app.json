@@ -60,5 +60,8 @@
     "min_volatility_pct": 25.0,
     "max_volatility_pct": 40.0,
     "strict_window": true
+  },
+  "flat_scanner": {
+    "max_flatness_pct": 35.0
   }
 }

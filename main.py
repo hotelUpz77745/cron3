@@ -139,3 +139,5 @@ if __name__ == "__main__":
 
 # git cherry-pick ce2a11a
 # git cherry-pick 858f343
+# Хэш (индекс) вашего коммита: 8f649f4
+# (Полное сообщение коммита: feat(notifications): add idempotency alerts and tg control ui)

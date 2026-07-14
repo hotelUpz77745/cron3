@@ -18,7 +18,7 @@ logger = UnifiedLogger("VolatilityScanner")
 class VolatilityScanner:
     def __init__(self):
         self.config_path = DATA_DIR / "app.json"
-        self.output_path = DATA_DIR / "volatile_symbols.json"
+        self.output_path = DATA_DIR / "volatile_symbols.txt"
         
         # We need a BinanceClient to get klines. In an isolated script, we can initialize it without keys.
         self.client = BinanceClient("", "")
@@ -118,7 +118,12 @@ class VolatilityScanner:
         
         try:
             with open(self.output_path, "w", encoding="utf-8") as f:
-                json.dump(matching_symbols, f, indent=4)
+                f.write(f"# ATR VOLATILITY SCREENER\n")
+                f.write(f"# Найдено символов: {len(matching_symbols)}\n\n")
+                f.write(f"{'Symbol':<15} | {'Volatility':<12} | {'Candles'}\n")
+                f.write("-" * 45 + "\n")
+                for item in matching_symbols:
+                    f.write(f"{item['symbol']:<15} | {item['volatility']:>5.2f}%       | {item['candles']}\n")
             logger.info(f"[Scanner] Saved {len(matching_symbols)} matching symbols to {self.output_path}")
         except Exception as e:
             logger.error(f"[Scanner] Error saving to {self.output_path}: {e}")

@@ -83,6 +83,9 @@ class TelegramReceiver:
             ],
             [
                 KeyboardButton(text="🔍 ATR SCREENER"),
+                KeyboardButton(text="📉 FLAT SCREENER")
+            ],
+            [
                 KeyboardButton(text="🔔 SET INFO")
             ]
         ]
@@ -1423,6 +1426,59 @@ class TelegramReceiver:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
 
         # =========================================================
+        # FLAT SCREENER
+        # =========================================================
+        @self.dp.message(F.text == "📉 FLAT SCREENER")
+        async def on_flat_screener_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📉 Запустить Flat Screener", callback_data="cb_run_flat_scanner")]
+            ])
+            text = (
+                "<b>Flat Screener (Поиск боковика)</b>\n\n"
+                "⚠️ <b>ВНИМАНИЕ:</b> Перед запуском этого скринера рекомендуется сперва обновить слепок данных, "
+                "запустив скринер волатильности (ATR SCREENER).\n\n"
+                "💡 <i>Подсказка по Flatness:</i>\n"
+                "Значение от 0.0 до 1.0. Чем ближе к 0, тем идеальнее пара стоит в волатильном коридоре (боковике) "
+                "без направленного тренда. Значение показывает отношение чистого смещения цены к ее полному размаху."
+            )
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_run_flat_scanner")
+        async def process_cb_run_flat_scanner(callback: CallbackQuery, state: FSMContext):
+            await callback.answer("Запускаю Flat Screener...")
+            msg = await callback.message.answer("⏳ Анализ плоских коридоров запущен, пожалуйста подождите...")
+            
+            try:
+                import sys
+                import subprocess
+                from consts import DATA_DIR
+                output_path = DATA_DIR / "flat_symbols.txt"
+                if output_path.exists():
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                        
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, "test_flat_screeners.py",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd()
+                )
+                stdout, stderr = await process.communicate()
+                
+                if output_path.exists():
+                    await msg.delete()
+                    await callback.message.answer_document(FSInputFile(output_path), caption="✅ Flat Screener завершен. Результаты в файле.")
+                else:
+                    await msg.edit_text(f"❌ Ошибка сканирования (файл не создан).\n\nЛоги:\n{stderr.decode('utf-8')}")
+                    
+            except Exception as e:
+                logger.error(f"Error running flat scanner: {e}")
+                await msg.edit_text(f"❌ Системная ошибка при запуске Flat скринера: {e}")
+
+        # =========================================================
         # /sonnik - VOLATILITY SCANNER
         # =========================================================
         @self.dp.message(Command("sonnik"))
@@ -1444,7 +1500,7 @@ class TelegramReceiver:
                 import sys
                 import subprocess
                 from consts import DATA_DIR
-                output_path = DATA_DIR / "volatile_symbols.json"
+                output_path = DATA_DIR / "volatile_symbols.txt"
                 if output_path.exists():
                     try:
                         os.remove(output_path)
@@ -1460,7 +1516,7 @@ class TelegramReceiver:
                 )
                 stdout, stderr = await process.communicate()
                 
-                output_path = DATA_DIR / "volatile_symbols.json"
+                output_path = DATA_DIR / "volatile_symbols.txt"
                 if output_path.exists():
                     await msg.delete()
                     await callback.message.answer_document(FSInputFile(output_path), caption="✅ Сканирование завершено. Результаты в файле.")
