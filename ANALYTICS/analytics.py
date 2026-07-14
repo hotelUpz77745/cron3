@@ -318,7 +318,11 @@ class AnalyticsManager:
                         signed=True
                     )
                     
-                    if not inc_res.success or not isinstance(inc_res.data, list) or not inc_res.data:
+                    if not inc_res.success:
+                        logger.error(f"Absolute Deep Sync aborted: Failed to fetch income from Binance. API Error: {getattr(inc_res, 'error_message', 'Unknown')}")
+                        return
+                        
+                    if not isinstance(inc_res.data, list) or not inc_res.data:
                         break
                         
                     page_records = inc_res.data
