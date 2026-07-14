@@ -318,6 +318,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
         async def process_reset_analytics_confirm(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Сброс аналитики отменен.", reply_markup=self._get_main_keyboard())
@@ -347,6 +350,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
         async def process_initial_balance(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Действие отменено.", reply_markup=self._get_main_keyboard())
@@ -796,6 +802,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_add_symbol)
         async def process_add_symbol(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
@@ -835,6 +844,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_del_symbol)
         async def process_del_symbol(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 return await on_set_coins(message, state)
                 
@@ -1010,6 +1022,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_invest_size)
         async def handle_invest_size(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
@@ -1116,6 +1131,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_avg_params)
         async def handle_avg_params(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
@@ -1254,6 +1272,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_tp_params)
         async def handle_tp_params(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text == "🔙 Back":
                 await state.clear()
                 return await on_set_coins(message, state)
@@ -1509,6 +1530,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_flatness_val)
         async def process_flatness_val(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             if message.text and message.text == "🔙 Back":
                 await state.clear()
                 await message.answer("Отменено.", reply_markup=self._get_main_keyboard())
@@ -1708,6 +1732,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_notif_neg)
         async def process_notif_neg_val(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             try:
                 val = float(message.text)
                 val = -abs(val)  # Validation: always negative or zero
@@ -1726,6 +1753,9 @@ class TelegramReceiver:
 
         @self.dp.message(TGStates.waiting_for_notif_pos)
         async def process_notif_pos_val(message: Message, state: FSMContext):
+            if not message.text:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение.")
+                return
             try:
                 val = float(message.text)
                 val = abs(val)  # Validation: always positive or zero
