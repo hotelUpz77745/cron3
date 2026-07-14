@@ -84,7 +84,8 @@ class TelegramReceiver:
             ],
             [
                 KeyboardButton(text="🔍 ATR SCREENER"),
-                KeyboardButton(text="📉 FLAT SCREENER")
+                KeyboardButton(text="📉 FLAT SCREENER"),
+                KeyboardButton(text="📉 FLAT V2 (Боковик)")
             ],
             [
                 KeyboardButton(text="🔔 SET INFO")
@@ -1516,6 +1517,65 @@ class TelegramReceiver:
             except Exception as e:
                 logger.error(f"Error running flat scanner: {e}")
                 await msg.edit_text(f"❌ Системная ошибка при запуске Flat скринера: {e}")
+
+        # =========================================================
+        # FLAT SCREENER V2
+        # =========================================================
+        @self.dp.message(F.text == "📉 FLAT V2 (Боковик)")
+        async def on_flat_v2_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📉 Запустить Flat Screener V2", callback_data="cb_run_flat_v2")]
+            ])
+            text = (
+                "<b>Flat Screener V2 (Истинный Боковик)</b>\n\n"
+                "⚠️ <b>ВНИМАНИЕ:</b> Использует данные от скринера волатильности (ATR SCREENER).\n\n"
+                "💡 <i>Логика:</i>\n"
+                "Этот скринер ищет настоящие боковики, используя два метода одновременно:\n"
+                "1. <b>Пинг-Понг:</b> Монета должна коснуться верхних 25% диапазона и нижних 25% как минимум 2 раза по очереди.\n"
+                "2. <b>Пила:</b> Цена должна пересечь свою среднюю скользящую (SMA) как минимум 3 раза за окно.\n\n"
+                "Это отлично отсеивает 'V-образные' шпильки и гарантирует пилообразное движение цены."
+            )
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_run_flat_v2")
+        async def process_cb_run_flat_v2(callback: CallbackQuery, state: FSMContext):
+            from consts import CACHE_DIR
+            if not (CACHE_DIR / "volatile_symbols.txt").exists() and not (CACHE_DIR / "volatile_symbols.json").exists():
+                await callback.answer("🛑 Нет данных от ATR Screener! Сперва запустите его.", show_alert=True)
+                return
+
+            await callback.answer("Запускаю Flat Screener V2...")
+            msg = await callback.message.answer("⏳ Анализ плоских коридоров V2 запущен, пожалуйста подождите...")
+            
+            try:
+                import sys
+                import subprocess
+                import os
+                from aiogram.types import FSInputFile
+                
+                output_path = CACHE_DIR / "flat_symbols_v2.txt"
+                if output_path.exists():
+                    try:
+                        os.remove(output_path)
+                    except:
+                        pass
+                        
+                process = await asyncio.create_subprocess_exec(
+                    sys.executable, "test_flat_screeners_v2.py",
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=os.getcwd()
+                )
+                stdout, stderr = await process.communicate()
+                
+                if output_path.exists():
+                    await msg.delete()
+                    await callback.message.answer_document(FSInputFile(output_path), caption="✅ Flat Screener V2 завершен. Результаты в файле.")
+                else:
+                    await msg.edit_text(f"❌ Ошибка сканирования (файл не создан).\n\nЛоги:\n{stderr.decode('utf-8')}")
+            except Exception as e:
+                await msg.edit_text(f"❌ Ошибка выполнения скринера: {e}")
 
         @self.dp.callback_query(F.data == "cb_edit_flatness")
         async def process_cb_edit_flatness(callback: CallbackQuery, state: FSMContext):
