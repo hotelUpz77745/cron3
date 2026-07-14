@@ -8,3 +8,6 @@ TESTS/
 test/
 logs/
 CACHE/flat_klines*/
+CFG/runtime/
+CFG/flat_symbols.txt
+CFG/volatile_symbols.txt
