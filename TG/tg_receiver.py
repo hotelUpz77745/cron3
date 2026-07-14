@@ -31,6 +31,8 @@ class TGStates(StatesGroup):
     waiting_for_initial_balance = State()
     waiting_for_reset_confirm = State()
     waiting_for_scanner_json = State()
+    waiting_for_notif_neg = State()
+    waiting_for_notif_pos = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -80,7 +82,8 @@ class TelegramReceiver:
                 KeyboardButton(text="🗑️ Сбросить аналитику")
             ],
             [
-                KeyboardButton(text="🔍 ATR SCREENER")
+                KeyboardButton(text="🔍 ATR SCREENER"),
+                KeyboardButton(text="🔔 SET INFO")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -1538,6 +1541,88 @@ class TelegramReceiver:
                 await state.clear()
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
+
+        @self.dp.message(F.text == "🔔 SET INFO")
+        async def on_set_info(message: Message, state: FSMContext):
+            await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔄 Сбросить флаги", callback_data="reset_notif_flags")],
+                [
+                    InlineKeyboardButton(text="✏️ Ред. Отриц. порог", callback_data="edit_notif_neg"),
+                    InlineKeyboardButton(text="✏️ Ред. Полож. порог", callback_data="edit_notif_pos")
+                ]
+            ])
+            
+            from consts import DATA_DIR
+            from c_utils import Utils
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            notif_cfg = app_cfg.get("notifications", {})
+            enabled = notif_cfg.get("enabled", False)
+            neg_th = notif_cfg.get("negative_threshold", -100.0)
+            pos_th = notif_cfg.get("positive_threshold", 100.0)
+            
+            neg_flag = self.bot_core.notifier.neg_flag if hasattr(self.bot_core, "notifier") else False
+            pos_flag = self.bot_core.notifier.pos_flag if hasattr(self.bot_core, "notifier") else False
+            
+            text = (
+                f"<b>Управление уведомлениями:</b>\n"
+                f"Статус: {'✅ Вкл' if enabled else '❌ Выкл'}\n"
+                f"Отрицательный порог: {neg_th} USDT (Сработал: {neg_flag})\n"
+                f"Положительный порог: {pos_th} USDT (Сработал: {pos_flag})"
+            )
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "reset_notif_flags")
+        async def process_reset_notif_flags(callback: CallbackQuery, state: FSMContext):
+            if hasattr(self.bot_core, "notifier"):
+                self.bot_core.notifier.reset_flags()
+                await callback.message.edit_text("✅ Флаги уведомлений успешно сброшены!")
+            else:
+                await callback.answer("Notifier module not found.", show_alert=True)
+
+        @self.dp.callback_query(F.data == "edit_notif_neg")
+        async def process_edit_notif_neg(callback: CallbackQuery, state: FSMContext):
+            await state.set_state(TGStates.waiting_for_notif_neg)
+            await callback.message.answer("Введите новый отрицательный порог (например, -150.0):")
+            await callback.answer()
+
+        @self.dp.callback_query(F.data == "edit_notif_pos")
+        async def process_edit_notif_pos(callback: CallbackQuery, state: FSMContext):
+            await state.set_state(TGStates.waiting_for_notif_pos)
+            await callback.message.answer("Введите новый положительный порог (например, 200.0):")
+            await callback.answer()
+
+        @self.dp.message(TGStates.waiting_for_notif_neg)
+        async def process_notif_neg_val(message: Message, state: FSMContext):
+            try:
+                val = float(message.text)
+                from consts import DATA_DIR
+                from c_utils import Utils
+                app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+                if "notifications" not in app_cfg: app_cfg["notifications"] = {}
+                app_cfg["notifications"]["negative_threshold"] = val
+                Utils.write_json_file(DATA_DIR / "app.json", app_cfg)
+                
+                await message.answer(f"✅ Отрицательный порог установлен на {val} USDT.")
+                await state.clear()
+            except ValueError:
+                await message.answer("❌ Ошибка! Введите числовое значение.")
+
+        @self.dp.message(TGStates.waiting_for_notif_pos)
+        async def process_notif_pos_val(message: Message, state: FSMContext):
+            try:
+                val = float(message.text)
+                from consts import DATA_DIR
+                from c_utils import Utils
+                app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+                if "notifications" not in app_cfg: app_cfg["notifications"] = {}
+                app_cfg["notifications"]["positive_threshold"] = val
+                Utils.write_json_file(DATA_DIR / "app.json", app_cfg)
+                
+                await message.answer(f"✅ Положительный порог установлен на {val} USDT.")
+                await state.clear()
+            except ValueError:
+                await message.answer("❌ Ошибка! Введите числовое значение.")
 
     async def start(self):
         logger.info("Starting Telegram Receiver...")

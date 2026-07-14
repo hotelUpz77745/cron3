@@ -59,6 +59,9 @@ class BotCore:
         from ANALYTICS.analytics import AnalyticsManager
         self.analytics = AnalyticsManager()
         
+        from CORE.notifier import NotifierManager
+        self.notifier = NotifierManager()
+        
         from consts import TG_ENABLED
         auto_start = _CFG.get("app", {}).get("auto_start", False)
         if TG_ENABLED:
@@ -482,6 +485,8 @@ class BotCore:
         self.volatility_manager = VolatilityManager(self)
         self.volatility_manager.start()
         
+        await self.notifier.start()
+        
         await self._game_loop()
 
     def stop(self):
@@ -493,6 +498,8 @@ class BotCore:
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""
         logger.info("Executing graceful BotCore shutdown...")
+        if hasattr(self, 'notifier'):
+            await self.notifier.stop()
         self.is_running = False
         try:
             # Принудительно дампим стейты
