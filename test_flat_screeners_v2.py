@@ -30,7 +30,7 @@ async def fetch_klines(symbol: str, timeframe: str, window: int, cache_dir: Path
         return data, False
     return [], False
 
-def analyze_sideways(klines: list) -> dict:
+def analyze_sideways(klines: list, min_alt_touches: int = 2, min_sma_crosses: int = 3) -> dict:
     if not klines or len(klines) < 2:
         return {"is_sideways": False}
         
@@ -80,9 +80,7 @@ def analyze_sideways(klines: list) -> dict:
                 above = curr_above
                 
         # Criteria for "Volatile Sideways"
-        # Minimum 2 alternating touches (e.g. top -> bottom -> top)
-        # Minimum 3 SMA crosses
-        is_sideways = (alternating_touches >= 2) and (crosses >= 3)
+        is_sideways = (alternating_touches >= min_alt_touches) and (crosses >= min_sma_crosses)
         
         return {
             "is_sideways": is_sideways,
@@ -102,6 +100,10 @@ async def main():
     window = scanner_cfg.get("window", 12)
     cache_lifetime_hours = scanner_cfg.get("cache_lifetime_hours", 1)
     cache_lifetime_sec = int(cache_lifetime_hours * 3600)
+    
+    flat_v2_cfg = app_cfg.get("flat_scanner_v2", {})
+    min_alt_touches = flat_v2_cfg.get("min_alt_touches", 2)
+    min_sma_crosses = flat_v2_cfg.get("min_sma_crosses", 3)
     
     cache_dir = CACHE_DIR / f"flat_klines_{timeframe}"
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -155,7 +157,7 @@ async def main():
         if not klines:
             continue
             
-        stats = analyze_sideways(klines)
+        stats = analyze_sideways(klines, min_alt_touches, min_sma_crosses)
         if stats["is_sideways"]:
             flat_item = dict(original_item)
             flat_item["alt_touches"] = stats["alt_touches"]

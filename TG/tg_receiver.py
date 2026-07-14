@@ -1524,6 +1524,14 @@ class TelegramReceiver:
         @self.dp.message(F.text == "📉 FLAT V2 (Боковик)")
         async def on_flat_v2_cmd(message: Message, state: FSMContext):
             await state.clear()
+            
+            from c_utils import Utils
+            from consts import DATA_DIR
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            flat_v2_cfg = app_cfg.get("flat_scanner_v2", {})
+            min_alt_touches = flat_v2_cfg.get("min_alt_touches", 2)
+            min_sma_crosses = flat_v2_cfg.get("min_sma_crosses", 3)
+            
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📉 Запустить Flat Screener V2", callback_data="cb_run_flat_v2")]
             ])
@@ -1532,9 +1540,10 @@ class TelegramReceiver:
                 "⚠️ <b>ВНИМАНИЕ:</b> Использует данные от скринера волатильности (ATR SCREENER).\n\n"
                 "💡 <i>Логика:</i>\n"
                 "Этот скринер ищет настоящие боковики, используя два метода одновременно:\n"
-                "1. <b>Пинг-Понг:</b> Монета должна коснуться верхних 25% диапазона и нижних 25% как минимум 2 раза по очереди.\n"
-                "2. <b>Пила:</b> Цена должна пересечь свою среднюю скользящую (SMA) как минимум 3 раза за окно.\n\n"
-                "Это отлично отсеивает 'V-образные' шпильки и гарантирует пилообразное движение цены."
+                f"1. <b>Пинг-Понг:</b> Монета должна коснуться верхних 25% диапазона и нижних 25% как минимум {min_alt_touches} раза по очереди.\n"
+                f"2. <b>Пила:</b> Цена должна пересечь свою среднюю скользящую (SMA) как минимум {min_sma_crosses} раза за окно.\n\n"
+                "Это отлично отсеивает 'V-образные' шпильки и гарантирует пилообразное движение цены.\n\n"
+                "<i>Настроить параметры можно в файле app.json (секция flat_scanner_v2).</i>"
             )
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 

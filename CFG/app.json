@@ -67,5 +67,10 @@
   "flat_scanner": {
     "_comment_max_flatness": "Values usually 0.0 to 100.0. E.g. 35.0 means net movement is max 35% of total range. Lower is flatter.",
     "max_flatness_pct": 35.0
+  },
+  "flat_scanner_v2": {
+    "_comment_v2": "min_alt_touches = required alternating touches of top/bottom 25% of range. min_sma_crosses = required SMA crossings.",
+    "min_alt_touches": 2,
+    "min_sma_crosses": 3
   }
 }
