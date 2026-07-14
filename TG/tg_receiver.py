@@ -33,6 +33,7 @@ class TGStates(StatesGroup):
     waiting_for_scanner_json = State()
     waiting_for_notif_neg = State()
     waiting_for_notif_pos = State()
+    waiting_for_flatness_val = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -1431,16 +1432,26 @@ class TelegramReceiver:
         @self.dp.message(F.text == "📉 FLAT SCREENER")
         async def on_flat_screener_cmd(message: Message, state: FSMContext):
             await state.clear()
+            
+            from c_utils import Utils
+            from consts import DATA_DIR
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            flat_cfg = app_cfg.get("flat_scanner", {})
+            max_flat = flat_cfg.get("max_flatness_pct", 35.0)
+            
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="📉 Запустить Flat Screener", callback_data="cb_run_flat_scanner")]
+                [InlineKeyboardButton(text="📉 Запустить Flat Screener", callback_data="cb_run_flat_scanner")],
+                [InlineKeyboardButton(text="⚙️ Изменить порог (Flatness)", callback_data="cb_edit_flatness")]
             ])
             text = (
                 "<b>Flat Screener (Поиск боковика)</b>\n\n"
+                f"🎚 <b>Текущий порог отсечения:</b> {max_flat}%\n\n"
                 "⚠️ <b>ВНИМАНИЕ:</b> Перед запуском этого скринера рекомендуется сперва обновить слепок данных, "
                 "запустив скринер волатильности (ATR SCREENER).\n\n"
                 "💡 <i>Подсказка по Flatness:</i>\n"
-                "Значение от 0.0 до 1.0. Чем ближе к 0, тем идеальнее пара стоит в волатильном коридоре (боковике) "
-                "без направленного тренда. Значение показывает отношение чистого смещения цены к ее полному размаху."
+                "Значение от 0.0 до 100.0. Чем ближе к 0, тем идеальнее пара стоит в волатильном коридоре (боковике) "
+                "без направленного тренда. Значение показывает отношение чистого смещения цены к ее полному размаху.\n\n"
+                "Например, 15.0 задаст очень жесткие рамки для идеального боковика."
             )
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -1477,6 +1488,45 @@ class TelegramReceiver:
             except Exception as e:
                 logger.error(f"Error running flat scanner: {e}")
                 await msg.edit_text(f"❌ Системная ошибка при запуске Flat скринера: {e}")
+
+        @self.dp.callback_query(F.data == "cb_edit_flatness")
+        async def process_cb_edit_flatness(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await callback.message.answer(
+                "Введите новое значение порога (max_flatness_pct) в процентах, например 15.0 или 35.0:\n\n"
+                "<i>Для отмены нажмите кнопку Back.</i>",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await state.set_state(TGStates.waiting_for_flatness_val)
+
+        @self.dp.message(TGStates.waiting_for_flatness_val)
+        async def process_flatness_val(message: Message, state: FSMContext):
+            if message.text and message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Отменено.", reply_markup=self._get_main_keyboard())
+                return
+                
+            try:
+                val = float(message.text.strip())
+                if val < 0.0 or val > 100.0:
+                    raise ValueError("Значение должно быть от 0 до 100")
+                    
+                from c_utils import Utils
+                from consts import DATA_DIR
+                app_json_path = DATA_DIR / "app.json"
+                app_data = Utils.read_json_file(app_json_path)
+                
+                if "flat_scanner" not in app_data:
+                    app_data["flat_scanner"] = {}
+                app_data["flat_scanner"]["max_flatness_pct"] = val
+                
+                Utils.write_json_file(app_json_path, app_data)
+                
+                await message.answer(f"✅ Порог Flat Screener успешно обновлен на {val}%!", reply_markup=self._get_main_keyboard())
+                await state.clear()
+            except Exception as e:
+                await message.answer(f"❌ Ошибка: {e}. Пожалуйста, введите корректное число (например, 20.0).")
 
         # =========================================================
         # /sonnik - VOLATILITY SCANNER
