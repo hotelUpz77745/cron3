@@ -285,7 +285,7 @@ class AnalyticsManager:
                             for row in reader:
                                 if not row or row[0] in ("Id", "Symbol"):
                                     continue
-                                sym = row[1] if row[0].isdigit() else row[0]
+                                sym = row[1].strip() if row[0].isdigit() else row[0].strip()
                                 ledger_symbols.append(sym)
                 except Exception:
                     pass
