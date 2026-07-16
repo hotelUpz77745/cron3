@@ -296,18 +296,36 @@ class AnalyticsManager:
                 income_records = []
                 current_start = start_ts - 600000  # -10m safety
                 
-                while True:
-                    inc_res = await client._request(
-                        "GET", 
-                        "https://fapi.binance.com/fapi/v1/income", 
-                        params={"limit": 1000, "startTime": current_start}, 
-                        signed=True
-                    )
+                MAX_PAGES = 100
+                page_count = 0
+                while page_count < MAX_PAGES:
+                    page_count += 1
                     
-                    if not inc_res.success or not isinstance(inc_res.data, list) or not inc_res.data:
-                        break
+                    attempts = 0
+                    success_fetch = False
+                    inc_res = None
+                    
+                    while attempts < 3:
+                        inc_res = await client._request(
+                            "GET", 
+                            "https://fapi.binance.com/fapi/v1/income", 
+                            params={"limit": 1000, "startTime": current_start}, 
+                            signed=True
+                        )
+                        if inc_res and inc_res.success and isinstance(inc_res.data, list):
+                            success_fetch = True
+                            break
+                        attempts += 1
+                        await asyncio.sleep(1.0)
+                        
+                    if not success_fetch:
+                        logger.error(f"[ANALYTICS] Failed to fetch income history after 3 attempts! Aborting Deep Sync to protect stats.")
+                        return # Abort the whole sync to prevent data loss
                         
                     page_records = inc_res.data
+                    if not page_records:
+                        break
+                        
                     income_records.extend(page_records)
                     
                     if len(page_records) < 1000:
@@ -615,9 +633,16 @@ class AnalyticsManager:
     def start_realtime_tracker(self, client):
         if hasattr(self, "_tracker_task") and self._tracker_task:
             return
+        self._is_tracker_running = True
         self._tracker_task = asyncio.create_task(self._realtime_tracker_loop(client))
         self._background_tasks.add(self._tracker_task)
         self._tracker_task.add_done_callback(self._background_tasks.discard)
+        
+    def stop_realtime_tracker(self):
+        self._is_tracker_running = False
+        if hasattr(self, "_tracker_task") and self._tracker_task:
+            self._tracker_task.cancel()
+            self._tracker_task = None
         
     async def sync_current_drawdowns(self, client):
         async with self._lock:
@@ -724,9 +749,9 @@ class AnalyticsManager:
             self._write_data(data)
 
     async def _realtime_tracker_loop(self, client):
-        logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 15s)")
-        while True:
-            await asyncio.sleep(15.0)
+        logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 5s)")
+        while getattr(self, '_is_tracker_running', True):
+            await asyncio.sleep(5.0)
             try:
                 # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
                 # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
