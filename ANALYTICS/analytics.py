@@ -296,7 +296,8 @@ class AnalyticsManager:
                 income_records = []
                 current_start = start_ts - 600000  # -10m safety
                 
-                while True:
+                is_fetching = True
+                while is_fetching:
                     attempts = 0
                     success_fetch = False
                     inc_res = None
@@ -320,12 +321,14 @@ class AnalyticsManager:
                         
                     page_records = inc_res.data
                     if not page_records:
-                        break
+                        is_fetching = False
+                        continue
                         
                     income_records.extend(page_records)
                     
                     if len(page_records) < 1000:
-                        break
+                        is_fetching = False
+                        continue
                     
                     current_start = int(page_records[-1].get("time", current_start)) + 1
                     await asyncio.sleep(0.5)  # rate limit safety
