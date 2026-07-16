@@ -31,6 +31,7 @@ class TGStates(StatesGroup):
     waiting_for_initial_balance = State()
     waiting_for_reset_confirm = State()
     waiting_for_scanner_json = State()
+    waiting_for_close_all_confirm = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -157,7 +158,18 @@ class TelegramReceiver:
                 await msg.edit_text(f"❌ Ошибка во время Deep Sync: {e}")
 
         @self.dp.message(F.text == "🚨 Close All")
-        async def on_close_all(message: Message):
+        async def on_close_all(message: Message, state: FSMContext):
+            await state.set_state(TGStates.waiting_for_close_all_confirm)
+            await message.answer("⚠️ Вы уверены, что хотите закрыть все позиции по рынку и отменить лимитные ордера?\n\nДля подтверждения введите слово <b>ЗАКРЫТЬ</b>", parse_mode="HTML")
+
+        @self.dp.message(StateFilter(TGStates.waiting_for_close_all_confirm))
+        async def process_close_all_confirm(message: Message, state: FSMContext):
+            await state.clear()
+            
+            if not message.text or message.text.strip().lower() != "закрыть":
+                await message.answer("❌ Подтверждение отменено. Действие прервано.")
+                return
+                
             msg = await message.answer("⏳ Отправка запросов на закрытие позиций и отмену ордеров...")
             try:
                 await self.bot_core.close_all_positions()
