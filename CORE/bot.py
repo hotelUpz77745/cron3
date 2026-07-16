@@ -227,6 +227,10 @@ class BotCore:
                 logger.error(f"[{symbol}] Failed to open {side} position: {res.error_msg}")
                 return
                 
+            # БЕЗУСЛОВНАЯ фиксация входа в позицию (ИДЕМПОТЕНТНОСТЬ)
+            # Если биржа приняла ордер, мы УЖЕ в позиции. Флаг спасет от двойного входа при отвале REST/WS.
+            state.set_in_position(True)
+                
             current_time_ms = int(time.time() * 1000)
             state.open_time = current_time_ms
             side_cfg["open_time"] = current_time_ms
