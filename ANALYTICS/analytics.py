@@ -177,8 +177,11 @@ class AnalyticsManager:
 
     def _write_data(self, data: dict):
         try:
+            import os
             self._calculate_advanced_metrics(data)
-            self.log_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
+            temp_file = self.log_file.with_suffix('.tmp')
+            temp_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
+            os.replace(temp_file, self.log_file)
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
 
@@ -441,12 +444,15 @@ class AnalyticsManager:
                 # gets added to final balance internally, but not as a trade row.
                 current_balance += global_pending_delta
                         
-                # Overwrite CSV completely
+                # Overwrite CSV completely using atomic write
                 async with self._csv_lock:
-                    with open(self.txt_file, 'w', encoding='utf-8', newline='') as f:
+                    import os
+                    temp_txt = self.txt_file.with_suffix('.tmp')
+                    with open(temp_txt, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
                         writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
                         writer.writerows(ledger_rows)
+                    os.replace(temp_txt, self.txt_file)
                         
                 # Reconstruct JSON
                 async with self._lock:
