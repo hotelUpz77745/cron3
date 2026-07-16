@@ -754,9 +754,9 @@ class AnalyticsManager:
             self._write_data(data)
 
     async def _realtime_tracker_loop(self, client):
-        logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 5s)")
+        logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 10s)")
         while getattr(self, '_is_tracker_running', True):
-            await asyncio.sleep(5.0)
+            await asyncio.sleep(10.0)
             try:
                 # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
                 # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
@@ -770,10 +770,10 @@ class AnalyticsManager:
 
     async def _do_fetch_and_record(self, client, symbol: str, side: str, open_time: int, close_time: int):
         """
-        Waits 5 seconds after a trade closes, then triggers the Absolute Deep Sync engine
+        Waits 10 seconds after a trade closes, then triggers the Absolute Deep Sync engine
         to completely reconstruct analytics and ledger.
         """
-        logger.info(f"[{symbol}] Trade closed. Waiting 5s before Absolute Deep Sync...")
+        logger.info(f"[{symbol}] Trade closed. Waiting 10s before Absolute Deep Sync...")
         
         # FIX: Ensure first_trade_ts is set BEFORE we run deep_sync
         # This allows the system to seamlessly start writing analytics from a clean "Reset" state
@@ -786,7 +786,7 @@ class AnalyticsManager:
                     data["first_trade_ts"] = open_time
                     self._write_data(data)
                     
-        await asyncio.sleep(5.0)
+        await asyncio.sleep(10.0)
         await self.deep_sync_analytics(client)
         logger.info(f"[ANALYTICS] Position synced: {symbol} {side}")
 

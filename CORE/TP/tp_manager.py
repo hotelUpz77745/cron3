@@ -45,6 +45,10 @@ class TakeProfitManager:
         if volume is None:
             volume_float = abs(state.total_volume)
             volume = TradeMath.round_qty(volume_float, spec_data, symbol)
+            
+        if volume <= 0:
+            logger.warning(f"[{symbol}] {side} Calculated TP volume is {volume}. Skipping TP placement to prevent zero-quantity error.")
+            return False
         
         # Сторона ордера: обратная стороне позиции
         order_side = "SELL" if side == "LONG" else "BUY"

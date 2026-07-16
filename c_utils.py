@@ -140,9 +140,12 @@ class Utils:
 
     @staticmethod
     def get_spec_precisions(symbol_info, symbol):
-        symbol_data = next((item for item in symbol_info["symbols"] if item['symbol'] == symbol), None)
+        if not symbol_info or not isinstance(symbol_info, dict) or "symbols" not in symbol_info:
+            return None
+            
+        symbol_data = next((item for item in symbol_info.get("symbols", []) if item.get('symbol') == symbol), None)
         if not symbol_data:
-            return
+            return None
 
         lot_size_filter = next((f for f in symbol_data["filters"] if f["filterType"] == "LOT_SIZE"), None)
         price_filter = next((f for f in symbol_data["filters"] if f["filterType"] == "PRICE_FILTER"), None)

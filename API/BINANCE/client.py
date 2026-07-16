@@ -541,7 +541,7 @@ class BinanceClient:
         """
         # Лимит для свечей (Binance API позволяет до 1500, обычно Rate Limit 10-20ms)
         limit = min(limit, 1500)
-        limit_sec = 0.1
+        limit_sec = 0.5
         async with self._kline_lock:
             elapsed = time.monotonic() - self._kline_last_send
             if elapsed < limit_sec:

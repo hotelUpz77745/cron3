@@ -66,8 +66,10 @@ class BotCore:
         else:
             self.is_paused = False
         
-        self.spec_data = {}
+        spec_cache_path = DATA_DIR / "CACHE" / "specifications.json"
+        self.spec_data = Utils.read_json_file(spec_cache_path)
         
+
         from consts import API_KEY, API_SECRET
         self.client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
         
@@ -182,6 +184,7 @@ class BotCore:
                 data = await BinancePublic.get_instruments()
                 if data:
                     self.spec_data = {"symbols": data}
+                    Utils.write_json_file(DATA_DIR / "CACHE" / "specifications.json", self.spec_data)
 
                 await asyncio.sleep(SPEC_TTL_SEC) 
         except asyncio.CancelledError:
