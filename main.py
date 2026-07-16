@@ -134,3 +134,6 @@ if __name__ == "__main__":
 
 # Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
 # 1;XPLUSDT;SYNC;2026-06-30 03:26:05;2026-06-30 03:26:05;0.0231;298.9831
+
+# git fetch origin
+# git checkout origin/slavik -- ANALYTICS/analytics.py TG/tg_receiver.py CORE/bot.py

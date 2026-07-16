@@ -46,6 +46,11 @@ class TelegramReceiver:
             if TG_ALLOWED_USERS and event.from_user.id not in TG_ALLOWED_USERS:
                 logger.warning(f"Unauthorized access attempt by {event.from_user.id}")
                 return
+                
+            if not event.text:
+                await event.answer("⚠️ Бот принимает только текстовые команды. Пожалуйста, не отправляйте медиафайлы, стикеры или пустые сообщения.")
+                return
+                
             return await handler(event, data)
 
         @self.dp.callback_query.outer_middleware()
