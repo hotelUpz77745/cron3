@@ -425,6 +425,11 @@ class BotCore:
         logger.info("Streams and REST synced! Running initial RuntimeFSM Sync...")
         await self.runtime_manager.sync_with_fsm(self.fsm_states)
 
+        logger.info("Waiting for exchange specifications to load...")
+        while not self.spec_data.get("symbols") and self.is_running:
+            await asyncio.sleep(0.5)
+        logger.info("Exchange specifications loaded.")
+
         while self.is_running:
             try:
                 if self.is_paused:
