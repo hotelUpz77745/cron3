@@ -487,6 +487,46 @@ class BotCore:
         if hasattr(self, 'volatility_manager'):
             self.volatility_manager.stop()
 
+    async def close_all_positions(self):
+        """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
+        from consts import _CFG
+        symbols = _CFG.get("symbols", [])
+        
+        # 1. Отмена лимитных ордеров
+        for sym in symbols:
+            import logging
+            logger = logging.getLogger("BotCore")
+            try:
+                await self.client.cancel_all_orders(sym)
+                logger.info(f"[{sym}] Canceled all limit orders.")
+            except Exception as e:
+                logger.error(f"[{sym}] Failed to cancel orders: {e}")
+            
+        # 2. Получение и закрытие позиций по рынку
+        try:
+            positions = await self.client.fetch_positions()
+            for p in positions:
+                sym = p.get("symbol")
+                if sym not in symbols:
+                    continue
+                amt = float(p.get("positionAmt", 0.0))
+                if abs(amt) > 0:
+                    pos_side = p.get("positionSide") # "LONG" or "SHORT"
+                    side = "SELL" if pos_side == "LONG" else "BUY"
+                    
+                    logger.warning(f"[{sym}] Emergency closing {pos_side} position. Volume: {abs(amt)}")
+                    await self.client.make_order(
+                        symbol=sym,
+                        qty=abs(amt),
+                        side=side,
+                        position_side=pos_side,
+                        market_type="MARKET"
+                    )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger("BotCore")
+            logger.error(f"Error while fetching/closing positions: {e}")
+
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""
         logger.info("Executing graceful BotCore shutdown...")

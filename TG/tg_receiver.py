@@ -78,6 +78,9 @@ class TelegramReceiver:
             [
                 KeyboardButton(text="💰 Задать нач. баланс"),
                 KeyboardButton(text="🗑️ Сбросить аналитику")
+            ],
+            [
+                KeyboardButton(text="🚨 Close All")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -147,6 +150,18 @@ class TelegramReceiver:
             except Exception as e:
                 logger.error(f"Failed to execute manual deep sync: {e}")
                 await msg.edit_text(f"❌ Ошибка во время Deep Sync: {e}")
+
+        @self.dp.message(F.text == "🚨 Close All")
+        async def on_close_all(message: Message):
+            msg = await message.answer("⏳ Отправка запросов на закрытие позиций и отмену ордеров...")
+            try:
+                await self.bot_core.close_all_positions()
+                await msg.edit_text("✅ Все лимитные ордера отменены, а активные позиции закрыты по рынку!\n\n💡 <i>Пожалуйста, дождитесь обновления аналитики (обычно занимает несколько секунд).</i>", parse_mode="HTML")
+            except Exception as e:
+                import logging
+                logger = logging.getLogger("TGReceiver")
+                logger.error(f"Failed to Close All: {e}")
+                await msg.edit_text(f"❌ Произошла ошибка при закрытии: {e}")
 
         @self.dp.message(F.text == "▶️ Start")
         async def on_pre_start(message: Message, state: FSMContext):
