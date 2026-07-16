@@ -204,15 +204,7 @@ class AnalyticsManager:
                 with open(self.txt_file, mode="a", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f, delimiter=';')
                     writer.writerow([symbol, side, open_str, close_str, round(pnl, 4), round(balance, 4)])
-                
-                # Truncate if necessary
-                with open(self.txt_file, mode="r", encoding="utf-8") as f:
-                    lines = f.readlines()
-                
-                if len(lines) > ANALYTICS_CSV_MAX_ROWS + 1: # +1 for header
-                    lines = [lines[0]] + lines[-(ANALYTICS_CSV_MAX_ROWS):]
-                    with open(self.txt_file, mode="w", encoding="utf-8", newline="") as f:
-                        f.writelines(lines)
+                    
             except Exception as e:
                 logger.error(f"Error appending to CSV: {e}")
 
