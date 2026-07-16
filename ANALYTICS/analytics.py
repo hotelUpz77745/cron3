@@ -296,11 +296,7 @@ class AnalyticsManager:
                 income_records = []
                 current_start = start_ts - 600000  # -10m safety
                 
-                MAX_PAGES = 100
-                page_count = 0
-                while page_count < MAX_PAGES:
-                    page_count += 1
-                    
+                while True:
                     attempts = 0
                     success_fetch = False
                     inc_res = None
