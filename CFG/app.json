@@ -6,8 +6,8 @@
     "time_slack_sec": 0.15,
     "req_timeout_sec": 10.0,
     "avoid_check_runtime_cfg": false,
-    "api_rate_limit_sec": 0.1,
-    "api_concurrent_rate_limit_sec": 0.01,
+    "api_rate_limit_sec": 0.2,
+    "api_concurrent_rate_limit_sec": 0.05,
     "rest_failsafe_sec": 1.0,
     "auto_start": true
   },

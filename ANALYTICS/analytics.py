@@ -403,6 +403,7 @@ class AnalyticsManager:
                 
                 # 8th column logic removed entirely
                 # Reconstruct Ledger sequentially
+                active_trades = {}  # {sym: {"last_ts": 0, "pnl": 0.0}}
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
                     from datetime import datetime
                     dt_str = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d %H:%M:%S")
@@ -421,11 +422,25 @@ class AnalyticsManager:
                     global_pending_delta += net_event
                     
                     if g["has_trade"]:
-                        by_symbol[sym]["trades"] += 1
                         if by_symbol[sym]["first_ts"] is None:
                             by_symbol[sym]["first_ts"] = ts
-                        if g["pnl"] > 0:
-                            by_symbol[sym]["wins"] += 1
+                            
+                        # Считаем реальные сделки, а не филы (группируем филы внутри 5-секундного окна)
+                        if sym not in active_trades:
+                            active_trades[sym] = {"last_ts": ts, "pnl": g["pnl"]}
+                        else:
+                            last_ts = active_trades[sym]["last_ts"]
+                            if ts - last_ts <= 5000:
+                                # Тот же трейд (филы рядом по времени)
+                                active_trades[sym]["last_ts"] = ts
+                                active_trades[sym]["pnl"] += g["pnl"]
+                            else:
+                                # Прошло больше 5 секунд -> закрываем предыдущий трейд и считаем его
+                                by_symbol[sym]["trades"] += 1
+                                if active_trades[sym]["pnl"] > 0:
+                                    by_symbol[sym]["wins"] += 1
+                                # Начинаем отсчет нового трейда
+                                active_trades[sym] = {"last_ts": ts, "pnl": g["pnl"]}
                             
                         current_balance += global_pending_delta
                         ledger_rows.append([
@@ -443,6 +458,13 @@ class AnalyticsManager:
                 # Any remaining global_pending_delta (e.g. recent funding fee or open pos comm) 
                 # gets added to final balance internally, but not as a trade row.
                 current_balance += global_pending_delta
+                
+                # Финализируем последние открытые трейды для статистики (после цикла)
+                for sym, t_info in active_trades.items():
+                    if t_info["last_ts"] > 0:
+                        by_symbol[sym]["trades"] += 1
+                        if t_info["pnl"] > 0:
+                            by_symbol[sym]["wins"] += 1
                         
                 # Overwrite CSV completely using atomic write
                 async with self._csv_lock:
