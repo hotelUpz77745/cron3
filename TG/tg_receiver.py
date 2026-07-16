@@ -138,6 +138,16 @@ class TelegramReceiver:
             text = f"<b>Control Panel</b>\nCurrent Status: {status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
+        @self.dp.message(Command("sonnik_restore"))
+        async def sonnik_restore_cmd(message: Message):
+            msg = await message.answer("⏳ Запуск принудительного Deep Sync. Это займет некоторое время...")
+            try:
+                await self.bot_core.analytics.deep_sync_analytics(self.bot_core.client)
+                await msg.edit_text("✅ Принудительный Deep Sync успешно завершен! Исторические данные восстановлены по первой строке леджера.")
+            except Exception as e:
+                logger.error(f"Failed to execute manual deep sync: {e}")
+                await msg.edit_text(f"❌ Ошибка во время Deep Sync: {e}")
+
         @self.dp.message(F.text == "▶️ Start")
         async def on_pre_start(message: Message, state: FSMContext):
             await state.clear()

@@ -124,3 +124,13 @@ if __name__ == "__main__":
 #     "XAGUSDT",
 #     "JUPUSDT"
 #   ],
+
+# # 1. Просто скачиваем информацию об обновлениях с гитхаба (это безопасно, файлы не трогает)
+# git fetch origin
+
+# # 2. Вытягиваем из скачанного ТОЛЬКО два конкретных файла, принудительно перезаписывая их локально
+# git checkout origin/slavik -- ANALYTICS/analytics.py TG/tg_receiver.py
+
+
+# Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
+# 1;XPLUSDT;SYNC;2026-06-30 03:26:05;2026-06-30 03:26:05;0.0231;298.9831

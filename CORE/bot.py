@@ -474,10 +474,7 @@ class BotCore:
         else:
             logger.info("BotCore started in ACTIVE state (auto_start enabled). Trading loops are running.")
         self.analytics.start_realtime_tracker(self.client)
-        
-        logger.info("Running initial deep sync analytics on startup...")
-        await self.analytics.deep_sync_analytics(self.client)
-        
+
         from CORE.ADVANCED.volatility_manager import VolatilityManager
         self.volatility_manager = VolatilityManager(self)
         self.volatility_manager.start()

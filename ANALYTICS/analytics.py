@@ -242,7 +242,7 @@ class AnalyticsManager:
                         with open(self.txt_file, 'r', encoding='utf-8') as f:
                             reader = csv.reader(f, delimiter=';')
                             for row in reader:
-                                if len(row) > 3 and "Close Time" not in row[3]:
+                                if len(row) > 3 and row[0] != "Id":
                                     try:
                                         dt = datetime.strptime(row[3].strip(), "%Y-%m-%d %H:%M:%S")
                                         csv_ts = int(dt.timestamp() * 1000)
