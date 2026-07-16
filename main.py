@@ -109,3 +109,11 @@ if __name__ == "__main__":
     #   1059524161,
     #   610822492
     # ]
+
+
+#       "symbols": [
+#     "XPLUSDT",
+#     "MMTUSDT",
+#     "KGENUSDT",
+#     "JUPUSDT"
+#   ],

@@ -508,6 +508,10 @@ class AnalyticsManager:
             
             acc_data = res.data
             
+            if "positions" not in acc_data or "totalMarginBalance" not in acc_data:
+                logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data from Binance! Skipping update to protect stats.")
+                return
+            
             positions = acc_data.get("positions", [])
             coin_drawdowns = {}
             for p in positions:
@@ -633,6 +637,110 @@ class AnalyticsManager:
         self._background_tasks.add(self._tracker_task)
         self._tracker_task.add_done_callback(self._background_tasks.discard)
         
+    async def sync_current_drawdowns(self, client):
+        async with self._lock:
+            data = self._read_data()
+            if not data:
+                return
+                
+            res = await client.fetch_account_info()
+            if not res.success or not isinstance(res.data, dict):
+                return
+                
+            if "positions" not in res.data or "totalMarginBalance" not in res.data:
+                logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data from Binance! Skipping update to protect stats.")
+                return
+                
+            margin_balance = float(res.data.get("totalMarginBalance", 0.0))
+            
+            # Update global unrealized pnl as well
+            positions = res.data.get("positions", [])
+            coin_drawdowns = {}
+            for p in positions:
+                sym = p.get("symbol", "")
+                unrealized = float(p.get("unrealizedProfit", 0.0))
+                coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
+            bot_unrealized = 0.0
+            for sym, cdata in data.get("per_coin", {}).items():
+                drawdown = coin_drawdowns.get(sym, 0.0)
+                cdata["current_drawdown"] = round(drawdown, 4)
+                cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
+                cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
+                bot_unrealized += drawdown
+            data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
+            
+            bot_gross_profit = 0.0
+            if "per_coin" in data:
+                for sym, cdata in data["per_coin"].items():
+                    c_gross = cdata.get("realized_pnl_usdt", 0.0)
+                    c_comm = cdata.get("commission_usdt", 0.0)
+                    c_fund = cdata.get("funding_usdt", 0.0)
+                    
+                    cdata["realized_pnl_usdt"] = round(c_gross, 4)
+                    c_net = round(c_gross + c_comm + c_fund, 4)
+                    cdata["realized_pnl_net_usdt"] = c_net
+                    
+                    c_drawdown = cdata.get("current_drawdown", 0.0)
+                    cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
+                    bot_gross_profit += c_gross
+                    
+            bot_total_comm = data.get("total_commission_usdt", 0.0)
+            bot_total_fund = data.get("total_funding_usdt", 0.0)
+            
+            data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
+            bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
+            data["realized_pnl_net_usdt"] = bot_realized_net
+            data["net_profit_usdt"] = round(bot_realized_net + bot_unrealized, 4)
+            
+            initial = data.get("start_balance_usdt", 0.0)
+            bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
+            data["cur_balance_usdt"] = bot_cur_balance
+            
+            if initial > 0:
+                data["roi_pct"] = round(((bot_cur_balance - initial) / initial) * 100, 2)
+            else:
+                data["roi_pct"] = 0.0
+                
+            if bot_gross_profit > 0:
+                data["load_ratio"] = round(abs(bot_unrealized) / bot_gross_profit, 2)
+            else:
+                data["load_ratio"] = 0.0
+            
+            peak = data.get("peak_balance_usdt", initial)
+            trough = data.get("_current_trough_usdt", peak)
+            min_bal = data.get("min_balance_usdt", initial)
+            
+            if bot_cur_balance > peak:
+                peak = bot_cur_balance
+                trough = bot_cur_balance
+                data["peak_balance_usdt"] = peak
+                
+            if bot_cur_balance < trough:
+                trough = bot_cur_balance
+                
+            if bot_cur_balance < min_bal:
+                min_bal = bot_cur_balance
+                data["min_balance_usdt"] = min_bal
+                
+            data["_current_trough_usdt"] = trough
+                
+            # Always write data to update unrealized PnL, not just on peak/trough change
+            max_drawdown = trough - peak
+            data["max_drawdown_usdt"] = round(min(data.get("max_drawdown_usdt", 0.0), max_drawdown), 4)
+            
+            max_perf = peak - initial
+            data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)
+            
+            if data["max_drawdown_usdt"] < 0:
+                data["recovery_factor"] = round(bot_gross_profit / abs(data["max_drawdown_usdt"]), 2)
+            else:
+                data["recovery_factor"] = 0.0
+            
+            import time
+            data["last_updated_ts"] = int(time.time() * 1000)
+            
+            self._write_data(data)
+
     async def _realtime_tracker_loop(self, client):
         logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 15s)")
         while True:
@@ -644,104 +752,7 @@ class AnalyticsManager:
                 if self._sync_locks:
                     continue
                     
-                async with self._lock:
-                    data = self._read_data()
-                    if not data:
-                        continue
-                        
-                    res = await client.fetch_account_info()
-                    if not res.success or not isinstance(res.data, dict):
-                        continue
-                        
-                    margin_balance = float(res.data.get("totalMarginBalance", 0.0))
-                    
-                    # Update global unrealized pnl as well
-                    positions = res.data.get("positions", [])
-                    coin_drawdowns = {}
-                    for p in positions:
-                        sym = p.get("symbol", "")
-                        unrealized = float(p.get("unrealizedProfit", 0.0))
-                        coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
-                    bot_unrealized = 0.0
-                    for sym, cdata in data.get("per_coin", {}).items():
-                        drawdown = coin_drawdowns.get(sym, 0.0)
-                        cdata["current_drawdown"] = round(drawdown, 4)
-                        cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
-                        cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
-                        bot_unrealized += drawdown
-                    data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
-                    
-                    bot_gross_profit = 0.0
-                    if "per_coin" in data:
-                        for sym, cdata in data["per_coin"].items():
-                            c_gross = cdata.get("realized_pnl_usdt", 0.0)
-                            c_comm = cdata.get("commission_usdt", 0.0)
-                            c_fund = cdata.get("funding_usdt", 0.0)
-                            
-                            cdata["realized_pnl_usdt"] = round(c_gross, 4)
-                            c_net = round(c_gross + c_comm + c_fund, 4)
-                            cdata["realized_pnl_net_usdt"] = c_net
-                            
-                            c_drawdown = cdata.get("current_drawdown", 0.0)
-                            cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
-                            bot_gross_profit += c_gross
-                            
-                    bot_total_comm = data.get("total_commission_usdt", 0.0)
-                    bot_total_fund = data.get("total_funding_usdt", 0.0)
-                    
-                    data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
-                    bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
-                    data["realized_pnl_net_usdt"] = bot_realized_net
-                    data["net_profit_usdt"] = round(bot_realized_net + bot_unrealized, 4)
-                    
-                    initial = data.get("start_balance_usdt", 0.0)
-                    bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
-                    data["cur_balance_usdt"] = bot_cur_balance
-                    
-                    if initial > 0:
-                        data["roi_pct"] = round(((bot_cur_balance - initial) / initial) * 100, 2)
-                    else:
-                        data["roi_pct"] = 0.0
-                        
-                    if bot_gross_profit > 0:
-                        data["load_ratio"] = round(abs(bot_unrealized) / bot_gross_profit, 2)
-                    else:
-                        data["load_ratio"] = 0.0
-                    
-                    peak = data.get("peak_balance_usdt", initial)
-                    trough = data.get("_current_trough_usdt", peak)
-                    min_bal = data.get("min_balance_usdt", initial)
-                    
-                    if bot_cur_balance > peak:
-                        peak = bot_cur_balance
-                        trough = bot_cur_balance
-                        data["peak_balance_usdt"] = peak
-                        
-                    if bot_cur_balance < trough:
-                        trough = bot_cur_balance
-                        
-                    if bot_cur_balance < min_bal:
-                        min_bal = bot_cur_balance
-                        data["min_balance_usdt"] = min_bal
-                        
-                    data["_current_trough_usdt"] = trough
-                        
-                    # Always write data to update unrealized PnL, not just on peak/trough change
-                    max_drawdown = trough - peak
-                    data["max_drawdown_usdt"] = round(min(data.get("max_drawdown_usdt", 0.0), max_drawdown), 4)
-                    
-                    max_perf = peak - initial
-                    data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)
-                    
-                    if data["max_drawdown_usdt"] < 0:
-                        data["recovery_factor"] = round(bot_gross_profit / abs(data["max_drawdown_usdt"]), 2)
-                    else:
-                        data["recovery_factor"] = 0.0
-                    
-                    import time
-                    data["last_updated_ts"] = int(time.time() * 1000)
-                    
-                    self._write_data(data)
+                await self.sync_current_drawdowns(client)
             except Exception as e:
                 logger.error(f"Realtime tracker error: {e}")
 

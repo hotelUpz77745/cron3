@@ -22,7 +22,7 @@ from c_utils import Utils
 from c_log import UnifiedLogger
 logger = UnifiedLogger("BotCore")
 
-BLOCK_ENTRY = True  # Глобальный флаг блокировки входа в позиции (для отладки)
+BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
 
 class BotCore:
     def __init__(self):
@@ -299,16 +299,19 @@ class BotCore:
         runtime_cfg = self.runtime_configs.get(symbol, {})
         states = self.fsm_states[symbol]
         current_price = self.prices.get(symbol)
+        # print(current_price, 'current_price')
         
         if not current_price:
+            logger.warning(f"[{symbol}] ПРЕДУПРЕЖДЕНИЕ: Цена отсутствует в стриме (self.prices)! Запрашиваю через REST API (get_last_price)...")
             try:
                 from API.BINANCE.public import BinancePublic
                 price = await BinancePublic.get_last_price(symbol)
                 if price:
                     current_price = price
                     self.prices[symbol] = price
-            except Exception:
-                pass
+                    logger.warning(f"[{symbol}] Цена успешно получена через REST: {price}")
+            except Exception as e:
+                logger.error(f"[{symbol}] Ошибка при получении цены через REST: {e}")
         
         signal_tasks = []
         

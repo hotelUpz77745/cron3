@@ -417,13 +417,13 @@ class TelegramReceiver:
         async def on_analytics(message: Message, state: FSMContext):
             await state.clear()
             
-            # Level 2 Protection: Deep Sync Analytics before showing dashboard
+            # Level 2 Protection: Synchronized on-demand update without heavy deep sync
             msg = await message.answer("⏳ Синхронизация с Binance...")
             try:
-                await self.bot_core.analytics.deep_sync_analytics(self.bot_core.client)
+                await self.bot_core.analytics.sync_current_drawdowns(self.bot_core.client)
                 await msg.delete()
             except Exception as e:
-                logger.error(f"Failed to deep sync: {e}")
+                logger.error(f"Failed to sync current drawdowns: {e}")
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
