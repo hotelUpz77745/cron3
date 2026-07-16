@@ -276,7 +276,21 @@ class AnalyticsManager:
                 except Exception:
                     active_symbols = []
                 
-                tracked_symbols = set(active_symbols)
+                ledger_symbols = []
+                try:
+                    if self.txt_file.exists():
+                        import csv
+                        with open(self.txt_file, 'r', encoding='utf-8') as f:
+                            reader = csv.reader(f, delimiter=';')
+                            for row in reader:
+                                if not row or row[0] in ("Id", "Symbol"):
+                                    continue
+                                sym = row[1] if row[0].isdigit() else row[0]
+                                ledger_symbols.append(sym)
+                except Exception:
+                    pass
+                
+                tracked_symbols = set(active_symbols + ledger_symbols)
                 
                 # Fetch income
                 income_records = []

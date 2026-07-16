@@ -1,15 +1,15 @@
 {
     "start_balance_usdt": 295.0,
-    "cur_balance_usdt": 300.2699,
+    "cur_balance_usdt": 300.2704,
     "total_trades": 174,
     "winning_trades": 156,
     "winrate_pct": 89.66,
     "realized_pnl_usdt": 8.0659,
-    "net_profit_usdt": 5.2699,
-    "unrealized_pnl_usdt": -0.1421,
+    "net_profit_usdt": 5.2704,
+    "unrealized_pnl_usdt": -0.1416,
     "per_coin": {
         "STABLEUSDT": {
-            "current_drawdown": -0.1421,
+            "current_drawdown": -0.1416,
             "total_trades": 54,
             "winning_trades": 45,
             "winrate_pct": 83.33,
@@ -30,7 +30,7 @@
                 "closed_mdme_sum": 0.0,
                 "closed_count": 0
             },
-            "net_profit_usdt": 0.0196,
+            "net_profit_usdt": 0.0201,
             "max_net_profit": 0.0468,
             "min_net_profit": -0.0478,
             "avg_daily_profit": 0.0098,
@@ -76,7 +76,7 @@
     "max_drawdown_usdt": -0.0478,
     "performance_usdt": 5.2769,
     "recovery_factor": 168.74,
-    "last_updated_ts": 1784211435773,
+    "last_updated_ts": 1784211634704,
     "_help": {
         "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
         "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
