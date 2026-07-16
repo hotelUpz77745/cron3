@@ -158,8 +158,6 @@ class TelegramReceiver:
                 await self.bot_core.close_all_positions()
                 await msg.edit_text("✅ Все лимитные ордера отменены, а активные позиции закрыты по рынку!\n\n💡 <i>Пожалуйста, дождитесь обновления аналитики (обычно занимает несколько секунд).</i>", parse_mode="HTML")
             except Exception as e:
-                import logging
-                logger = logging.getLogger("TGReceiver")
                 logger.error(f"Failed to Close All: {e}")
                 await msg.edit_text(f"❌ Произошла ошибка при закрытии: {e}")
 

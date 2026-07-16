@@ -494,8 +494,6 @@ class BotCore:
         
         # 1. Отмена лимитных ордеров
         for sym in symbols:
-            import logging
-            logger = logging.getLogger("BotCore")
             try:
                 await self.client.cancel_all_orders(sym)
                 logger.info(f"[{sym}] Canceled all limit orders.")
@@ -523,8 +521,6 @@ class BotCore:
                         market_type="MARKET"
                     )
         except Exception as e:
-            import logging
-            logger = logging.getLogger("BotCore")
             logger.error(f"Error while fetching/closing positions: {e}")
 
     async def shutdown(self):
