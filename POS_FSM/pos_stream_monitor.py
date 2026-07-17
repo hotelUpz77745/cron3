@@ -56,10 +56,12 @@ class PositionMonitor:
 
         # Проверка наличия позиции (по модулю объема)
         if abs(pos_amt) == 0:
-            if state.in_position:
+            # Инвариант 1: если позиции на бирже нет, мы обязаны стереть ВСЕ следы в кэше
+            # Даже если in_position УЖЕ False, но в памяти остались якоря (initial_entry_price, fallback_price)
+            if state.in_position or state.initial_entry_price > 0 or state.fallback_price is not None:
                 if IS_SHOW_SIGNAL:
-                    logger.debug(f"[MONITOR] POSITION CLOSED {symbol} {side}")
-                # Позиция закрыта
+                    logger.debug(f"[MONITOR] POSITION CLOSED or DIRTY CACHE WIPED {symbol} {side}")
+                # Вызов is_finished = True запустит полную очистку в _check_and_reset_finished_positions (включая state.reset())
                 state.is_finished = True
                 state.set_in_position(False)
         else:

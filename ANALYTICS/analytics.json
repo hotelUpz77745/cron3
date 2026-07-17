@@ -152,7 +152,7 @@
             "net_profit_usdt": 15.7664,
             "max_net_profit": 16.6134,
             "min_net_profit": 15.7664,
-            "avg_daily_profit": 1.5044,
+            "avg_daily_profit": 1.5039,
             "risk_reward_ratio": 0.06,
             "max_position_size": 100.0,
             "DRME": 0.015
@@ -182,7 +182,7 @@
             "net_profit_usdt": 2.5671,
             "max_net_profit": 2.9897,
             "min_net_profit": 2.5671,
-            "avg_daily_profit": 0.1556,
+            "avg_daily_profit": 0.1555,
             "risk_reward_ratio": 0.01,
             "max_position_size": 100.0,
             "DRME": 0.0016
@@ -195,7 +195,7 @@
     "max_drawdown_usdt": -2.7648,
     "performance_usdt": 26.0921,
     "recovery_factor": 11.4,
-    "last_updated_ts": 1784269211382,
+    "last_updated_ts": 1784269503576,
     "_help": {
         "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
         "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
