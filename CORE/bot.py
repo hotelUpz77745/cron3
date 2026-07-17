@@ -56,6 +56,9 @@ class BotCore:
         from CORE.TP.fallback_tp_manager import FallbackTpManager
         self.fallback_tp_manager = FallbackTpManager()
         
+        from CORE._utils import SpecManager
+        self.spec_manager = SpecManager(self)
+        
         from ANALYTICS.analytics import AnalyticsManager
         self.analytics = AnalyticsManager()
         
@@ -177,19 +180,7 @@ class BotCore:
             
         logger.info(f"[{symbol}] Successfully deleted from BotCore.")
 
-    async def _specification_task(self):
-        """Фоновая задача: Обновление спецификации."""
-        try:
-            while self.is_running:
-                data = await BinancePublic.get_instruments()
-                if data:
-                    self.spec_data = {"symbols": data}
-                    Utils.write_json_file(DATA_DIR / "CACHE" / "specifications.json", self.spec_data)
 
-                await asyncio.sleep(SPEC_TTL_SEC) 
-        except asyncio.CancelledError:
-            pass
-            
     async def _on_tick(self, tick: HotPriceTick):
         """Коллбэк для стрима горячих цен."""
         self.prices[tick.symbol] = (tick.price, time.time())
@@ -308,20 +299,14 @@ class BotCore:
         if price_data:
             if isinstance(price_data, tuple):
                 p, ts = price_data
+                # We trust the pre-flight bulk fetch to have refreshed it if needed
                 if time.time() - ts < 5.0:  # PRICE_STALE_SEC
                     current_price = p
             else:
                 current_price = price_data  # safe fallback
                 
         if not current_price:
-            try:
-                from API.BINANCE.public import BinancePublic
-                price = await BinancePublic.get_last_price(symbol)
-                if price:
-                    current_price = price
-                    self.prices[symbol] = (price, time.time())
-            except Exception:
-                pass
+            return  # safely skip loop iteration if we couldn't get a price even after fallback
         
         signal_tasks = []
         
@@ -395,7 +380,7 @@ class BotCore:
         self.runtime_configs = self.runtime_manager.caches
 
         # ШАГ 2. Инициализация стримов и фоновых задач
-        spec_task = asyncio.create_task(self._specification_task())
+        self.spec_manager.start()
         price_task = asyncio.create_task(self.price_stream.run(self._on_tick))
         
         from POS_FSM.pos_stream_monitor import PositionMonitor
@@ -462,6 +447,23 @@ class BotCore:
                 # Источник сигнала для позиции, которая не в позиции
                 is_signal = self.time_control.is_new_interval()
 
+                # Pre-flight bulk price update
+                stale_symbols = []
+                now = time.time()
+                for sym in self.symbols:
+                    price_data = self.prices.get(sym)
+                    if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 5.0):
+                        stale_symbols.append(sym)
+                
+                if stale_symbols:
+                    try:
+                        from API.BINANCE.public import BinancePublic
+                        bulk_prices = await BinancePublic.get_prices_bulk(stale_symbols)
+                        for sym, p in bulk_prices.items():
+                            self.prices[sym] = (p, time.time())
+                    except Exception as e:
+                        logger.error(f"Bulk price fetch failed: {e}")
+
                 tasks = [self._process_symbol_loop(symbol, is_signal) for symbol in self.symbols]
                 await asyncio.gather(*tasks)
                 
@@ -479,14 +481,14 @@ class BotCore:
                 await asyncio.sleep(TIME_SLACK_SEC)
                 
         self.is_running = False
-        spec_task.cancel()
+        self.spec_manager.stop()
         self.price_stream.stop()
         price_task.cancel()
         pos_task.cancel()
         # Попытка быстрого сохранения стейтов при нормальном завершении
         await self.runtime_manager.sync_with_fsm(self.fsm_states, force_save=True)
         await self.client.shutdown()
-        await asyncio.gather(spec_task, price_task, pos_task, return_exceptions=True)
+        await asyncio.gather(price_task, pos_task, return_exceptions=True)
 
     async def start(self):
         """Запуск бота."""
@@ -505,6 +507,7 @@ class BotCore:
     def stop(self):
         """Остановка бота."""
         self.is_running = False
+        self.spec_manager.stop()
         if hasattr(self, 'volatility_manager'):
             self.volatility_manager.stop()
 

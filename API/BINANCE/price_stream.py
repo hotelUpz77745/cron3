@@ -169,7 +169,7 @@ class BinanceHotPriceStream:
             ping_task = None
             try:
                 assert self._session is not None
-                ws = await self._session.ws_connect(url, autoping=False, max_msg_size=0)
+                ws = await self._session.ws_connect(url, autoping=True, max_msg_size=0)
                 ping_task = asyncio.create_task(self._ping_loop(ws))
                 backoff = self.reconnect_min_sec
 

@@ -113,3 +113,43 @@ class RiskCalculatingUtils:
         """
         active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
         return str(max(active_levels)) if active_levels else "0"
+
+class SpecManager:
+    """
+    Управляет периодическим обновлением спецификаций инструментов (exchangeInfo).
+    """
+    def __init__(self, bot_core):
+        self.bot_core = bot_core
+        self.is_running = False
+        self._task = None
+
+    async def _specification_task(self):
+        import asyncio
+        from consts import SPEC_TTL_SEC, DATA_DIR
+        from API.BINANCE.public import BinancePublic
+        from c_utils import Utils
+        from c_log import UnifiedLogger
+        logger = UnifiedLogger("SpecManager")
+        
+        try:
+            while self.is_running:
+                data = await BinancePublic.get_instruments()
+                if data:
+                    self.bot_core.spec_data = {"symbols": data}
+                    Utils.write_json_file(DATA_DIR / "CACHE" / "specifications.json", self.bot_core.spec_data)
+                
+                await asyncio.sleep(SPEC_TTL_SEC)
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.error(f"Ошибка в _specification_task: {e}")
+
+    def start(self):
+        import asyncio
+        self.is_running = True
+        self._task = asyncio.create_task(self._specification_task())
+
+    def stop(self):
+        self.is_running = False
+        if self._task:
+            self._task.cancel()
