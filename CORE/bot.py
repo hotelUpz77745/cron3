@@ -229,6 +229,7 @@ class BotCore:
             # Очищаем кэши от прошлых сделок, чтобы они не стрельнули ложным фолбеком
             state.fallback_price = None
             state.next_avg_price = None
+            state.initial_entry_price = 0.0
             
             # Дожидаемся обновления avg_entry_price от вебсокета после входа
             state.pre_avg_price = 0.0

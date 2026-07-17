@@ -69,6 +69,7 @@ class PositionMonitor:
                 # Сбрасываем кэши от прошлых сделок, если позиция была открыта вручную или из-за рассинхрона
                 state.fallback_price = None
                 state.next_avg_price = None
+                state.initial_entry_price = 0.0
             
             # Позиция активна: set_in_position(True) автоматически сбросит in_position_papper в False
             state.set_in_position(True)
