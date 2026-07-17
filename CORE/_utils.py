@@ -1,5 +1,4 @@
 # ==============================================================================
-# Path: CORE/trade_math.py
 # Role: Математика для трейдинга (расчет объема, тейк-профитов и прочего)
 # ==============================================================================
 
@@ -100,7 +99,6 @@ class TradeMath:
         qty_precision = precisions[0] if precisions else 3
         return round(qty, qty_precision)
 # ==============================================================================
-# Path: CORE/risk_utils.py
 # Role: Общие утилиты для расчетов рисков и детерминации уровней
 # ==============================================================================
 
@@ -115,71 +113,3 @@ class RiskCalculatingUtils:
         """
         active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
         return str(max(active_levels)) if active_levels else "0"
-# ==============================================================================
-# Path: CORE/spec_manager.py
-# Role: Периодическое обновление спецификаций рынка
-# ==============================================================================
-
-import asyncio
-from typing import Optional, Callable, Dict, Any
-from consts import SPEC_TTL_SEC
-from API.BINANCE.public import BinancePublic
-from c_log import UnifiedLogger
-
-class SpecManager:
-    """
-    Периодически опрашивает /fapi/v1/exchangeInfo и хранит спецификации символов
-    в атрибуте exchange_info.
-    """
-    def __init__(self, logger: UnifiedLogger, stop_flag: Callable[[], bool]):
-        self.logger = logger
-        self.stop_flag = stop_flag
-        
-        self.exchange_info: Optional[Dict[str, Any]] = None
-        self._task: Optional[asyncio.Task] = None
-
-    async def start(self):
-        """Запускает фоновый опрос спецификаций"""
-        self._task = asyncio.create_task(self._loop())
-
-    async def _loop(self):
-        while not self.stop_flag():
-            try:
-                data = await BinancePublic._get("/fapi/v1/exchangeInfo")
-                if isinstance(data, dict) and "symbols" in data:
-                    self.exchange_info = data
-                else:
-                    self.logger.warning("Не удалось получить корректный exchangeInfo")
-            except Exception as e:
-                self.logger.error(f"Ошибка получения спецификаций: {e}")
-
-            # Ждём SPEC_TTL_SEC секунд (SPEC_TTL_SEC задан в секундах)
-            sleep_sec = SPEC_TTL_SEC
-            for _ in range(sleep_sec):
-                if self.stop_flag():
-                    break
-                await asyncio.sleep(1)
-
-    async def wait_for_instruments(self, timeout: float = 15.0) -> bool:
-        """Ждёт, пока спецификации не загрузятся первый раз."""
-        step = 0.1
-        elapsed = 0.0
-        while elapsed < timeout:
-            if self.stop_flag():
-                return False
-            if self.exchange_info is not None:
-                return True
-            await asyncio.sleep(step)
-            elapsed += step
-        
-        self.logger.error("Таймаут ожидания exchangeInfo")
-        return False
-
-    async def shutdown(self):
-        """Останавливает фоновый опрос."""
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
-                pass

@@ -38,6 +38,7 @@ PROJECT_NAME = "hron"
 Директ -- всегда в приоритете. То что оператор промсит напрямую в окне редактирования с чатом -- в перую очередь.
 ---
 
+(тут обновы писать пометки и прогресс не надо, пиши в соответствующий файл в "COMMON\\wiki\\{PROJECT_NAME}")
 
 ## 4. Architectural Invariants (Methodology)
 
@@ -50,6 +51,23 @@ PROJECT_NAME = "hron"
 ---
 
 ## 5. CRITICAL RULE:
-- "NEVER run main.py, tests, or any mutating commands without EXPLICIT permission from the user." -- status: DISABLED
+- "NEVER run main.py, tests, or any mutating commands without EXPLICIT permission from the user." -- status: ENABLED
 
 ## После каждой правки обновляй WORKSPACE/TRADING_SYSTEM/COMMON/wiki/{PROJECT_NAME}
+
+## 6. Latest Commits
+- `79da157 - fix(analytics): group partial fills within 5 seconds for accurate real trade counting`
+- `c2c7833 - fix(CORE/bot.py): enforce idempotency flag immediately after successful market order`
+- `5a8a975 - fix: TP zero quantity prevention, resilient spec loader, API rate limits reduction`
+- `8006c69 - fix(core): wait for exchange specifications before starting game loop to prevent KeyError`
+- `c2385ce - fix(tg): add missing StateFilter import for close all confirmation`
+- `970e04d - feat(tg): add confirmation step for Close All command requiring the word ЗАКРЫТЬ`
+- `9b0cc47 - fix(analytics): make ledger and json writes atomic to prevent file truncation during abrupt restart`
+- `79d66a9 - refactor(analytics): completely eradicate while True, replace with explicit is_fetching flag`
+- `3feb52b - fix(analytics): remove MAX_PAGES hard limit in deep sync to fetch full history`
+- `b168c84 - feat(tg): add fool-proofing to block non-text media messages in outer middleware`
+- `c31441e - refactor(analytics): remove infinite loops, add 3-retries safety to deep sync, change tracker polling to 5s`
+- `7328651 - fix(log): resolve KeyError context by using UnifiedLogger instances directly`
+- `cf1dbb4 - feat(tg): add Close All button to emergency close all active positions and orders`
+- `ee24eb8 - fix(analytics): auto strip symbols during deep sync to prevent duplicates`
+- `16b7f54 - fix(analytics): restore legacy ledger symbols tracking for deep sync`

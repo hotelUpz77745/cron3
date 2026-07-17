@@ -192,7 +192,7 @@ class BotCore:
             
     async def _on_tick(self, tick: HotPriceTick):
         """Коллбэк для стрима горячих цен."""
-        self.prices[tick.symbol] = tick.price
+        self.prices[tick.symbol] = (tick.price, time.time())
         if not self.price_stream_synced.is_set():
             self.price_stream_synced.set()
 
@@ -302,15 +302,24 @@ class BotCore:
     async def _process_symbol_loop(self, symbol: str, is_signal: bool):
         runtime_cfg = self.runtime_configs.get(symbol, {})
         states = self.fsm_states[symbol]
-        current_price = self.prices.get(symbol)
         
+        current_price = None
+        price_data = self.prices.get(symbol)
+        if price_data:
+            if isinstance(price_data, tuple):
+                p, ts = price_data
+                if time.time() - ts < 5.0:  # PRICE_STALE_SEC
+                    current_price = p
+            else:
+                current_price = price_data  # safe fallback
+                
         if not current_price:
             try:
                 from API.BINANCE.public import BinancePublic
                 price = await BinancePublic.get_last_price(symbol)
                 if price:
                     current_price = price
-                    self.prices[symbol] = price
+                    self.prices[symbol] = (price, time.time())
             except Exception:
                 pass
         
@@ -415,7 +424,7 @@ class BotCore:
         if self.symbols:
             initial_prices = await BinancePublic.get_prices_bulk(self.symbols)
             for sym, p in initial_prices.items():
-                self.prices[sym] = p
+                self.prices[sym] = (p, time.time())
                 
         logger.info("Waiting for price streams to connect...")
         try:
