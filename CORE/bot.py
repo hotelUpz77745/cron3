@@ -226,6 +226,10 @@ class BotCore:
             state.open_time = current_time_ms
             side_cfg["open_time"] = current_time_ms
 
+            # Очищаем кэши от прошлых сделок, чтобы они не стрельнули ложным фолбеком
+            state.fallback_price = None
+            state.next_avg_price = None
+            
             # Дожидаемся обновления avg_entry_price от вебсокета после входа
             state.pre_avg_price = 0.0
             sync_success = await Utils.wait_for_fsm_sync(state, timeout_sec=3.0, poll_interval=0.01)

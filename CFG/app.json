@@ -8,7 +8,7 @@
     "avoid_check_runtime_cfg": false,
     "api_rate_limit_sec": 0.2,
     "api_concurrent_rate_limit_sec": 0.05,
-    "rest_failsafe_sec": 1.2,
+    "rest_failsafe_sec": 1.0,
     "auto_start": true
   },
   "signal": {

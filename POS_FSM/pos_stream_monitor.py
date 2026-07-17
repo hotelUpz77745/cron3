@@ -66,6 +66,9 @@ class PositionMonitor:
             if not state.in_position:
                 if IS_SHOW_SIGNAL:
                     logger.debug(f"[MONITOR] NEW POSITION {symbol} {side} at {entry_price}")
+                # Сбрасываем кэши от прошлых сделок, если позиция была открыта вручную или из-за рассинхрона
+                state.fallback_price = None
+                state.next_avg_price = None
             
             # Позиция активна: set_in_position(True) автоматически сбросит in_position_papper в False
             state.set_in_position(True)
