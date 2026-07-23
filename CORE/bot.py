@@ -43,6 +43,10 @@ class BotCore:
             self.runtime_manager.backup_manager = self.backup_manager
         else:
             self.backup_manager = None
+            
+        from CORE.notifier import NotifierManager
+        self.notifier = NotifierManager()
+        
         self.runtime_configs = self.runtime_manager.caches # Кеш рантаймов
         
         # Флаги готовности стримов
@@ -468,6 +472,10 @@ class BotCore:
         logger.info("Exchange specifications loaded.")
 
         # Запуск фонового контроллера Watchdog
+        # Запускаем Notifier
+        await self.notifier.start()
+
+        # Запускаем watchdog
         watchdog_task = asyncio.create_task(self.watchdog.start())
 
         while self.is_running:
@@ -518,6 +526,7 @@ class BotCore:
                 await asyncio.sleep(TIME_SLACK_SEC)
                 
         self.is_running = False
+        await self.notifier.stop()
         self.watchdog.stop()
         watchdog_task.cancel()
         self.spec_manager.stop()

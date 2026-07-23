@@ -11,8 +11,8 @@
 from datetime import datetime, timezone
 import pytz
 
-GRACE_PERIOD_SEC = 60.0 # Буфер времени от начала свечи, в пределах которого происходит проверка новых сигналов
-SHIFT_INTERVAL = 0
+GRACE_PERIOD_SEC = 89.0 # Буфер времени от начала свечи, в пределах которого происходит проверка новых сигналов
+SHIFT_INTERVAL = -11
 
 class TimeControl:    
     def __init__(self, interval="5m"):

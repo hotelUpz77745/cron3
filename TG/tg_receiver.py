@@ -32,6 +32,8 @@ class TGStates(StatesGroup):
     waiting_for_reset_confirm = State()
     waiting_for_scanner_json = State()
     waiting_for_close_all_confirm = State()
+    waiting_for_notif_neg = State()
+    waiting_for_notif_pos = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -76,6 +78,7 @@ class TelegramReceiver:
                 KeyboardButton(text="⚙️ Set Coins")
             ],
             [
+                KeyboardButton(text="🔔 Notifications"),
                 KeyboardButton(text="🔧 Super Grid"),
                 KeyboardButton(text="🚨 Close All")
             ]
@@ -137,6 +140,18 @@ class TelegramReceiver:
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             text = f"<b>Control Panel</b>\nCurrent Status: {status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+
+        @self.dp.message(Command("quant"))
+        async def secret_quant_cmd(message: Message, state: FSMContext):
+            msg = await message.answer("⏳ Симуляция ликвидаций запущена...")
+            try:
+                from quant_calculator import QuantCalculator
+                calc = QuantCalculator()
+                report = calc.generate_report()
+                await msg.edit_text(f"```text\n{report}\n```", parse_mode="Markdown")
+            except Exception as e:
+                logger.error(f"Quant calculator error: {e}")
+                await msg.edit_text(f"❌ Ошибка калькулятора: {e}")
 
         @self.dp.message(Command("sonnik_restore"))
         async def sonnik_restore_cmd(message: Message):
@@ -1580,6 +1595,102 @@ class TelegramReceiver:
                 await state.clear()
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
+
+        @self.dp.message(F.text == "🔔 Notifications")
+        async def on_notifications_menu(message: Message, state: FSMContext):
+            await state.clear()
+            from consts import DATA_DIR
+            from c_utils import Utils
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            notif_cfg = app_cfg.get("notifications", {})
+            enabled = notif_cfg.get("enabled", False)
+            neg_th = notif_cfg.get("negative_threshold", -100.0)
+            pos_th = notif_cfg.get("positive_threshold", 100.0)
+            
+            neg_flag = self.bot_core.notifier.neg_flag if hasattr(self.bot_core, "notifier") else False
+            pos_flag = self.bot_core.notifier.pos_flag if hasattr(self.bot_core, "notifier") else False
+            
+            status_emoji = "✅ Вкл" if enabled else "❌ Выкл"
+            text = (
+                f"<b>Управление уведомлениями (Просадка/Профицит):</b>\n"
+                f"Статус: {status_emoji}\n"
+                f"Отрицательный порог: <b>{neg_th} USDT</b> (Сработал: {neg_flag})\n"
+                f"Положительный порог: <b>{pos_th} USDT</b> (Сработал: {pos_flag})"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔕 Сбросить флаги", callback_data="notif_reset_flags")],
+                [
+                    InlineKeyboardButton(text="📉 Изменить Neg порог", callback_data="notif_edit_neg"),
+                    InlineKeyboardButton(text="📈 Изменить Pos порог", callback_data="notif_edit_pos")
+                ]
+            ])
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "notif_reset_flags")
+        async def process_notif_reset_flags(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            if hasattr(self.bot_core, "notifier"):
+                self.bot_core.notifier.reset_flags()
+                await callback.message.answer("✅ Флаги уведомлений успешно сброшены вручную!", reply_markup=self._get_main_keyboard())
+            else:
+                await callback.message.answer("❌ Модуль уведомлений не найден.")
+
+        @self.dp.callback_query(F.data == "notif_edit_neg")
+        async def process_notif_edit_neg(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await state.set_state(TGStates.waiting_for_notif_neg)
+            await callback.message.answer("Введите новый отрицательный порог (например, -150.0):", reply_markup=self._get_back_keyboard())
+
+        @self.dp.callback_query(F.data == "notif_edit_pos")
+        async def process_notif_edit_pos(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await state.set_state(TGStates.waiting_for_notif_pos)
+            await callback.message.answer("Введите новый положительный порог (например, 150.0):", reply_markup=self._get_back_keyboard())
+
+        @self.dp.message(TGStates.waiting_for_notif_neg)
+        async def process_notif_neg_input(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Действие отменено.", reply_markup=self._get_main_keyboard())
+                return
+            try:
+                new_th = float(message.text.replace(',', '.'))
+                from consts import DATA_DIR
+                from c_utils import Utils
+                app_path = DATA_DIR / "app.json"
+                app_data = Utils.read_json_file(app_path)
+                if "notifications" not in app_data:
+                    app_data["notifications"] = {}
+                app_data["notifications"]["negative_threshold"] = new_th
+                Utils.write_json_file(app_path, app_data)
+                
+                await message.answer(f"✅ Отрицательный порог успешно установлен на {new_th}.", reply_markup=self._get_main_keyboard())
+                await state.clear()
+            except ValueError:
+                await message.answer("❌ Некорректное число. Введите порог еще раз (например, -150.0) или нажмите Back:")
+
+        @self.dp.message(TGStates.waiting_for_notif_pos)
+        async def process_notif_pos_input(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Действие отменено.", reply_markup=self._get_main_keyboard())
+                return
+            try:
+                new_th = float(message.text.replace(',', '.'))
+                from consts import DATA_DIR
+                from c_utils import Utils
+                app_path = DATA_DIR / "app.json"
+                app_data = Utils.read_json_file(app_path)
+                if "notifications" not in app_data:
+                    app_data["notifications"] = {}
+                app_data["notifications"]["positive_threshold"] = new_th
+                Utils.write_json_file(app_path, app_data)
+                
+                await message.answer(f"✅ Положительный порог успешно установлен на {new_th}.", reply_markup=self._get_main_keyboard())
+                await state.clear()
+            except ValueError:
+                await message.answer("❌ Некорректное число. Введите порог еще раз (например, 150.0) или нажмите Back:")
 
     async def start(self):
         logger.info("Starting Telegram Receiver...")
