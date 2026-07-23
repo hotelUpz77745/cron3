@@ -22,7 +22,7 @@ from c_utils import Utils
 from c_log import UnifiedLogger
 logger = UnifiedLogger("BotCore")
 
-BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
+BLOCK_ENTRY = True  # Глобальный флаг блокировки входа в позиции (для отладки)
 
 class BotCore:
     def __init__(self):

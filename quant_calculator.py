@@ -13,6 +13,8 @@ from consts import DATA_DIR, ANALYTICS_DIR
 class QuantCalculator:
     def __init__(self, deposit=None, leverage=None, coins_count=None, grid_steps=None, volumes=None, invest_size=None):
         self.maintenance_margin_rate = 0.004
+        self.super_grid_multiplier = 1.0
+        self.super_grid_enabled = False
         
         # Динамическая подгрузка из файлов, если параметры не переданы
         if deposit is None:
@@ -23,14 +25,14 @@ class QuantCalculator:
             else:
                 deposit = 300.0
                 
+        app_data = {}
+        app_path = DATA_DIR / "app.json"
+        if app_path.exists():
+            app_data = Utils.read_json_file(app_path)
+            
         if coins_count is None:
-            app_path = DATA_DIR / "app.json"
-            if app_path.exists():
-                data = Utils.read_json_file(app_path)
-                symbols = data.get("symbols", [])
-                coins_count = len(symbols) if symbols else 4
-            else:
-                coins_count = 4
+            symbols = app_data.get("symbols", [])
+            coins_count = len(symbols) if symbols else 4
                 
         # Если нет монет, ставим минимум 1 для избежания деления на 0 в симуляциях
         if coins_count == 0:
@@ -63,7 +65,16 @@ class QuantCalculator:
         self.leverage = leverage if leverage else 10
         self.coins_count = coins_count
         self.invest_size = invest_size if invest_size else 100.0
-        self.grid_steps_pct = grid_steps if grid_steps else [0, -5, -8, -13, -21, -34]
+        
+        grid_steps = grid_steps if grid_steps else [0, -5, -8, -13, -21, -34]
+        
+        super_grid_cfg = app_data.get("super_grid", {})
+        if super_grid_cfg.get("enabled", False):
+            self.super_grid_enabled = True
+            self.super_grid_multiplier = float(super_grid_cfg.get("multiplier", 1.0))
+            grid_steps = [round(step * self.super_grid_multiplier, 2) for step in grid_steps]
+            
+        self.grid_steps_pct = grid_steps
         self.volume_pct = volumes if volumes else [12.96, 14.26, 15.68, 17.25, 18.98, 20.87]
 
     def simulate_drop(self, drop_pct, active_coins, invest_size):
@@ -119,6 +130,8 @@ class QuantCalculator:
         lines = []
         lines.append("="*40)
         lines.append("🧪 QUANT LIQUIDATION CALCULATOR")
+        if self.super_grid_enabled:
+            lines.append(f"🔥 АКТИВЕН SUPER GRID (Множитель: {self.super_grid_multiplier}x)")
         lines.append(f"Депозит: {self.total_deposit} USDT | Монет: {self.coins_count} | Плечо: {self.leverage}x")
         lines.append(f"Текущий invest_size: {self.invest_size} USDT")
         lines.append(f"Сетка (%): {self.grid_steps_pct}")
