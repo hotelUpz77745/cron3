@@ -28,7 +28,7 @@ class BotCore:
     def __init__(self):
         self.is_running = False
         # Работаем только с теми символами, которые прописаны в конфигах .app.json в разделе symbols
-        self.symbols = _CFG.get("symbols", [])
+        self.symbols = _CFG["symbols"]
         self.prices = {}   # Структура для хранения цен
         from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
         self.runtime_manager = RuntimeFsmManager()
@@ -54,7 +54,7 @@ class BotCore:
         self.pos_stream_synced = asyncio.Event()
         
         # Получаем таймфрейм из конфига app.json (секция signal)
-        signal_cfg = _CFG.get("signal", {})
+        signal_cfg = _CFG["signal"]
         timeframe = signal_cfg.get("timeframe", "5m")
         self.time_control = TimeControl(interval=timeframe)
         
@@ -78,7 +78,7 @@ class BotCore:
         self.analytics = AnalyticsManager()
         
         from consts import TG_ENABLED
-        auto_start = _CFG.get("app", {}).get("auto_start", False)
+        auto_start = _CFG["app"]["auto_start"]
         if TG_ENABLED:
             self.is_paused = not auto_start
         else:
@@ -101,7 +101,7 @@ class BotCore:
         self._last_tick = time.time()
         self._tick_count = 0
         self.logger = logger
-        self.server_name = _CFG.get("app", {}).get("server_name", "HronBot")
+        self.server_name = _CFG["app"]["server_name"]
 
         from watchdog import LoopWatchdog
         from consts import (
@@ -579,7 +579,7 @@ class BotCore:
     async def close_all_positions(self):
         """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
         from consts import _CFG
-        symbols = _CFG.get("symbols", [])
+        symbols = _CFG["symbols"]
         
         # 1. Отмена лимитных ордеров
         for sym in symbols:

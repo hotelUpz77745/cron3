@@ -41,7 +41,7 @@ class AverageManager:
                 indent_pct = level_data["indent"]
                 
                 from consts import _CFG
-                app_adv = _CFG.get("super_grid", {})
+                app_adv = _CFG["super_grid"]
                 if app_adv.get("enabled", False) and level_data.get("super_indent") is not None:
                     indent_pct = level_data["super_indent"]
                     

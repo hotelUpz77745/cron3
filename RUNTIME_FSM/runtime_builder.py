@@ -34,7 +34,7 @@ def build_runtime_caches():
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
     created_new = False
-    symbols = _CFG.get("symbols", [])
+    symbols = _CFG["symbols"]
     for symbol in symbols:
         sym_lower = symbol.lower()
         target_file = RUNTIME_DIR / f"{sym_lower}.json"

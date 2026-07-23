@@ -226,7 +226,7 @@ if __name__ == "__main__":
 
     class MockBotCore:
         def __init__(self):
-            self.symbols = _CFG.get("symbols", [])
+            self.symbols = _CFG["symbols"]
             # Для получения публичных свечей ключи не нужны, но клиент требует их в конструкторе
             self.client = BinanceClient("", "")
             self.runtime_manager = MockRuntimeManager()

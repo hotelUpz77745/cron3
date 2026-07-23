@@ -50,8 +50,8 @@ TG_TOKEN: str = os.getenv("TG_TOKEN") or ""
 # ============================================================
 # APP / UTILS
 # ============================================================
-TG_ENABLED: bool = bool(_CFG.get("telegram", {}).get("enabled", False))
-TG_ALLOWED_USERS: list[int] = _CFG.get("telegram", {}).get("allowed_users", [])
+TG_ENABLED: bool = bool(_CFG["telegram"]["enabled"])
+TG_ALLOWED_USERS: list[int] = _CFG["telegram"]["allowed_users"]
 TIME_ZONE: str = str(_CFG["app"]["time_zone"])
 PRECISION: int = int(_CFG["app"]["precision"])
 SPEC_TTL_SEC: float = float(_CFG["app"]["spec_ttl_sec"])
@@ -61,14 +61,14 @@ AVOID_CHECK_RUNTIME_CFG: bool = bool(_CFG["app"].get("avoid_check_runtime_cfg", 
 API_RATE_LIMIT_SEC: float = float(_CFG["app"].get("api_rate_limit_sec", 0.1))
 API_CONCURRENT_RATE_LIMIT_SEC: float = float(_CFG["app"].get("api_concurrent_rate_limit_sec", 0.01))
 REST_FAILSAFE_SEC: float = float(_CFG["app"].get("rest_failsafe_sec", 5.0))
-ANALYTICS_CSV_MAX_ROWS: int = int(_CFG.get("analytics", {}).get("csv_max_rows", 1000))
+ANALYTICS_CSV_MAX_ROWS: int = int(_CFG["analytics"]["csv_max_rows"])
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])
 WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodelete_sec"])
-BACKUP_ENABLED: bool = bool(_CFG.get("backup", {}).get("enabled", False))
-BACKUP_DEBOUNCE_SEC: int = int(_CFG.get("backup", {}).get("debounce_sec", 60))
-BACKUP_MAX_INTERVAL_SEC: int = int(_CFG.get("backup", {}).get("max_interval_sec", 300))
+BACKUP_ENABLED: bool = bool(_CFG["backup"]["enabled"])
+BACKUP_DEBOUNCE_SEC: int = int(_CFG["backup"]["debounce_sec"])
+BACKUP_MAX_INTERVAL_SEC: int = int(_CFG["backup"]["max_interval_sec"])
 
 # ============================================================
 # LOGGING

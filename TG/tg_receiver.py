@@ -193,7 +193,7 @@ class TelegramReceiver:
                 return
                 
             from consts import _CFG
-            symbols = _CFG.get("symbols", [])
+            symbols = _CFG["symbols"]
             
             for sym in symbols:
                 sym_lower = sym.lower()
@@ -226,7 +226,7 @@ class TelegramReceiver:
                                 lines.append(f"    ├ Grid: [{', '.join(indents)}]")
                                 
                                 from consts import _CFG
-                                if _CFG.get("super_grid", {}).get("enabled", False) and any(si != "-" for si in super_indents):
+                                if _CFG["super_grid"]["enabled"] and any(si != "-" for si in super_indents):
                                     lines.append(f"    ├ Super: [{', '.join(super_indents)}]")
                                     
                                 
@@ -299,7 +299,7 @@ class TelegramReceiver:
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             from consts import _CFG
-            super_grid_enabled = _CFG.get("super_grid", {}).get("enabled", False)
+            super_grid_enabled = _CFG["super_grid"]["enabled"]
             super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"
             text = f"<b>Control Panel</b>\nCurrent Status: {status}\nSuper Grid (Volatility): {super_grid_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
@@ -674,7 +674,7 @@ class TelegramReceiver:
                     data = json.loads(text)
                     ts = data.get("last_updated_ts")
                     if ts:
-                        tz_str = _CFG.get("app", {}).get("time_zone", "UTC")
+                        tz_str = _CFG["app"]["time_zone"]
                         try:
                             dt = datetime.fromtimestamp(ts / 1000.0, tz=ZoneInfo(tz_str))
                         except Exception:
