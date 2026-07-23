@@ -4,13 +4,14 @@
 # ==============================================================================
 
 import sys
+sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 from pathlib import Path
 from c_utils import Utils
 from consts import DATA_DIR, ANALYTICS_DIR
 
 class QuantCalculator:
-    def __init__(self, deposit=None, leverage=None, coins_count=None, grid_steps=None, volumes=None):
+    def __init__(self, deposit=None, leverage=None, coins_count=None, grid_steps=None, volumes=None, invest_size=None):
         self.maintenance_margin_rate = 0.004
         
         # Динамическая подгрузка из файлов, если параметры не переданы
@@ -36,9 +37,12 @@ class QuantCalculator:
             coins_count = 1
             
         base_path = DATA_DIR / "_base.json"
-        if base_path.exists() and (leverage is None or grid_steps is None or volumes is None):
+        if base_path.exists() and (leverage is None or grid_steps is None or volumes is None or invest_size is None):
             base_data = Utils.read_json_file(base_path)
             long_cfg = base_data.get("LONG", {})
+            
+            if invest_size is None:
+                invest_size = float(long_cfg.get("invest_size", 100.0))
             if leverage is None:
                 leverage = long_cfg.get("leverage", 10)
                 
@@ -58,6 +62,7 @@ class QuantCalculator:
         self.total_deposit = deposit
         self.leverage = leverage if leverage else 10
         self.coins_count = coins_count
+        self.invest_size = invest_size if invest_size else 100.0
         self.grid_steps_pct = grid_steps if grid_steps else [0, -5, -8, -13, -21, -34]
         self.volume_pct = volumes if volumes else [12.96, 14.26, 15.68, 17.25, 18.98, 20.87]
 
@@ -110,44 +115,35 @@ class QuantCalculator:
                 return drop
         return -100.0
 
-    def find_optimal_invest_size(self):
-        best_invest = 0.0
-        for inv in np.arange(10.0, 2000.0, 1.0):
-            mb, mm = self.simulate_drop(-45.0, self.coins_count, inv)
-            if mb > mm:
-                best_invest = inv
-            else:
-                break
-        return round(best_invest, 2)
-
     def generate_report(self):
         lines = []
         lines.append("="*40)
         lines.append("🧪 QUANT LIQUIDATION CALCULATOR")
-        lines.append(f"Депозит: {self.total_deposit} USDT | Плечо: {self.leverage}x | Монет: {self.coins_count}")
+        lines.append(f"Депозит: {self.total_deposit} USDT | Монет: {self.coins_count} | Плечо: {self.leverage}x")
+        lines.append(f"Текущий invest_size: {self.invest_size} USDT")
+        lines.append(f"Сетка (%): {self.grid_steps_pct}")
+        lines.append(f"Объемы (%): {self.volume_pct}")
         lines.append("="*40)
         
-        optimal_invest = self.find_optimal_invest_size()
-        lines.append(f"\n[ЦЕЛЬ]: Выдержать синхронную просадку всех {self.coins_count} монет на -45%.")
-        lines.append(f"✅ Оптимальный invest_size (ОДНА сторона): {optimal_invest} USDT")
-        
         if self.leverage > 0:
-            max_margin_per_side = optimal_invest / self.leverage
+            max_margin_per_side = self.invest_size / self.leverage
             max_margin_total = max_margin_per_side * self.coins_count
-            lines.append(f"   (Маржа 1 стороны при фулл сетке: ~{max_margin_per_side:.2f} USDT)")
-            lines.append(f"   (Максимальная маржа для всех {self.coins_count} монет: ~{max_margin_total:.2f} USDT)")
+            lines.append(f"\n💡 ТЕКУЩАЯ НАГРУЗКА ПРИ ПОЛНОЙ СЕТКЕ:")
+            lines.append(f"   Маржа 1 стороны (фулл сетка): ~{max_margin_per_side:.2f} USDT")
+            lines.append(f"   Максимальная маржа ({self.coins_count} монет): ~{max_margin_total:.2f} USDT")
+            lines.append(f"   Свободная маржа (запас): ~{self.total_deposit - max_margin_total:.2f} USDT")
         
         lines.append("\n" + "="*40)
-        lines.append(f"📈 МОДЕЛИРОВАНИЕ (invest_size = {optimal_invest} USDT)\n")
+        lines.append(f"📈 СЦЕНАРИИ ЛИКВИДАЦИИ\n")
         
         if self.coins_count > 1:
-            liq_swan = self.find_liquidation_point(1, optimal_invest)
+            liq_swan = self.find_liquidation_point(1, self.invest_size)
             lines.append(f"🦢 'Черный лебедь' ({self.coins_count-1} стоят, 1 падает):")
-            lines.append(f"   Ликвидация при падении монеты на {liq_swan:.1f}%")
+            lines.append(f"   Ликвидация при падении проблемной монеты на {liq_swan:.1f}%")
         
-        liq_apoc = self.find_liquidation_point(self.coins_count, optimal_invest)
+        liq_apoc = self.find_liquidation_point(self.coins_count, self.invest_size)
         lines.append(f"🌋 'Апокалипсис' (Все {self.coins_count} синхронно падают):")
-        lines.append(f"   Ликвидация аккаунта при падении на {liq_apoc:.1f}%")
+        lines.append(f"   Ликвидация аккаунта при обвале на {liq_apoc:.1f}%")
         lines.append("="*40)
         
         return "\n".join(lines)

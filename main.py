@@ -139,3 +139,6 @@ if __name__ == "__main__":
 # git checkout origin/slavik -- ANALYTICS/analytics.py TG/tg_receiver.py CORE/bot.py
 # git fetch origin
 # git checkout origin/slavik -- CORE/_utils.py CORE/bot.py API/BINANCE/price_stream.py CORE/GRID/avg_manager.py POS_FSM/pos_stream_monitor.py
+
+
+# /quant
