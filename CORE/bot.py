@@ -462,12 +462,11 @@ class BotCore:
             
         if not self.pos_stream.ready:
             logger.warning("Position Stream failed to connect in time! Relying on REST failsafe.")
+            # Строгая гарантия: забираем начальный стейт позиций по REST
+            await self.pos_monitor.sync_from_rest(self.client, self.symbols)
         else:
             logger.info("Position Stream connected successfully.")
 
-        
-        # Строгая гарантия: забираем начальный стейт позиций по REST
-        await self.pos_monitor.sync_from_rest(self.client, self.symbols)
         
         # ШАГ 3. Синхронизация рантаймов с реальностью FSM
         logger.info("Streams and REST synced! Running initial RuntimeFSM Sync...")

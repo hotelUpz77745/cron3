@@ -253,8 +253,6 @@ class PositionStream:
                     if not await self._connect():
                         raise RuntimeError("ws_connect_failed")
 
-                    self.ready = True
-                    
                     # Обязательная синхронизация по REST при любом подключении/переподключении стрима
                     if self.client and self.target_symbols:
                         try:
@@ -263,6 +261,7 @@ class PositionStream:
                         except Exception as e:
                             logger.error(f"[MASTER WS] REST sync failed on connect: {e}")
 
+                    self.ready = True
                     await self._handle_messages()
 
                 except asyncio.CancelledError:
