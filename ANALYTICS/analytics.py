@@ -705,10 +705,15 @@ class AnalyticsManager:
             
             # FIX: Merge all active symbols from config so that new coins are tracked immediately,
             # instead of waiting for their first closed trade.
-            from consts import _CFG
-            config_symbols = _CFG.get("app", {}).get("symbols", [])
-            if isinstance(config_symbols, dict):
-                config_symbols = list(config_symbols.keys())
+            config_symbols = []
+            try:
+                import json
+                with open("CFG/app.json", "r", encoding="utf-8") as f:
+                    app_cfg = json.load(f)
+                    syms = app_cfg.get("symbols", [])
+                    config_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
+            except Exception:
+                pass
                 
             if "per_coin" not in data:
                 data["per_coin"] = {}
