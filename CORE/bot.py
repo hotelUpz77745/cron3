@@ -454,6 +454,17 @@ class BotCore:
         except asyncio.TimeoutError:
             logger.warning("Timeout waiting for price streams! Relying on REST prefetch.")
 
+        logger.info("Waiting for Position Stream to connect...")
+        wait_cycles = 0
+        while not self.pos_stream.ready and wait_cycles < 50:
+            await asyncio.sleep(0.1)
+            wait_cycles += 1
+            
+        if not self.pos_stream.ready:
+            logger.warning("Position Stream failed to connect in time! Relying on REST failsafe.")
+        else:
+            logger.info("Position Stream connected successfully.")
+
         
         # Строгая гарантия: забираем начальный стейт позиций по REST
         await self.pos_monitor.sync_from_rest(self.client, self.symbols)

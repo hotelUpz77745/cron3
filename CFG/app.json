@@ -23,7 +23,7 @@
     "warning": true,
     "error": true,
     "max_log_lines": 10000,
-    "log_to_console": true,
+    "log_to_console": false,
     "log_to_file": true
   },
   "symbols": [
