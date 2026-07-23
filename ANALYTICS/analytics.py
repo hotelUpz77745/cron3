@@ -29,8 +29,11 @@ class AnalyticsManager:
 
     def _ensure_files(self):
         if not self.log_file.exists():
+            import time
+            current_ms = int(time.time() * 1000)
             default_data = {
                 "start_balance_usdt": 0.0,
+                "first_trade_ts": current_ms,
                 "cur_balance_usdt": 0.0,
                 "total_trades": 0,
                 "winning_trades": 0,
@@ -836,17 +839,11 @@ class AnalyticsManager:
         """
         logger.info(f"[{symbol}] Trade closed. Waiting 10s before Absolute Deep Sync...")
         
-        # FIX: Ensure first_trade_ts is set BEFORE we run deep_sync
-        # This allows the system to seamlessly start writing analytics from a clean "Reset" state
-        # without requiring a manual Restore.
+        # The first_trade_ts is now automatically anchored to the exact moment analytics.json is created.
+        # This prevents the bot from looking into the past and pulling old trades after a reset.
         if open_time:
-            async with self._lock:
-                data = self._read_data()
-                if not data.get("first_trade_ts"):
-                    logger.info(f"[ANALYTICS] Empty ledger detected. Initializing first_trade_ts to {open_time} from {symbol} {side}...")
-                    data["first_trade_ts"] = open_time
-                    self._write_data(data)
-                    
+            pass
+            
         await asyncio.sleep(10.0)
         await self.deep_sync_analytics(client)
         logger.info(f"[ANALYTICS] Position synced: {symbol} {side}")
