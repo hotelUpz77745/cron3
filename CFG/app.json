@@ -9,7 +9,7 @@
     "api_rate_limit_sec": 0.1,
     "api_concurrent_rate_limit_sec": 0.01,
     "rest_failsafe_sec": 1.0,
-    "auto_start": true
+    "auto_start": false
   },
   "signal": {
     "timeframe": "5m"
