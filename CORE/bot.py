@@ -82,6 +82,27 @@ class BotCore:
         # Сетевые адаптеры и стримы
         self.price_stream = BinanceHotPriceStream(self.symbols)
 
+        # Контроль главный петли (Watchdog)
+        self._last_tick = time.time()
+        self._tick_count = 0
+        self.logger = logger
+        self.server_name = _CFG.get("app", {}).get("server_name", "HronBot")
+
+        from watchdog import LoopWatchdog
+        from consts import (
+            WATCHDOG_TIMEOUT_SEC,
+            WATCHDOG_CHECK_INTERVAL_SEC,
+            WATCHDOG_HEARTBEAT_INTERVAL_SEC,
+            WATCHDOG_HEARTBEAT_AUTODELETE_SEC
+        )
+        self.watchdog = LoopWatchdog(
+            self,
+            timeout_sec=WATCHDOG_TIMEOUT_SEC,
+            check_interval_sec=WATCHDOG_CHECK_INTERVAL_SEC,
+            heartbeat_interval_sec=WATCHDOG_HEARTBEAT_INTERVAL_SEC,
+            heartbeat_autodelete_sec=WATCHDOG_HEARTBEAT_AUTODELETE_SEC
+        )
+
     async def add_symbol(self, symbol: str):
         symbol = symbol.upper()
         if symbol in self.symbols:
@@ -436,7 +457,12 @@ class BotCore:
             await asyncio.sleep(0.5)
         logger.info("Exchange specifications loaded.")
 
+        # Запуск фонового контроллера Watchdog
+        watchdog_task = asyncio.create_task(self.watchdog.start())
+
         while self.is_running:
+            self._last_tick = time.time()
+            self._tick_count += 1
             try:
                 if self.is_paused:
                     await asyncio.sleep(1.0)
@@ -486,6 +512,8 @@ class BotCore:
                 await asyncio.sleep(TIME_SLACK_SEC)
                 
         self.is_running = False
+        self.watchdog.stop()
+        watchdog_task.cancel()
         self.spec_manager.stop()
         self.price_stream.stop()
         price_task.cancel()
@@ -493,7 +521,7 @@ class BotCore:
         # Попытка быстрого сохранения стейтов при нормальном завершении
         await self.runtime_manager.sync_with_fsm(self.fsm_states, force_save=True)
         await self.client.shutdown()
-        await asyncio.gather(price_task, pos_task, return_exceptions=True)
+        await asyncio.gather(price_task, pos_task, watchdog_task, return_exceptions=True)
 
     async def start(self):
         """Запуск бота."""
@@ -512,6 +540,8 @@ class BotCore:
     def stop(self):
         """Остановка бота."""
         self.is_running = False
+        if hasattr(self, 'watchdog'):
+            self.watchdog.stop()
         self.spec_manager.stop()
         if hasattr(self, 'volatility_manager'):
             self.volatility_manager.stop()
@@ -556,6 +586,8 @@ class BotCore:
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""
         logger.info("Executing graceful BotCore shutdown...")
         self.is_running = False
+        if hasattr(self, 'watchdog'):
+            self.watchdog.stop()
         try:
             # Принудительно дампим стейты
             if hasattr(self, 'fsm_states') and hasattr(self, 'runtime_manager'):

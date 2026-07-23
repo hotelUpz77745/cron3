@@ -52,5 +52,11 @@
     "min_volatility_pct": 25.0,
     "max_volatility_pct": 40.0,
     "strict_window": true
+  },
+  "watchdog": {
+    "timeout_sec": 60,
+    "check_interval_sec": 1,
+    "heartbeat_interval_sec": 60,
+    "heartbeat_autodelete_sec": 180
   }
 }

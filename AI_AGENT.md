@@ -47,6 +47,7 @@ PROJECT_NAME = "hron"
 - **Volatility Calculations**: `VolatilityManager` calculates the *average* volatility per candle. If computing weekly volatility, `timeframe` must be `1w`, not `3m`.
 - **Analytics Ledger Aggregation**: Binance API `/fapi/v1/income` returns `REALIZED_PNL` as fragmented partial fills. The ledger reconstructor (`deep_sync_analytics`) MUST separate these partial fills using the `info` (tradeId) field to perfectly mirror the Binance history and prevent "lost trade" perception. Do NOT merge them by time-window.
 - **Net Profit Priority**: All reporting and daily metric calculations (like `Avg Daily Profit`, `DRME`) MUST be based on `realized_pnl_net_usdt` (which accounts for commissions and funding), rather than gross `realized_pnl_usdt`.
+- **Loop Watchdog Isolation**: `watchdog.py` monitors `BotCore` main loop health and handles Telegram alerts/heartbeats. Telegram delivery is handled by `WatchdogTGAdapter` inside `watchdog.py` using `TG_TOKEN` strictly from `.env` without fallbacks to config files.
 
 ---
 
@@ -56,6 +57,7 @@ PROJECT_NAME = "hron"
 ## После каждой правки обновляй WORKSPACE/TRADING_SYSTEM/COMMON/wiki/{PROJECT_NAME}
 
 ## 6. Latest Commits
+- `09fa888 - feat(core): integrate LoopWatchdog into BotCore with WatchdogTGAdapter and TG_TOKEN from .env`
 - `79da157 - fix(analytics): group partial fills within 5 seconds for accurate real trade counting`
 - `c2c7833 - fix(CORE/bot.py): enforce idempotency flag immediately after successful market order`
 - `5a8a975 - fix: TP zero quantity prevention, resilient spec loader, API rate limits reduction`
