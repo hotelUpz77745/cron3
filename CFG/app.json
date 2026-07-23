@@ -58,5 +58,10 @@
     "check_interval_sec": 1,
     "heartbeat_interval_sec": 60,
     "heartbeat_autodelete_sec": 180
+  },
+  "backup": {
+    "enabled": true,
+    "debounce_sec": 60,
+    "max_interval_sec": 300
   }
 }

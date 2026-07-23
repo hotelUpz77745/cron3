@@ -66,6 +66,9 @@ WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])
 WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodelete_sec"])
+BACKUP_ENABLED: bool = bool(_CFG.get("backup", {}).get("enabled", False))
+BACKUP_DEBOUNCE_SEC: int = int(_CFG.get("backup", {}).get("debounce_sec", 60))
+BACKUP_MAX_INTERVAL_SEC: int = int(_CFG.get("backup", {}).get("max_interval_sec", 300))
 
 # ============================================================
 # LOGGING

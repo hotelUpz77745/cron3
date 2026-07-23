@@ -22,6 +22,7 @@ class RuntimeFsmManager:
         self.caches: Dict[str, Dict[str, Any]] = {}
         self.locks: Dict[str, asyncio.Lock] = {}
         self.runtime_dir = RUNTIME_DIR
+        self.backup_manager = None
 
     def load_initial_caches(self, symbols: List[str]):
         """
@@ -156,3 +157,5 @@ class RuntimeFsmManager:
                 path = RUNTIME_DIR / f"{sym_lower}.json"
                 # Используем Utils для записи
                 Utils.write_json_file(path, self.caches[symbol])
+                if self.backup_manager:
+                    self.backup_manager.mark_changed()

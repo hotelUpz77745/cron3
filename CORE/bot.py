@@ -32,6 +32,17 @@ class BotCore:
         self.prices = {}   # Структура для хранения цен
         from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
         self.runtime_manager = RuntimeFsmManager()
+        
+        from consts import BACKUP_ENABLED, BACKUP_DEBOUNCE_SEC, BACKUP_MAX_INTERVAL_SEC
+        if BACKUP_ENABLED:
+            from CORE.runtime_backup import RuntimeBackupManager
+            self.backup_manager = RuntimeBackupManager(
+                debounce_sec=BACKUP_DEBOUNCE_SEC,
+                max_interval_sec=BACKUP_MAX_INTERVAL_SEC
+            )
+            self.runtime_manager.backup_manager = self.backup_manager
+        else:
+            self.backup_manager = None
         self.runtime_configs = self.runtime_manager.caches # Кеш рантаймов
         
         # Флаги готовности стримов
@@ -492,6 +503,9 @@ class BotCore:
                 
                 # Синхронизация рантаймов при изменениях в PositionState (постоянный контроль)
                 await self.runtime_manager.sync_with_fsm(self.fsm_states)
+
+                if getattr(self, 'backup_manager', None):
+                    await self.backup_manager.check_and_backup()
 
                 # Предотвращение блокировки event loop
                 await asyncio.sleep(TIME_SLACK_SEC)
