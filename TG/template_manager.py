@@ -71,10 +71,11 @@ class TemplateManager:
                                 final_data[side][key] = {}
                             for subkey in user_data[side][key]:
                                 if subkey in final_data[side][key] and isinstance(final_data[side][key][subkey], dict):
-                                    # Если это сетка (grid) и индент изменился, сбрасываем цену, чтобы ядро пересчитало её
                                     if key == "grid":
                                         old_indent = final_data[side][key][subkey].get("indent")
                                         new_indent = user_data[side][key][subkey].get("indent")
+                                        old_super_indent = final_data[side][key][subkey].get("super_indent")
+                                        
                                         if new_indent is not None and old_indent is not None:
                                             try:
                                                 if float(old_indent) != float(new_indent):
@@ -84,6 +85,11 @@ class TemplateManager:
                                                 pass
                                     
                                     final_data[side][key][subkey].update(user_data[side][key][subkey])
+                                    
+                                    if key == "grid":
+                                        new_super_indent = user_data[side][key][subkey].get("super_indent")
+                                        if old_super_indent is not None and new_super_indent is None:
+                                            final_data[side][key][subkey]["super_indent"] = old_super_indent
                                 else:
                                     final_data[side][key][subkey] = user_data[side][key][subkey]
                         else:

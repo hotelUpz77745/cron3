@@ -1,6 +1,6 @@
 # ==============================================================================
 # Path: ANALYTICS/analytics.py
-# Role: Домен аналитики и ведения журнала сделок
+# Role: ╨Ф╨╛╨╝╨╡╨╜ ╨░╨╜╨░╨╗╨╕╤В╨╕╨║╨╕ ╨╕ ╨▓╨╡╨┤╨╡╨╜╨╕╤П ╨╢╤Г╤А╨╜╨░╨╗╨░ ╤Б╨┤╨╡╨╗╨╛╨║
 # ==============================================================================
 
 import asyncio
@@ -15,7 +15,7 @@ logger = logging.getLogger("Analytics")
 
 class AnalyticsManager:
     """
-    Ведет журнал сделок и статистику закрытых позиций.
+    ╨Т╨╡╨┤╨╡╤В ╨╢╤Г╤А╨╜╨░╨╗ ╤Б╨┤╨╡╨╗╨╛╨║ ╨╕ ╤Б╤В╨░╤В╨╕╤Б╤В╨╕╨║╤Г ╨╖╨░╨║╤А╤Л╤В╤Л╤Е ╨┐╨╛╨╖╨╕╤Ж╨╕╨╣.
     """
     def __init__(self):
         self.log_file = ANALYTICS_DIR / "analytics.json"
@@ -191,7 +191,7 @@ class AnalyticsManager:
                 def ts_to_str(ts_ms):
                     if not ts_ms:
                         return "Unknown"
-                    return datetime.fromtimestamp(ts_ms / 1000.0).strftime('%Y-%m-%d %H:%M:%S')
+                    return datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).strftime('%Y-%m-%d %H:%M:%S')
 
                 open_str = ts_to_str(open_time)
                 close_str = ts_to_str(close_time)
@@ -214,7 +214,7 @@ class AnalyticsManager:
 
 
     def record_finished_position(self, client, symbol: str, side: str, open_time: int, close_time: int):
-        """Запускает фоновую задачу для подтягивания PnL и записи в лог."""
+        """╨Ч╨░╨┐╤Г╤Б╨║╨░╨╡╤В ╤Д╨╛╨╜╨╛╨▓╤Г╤О ╨╖╨░╨┤╨░╤З╤Г ╨┤╨╗╤П ╨┐╨╛╨┤╤В╤П╨│╨╕╨▓╨░╨╜╨╕╤П PnL ╨╕ ╨╖╨░╨┐╨╕╤Б╨╕ ╨▓ ╨╗╨╛╨│."""
         self._sync_locks.add(symbol)
         task = asyncio.create_task(self._fetch_and_record(client, symbol, side, open_time, close_time))
         self._background_tasks.add(task)
@@ -247,7 +247,7 @@ class AnalyticsManager:
                             for row in reader:
                                 if len(row) > 3 and row[0] != "Id":
                                     try:
-                                        dt = datetime.strptime(row[3].strip(), "%Y-%m-%d %H:%M:%S")
+                                        dt = datetime.strptime(row[3].strip(), "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
                                         csv_ts = int(dt.timestamp() * 1000)
                                         break  # First valid row is our definitive start
                                     except Exception:
@@ -406,7 +406,7 @@ class AnalyticsManager:
                 active_trades = {}  # {sym: {"last_ts": 0, "pnl": 0.0}}
                 for (ts, sym, info), g in sorted(grouped.items(), key=lambda x: x[0][0]):
                     from datetime import datetime
-                    dt_str = datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d %H:%M:%S")
+                    dt_str = datetime.fromtimestamp(ts / 1000, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                     
                     # Add to global stats
                     total_pnl += g["pnl"]
@@ -425,21 +425,21 @@ class AnalyticsManager:
                         if by_symbol[sym]["first_ts"] is None:
                             by_symbol[sym]["first_ts"] = ts
                             
-                        # Считаем реальные сделки, а не филы (группируем филы внутри 5-секундного окна)
+                        # ╨б╤З╨╕╤В╨░╨╡╨╝ ╤А╨╡╨░╨╗╤М╨╜╤Л╨╡ ╤Б╨┤╨╡╨╗╨║╨╕, ╨░ ╨╜╨╡ ╤Д╨╕╨╗╤Л (╨│╤А╤Г╨┐╨┐╨╕╤А╤Г╨╡╨╝ ╤Д╨╕╨╗╤Л ╨▓╨╜╤Г╤В╤А╨╕ 5-╤Б╨╡╨║╤Г╨╜╨┤╨╜╨╛╨│╨╛ ╨╛╨║╨╜╨░)
                         if sym not in active_trades:
                             active_trades[sym] = {"last_ts": ts, "pnl": g["pnl"]}
                         else:
                             last_ts = active_trades[sym]["last_ts"]
                             if ts - last_ts <= 5000:
-                                # Тот же трейд (филы рядом по времени)
+                                # ╨в╨╛╤В ╨╢╨╡ ╤В╤А╨╡╨╣╨┤ (╤Д╨╕╨╗╤Л ╤А╤П╨┤╨╛╨╝ ╨┐╨╛ ╨▓╤А╨╡╨╝╨╡╨╜╨╕)
                                 active_trades[sym]["last_ts"] = ts
                                 active_trades[sym]["pnl"] += g["pnl"]
                             else:
-                                # Прошло больше 5 секунд -> закрываем предыдущий трейд и считаем его
+                                # ╨Я╤А╨╛╤И╨╗╨╛ ╨▒╨╛╨╗╤М╤И╨╡ 5 ╤Б╨╡╨║╤Г╨╜╨┤ -> ╨╖╨░╨║╤А╤Л╨▓╨░╨╡╨╝ ╨┐╤А╨╡╨┤╤Л╨┤╤Г╤Й╨╕╨╣ ╤В╤А╨╡╨╣╨┤ ╨╕ ╤Б╤З╨╕╤В╨░╨╡╨╝ ╨╡╨│╨╛
                                 by_symbol[sym]["trades"] += 1
                                 if active_trades[sym]["pnl"] > 0:
                                     by_symbol[sym]["wins"] += 1
-                                # Начинаем отсчет нового трейда
+                                # ╨Э╨░╤З╨╕╨╜╨░╨╡╨╝ ╨╛╤В╤Б╤З╨╡╤В ╨╜╨╛╨▓╨╛╨│╨╛ ╤В╤А╨╡╨╣╨┤╨░
                                 active_trades[sym] = {"last_ts": ts, "pnl": g["pnl"]}
                             
                         current_balance += global_pending_delta
@@ -459,7 +459,7 @@ class AnalyticsManager:
                 # gets added to final balance internally, but not as a trade row.
                 current_balance += global_pending_delta
                 
-                # Финализируем последние открытые трейды для статистики (после цикла)
+                # ╨д╨╕╨╜╨░╨╗╨╕╨╖╨╕╤А╤Г╨╡╨╝ ╨┐╨╛╤Б╨╗╨╡╨┤╨╜╨╕╨╡ ╨╛╤В╨║╤А╤Л╤В╤Л╨╡ ╤В╤А╨╡╨╣╨┤╤Л ╨┤╨╗╤П ╤Б╤В╨░╤В╨╕╤Б╤В╨╕╨║╨╕ (╨┐╨╛╤Б╨╗╨╡ ╤Ж╨╕╨║╨╗╨░)
                 for sym, t_info in active_trades.items():
                     if t_info["last_ts"] > 0:
                         by_symbol[sym]["trades"] += 1
@@ -609,7 +609,7 @@ class AnalyticsManager:
                 
                 bot_unrealized += drawdown
                     
-            # unrealized_pnl_usdt = Сум по current_drawdown
+            # unrealized_pnl_usdt = ╨б╤Г╨╝ ╨┐╨╛ current_drawdown
             data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
             
             bot_gross_profit = 0.0
@@ -694,43 +694,13 @@ class AnalyticsManager:
                 sym = p.get("symbol", "")
                 unrealized = float(p.get("unrealizedProfit", 0.0))
                 coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
-            try:
-                import json
-                with open("CFG/app.json", "r", encoding="utf-8") as f:
-                    app_cfg = json.load(f)
-                    syms = app_cfg.get("symbols", [])
-                    active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
-            except Exception:
-                active_symbols = []
-
             bot_unrealized = 0.0
-            for sym, drawdown in coin_drawdowns.items():
-                # Only track drawdowns for symbols the bot is actively trading/tracking
-                if active_symbols and sym not in active_symbols:
-                    continue
-                
-                # Ensure it exists in per_coin so it can be displayed
-                if "per_coin" not in data:
-                    data["per_coin"] = {}
-                if sym not in data["per_coin"]:
-                    data["per_coin"][sym] = {
-                        "realized_pnl_usdt": 0.0,
-                        "realized_pnl_net_usdt": 0.0,
-                        "commission_usdt": 0.0,
-                        "funding_usdt": 0.0,
-                        "net_profit_usdt": 0.0,
-                        "win_count": 0,
-                        "loss_count": 0,
-                        "max_drawdown": 0.0,
-                        "min_drawdown": 0.0
-                    }
-                    
-                cdata = data["per_coin"][sym]
+            for sym, cdata in data.get("per_coin", {}).items():
+                drawdown = coin_drawdowns.get(sym, 0.0)
                 cdata["current_drawdown"] = round(drawdown, 4)
                 cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
                 cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
                 bot_unrealized += drawdown
-                
             data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
             
             bot_gross_profit = 0.0
@@ -810,9 +780,9 @@ class AnalyticsManager:
         while getattr(self, '_is_tracker_running', True):
             await asyncio.sleep(10.0)
             try:
-                # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
-                # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
-                # gross_profit еще не обновился, что приведет к "виражу" на графике и искажению peak/trough.
+                # ╨Х╤Б╨╗╨╕ ╤Е╨╛╤В╤П ╨▒╤Л ╨╛╨┤╨╕╨╜ ╤Б╨╕╨╝╨▓╨╛╨╗ ╤Б╨╡╨╣╤З╨░╤Б ╨╢╨┤╨╡╤В ╨┐╨╛╨┤╤В╤П╨│╨╕╨▓╨░╨╜╨╕╤П PnL (5 ╤Б╨╡╨║╤Г╨╜╨┤),
+                # ╨╝╤Л ╨┐╤А╨╛╨┐╤Г╤Б╨║╨░╨╡╨╝ ╤В╨░╨║╤В ╤В╤А╨╡╨║╨╡╤А╨░. ╨Ш╨╜╨░╤З╨╡ ╤В╤А╨╡╨║╨╡╤А ╤Г╨▓╨╕╨┤╨╕╤В unrealized=0, ╨╜╨╛
+                # gross_profit ╨╡╤Й╨╡ ╨╜╨╡ ╨╛╨▒╨╜╨╛╨▓╨╕╨╗╤Б╤П, ╤З╤В╨╛ ╨┐╤А╨╕╨▓╨╡╨┤╨╡╤В ╨║ "╨▓╨╕╤А╨░╨╢╤Г" ╨╜╨░ ╨│╤А╨░╤Д╨╕╨║╨╡ ╨╕ ╨╕╤Б╨║╨░╨╢╨╡╨╜╨╕╤О peak/trough.
                 if self._sync_locks:
                     continue
                     

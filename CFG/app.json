@@ -18,8 +18,8 @@
     "csv_max_rows": 5
   },
   "logging": {
-    "debug": false,
-    "info": false,
+    "debug": true,
+    "info": true,
     "warning": true,
     "error": true,
     "max_log_lines": 10000,
@@ -28,9 +28,7 @@
   },
   "symbols": [
     "STABLEUSDT",
-    "DASHUSDT",
-    "MMTUSDT",
-    "KGENUSDT"
+    "DASHUSDT"
   ],
   "telegram": {
     "enabled": true,

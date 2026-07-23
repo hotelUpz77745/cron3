@@ -142,3 +142,11 @@ if __name__ == "__main__":
 
 
 # /quant
+
+
+#   "symbols": [
+#     "STABLEUSDT",
+#     "DASHUSDT",
+#     "MMTUSDT",
+#     "KGENUSDT"
+#   ],

@@ -156,9 +156,18 @@ class BotCore:
         if hasattr(self, 'price_stream') and self.price_stream:
             await self.price_stream.aclose()
             
+        # Завершаем текущую таску price_stream
+        for task in asyncio.all_tasks():
+            if task.get_name() == "price_stream":
+                task.cancel()
+                
         self.price_stream = BinanceHotPriceStream(self.symbols)
         self.price_stream_synced.clear()
-        asyncio.create_task(self.price_stream.run(self._on_tick))
+        asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
+        
+        # 6. Trigger VolatilityManager to compute super_indent for the new symbol
+        if hasattr(self, 'volatility_manager') and self.volatility_manager.is_running:
+            asyncio.create_task(self.volatility_manager.process_all())
         
         logger.info(f"[{symbol}] Dynamically added to BotCore.")
 
