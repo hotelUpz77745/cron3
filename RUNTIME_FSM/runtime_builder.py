@@ -13,11 +13,9 @@ from c_utils import Utils
 logger = UnifiedLogger("RuntimeBuilder")
 
 RUNTIME_DIR = DATA_DIR / "runtime"
-TEMP_DIR = DATA_DIR / "temp"
 
 def _ensure_dirs():
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
-    TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
 def build_runtime_caches():
     _ensure_dirs()

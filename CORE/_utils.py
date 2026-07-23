@@ -125,7 +125,7 @@ class SpecManager:
 
     async def _specification_task(self):
         import asyncio
-        from consts import SPEC_TTL_SEC, DATA_DIR
+        from consts import SPEC_TTL_SEC, CACHE_DIR
         from API.BINANCE.public import BinancePublic
         from c_utils import Utils
         from c_log import UnifiedLogger
@@ -136,7 +136,7 @@ class SpecManager:
                 data = await BinancePublic.get_instruments()
                 if data:
                     self.bot_core.spec_data = {"symbols": data}
-                    Utils.write_json_file(DATA_DIR / "CACHE" / "specifications.json", self.bot_core.spec_data)
+                    Utils.write_json_file(CACHE_DIR / "specifications.json", self.bot_core.spec_data)
                 
                 await asyncio.sleep(SPEC_TTL_SEC)
         except asyncio.CancelledError:

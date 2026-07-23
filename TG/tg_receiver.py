@@ -67,25 +67,16 @@ class TelegramReceiver:
         keyboard = [
             [
                 KeyboardButton(text="▶️ Start"),
+                KeyboardButton(text="ℹ️ Status"),
                 KeyboardButton(text="⏸️ Stop")
             ],
             [
                 KeyboardButton(text="📊 Analytics"),
+                KeyboardButton(text="📜 Logs"),
                 KeyboardButton(text="⚙️ Set Coins")
             ],
             [
-                KeyboardButton(text="📜 Get Logs"),
-                KeyboardButton(text="ℹ️ Status")
-            ],
-            [
-                KeyboardButton(text="📂 Get CFG"),
-                KeyboardButton(text="🔧 Super Grid")
-            ],
-            [
-                KeyboardButton(text="💰 Задать нач. баланс"),
-                KeyboardButton(text="🗑️ Сбросить аналитику")
-            ],
-            [
+                KeyboardButton(text="🔧 Super Grid"),
                 KeyboardButton(text="🚨 Close All")
             ]
         ]
@@ -298,18 +289,29 @@ class TelegramReceiver:
             text = f"<b>Control Panel</b>\nCurrent Status: {status}\nSuper Grid (Volatility): {super_grid_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
-        @self.dp.message(F.text == "📜 Get Logs")
-        async def on_get_logs(message: Message, state: FSMContext):
+        @self.dp.message(F.text == "📜 Logs")
+        async def on_logs_menu(message: Message, state: FSMContext):
             await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="📜 Get Logs", callback_data="logs_get_logs")],
+                [InlineKeyboardButton(text="📂 Get Backup.CFG", callback_data="logs_get_cfg")]
+            ])
+            await message.answer("Выберите нужный лог/конфиг:", reply_markup=keyboard)
+
+        @self.dp.callback_query(F.data == "logs_get_logs")
+        async def on_get_logs(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            await callback.answer()
             log_path = os.path.join("logs", "all.log")
             if os.path.exists(log_path):
-                await message.answer_document(FSInputFile(log_path))
+                await callback.message.answer_document(FSInputFile(log_path))
             else:
-                await message.answer("Global log file not found.")
+                await callback.message.answer("Global log file not found.")
 
-        @self.dp.message(F.text == "📂 Get CFG")
-        async def on_get_cfg(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data == "logs_get_cfg")
+        async def on_get_cfg(callback: CallbackQuery, state: FSMContext):
             await state.clear()
+            await callback.answer()
             from consts import DATA_DIR
             from c_utils import Utils
             import json
@@ -338,12 +340,13 @@ class TelegramReceiver:
             with open(dump_path, "w", encoding="utf-8") as f:
                 json.dump(dump_data, f, indent=4)
                 
-            await message.answer_document(FSInputFile(dump_path))
+            await callback.message.answer_document(FSInputFile(dump_path))
 
-        @self.dp.message(F.text == "🗑️ Сбросить аналитику")
-        async def on_reset_analytics(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data == "analytics_reset")
+        async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
             await state.clear()
-            await message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
+            await callback.answer()
+            await callback.message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await state.set_state(TGStates.waiting_for_reset_confirm)
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
@@ -369,10 +372,11 @@ class TelegramReceiver:
                     await message.answer("⚠️ Файл аналитики не найден.", reply_markup=self._get_main_keyboard())
             else:
                 await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
-        @self.dp.message(F.text == "💰 Задать нач. баланс")
-        async def on_set_initial_balance(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data == "analytics_set_balance")
+        async def on_set_initial_balance(callback: CallbackQuery, state: FSMContext):
             await state.clear()
-            await message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
+            await callback.answer()
+            await callback.message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
             await state.set_state(TGStates.waiting_for_initial_balance)
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
@@ -439,7 +443,9 @@ class TelegramReceiver:
                 [InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking")],
                 [InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt")],
                 [InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report")],
-                [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")]
+                [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")],
+                [InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="analytics_set_balance"),
+                 InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset")]
             ])
             await message.answer("Выберите раздел аналитики:", reply_markup=keyboard)
 

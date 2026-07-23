@@ -13,7 +13,7 @@ CACHE_FILE = CACHE_DIR / "leverage_cache.json"
 
 class LeverageManager:
     def __init__(self):
-        # Кэш персистентный, сохраняется в temp
+        # Кэш персистентный, сохраняется в CACHE
         self._cache: Dict[str, bool] = self._load_cache()
 
     def _load_cache(self) -> Dict[str, bool]:

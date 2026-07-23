@@ -201,7 +201,6 @@ class BotCore:
             
         logger.info(f"[{symbol}] Successfully deleted from BotCore.")
 
-
     async def _on_tick(self, tick: HotPriceTick):
         """Коллбэк для стрима горячих цен."""
         self.prices[tick.symbol] = (tick.price, time.time())
@@ -467,13 +466,6 @@ class BotCore:
                 if self.is_paused:
                     await asyncio.sleep(1.0)
                     continue
-                
-                # # ===== ОПОРНАЯ ТОЧКА ДЛЯ ТЕСТИРОВАНИЯ =====               
-                # logger.info(f"DEBUG LOOP: Prices snapshot: {list(self.prices.items())[:3]}...")
-                # # Скипаем дальнейший проход для отладкыи
-                # await asyncio.sleep(TIME_SLACK_SEC)
-                # # continue
-                # ==========================================
 
                 # Источник сигнала для позиции, которая не в позиции
                 is_signal = self.time_control.is_new_interval()
