@@ -16,7 +16,7 @@ from pathlib import Path
 from decimal import Decimal, getcontext
 
 from consts import PRECISION
-from c_log import TZ
+
 
 
 getcontext().prec = PRECISION  # точность Decimal
