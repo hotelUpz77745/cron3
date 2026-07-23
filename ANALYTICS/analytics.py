@@ -694,13 +694,43 @@ class AnalyticsManager:
                 sym = p.get("symbol", "")
                 unrealized = float(p.get("unrealizedProfit", 0.0))
                 coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
+            try:
+                import json
+                with open("CFG/app.json", "r", encoding="utf-8") as f:
+                    app_cfg = json.load(f)
+                    syms = app_cfg.get("symbols", [])
+                    active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
+            except Exception:
+                active_symbols = []
+
             bot_unrealized = 0.0
-            for sym, cdata in data.get("per_coin", {}).items():
-                drawdown = coin_drawdowns.get(sym, 0.0)
+            for sym, drawdown in coin_drawdowns.items():
+                # Only track drawdowns for symbols the bot is actively trading/tracking
+                if active_symbols and sym not in active_symbols:
+                    continue
+                
+                # Ensure it exists in per_coin so it can be displayed
+                if "per_coin" not in data:
+                    data["per_coin"] = {}
+                if sym not in data["per_coin"]:
+                    data["per_coin"][sym] = {
+                        "realized_pnl_usdt": 0.0,
+                        "realized_pnl_net_usdt": 0.0,
+                        "commission_usdt": 0.0,
+                        "funding_usdt": 0.0,
+                        "net_profit_usdt": 0.0,
+                        "win_count": 0,
+                        "loss_count": 0,
+                        "max_drawdown": 0.0,
+                        "min_drawdown": 0.0
+                    }
+                    
+                cdata = data["per_coin"][sym]
                 cdata["current_drawdown"] = round(drawdown, 4)
                 cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
                 cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
                 bot_unrealized += drawdown
+                
             data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
             
             bot_gross_profit = 0.0
