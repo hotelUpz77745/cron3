@@ -334,6 +334,25 @@ class BotCore:
         runtime_cfg = self.runtime_configs.get(symbol, {})
         states = self.fsm_states[symbol]
         
+        # --- REST Failsafe (MUST run even if price is missing) ---
+        from consts import REST_FAILSAFE_SEC
+        current_time = time.monotonic()
+        if not hasattr(self, "_last_rest_syncs"):
+            self._last_rest_syncs = {}
+            
+        last_sync = self._last_rest_syncs.get(symbol, current_time)
+        if current_time - last_sync > REST_FAILSAFE_SEC or symbol not in self._last_rest_syncs:
+            self._last_rest_syncs[symbol] = current_time
+            any_open = any(s.in_position for s in states.values())
+            if any_open:
+                try:
+                    await self.pos_monitor.sync_from_rest(self.client, [symbol])
+                except Exception as e:
+                    logger.error(f"[{symbol}] Periodic REST sync failed: {e}")
+
+        # Проверяем закрытие позиций (ДО ПРОВЕРКИ ЦЕНЫ)
+        await self._check_and_reset_finished_positions(symbol, states, runtime_cfg)
+        
         current_price = None
         price_data = self.prices.get(symbol)
         if price_data:
@@ -367,16 +386,12 @@ class BotCore:
             if not side_cfg or not side_cfg.get("enable"):
                 continue
             
-            if not current_price:
-                continue
-            
             if not state.in_position and not state.in_position_papper:
                 if is_signal and not BLOCK_ENTRY:
                     logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
                     # Ставим временный флаг идемпотентности
                     state.in_position_papper = True
                     signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
-                # pass            
             
             else:
                 # Позиция уже открыта (или в процессе in_position_papper)
@@ -385,25 +400,6 @@ class BotCore:
 
         if signal_tasks:
             await asyncio.gather(*signal_tasks)
-            
-        # --- REST Failsafe ---
-        from consts import REST_FAILSAFE_SEC
-        current_time = time.monotonic()
-        if not hasattr(self, "_last_rest_syncs"):
-            self._last_rest_syncs = {}
-            
-        last_sync = self._last_rest_syncs.get(symbol, current_time)
-        if current_time - last_sync > REST_FAILSAFE_SEC or symbol not in self._last_rest_syncs:
-            self._last_rest_syncs[symbol] = current_time
-            any_open = any(s.in_position for s in states.values())
-            if any_open:
-                try:
-                    await self.pos_monitor.sync_from_rest(self.client, [symbol])
-                except Exception as e:
-                    logger.error(f"[{symbol}] Periodic REST sync failed: {e}")
-
-        # В конце итерации по символу проверяем закрытие позиций
-        await self._check_and_reset_finished_positions(symbol, states, runtime_cfg)
 
     async def _game_loop(self):
         """Главный цикл торгового ядра."""
