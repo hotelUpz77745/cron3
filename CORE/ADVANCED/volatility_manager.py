@@ -33,8 +33,7 @@ class VolatilityManager:
         logger.info("[VolatilityManager] Started background loop.")
         while self.is_running:
             try:
-                if not getattr(self.bot_core, 'is_paused', False):
-                    await self.process_all()
+                await self.process_all()
             except Exception as e:
                 logger.error(f"[VolatilityManager] Error in loop: {e}")
             
@@ -147,6 +146,8 @@ class VolatilityManager:
                                 orig_indent = float(el.get("indent", 0.0))
                                 new_indent = orig_indent * ratio
                                 el["super_indent"] = round(new_indent, 4)
+                                if not el.get("is_active", False):
+                                    el["price"] = None
                             else:
                                 if el.get("super_indent") is not None:
                                     el["super_indent"] = None
