@@ -101,7 +101,8 @@ class RuntimeBackupManager:
                 
                 import datetime
                 import pytz
-                utc_now = datetime.datetime.now(pytz.utc)
+                import datetime
+                utc_now = datetime.datetime.now(datetime.timezone.utc)
                 date_str = utc_now.strftime("%Y-%m-%d_%H-%M-%S")
                 filename = f"runtime_backup_{date_str}.zip"
                 

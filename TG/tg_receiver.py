@@ -674,12 +674,9 @@ class TelegramReceiver:
                     data = json.loads(text)
                     ts = data.get("last_updated_ts")
                     if ts:
-                        tz_str = _CFG["app"]["time_zone"]
-                        try:
-                            dt = datetime.fromtimestamp(ts / 1000.0, tz=ZoneInfo(tz_str))
-                        except Exception:
-                            dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
-                        time_str = dt.strftime('%Y-%m-%d %H:%M:%S %Z')
+                        from datetime import datetime, timezone
+                        dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
+                        time_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
                         
                         last_trade_time = "Нет сделок"
                         csv_path = ANALYTICS_DIR / "trades_ledger.txt"

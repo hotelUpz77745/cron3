@@ -70,7 +70,7 @@ class Utils:
         else:
             seconds = ms
 
-        dt = datetime.fromtimestamp(seconds, TZ)
+        dt = datetime.fromtimestamp(seconds, timezone.utc)
         return dt.strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod    

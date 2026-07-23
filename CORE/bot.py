@@ -101,7 +101,8 @@ class BotCore:
         self._last_tick = time.time()
         self._tick_count = 0
         self.logger = logger
-        self.server_name = _CFG["app"]["server_name"]
+        # server_name is purely cosmetic for Telegram, so it's genuinely optional
+        self.server_name = _CFG["app"].get("server_name", "HronBot")
 
         from watchdog import LoopWatchdog
         from consts import (

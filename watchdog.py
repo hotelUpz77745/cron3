@@ -80,23 +80,16 @@ class WatchdogTGAdapter:
 
         try:
             utc_now = datetime.datetime.now(pytz.utc)
-            try:
-                tz_kyiv = pytz.timezone("Europe/Kyiv")
-                kyiv_now = utc_now.astimezone(tz_kyiv)
-            except Exception:
-                kyiv_now = utc_now
-
+            utc_now = datetime.datetime.now(datetime.timezone.utc)
             now = time.time()
 
-            date_str = kyiv_now.strftime("%Y-%m-%d")
+            date_str = utc_now.strftime("%Y-%m-%d")
             time_utc_str = utc_now.strftime("%H:%M:%S UTC")
-            time_kyiv_str = kyiv_now.strftime("%H:%M:%S Kyiv")
 
             msg = (
                 f"🟢 <b>{date_str}</b>\n\n"
                 f"Server: <b>{server_name}</b> is running smoothly.\n\n"
-                f"🕒 {time_utc_str}\n"
-                f"🕒 {time_kyiv_str}"
+                f"🕒 {time_utc_str}"
             )
 
             async with aiohttp.ClientSession() as session:

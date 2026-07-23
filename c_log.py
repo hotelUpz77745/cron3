@@ -67,10 +67,8 @@ from consts import (
 
 import inspect
 
-TZ = pytz.timezone(TIME_ZONE)
-
 def log_time() -> str:
-    return datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
 # ============================================================

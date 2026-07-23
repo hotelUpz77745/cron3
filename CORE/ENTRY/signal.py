@@ -20,14 +20,14 @@ class TimeControl:
         self.last_fetch_timestamp = None
         self.window_open_until = 0
     
-    def get_date_time_now(self, tz_location):
-        now = datetime.now(tz_location)
-        return now.strftime("%Y-%m-%d %H:%M:%S")
+    def get_date_time_now(self):
+        now = datetime.now(timezone.utc)
+        return now.strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    def milliseconds_to_datetime(self, milliseconds, tz_location):
+    def milliseconds_to_datetime(self, milliseconds):
         seconds = milliseconds / 1000
-        dt = datetime.fromtimestamp(seconds, pytz.utc).astimezone(tz_location)
-        return dt.strftime("%Y-%m-%d %H:%M:%S") + f".{int(milliseconds % 1000):03d}"
+        dt = datetime.fromtimestamp(seconds, timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S") + f".{int(milliseconds % 1000):03d} UTC"
 
     def interval_to_seconds(self, interval):
         """
