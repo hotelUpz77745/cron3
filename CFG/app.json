@@ -14,9 +14,6 @@
   "signal": {
     "timeframe": "5m"
   },
-  "analytics": {
-    "csv_max_rows": 5
-  },
   "logging": {
     "debug": true,
     "info": true,
@@ -28,9 +25,7 @@
   },
   "symbols": [
     "STABLEUSDT",
-    "DASHUSDT",
-    "MMTUSDT",
-    "KGENUSDT"
+    "DASHUSDT"
   ],
   "telegram": {
     "enabled": true,

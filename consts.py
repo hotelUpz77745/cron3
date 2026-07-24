@@ -61,7 +61,6 @@ AVOID_CHECK_RUNTIME_CFG: bool = bool(_CFG["app"].get("avoid_check_runtime_cfg", 
 API_RATE_LIMIT_SEC: float = float(_CFG["app"].get("api_rate_limit_sec", 0.1))
 API_CONCURRENT_RATE_LIMIT_SEC: float = float(_CFG["app"].get("api_concurrent_rate_limit_sec", 0.01))
 REST_FAILSAFE_SEC: float = float(_CFG["app"].get("rest_failsafe_sec", 5.0))
-ANALYTICS_CSV_MAX_ROWS: int = int(_CFG["analytics"]["csv_max_rows"])
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])
