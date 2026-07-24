@@ -9,7 +9,7 @@ import logging
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR
+from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC
 
 logger = logging.getLogger("Analytics")
 
@@ -337,7 +337,7 @@ class AnalyticsManager:
                         continue
                     
                     current_start = int(page_records[-1].get("time", current_start)) + 1
-                    await asyncio.sleep(0.5)  # rate limit safety
+                    await asyncio.sleep(INCOME_PARSE_FREQ_SEC)  # rate limit safety
                 
                 # Reconstruct Ledger and Stats
                 total_pnl, total_comm, total_fund = 0.0, 0.0, 0.0
