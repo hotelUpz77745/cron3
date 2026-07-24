@@ -9,7 +9,7 @@ import logging
 import csv
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC
+from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC
 
 logger = logging.getLogger("Analytics")
 
@@ -828,9 +828,9 @@ class AnalyticsManager:
             self._write_data(data)
 
     async def _realtime_tracker_loop(self, client):
-        logger.info("[ANALYTICS] Started real-time absolute drawdown tracker (polls every 10s)")
+        logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {ANALYTICS_SYNC_FREQ_SEC}s)")
         while getattr(self, '_is_tracker_running', True):
-            await asyncio.sleep(10.0)
+            await asyncio.sleep(ANALYTICS_SYNC_FREQ_SEC)
             try:
                 # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
                 # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
@@ -847,14 +847,14 @@ class AnalyticsManager:
         Waits 10 seconds after a trade closes, then triggers the Absolute Deep Sync engine
         to completely reconstruct analytics and ledger.
         """
-        logger.info(f"[{symbol}] Trade closed. Waiting 10s before Absolute Deep Sync...")
+        logger.info(f"[{symbol}] Trade closed. Waiting {ANALYTICS_SYNC_FREQ_SEC}s before Absolute Deep Sync...")
         
         # The first_trade_ts is now automatically anchored to the exact moment analytics.json is created.
         # This prevents the bot from looking into the past and pulling old trades after a reset.
         if open_time:
             pass
             
-        await asyncio.sleep(10.0)
+        await asyncio.sleep(ANALYTICS_SYNC_FREQ_SEC)
         await self.deep_sync_analytics(client)
         logger.info(f"[ANALYTICS] Position synced: {symbol} {side}")
 

@@ -10,6 +10,7 @@
     "api_concurrent_rate_limit_sec": 0.01,
     "rest_failsafe_sec": 1.0,
     "income_parse_freq_sec": 0.5,
+    "analytics_sync_freq_sec": 10.0,
     "auto_start": false
   },
   "signal": {
