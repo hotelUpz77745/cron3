@@ -10,8 +10,9 @@ import csv
 from datetime import datetime, timezone
 from pathlib import Path
 from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC
+from c_log import UnifiedLogger
 
-logger = logging.getLogger("Analytics")
+logger = UnifiedLogger("Analytics")
 
 class AnalyticsManager:
     """
@@ -530,6 +531,7 @@ class AnalyticsManager:
 
     async def _update_drawdowns(self, client, data: dict):
         """Fetches account info to update current unrealized drawdowns globally and per-coin."""
+        import time
         try:
             res = await client.fetch_account_info()
             if not res.success or not isinstance(res.data, dict):
@@ -543,15 +545,59 @@ class AnalyticsManager:
                 
             positions = acc_data.get("positions", [])
             coin_drawdowns = {}
+            coin_details = {}
             for p in positions:
+                amt = float(p.get("positionAmt", 0.0))
+                if amt == 0:
+                    continue
                 sym = p.get("symbol", "")
                 unrealized = float(p.get("unrealizedProfit", 0.0))
+                side = p.get("positionSide", "BOTH")
+                
                 coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
                 
+                if sym not in coin_details:
+                    coin_details[sym] = {"long_unrealized": 0.0, "short_unrealized": 0.0, "long_amt": 0.0, "short_amt": 0.0}
+                    
+                if side == "LONG":
+                    coin_details[sym]["long_unrealized"] = round(unrealized, 4)
+                    coin_details[sym]["long_amt"] = amt
+                elif side == "SHORT":
+                    coin_details[sym]["short_unrealized"] = round(unrealized, 4)
+                    coin_details[sym]["short_amt"] = amt
+                
             bot_unrealized = 0.0
+            
+            config_symbols = list(data.get("per_coin", {}).keys())
+                
+            if "per_coin" not in data:
+                data["per_coin"] = {}
+                
+            for sym in config_symbols:
+                if sym not in data["per_coin"]:
+                    data["per_coin"][sym] = {
+                        "current_drawdown": 0.0,
+                        "realized_pnl_usdt": 0.0,
+                        "realized_pnl_net_usdt": 0.0,
+                        "commission_usdt": 0.0,
+                        "funding_usdt": 0.0,
+                        "net_profit_usdt": 0.0,
+                        "win_count": 0,
+                        "loss_count": 0,
+                        "max_drawdown": 0.0,
+                        "min_drawdown": 0.0
+                    }
+
             for sym, cdata in data.get("per_coin", {}).items():
                 drawdown = coin_drawdowns.get(sym, 0.0)
                 cdata["current_drawdown"] = round(drawdown, 4)
+                
+                details = coin_details.get(sym, {})
+                cdata["long_unrealized"] = details.get("long_unrealized", 0.0)
+                cdata["short_unrealized"] = details.get("short_unrealized", 0.0)
+                cdata["long_amt"] = details.get("long_amt", 0.0)
+                cdata["short_amt"] = details.get("short_amt", 0.0)
+                
                 cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
                 cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
                 
@@ -571,7 +617,6 @@ class AnalyticsManager:
                 current_mdme = abs(drawdown) / safe_margin
                 cdata["MDME"] = round(max(cdata.get("MDME", 0.0), current_mdme), 4)
                 
-                import time
                 now_ms = int(time.time() * 1000)
                 
                 if "epoch_state" not in cdata:
@@ -586,10 +631,8 @@ class AnalyticsManager:
                     }
                 else:
                     est = cdata["epoch_state"]
-                    # Update max_dd for current epoch
                     est["max_dd"] = min(est.get("max_dd", 0.0), drawdown)
                     
-                    # Detect size change (>10%)
                     if current_margin > 0 and abs(current_margin - est.get("size", current_margin)) > current_margin * 0.1:
                         duration_days = (now_ms - est.get("start_ts", now_ms)) / 86400000
                         if duration_days >= 1.0:
@@ -603,7 +646,6 @@ class AnalyticsManager:
                             est["closed_mdme_sum"] = est.get("closed_mdme_sum", 0.0) + epoch_mdme
                             est["closed_count"] = est.get("closed_count", 0) + 1
                             
-                        # Reset epoch
                         est["size"] = current_margin
                         est["start_ts"] = now_ms
                         est["pnl_at_start"] = cdata.get("realized_pnl_net_usdt", 0.0)
@@ -611,12 +653,10 @@ class AnalyticsManager:
                 
                 bot_unrealized += drawdown
                     
-            # unrealized_pnl_usdt = Сум по current_drawdown
             data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
             
             bot_gross_profit = 0.0
             if "per_coin" in data:
-                # Net profit = realized_pnl + commission + funding + current_drawdown
                 for sym, cdata in data["per_coin"].items():
                     c_gross = cdata.get("realized_pnl_usdt", 0.0)
                     c_comm = cdata.get("commission_usdt", 0.0)
@@ -628,7 +668,6 @@ class AnalyticsManager:
                     
                     c_drawdown = cdata.get("current_drawdown", 0.0)
                     cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
-                    
                     bot_gross_profit += c_gross
                     
             bot_total_comm = data.get("total_commission_usdt", 0.0)
@@ -657,141 +696,7 @@ class AnalyticsManager:
                 data["load_ratio"] = round(abs(bot_unrealized) / bot_gross_profit, 2)
             else:
                 data["load_ratio"] = 0.0
-                    
-            # Isolate unrealized PnL to ONLY the coins this bot tracks in analytics
-            data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
-                    
-        except Exception as e:
-            logger.error(f"Error updating drawdowns: {e}")
-
-    def start_realtime_tracker(self, client):
-        if hasattr(self, "_tracker_task") and self._tracker_task:
-            return
-        self._is_tracker_running = True
-        self._tracker_task = asyncio.create_task(self._realtime_tracker_loop(client))
-        self._background_tasks.add(self._tracker_task)
-        self._tracker_task.add_done_callback(self._background_tasks.discard)
-        
-    def stop_realtime_tracker(self):
-        self._is_tracker_running = False
-        if hasattr(self, "_tracker_task") and self._tracker_task:
-            self._tracker_task.cancel()
-            self._tracker_task = None
-        
-    async def sync_current_drawdowns(self, client):
-        async with self._lock:
-            data = self._read_data()
-            if not data:
-                return
                 
-            res = await client.fetch_account_info()
-            if not res.success or not isinstance(res.data, dict):
-                return
-                
-            if "positions" not in res.data or "totalMarginBalance" not in res.data:
-                logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data from Binance! Skipping update to protect stats.")
-                return
-                
-            margin_balance = float(res.data.get("totalMarginBalance", 0.0))
-            
-            # Update global unrealized pnl as well
-            positions = res.data.get("positions", [])
-            coin_drawdowns = {}
-            for p in positions:
-                # FIX: Binance API sometimes leaves a lingering unrealizedProfit in cache 
-                # even when the position is fully closed (positionAmt == 0).
-                # We strictly filter out closed positions to prevent the analytics from freezing.
-                if float(p.get("positionAmt", 0.0)) == 0:
-                    continue
-                    
-                sym = p.get("symbol", "")
-                unrealized = float(p.get("unrealizedProfit", 0.0))
-                coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
-                
-            bot_unrealized = 0.0
-            
-            # FIX: Merge all active symbols from config so that new coins are tracked immediately,
-            # instead of waiting for their first closed trade.
-            config_symbols = []
-            try:
-                import json
-                with open("CFG/app.json", "r", encoding="utf-8") as f:
-                    app_cfg = json.load(f)
-                    syms = app_cfg.get("symbols", [])
-                    config_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
-            except Exception:
-                pass
-                
-            if "per_coin" not in data:
-                data["per_coin"] = {}
-                
-            # Pre-populate new symbols safely
-            for sym in config_symbols:
-                if sym not in data["per_coin"]:
-                    data["per_coin"][sym] = {
-                        "current_drawdown": 0.0,
-                        "realized_pnl_usdt": 0.0,
-                        "realized_pnl_net_usdt": 0.0,
-                        "commission_usdt": 0.0,
-                        "funding_usdt": 0.0,
-                        "net_profit_usdt": 0.0,
-                        "win_count": 0,
-                        "loss_count": 0,
-                        "max_drawdown": 0.0,
-                        "min_drawdown": 0.0
-                    }
-            
-            for sym, cdata in data.get("per_coin", {}).items():
-                drawdown = coin_drawdowns.get(sym, 0.0)
-                cdata["current_drawdown"] = round(drawdown, 4)
-                cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
-                cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
-                bot_unrealized += drawdown
-                
-            data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
-            
-            bot_gross_profit = 0.0
-            if "per_coin" in data:
-                for sym, cdata in data["per_coin"].items():
-                    c_gross = cdata.get("realized_pnl_usdt", 0.0)
-                    c_comm = cdata.get("commission_usdt", 0.0)
-                    c_fund = cdata.get("funding_usdt", 0.0)
-                    
-                    cdata["realized_pnl_usdt"] = round(c_gross, 4)
-                    c_net = round(c_gross + c_comm + c_fund, 4)
-                    cdata["realized_pnl_net_usdt"] = c_net
-                    
-                    c_drawdown = cdata.get("current_drawdown", 0.0)
-                    cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
-                    bot_gross_profit += c_gross
-                    
-            bot_total_comm = data.get("total_commission_usdt", 0.0)
-            bot_total_fund = data.get("total_funding_usdt", 0.0)
-            
-            if data.get("total_trades", 0) == 0:
-                bot_gross_profit = 0.0
-                bot_total_comm = 0.0
-                bot_total_fund = 0.0
-                
-            data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
-            bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
-            data["realized_pnl_net_usdt"] = bot_realized_net
-            data["net_profit_usdt"] = round(bot_realized_net + bot_unrealized, 4)
-            
-            initial = data.get("start_balance_usdt", 0.0)
-            bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
-            data["cur_balance_usdt"] = bot_cur_balance
-            
-            if initial > 0:
-                data["roi_pct"] = round(((bot_cur_balance - initial) / initial) * 100, 2)
-            else:
-                data["roi_pct"] = 0.0
-                
-            if bot_gross_profit > 0:
-                data["load_ratio"] = round(abs(bot_unrealized) / bot_gross_profit, 2)
-            else:
-                data["load_ratio"] = 0.0
-            
             peak = data.get("peak_balance_usdt", initial)
             trough = data.get("_current_trough_usdt", peak)
             min_bal = data.get("min_balance_usdt", initial)
@@ -810,7 +715,6 @@ class AnalyticsManager:
                 
             data["_current_trough_usdt"] = trough
                 
-            # Always write data to update unrealized PnL, not just on peak/trough change
             max_drawdown = trough - peak
             data["max_drawdown_usdt"] = round(min(data.get("max_drawdown_usdt", 0.0), max_drawdown), 4)
             
@@ -821,11 +725,35 @@ class AnalyticsManager:
                 data["recovery_factor"] = round(bot_gross_profit / abs(data["max_drawdown_usdt"]), 2)
             else:
                 data["recovery_factor"] = 0.0
-            
+                    
+        except Exception as e:
+            import traceback
+            logger.error(f"[ANALYTICS] Error updating drawdowns: {e}\n{traceback.format_exc()}")
+
+    async def sync_current_drawdowns(self, client):
+        async with self._lock:
+            data = self._read_data()
+            if not data:
+                return
+                
+            await self._update_drawdowns(client, data)
             import time
             data["last_updated_ts"] = int(time.time() * 1000)
-            
             self._write_data(data)
+
+    def start_realtime_tracker(self, client):
+        if hasattr(self, "_tracker_task") and self._tracker_task:
+            return
+        self._is_tracker_running = True
+        self._tracker_task = asyncio.create_task(self._realtime_tracker_loop(client))
+        self._background_tasks.add(self._tracker_task)
+        self._tracker_task.add_done_callback(self._background_tasks.discard)
+        
+    def stop_realtime_tracker(self):
+        self._is_tracker_running = False
+        if hasattr(self, "_tracker_task") and self._tracker_task:
+            self._tracker_task.cancel()
+            self._tracker_task = None
 
     async def _realtime_tracker_loop(self, client):
         logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {ANALYTICS_SYNC_FREQ_SEC}s)")
