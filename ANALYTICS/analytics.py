@@ -634,6 +634,11 @@ class AnalyticsManager:
             bot_total_comm = data.get("total_commission_usdt", 0.0)
             bot_total_fund = data.get("total_funding_usdt", 0.0)
             
+            if data.get("total_trades", 0) == 0:
+                bot_gross_profit = 0.0
+                bot_total_comm = 0.0
+                bot_total_fund = 0.0
+                
             data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
             bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
             data["realized_pnl_net_usdt"] = bot_realized_net
@@ -763,6 +768,11 @@ class AnalyticsManager:
             bot_total_comm = data.get("total_commission_usdt", 0.0)
             bot_total_fund = data.get("total_funding_usdt", 0.0)
             
+            if data.get("total_trades", 0) == 0:
+                bot_gross_profit = 0.0
+                bot_total_comm = 0.0
+                bot_total_fund = 0.0
+                
             data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
             bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
             data["realized_pnl_net_usdt"] = bot_realized_net
