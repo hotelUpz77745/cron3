@@ -67,7 +67,7 @@ class RuntimeBackupManager:
             
     async def _create_and_send_backup(self):
         try:
-            from consts import DATA_DIR
+            from consts import DATA_DIR, ANALYTICS_DIR
             runtime_dir = DATA_DIR / "runtime"
             
             if not runtime_dir.exists():
@@ -79,6 +79,15 @@ class RuntimeBackupManager:
                 # Пакуем только json файлы из CFG/runtime/
                 for file_path in runtime_dir.glob("*.json"):
                     zf.write(file_path, arcname=file_path.name)
+                
+                # Пакуем файлы аналитики
+                analytics_json = ANALYTICS_DIR / "analytics.json"
+                if analytics_json.exists():
+                    zf.write(analytics_json, arcname=f"ANALYTICS/{analytics_json.name}")
+                    
+                trades_ledger = ANALYTICS_DIR / "trades_ledger.txt"
+                if trades_ledger.exists():
+                    zf.write(trades_ledger, arcname=f"ANALYTICS/{trades_ledger.name}")
                     
             file_bytes = memory_file.getvalue()
             
