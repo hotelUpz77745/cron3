@@ -1,8 +1,3 @@
-# ==============================================================================
-# Path: ANALYTICS/analytics.py
-# Role: Домен аналитики и ведения журнала сделок
-# ==============================================================================
-
 import asyncio
 import json
 import logging
@@ -94,6 +89,16 @@ class AnalyticsManager:
         from consts import DATA_DIR
         import math
         
+        # 0. Always guarantee global balances are mathematically sound
+        initial = float(data.get("start_balance_usdt", 0.0))
+        net_profit = float(data.get("net_profit_usdt", 0.0))
+        bot_cur_balance = round(initial + net_profit, 4)
+        data["cur_balance_usdt"] = bot_cur_balance
+        if initial > 0:
+            data["roi_pct"] = round(((bot_cur_balance - initial) / initial) * 100, 2)
+        else:
+            data["roi_pct"] = 0.0
+            
         current_ts = int(time.time() * 1000)
         
         for sym, cdata in data["per_coin"].items():
@@ -216,7 +221,6 @@ class AnalyticsManager:
                 logger.error(f"Error appending to CSV: {e}")
 
 
-
     def record_finished_position(self, client, symbol: str, side: str, open_time: int, close_time: int):
         """Запускает фоновую задачу для подтягивания PnL и записи в лог."""
         self._sync_locks.add(symbol)
@@ -303,8 +307,16 @@ class AnalyticsManager:
                 income_records = []
                 current_start = start_ts - 600000  # -10m safety
                 
+                import time
+                
                 is_fetching = True
                 while is_fetching:
+                    now_ts = int(time.time() * 1000)
+                    # Binance income query window cannot exceed 30 days. We use 7 days to be safe.
+                    end_time = current_start + (7 * 24 * 60 * 60 * 1000) - 1
+                    if end_time > now_ts:
+                        end_time = now_ts
+
                     attempts = 0
                     success_fetch = False
                     inc_res = None
@@ -313,7 +325,7 @@ class AnalyticsManager:
                         inc_res = await client._request(
                             "GET", 
                             "https://fapi.binance.com/fapi/v1/income", 
-                            params={"limit": 1000, "startTime": current_start}, 
+                            params={"limit": 1000, "startTime": current_start, "endTime": end_time}, 
                             signed=True
                         )
                         if inc_res and inc_res.success and isinstance(inc_res.data, list):
@@ -323,21 +335,23 @@ class AnalyticsManager:
                         await asyncio.sleep(1.0)
                         
                     if not success_fetch:
-                        logger.error(f"[ANALYTICS] Failed to fetch income history after 3 attempts! Aborting Deep Sync to protect stats.")
+                        err_msg = getattr(inc_res, 'error_msg', 'Unknown error') if inc_res else 'None'
+                        logger.error(f"[ANALYTICS] Failed to fetch income history (Msg: {err_msg}) after 3 attempts! Aborting Deep Sync to protect stats.")
                         return # Abort the whole sync to prevent data loss
                         
                     page_records = inc_res.data
-                    if not page_records:
-                        is_fetching = False
-                        continue
+                    if page_records:
+                        income_records.extend(page_records)
+                        # Advance current_start to strictly after the last record's time
+                        current_start = int(page_records[-1].get("time", current_start)) + 1
+                    else:
+                        # No records in this 7-day window, jump to the next window
+                        current_start = end_time + 1
                         
-                    income_records.extend(page_records)
-                    
-                    if len(page_records) < 1000:
+                    if current_start > now_ts:
                         is_fetching = False
                         continue
                     
-                    current_start = int(page_records[-1].get("time", current_start)) + 1
                     await asyncio.sleep(INCOME_PARSE_FREQ_SEC)  # rate limit safety
                 
                 # Reconstruct Ledger and Stats

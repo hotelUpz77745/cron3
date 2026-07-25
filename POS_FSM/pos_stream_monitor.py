@@ -29,12 +29,26 @@ class PositionMonitor:
         """Запрашивает актуальные позиции по REST и инициализирует/синхронизирует FSM стейт."""
         # logger.debug("[REST] Syncing active positions as failsafe...")
         positions = await client.fetch_positions()
+        if not positions:
+            # logger.warning("[REST] No positions returned (or API error), skipping sync_from_rest to prevent accidental wipe.")
+            return
+
+        binance_positions = {}
         for pos in positions:
             sym = pos.get("symbol")
-            if sym in symbols:
-                side = pos.get("positionSide")
-                pos_amt = float(pos.get("positionAmt", 0))
-                entry_price = float(pos.get("entryPrice", 0))
+            side = pos.get("positionSide")
+            binance_positions[(sym, side)] = pos
+
+        for sym in symbols:
+            for side in ["LONG", "SHORT"]:
+                pos = binance_positions.get((sym, side))
+                if pos:
+                    pos_amt = float(pos.get("positionAmt", 0))
+                    entry_price = float(pos.get("entryPrice", 0))
+                else:
+                    pos_amt = 0.0
+                    entry_price = 0.0
+                
                 self.update_from_stream(sym, side, pos_amt, entry_price)
 
     def update_from_stream(self, symbol: str, side: str, pos_amt: float, entry_price: float):

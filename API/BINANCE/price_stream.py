@@ -71,6 +71,7 @@ class BinanceHotPriceStream:
         self.throttle_ms = int(throttle_ms)
 
         self._stop = asyncio.Event()
+        self.ready = asyncio.Event()
         self._tasks: List[asyncio.Task] = []
         self._session: Optional[aiohttp.ClientSession] = None
         self._last_emit_ms: Dict[str, int] = {}
@@ -170,6 +171,7 @@ class BinanceHotPriceStream:
             try:
                 assert self._session is not None
                 ws = await self._session.ws_connect(url, autoping=True, max_msg_size=0)
+                self.ready.set()
                 ping_task = asyncio.create_task(self._ping_loop(ws))
                 backoff = self.reconnect_min_sec
 
@@ -203,6 +205,7 @@ class BinanceHotPriceStream:
                 if ws is not None and not ws.closed:
                     with contextlib.suppress(Exception):
                         await ws.close()
+                self.ready.clear()
 
     async def run(self, on_tick: Callable[[HotPriceTick], Awaitable[None]]) -> None:
         """Start stream tasks and block until stop() is called."""

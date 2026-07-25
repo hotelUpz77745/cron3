@@ -50,7 +50,6 @@ class BotCore:
         self.runtime_configs = self.runtime_manager.caches # Кеш рантаймов
         
         # Флаги готовности стримов
-        self.price_stream_synced = asyncio.Event()
         self.pos_stream_synced = asyncio.Event()
         
         # Получаем таймфрейм из конфига app.json (секция signal)
@@ -219,7 +218,6 @@ class BotCore:
             
         if self.symbols:
             self.price_stream = BinanceHotPriceStream(self.symbols)
-            self.price_stream_synced.clear()
             asyncio.create_task(self.price_stream.run(self._on_tick))
         else:
             self.price_stream = None
@@ -229,8 +227,6 @@ class BotCore:
     async def _on_tick(self, tick: HotPriceTick):
         """Коллбэк для стрима горячих цен."""
         self.prices[tick.symbol] = (tick.price, time.time())
-        if not self.price_stream_synced.is_set():
-            self.price_stream_synced.set()
 
     async def _process_signal(self, symbol: str, side: str, side_cfg: dict, current_price: float, concurrent_mode: bool = False):
         """Обработка сигнала входа для символа и стороны."""
@@ -459,7 +455,7 @@ class BotCore:
                 
         logger.info("Waiting for price streams to connect...")
         try:
-            await asyncio.wait_for(self.price_stream_synced.wait(), timeout=3.0)
+            await asyncio.wait_for(self.price_stream.ready.wait(), timeout=3.0)
             logger.info("Price streams connected successfully.")
         except asyncio.TimeoutError:
             logger.warning("Timeout waiting for price streams! Relying on REST prefetch.")
@@ -472,10 +468,11 @@ class BotCore:
             
         if not self.pos_stream.ready:
             logger.warning("Position Stream failed to connect in time! Relying on REST failsafe.")
-            # Строгая гарантия: забираем начальный стейт позиций по REST
-            await self.pos_monitor.sync_from_rest(self.client, self.symbols)
         else:
             logger.info("Position Stream connected successfully.")
+            
+        # Строгая гарантия: забираем начальный стейт позиций по REST всегда (WS не шлет стейт при старте)
+        await self.pos_monitor.sync_from_rest(self.client, self.symbols)
 
         
         # ШАГ 3. Синхронизация рантаймов с реальностью FSM
