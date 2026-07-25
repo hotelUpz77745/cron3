@@ -242,37 +242,14 @@ class AnalyticsManager:
                 data = self._read_data()
                 if not data:
                     return
-                start_balance = data.get("start_balance_usdt", 0.0)
-                
-                # 1. ALWAYS give priority to trades_ledger.txt first row
-                csv_ts = None
-                try:
-                    if self.txt_file.exists():
-                        import csv
-                        with open(self.txt_file, 'r', encoding='utf-8') as f:
-                            reader = csv.reader(f, delimiter=';')
-                            for row in reader:
-                                if len(row) > 3 and row[0] != "Id":
-                                    try:
-                                        from datetime import datetime, timezone
-                                        dt = datetime.strptime(row[3].strip(), "%Y-%m-%d %H:%M:%S")
-                                        dt = dt.replace(tzinfo=timezone.utc)
-                                        csv_ts = int(dt.timestamp() * 1000)
-                                        break  # First valid row is our definitive start
-                                    except Exception:
-                                        pass
-                except Exception as e:
-                    logger.error(f"Failed to read ledger for deep sync: {e}")
-
-                if csv_ts:
-                    start_ts = csv_ts
-                    data["first_trade_ts"] = start_ts
-                    self._write_data(data)
-                else:
-                    start_ts = data.get("first_trade_ts")
+                start_balance = data["start_balance_usdt"]
+                # first_trade_ts — единственный источник правды о точке отсчета.
+                # Устанавливается при создании analytics.json или при сбросе баланса.
+                # НИКОГДА не перезаписывается из ledger — иначе старые записи снова подсасываются.
+                start_ts = data["first_trade_ts"]
                     
             if not start_ts:
-                logger.warning("No first_trade_ts in analytics.json or ledger, skipping deep sync.")
+                logger.warning("No first_trade_ts in analytics.json, skipping deep sync.")
                 return
             
             try:
@@ -303,9 +280,11 @@ class AnalyticsManager:
                 
                 tracked_symbols = set(active_symbols + ledger_symbols)
                 
-                # Fetch income
+                # Fetch income starting strictly from first_trade_ts.
+                # No safety lookback — first_trade_ts is set precisely at reset/init time.
+                # A lookback would pull in pre-reset trades and corrupt stats.
                 income_records = []
-                current_start = start_ts - 600000  # -10m safety
+                current_start = start_ts
                 
                 import time
                 
