@@ -51,6 +51,7 @@ class BotCore:
         
         # Флаги готовности стримов
         self.pos_stream_synced = asyncio.Event()
+        self.price_stream_synced = asyncio.Event()
         
         # Получаем таймфрейм из конфига app.json (секция signal)
         signal_cfg = _CFG["signal"]
