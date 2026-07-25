@@ -596,22 +596,26 @@ class AnalyticsManager:
                     }
 
             for sym, cdata in data.get("per_coin", {}).items():
-                drawdown = coin_drawdowns.get(sym, 0.0)
+                details = coin_details.get(sym, {})
+                long_unreal = details.get("long_unrealized", 0.0)
+                short_unreal = details.get("short_unrealized", 0.0)
                 
-                # Идемпотентность при закрытии позиции:
-                # Если биржа вернула unrealized=0 (позиция закрылась), но Deep Sync ещё
-                # не отработал (_sync_locks содержит этот символ) — замораживаем
-                # последнее известное значение drawdown. Это предотвращает резкий скачок
-                # баланса в промежутке между обнулением unrealized и записью realized PnL.
-                # Флаг автоматически снимается в finally-блоке _fetch_and_record.
+                # Случай Б (Реализ опережает нереализ): Биржа отдает старый нереализ закрытой позиции
+                if (sym, "LONG") in self._sync_locks and details.get("long_amt", 0.0) != 0:
+                    long_unreal = 0.0
+                if (sym, "SHORT") in self._sync_locks and details.get("short_amt", 0.0) != 0:
+                    short_unreal = 0.0
+                    
+                drawdown = long_unreal + short_unreal
+                
+                # Случай А (Нереализ опережает реализ): Биржа уже обнулила позицию, а Income еще не скачан
                 if drawdown == 0.0 and any(s == sym for (s, _) in self._sync_locks):
                     drawdown = cdata.get("current_drawdown", 0.0)
                 
                 cdata["current_drawdown"] = round(drawdown, 4)
                 
-                details = coin_details.get(sym, {})
-                cdata["long_unrealized"] = details.get("long_unrealized", 0.0)
-                cdata["short_unrealized"] = details.get("short_unrealized", 0.0)
+                cdata["long_unrealized"] = long_unreal
+                cdata["short_unrealized"] = short_unreal
                 cdata["long_amt"] = details.get("long_amt", 0.0)
                 cdata["short_amt"] = details.get("short_amt", 0.0)
                 
