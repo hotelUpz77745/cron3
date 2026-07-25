@@ -673,6 +673,9 @@ class AnalyticsManager:
             data["unrealized_pnl_usdt"] = round(bot_unrealized, 4)
             
             bot_gross_profit = 0.0
+            bot_total_comm = 0.0
+            bot_total_fund = 0.0
+            
             if "per_coin" in data:
                 for sym, cdata in data["per_coin"].items():
                     c_gross = cdata.get("realized_pnl_usdt", 0.0)
@@ -685,15 +688,18 @@ class AnalyticsManager:
                     
                     c_drawdown = cdata.get("current_drawdown", 0.0)
                     cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
-                    bot_gross_profit += c_gross
                     
-            bot_total_comm = data.get("total_commission_usdt", 0.0)
-            bot_total_fund = data.get("total_funding_usdt", 0.0)
-            
+                    bot_gross_profit += c_gross
+                    bot_total_comm += c_comm
+                    bot_total_fund += c_fund
+                    
             if data.get("total_trades", 0) == 0:
                 bot_gross_profit = 0.0
                 bot_total_comm = 0.0
                 bot_total_fund = 0.0
+                
+            data["total_commission_usdt"] = round(bot_total_comm, 4)
+            data["total_funding_usdt"] = round(bot_total_fund, 4)
                 
             data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
             bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
