@@ -608,10 +608,6 @@ class AnalyticsManager:
                     
                 drawdown = long_unreal + short_unreal
                 
-                # Случай А (Нереализ опережает реализ): Биржа уже обнулила позицию, а Income еще не скачан
-                if drawdown == 0.0 and any(s == sym for (s, _) in self._sync_locks):
-                    drawdown = cdata.get("current_drawdown", 0.0)
-                
                 cdata["current_drawdown"] = round(drawdown, 4)
                 
                 cdata["long_unrealized"] = long_unreal
