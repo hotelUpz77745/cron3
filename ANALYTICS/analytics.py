@@ -549,6 +549,7 @@ class AnalyticsManager:
         try:
             res = await client.fetch_account_info()
             if not res.success or not isinstance(res.data, dict):
+                logger.warning(f"[ANALYTICS] fetch_account_info failed: {getattr(res, 'error_msg', 'Unknown Error')}")
                 return
             
             acc_data = res.data
