@@ -409,17 +409,36 @@ class TelegramReceiver:
                 await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Back:")
                 return
                 
-            import json
+            import json, time, csv
             analytics_path = ANALYTICS_DIR / "analytics.json"
+            ledger_path = ANALYTICS_DIR / "trades_ledger.txt"
             if analytics_path.exists():
                 try:
                     with open(analytics_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     
-                    data["start_balance_usdt"] = round(new_balance, 4)
+                    now_ms = int(time.time() * 1000)
                     
-                    # При сбросе баланса также сбрасываем пики и просадки, 
-                    # чтобы не было искусственной просадки на разницу балансов
+                    data["start_balance_usdt"] = round(new_balance, 4)
+                    data["cur_balance_usdt"] = round(new_balance, 4)
+                    
+                    # Сбрасываем точку отсчета Deep Sync на текущий момент,
+                    # чтобы после сброса не подтягивались старые сделки с биржи
+                    data["first_trade_ts"] = now_ms
+                    
+                    # Сбрасываем все PnL и счётчики
+                    data["total_trades"] = 0
+                    data["winning_trades"] = 0
+                    data["winrate_pct"] = 0.0
+                    data["realized_pnl_usdt"] = 0.0
+                    data["realized_pnl_net_usdt"] = 0.0
+                    data["net_profit_usdt"] = 0.0
+                    data["unrealized_pnl_usdt"] = 0.0
+                    data["total_commission_usdt"] = 0.0
+                    data["total_funding_usdt"] = 0.0
+                    data["per_coin"] = {}
+                    
+                    # Сбрасываем пики/просадки
                     data["peak_balance_usdt"] = round(new_balance, 4)
                     data["_current_trough_usdt"] = round(new_balance, 4)
                     data["min_balance_usdt"] = round(new_balance, 4)
@@ -427,18 +446,23 @@ class TelegramReceiver:
                     data["performance_usdt"] = 0.0
                     data["recovery_factor"] = 0.0
                     data["roi_pct"] = 0.0
-                    
 
                     with open(analytics_path, "w", encoding="utf-8") as f:
                         json.dump(data, f, indent=4)
+                    
+                    # Очищаем лог сделок (оставляем только заголовок)
+                    with open(ledger_path, "w", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=";")
+                        writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
                         
-                    await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.", reply_markup=self._get_main_keyboard())
+                    await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.\nСтатистика и журнал сделок сброшены.", reply_markup=self._get_main_keyboard())
                 except Exception as e:
                     await message.answer(f"❌ Ошибка обновления файла аналитики: {e}", reply_markup=self._get_main_keyboard())
             else:
                 await message.answer("⚠️ Файл аналитики пока не существует. Подождите, пока бот создаст его.", reply_markup=self._get_main_keyboard())
                 
             await state.clear()
+
 
         @self.dp.message(F.text == "📊 Analytics")
         async def on_analytics(message: Message, state: FSMContext):
