@@ -618,6 +618,16 @@ class AnalyticsManager:
 
             for sym, cdata in data.get("per_coin", {}).items():
                 drawdown = coin_drawdowns.get(sym, 0.0)
+                
+                # Идемпотентность при закрытии позиции:
+                # Если биржа вернула unrealized=0 (позиция закрылась), но Deep Sync ещё
+                # не отработал (_sync_locks содержит этот символ) — замораживаем
+                # последнее известное значение drawdown. Это предотвращает резкий скачок
+                # баланса в промежутке между обнулением unrealized и записью realized PnL.
+                # Флаг автоматически снимается в finally-блоке _fetch_and_record.
+                if drawdown == 0.0 and any(s == sym for (s, _) in self._sync_locks):
+                    drawdown = cdata.get("current_drawdown", 0.0)
+                
                 cdata["current_drawdown"] = round(drawdown, 4)
                 
                 details = coin_details.get(sym, {})
