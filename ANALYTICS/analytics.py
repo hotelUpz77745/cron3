@@ -223,7 +223,7 @@ class AnalyticsManager:
 
     def record_finished_position(self, client, symbol: str, side: str, open_time: int, close_time: int):
         """Запускает фоновую задачу для подтягивания PnL и записи в лог."""
-        self._sync_locks.add(symbol)
+        self._sync_locks.add((symbol, side))
         task = asyncio.create_task(self._fetch_and_record(client, symbol, side, open_time, close_time))
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
@@ -583,11 +583,24 @@ class AnalyticsManager:
                 
             bot_unrealized = 0.0
             
-            config_symbols = list(data.get("per_coin", {}).keys())
+            # Load tracked symbols from app.json (not just per_coin keys)
+            # This ensures unrealized PnL is tracked even before any trades close.
+            try:
+                import json as _json
+                with open("CFG/app.json", "r", encoding="utf-8") as _f:
+                    _app = _json.load(_f)
+                    _syms = _app["symbols"]
+                    config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
+            except Exception:
+                config_symbols = list(data.get("per_coin", {}).keys())
+                
+            if not config_symbols:
+                logger.warning("[ANALYTICS] _update_drawdowns: no symbols in config or per_coin, skipping.")
+                return
                 
             if "per_coin" not in data:
                 data["per_coin"] = {}
-                
+
             for sym in config_symbols:
                 if sym not in data["per_coin"]:
                     data["per_coin"][sym] = {
@@ -805,4 +818,4 @@ class AnalyticsManager:
         try:
             await self._do_fetch_and_record(client, symbol, side, open_time, close_time)
         finally:
-            self._sync_locks.discard(symbol)
+            self._sync_locks.discard((symbol, side))
