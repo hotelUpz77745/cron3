@@ -9,7 +9,8 @@
         "api_rate_limit_sec": 0.1,
         "rest_failsafe_sec": 1.0,
         "income_parse_freq_sec": 1.5,
-        "analytics_sync_freq_sec": 10.0,
+        "analytics_sync_freq_sec": 20.0,
+        "realtime_drawdown_freq_sec": 10.0,
         "auto_start": false
     },
     "signal": {
@@ -61,7 +62,7 @@
     },
     "backup": {
         "enabled": true,
-        "debounce_sec": 30,
+        "debounce_sec": 10,
         "max_interval_sec": 300
     },
     "notifications": {

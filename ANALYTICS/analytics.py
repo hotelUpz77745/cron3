@@ -6,7 +6,7 @@ import re
 import time as _time_module
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC
+from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC, REALTIME_DRAWDOWN_FREQ_SEC
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("Analytics")
@@ -827,9 +827,9 @@ class AnalyticsManager:
             self._tracker_task = None
 
     async def _realtime_tracker_loop(self, client):
-        logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {ANALYTICS_SYNC_FREQ_SEC}s)")
+        logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {REALTIME_DRAWDOWN_FREQ_SEC}s)")
         while getattr(self, '_is_tracker_running', True):
-            await asyncio.sleep(ANALYTICS_SYNC_FREQ_SEC)
+            await asyncio.sleep(REALTIME_DRAWDOWN_FREQ_SEC)
             try:
                 # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
                 # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
