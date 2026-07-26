@@ -6,7 +6,7 @@ import re
 import time as _time_module
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC, REALTIME_DRAWDOWN_FREQ_SEC
+from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PAGINATION_DELAY_SEC, POST_CLOSE_SYNC_DEBOUNCE_SEC, BG_UNREALIZED_POLL_FREQ_SEC
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("Analytics")
@@ -373,7 +373,7 @@ class AnalyticsManager:
                         is_fetching = False
                         continue
                     
-                    await asyncio.sleep(INCOME_PARSE_FREQ_SEC)  # rate limit safety
+                    await asyncio.sleep(INCOME_PAGINATION_DELAY_SEC)  # rate limit safety
                 
                 # Reconstruct Ledger and Stats
                 total_pnl, total_comm, total_fund = 0.0, 0.0, 0.0
@@ -827,9 +827,9 @@ class AnalyticsManager:
             self._tracker_task = None
 
     async def _realtime_tracker_loop(self, client):
-        logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {REALTIME_DRAWDOWN_FREQ_SEC}s)")
+        logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {BG_UNREALIZED_POLL_FREQ_SEC}s)")
         while getattr(self, '_is_tracker_running', True):
-            await asyncio.sleep(REALTIME_DRAWDOWN_FREQ_SEC)
+            await asyncio.sleep(BG_UNREALIZED_POLL_FREQ_SEC)
             try:
                 # Если хотя бы один символ сейчас ждет подтягивания PnL (5 секунд),
                 # мы пропускаем такт трекера. Иначе трекер увидит unrealized=0, но
@@ -853,14 +853,14 @@ class AnalyticsManager:
         Waits 10 seconds after a trade closes, then triggers the Absolute Deep Sync engine
         to completely reconstruct analytics and ledger.
         """
-        logger.info(f"[{symbol}] Trade closed. Waiting {ANALYTICS_SYNC_FREQ_SEC}s before Absolute Deep Sync...")
+        logger.info(f"[{symbol}] Trade closed. Waiting {POST_CLOSE_SYNC_DEBOUNCE_SEC}s before Absolute Deep Sync...")
         
         # The first_trade_ts is now automatically anchored to the exact moment analytics.json is created.
         # This prevents the bot from looking into the past and pulling old trades after a reset.
         if open_time:
             pass
             
-        await asyncio.sleep(ANALYTICS_SYNC_FREQ_SEC)
+        await asyncio.sleep(POST_CLOSE_SYNC_DEBOUNCE_SEC)
         await self.deep_sync_analytics(client)
         logger.info(f"[ANALYTICS] Position synced: {symbol} {side}")
 
