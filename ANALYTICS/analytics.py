@@ -757,20 +757,30 @@ class AnalyticsManager:
             # totalWalletBalance (already fetched above) = start_balance + ALL settled income:
             # realized PnL + commissions + funding fees (including those between Deep Syncs).
             # This eliminates the systematic drift caused by funding cycles between trade closes.
-            # cur_balance = wallet_balance + bot_unrealized (bot-tracked positions only)
+            # cur_balance = totalMarginBalance (ground truth, same snapshot as wallet)
+            # Both totalWalletBalance and totalUnrealizedProfit come from the SAME API call,
+            # so there is zero timing gap and all positions (including any outside bot scope) are counted.
+            # This is the exact figure the user sees in Binance UI as "Margin Balance".
             initial = float(data["start_balance_usdt"])
             
             # Keep per_coin derived realized_net for display / per-coin breakdown
             bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
             
-            # Global realized = ground truth from Binance wallet (always up-to-date)
+            # Global realized = ground truth from Binance wallet (always up-to-date with funding fees)
             wallet_realized_net = round(binance_wallet_balance - initial, 4)
             data["realized_pnl_net_usdt"] = wallet_realized_net
-            data["net_profit_usdt"] = round(wallet_realized_net + bot_unrealized, 4)
             
-            # cur_balance tracks the mathematical margin balance for the bot's scope
-            bot_cur_balance = round(binance_wallet_balance + bot_unrealized, 4)
+            # cur_balance = totalMarginBalance (= wallet + ALL unrealized, same snapshot, no drift)
+            binance_margin_balance = float(acc_data["totalMarginBalance"])
+            bot_cur_balance = round(binance_margin_balance, 4)
             data["cur_balance_usdt"] = bot_cur_balance
+            data["net_profit_usdt"] = round(bot_cur_balance - initial, 4)
+            
+            # Log if bot-tracked unrealized differs from Binance total (indicates external positions)
+            binance_total_unrealized = float(acc_data.get("totalUnrealizedProfit", 0.0))
+            unreal_gap = round(bot_unrealized - binance_total_unrealized, 4)
+            if abs(unreal_gap) > 0.05:
+                logger.warning(f\"[ANALYTICS] Unrealized gap: bot={bot_unrealized} vs Binance={binance_total_unrealized} (diff={unreal_gap}). Possible external positions on account.\")
             
             if initial > 0:
                 data["roi_pct"] = round(((bot_cur_balance - initial) / initial) * 100, 2)
