@@ -2,12 +2,51 @@ import asyncio
 import json
 import logging
 import csv
+import re
+import time as _time_module
 from datetime import datetime, timezone
 from pathlib import Path
 from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PARSE_FREQ_SEC, ANALYTICS_SYNC_FREQ_SEC
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("Analytics")
+
+# ============================================================
+# CIRCUIT BREAKER: Binance IP ban tracker
+# ============================================================
+_ban_until_ms: int = 0  # Global: timestamp (ms) until which the IP is banned
+
+_BAN_PATTERN = re.compile(r"banned until (\d{10,13})")  # matches e.g. "banned until 1785078419200"
+
+
+def _update_ban_from_error(error_msg: str) -> None:
+    """Parse ban timestamp from Binance error message and update global ban tracker."""
+    global _ban_until_ms
+    if not error_msg:
+        return
+    m = _BAN_PATTERN.search(error_msg)
+    if m:
+        ts = int(m.group(1))
+        # Binance returns 10-digit (seconds) or 13-digit (ms) timestamps
+        if ts < 1_000_000_000_000:  # 10-digit → convert to ms
+            ts *= 1000
+        if ts > _ban_until_ms:
+            _ban_until_ms = ts
+            ban_dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc).strftime("%H:%M:%S UTC")
+            logger.warning(f"[CIRCUIT_BREAKER] IP ban registered. Sleeping until {ban_dt} before next analytics REST call.")
+
+
+async def _wait_ban_lifted() -> bool:
+    """If IP is currently banned, sleep until ban expires. Returns True if had to wait."""
+    global _ban_until_ms
+    now_ms = int(_time_module.time() * 1000)
+    if _ban_until_ms <= now_ms:
+        return False
+    sleep_sec = (_ban_until_ms - now_ms) / 1000.0 + 5.0  # +5s safety buffer
+    logger.warning(f"[CIRCUIT_BREAKER] IP still banned. Waiting {sleep_sec:.0f}s before retrying...")
+    await asyncio.sleep(sleep_sec)
+    _ban_until_ms = 0
+    return True
 
 class AnalyticsManager:
     """
@@ -526,9 +565,14 @@ class AnalyticsManager:
         """Fetches account info to update current unrealized drawdowns globally and per-coin."""
         import time
         try:
+            # If IP is currently banned, wait until ban expires before making any REST call
+            await _wait_ban_lifted()
+
             res = await client.fetch_account_info()
             if not res.success or not isinstance(res.data, dict):
-                logger.warning(f"[ANALYTICS] fetch_account_info failed: {getattr(res, 'error_msg', 'Unknown Error')}")
+                err = getattr(res, 'error_msg', 'Unknown Error') or ''
+                _update_ban_from_error(err)
+                logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}")
                 return
             
             acc_data = res.data
@@ -788,7 +832,14 @@ class AnalyticsManager:
                 # gross_profit еще не обновился, что приведет к "виражу" на графике и искажению peak/trough.
                 if self._sync_locks:
                     continue
-                    
+
+                # Circuit breaker: skip tick entirely if still banned (ban-wait happens inside _update_drawdowns)
+                global _ban_until_ms
+                now_ms = int(_time_module.time() * 1000)
+                if _ban_until_ms > now_ms:
+                    # Don't call REST at all while banned — just skip this tick silently
+                    continue
+
                 await self.sync_current_drawdowns(client)
             except Exception as e:
                 logger.error(f"Realtime tracker error: {e}")
