@@ -26,7 +26,9 @@
     },
     "symbols": [
         "STABLEUSDT",
-        "DASHUSDT"
+        "DASHUSDT",
+        "KGENUSDT",
+        "MMTUSDT"
     ],
     "telegram": {
         "enabled": true,
