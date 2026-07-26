@@ -850,7 +850,7 @@ class AnalyticsManager:
 
     async def _do_fetch_and_record(self, client, symbol: str, side: str, open_time: int, close_time: int):
         """
-        Waits 10 seconds after a trade closes, then triggers the Absolute Deep Sync engine
+        Waits after a trade closes, then triggers the Absolute Deep Sync engine
         to completely reconstruct analytics and ledger.
         """
         logger.info(f"[{symbol}] Trade closed. Waiting {POST_CLOSE_SYNC_DEBOUNCE_SEC}s before Absolute Deep Sync...")
