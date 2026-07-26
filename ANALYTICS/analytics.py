@@ -577,9 +577,15 @@ class AnalyticsManager:
             
             acc_data = res.data
             
-            if "positions" not in acc_data or "totalMarginBalance" not in acc_data:
+            if "positions" not in acc_data or "totalMarginBalance" not in acc_data or "totalWalletBalance" not in acc_data:
                 logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data from Binance! Skipping update to protect stats.")
                 return
+            
+            # Ground-truth wallet balance from Binance.
+            # totalWalletBalance = start_balance + ALL settled income (realized PnL + commissions + funding fees).
+            # This automatically captures funding fees that occur between Deep Syncs, eliminating the
+            # systematic discrepancy that accumulates between trade closes.
+            binance_wallet_balance = float(acc_data["totalWalletBalance"])
                 
             positions = acc_data.get("positions", [])
             coin_drawdowns = {}
@@ -746,12 +752,24 @@ class AnalyticsManager:
             data["total_funding_usdt"] = round(bot_total_fund, 4)
                 
             data["realized_pnl_usdt"] = round(bot_gross_profit, 4)
-            bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
-            data["realized_pnl_net_usdt"] = bot_realized_net
-            data["net_profit_usdt"] = round(bot_realized_net + bot_unrealized, 4)
             
-            initial = float(data.get("start_balance_usdt", 0.0))
-            bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
+            # === GROUND-TRUTH BALANCE via totalWalletBalance ===
+            # totalWalletBalance (already fetched above) = start_balance + ALL settled income:
+            # realized PnL + commissions + funding fees (including those between Deep Syncs).
+            # This eliminates the systematic drift caused by funding cycles between trade closes.
+            # cur_balance = wallet_balance + bot_unrealized (bot-tracked positions only)
+            initial = float(data["start_balance_usdt"])
+            
+            # Keep per_coin derived realized_net for display / per-coin breakdown
+            bot_realized_net = round(bot_gross_profit + bot_total_comm + bot_total_fund, 4)
+            
+            # Global realized = ground truth from Binance wallet (always up-to-date)
+            wallet_realized_net = round(binance_wallet_balance - initial, 4)
+            data["realized_pnl_net_usdt"] = wallet_realized_net
+            data["net_profit_usdt"] = round(wallet_realized_net + bot_unrealized, 4)
+            
+            # cur_balance tracks the mathematical margin balance for the bot's scope
+            bot_cur_balance = round(binance_wallet_balance + bot_unrealized, 4)
             data["cur_balance_usdt"] = bot_cur_balance
             
             if initial > 0:
