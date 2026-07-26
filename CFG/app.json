@@ -9,7 +9,7 @@
         "api_rate_limit_sec": 0.1,
         "rest_failsafe_sec": 1.0,
         "income_pagination_delay_sec": 1.5,
-        "post_close_sync_debounce_sec": 20.0,
+        "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
         "auto_start": false
     },
