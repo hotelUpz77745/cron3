@@ -50,8 +50,8 @@ class TelegramReceiver:
                 logger.warning(f"Unauthorized access attempt by {event.from_user.id}")
                 return
                 
-            if not event.text:
-                await event.answer("⚠️ Бот принимает только текстовые команды. Пожалуйста, не отправляйте медиафайлы, стикеры или пустые сообщения.")
+            if not event.text and not event.document:
+                await event.answer("⚠️ Бот принимает только текстовые команды или документы (файлы). Пожалуйста, не отправляйте фото, видео, стикеры или пустые сообщения.")
                 return
                 
             return await handler(event, data)
