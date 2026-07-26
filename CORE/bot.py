@@ -41,6 +41,7 @@ class BotCore:
                 max_interval_sec=BACKUP_MAX_INTERVAL_SEC
             )
             self.runtime_manager.backup_manager = self.backup_manager
+            self.analytics.backup_manager = self.backup_manager
         else:
             self.backup_manager = None
             

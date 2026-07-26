@@ -230,6 +230,9 @@ class AnalyticsManager:
             temp_file = self.log_file.with_suffix('.tmp')
             temp_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
             os.replace(temp_file, self.log_file)
+            
+            if getattr(self, 'backup_manager', None):
+                self.backup_manager.mark_changed()
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
 
