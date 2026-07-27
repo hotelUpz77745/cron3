@@ -1,7 +1,7 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 400.0,
+        "invest_size": 400,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -11,42 +11,37 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 32.88
+                "price": 76.67
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -5.2493,
-                "is_active": false,
-                "price": 31.15
+                "super_indent": -3.4986,
+                "price": 73.99
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -8.3989,
-                "is_active": false,
-                "price": 30.12
+                "super_indent": -5.5977,
+                "price": 72.38
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -13.6482,
-                "is_active": false,
-                "price": 28.39
+                "super_indent": -9.0963,
+                "price": 69.7
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -22.047,
-                "is_active": false,
-                "price": 25.63
+                "super_indent": -14.694,
+                "price": 65.4
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -35.6952,
-                "is_active": false,
-                "price": 21.14
+                "super_indent": -23.7903,
+                "price": 58.43
             }
         },
         "tp_map": {
@@ -57,46 +52,41 @@
             },
             "1": {
                 "indent": 0.7,
-                "fallback_indent": 1.6,
-                "is_active": false
+                "fallback_indent": 1.6
             },
             "2": {
                 "indent": 1.0,
-                "fallback_indent": 2.3,
-                "is_active": false
+                "fallback_indent": 2.3
             },
             "3": {
                 "indent": 1.4,
-                "fallback_indent": 3.0,
-                "is_active": false
+                "fallback_indent": 3.0
             },
             "4": {
                 "indent": 1.9,
-                "fallback_indent": 3.6,
-                "is_active": false
+                "fallback_indent": 3.6
             },
             "5": {
                 "indent": 2.5,
-                "fallback_indent": 4.0,
-                "is_active": false
+                "fallback_indent": 4.0
             }
         },
-        "total_volume": 1.577,
-        "avg_entry_price": 32.88,
+        "total_volume": 0.68,
+        "avg_entry_price": 76.67,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 32.88,
-        "open_time": 1785104389381,
-        "next_avg_price": 31.15,
-        "fallback_price": 33.21,
+        "initial_entry_price": 76.67,
+        "open_time": 1785105889493,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
-        "pending_rolling_tp": false
+        "pending_rolling_tp": false,
+        "next_avg_price": 73.99,
+        "fallback_price": 77.44
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 400.0,
+        "invest_size": 400,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -106,42 +96,42 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 31.95
+                "price": 76.17
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": -5.2493,
-                "is_active": false,
-                "price": 33.63
+                "super_indent": -3.4986,
+                "price": 78.83,
+                "is_active": false
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": -8.3989,
-                "is_active": false,
-                "price": 34.63
+                "super_indent": -5.5977,
+                "price": 80.43,
+                "is_active": false
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": -13.6482,
-                "is_active": false,
-                "price": 36.31
+                "super_indent": -9.0963,
+                "price": 83.1,
+                "is_active": false
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": -22.047,
-                "is_active": false,
-                "price": 38.99
+                "super_indent": -14.694,
+                "price": 87.36,
+                "is_active": false
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": -35.6952,
-                "is_active": false,
-                "price": 43.35
+                "super_indent": -23.7903,
+                "price": 94.29,
+                "is_active": false
             }
         },
         "tp_map": {
@@ -176,18 +166,18 @@
                 "is_active": false
             }
         },
-        "total_volume": -0.811,
-        "avg_entry_price": 31.95,
+        "total_volume": -0.68,
+        "avg_entry_price": 76.17,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 31.95,
-        "open_time": 1784966989205,
-        "next_avg_price": 33.63,
-        "fallback_price": 31.63,
+        "initial_entry_price": 76.17,
+        "open_time": 1785113771616,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
-        "pending_rolling_tp": false
+        "pending_rolling_tp": false,
+        "next_avg_price": 78.83,
+        "fallback_price": 75.41
     },
     "super_grid": {
         "enabled": false

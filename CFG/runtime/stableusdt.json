@@ -11,42 +11,42 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 0.04031
+                "price": 0.03948
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": -5.1145,
                 "is_active": false,
-                "price": 0.03825
+                "price": 0.03746
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": -8.1832,
                 "is_active": false,
-                "price": 0.03701
+                "price": 0.03625
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": -13.2976,
                 "is_active": false,
-                "price": 0.03495
+                "price": 0.03423
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": -21.4808,
                 "is_active": false,
-                "price": 0.03165
+                "price": 0.031
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": -34.7784,
                 "is_active": false,
-                "price": 0.02629
+                "price": 0.02575
             }
         },
         "tp_map": {
@@ -81,13 +81,13 @@
                 "is_active": false
             }
         },
-        "total_volume": 1286.0,
-        "avg_entry_price": 0.04031,
+        "total_volume": 1313.0,
+        "avg_entry_price": 0.03948,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 0.04031,
-        "open_time": 1784999989090,
-        "next_avg_price": 0.03825,
-        "fallback_price": 0.04071,
+        "initial_entry_price": 0.03948,
+        "open_time": 1785133819315,
+        "next_avg_price": 0.03746,
+        "fallback_price": 0.03987,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
@@ -106,42 +106,42 @@
                 "volume": 12.96,
                 "super_indent": 0.0,
                 "is_active": true,
-                "price": 0.03855
+                "price": 0.03831
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
                 "super_indent": -5.1145,
                 "is_active": false,
-                "price": 0.04052
+                "price": 0.04027
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
                 "super_indent": -8.1832,
                 "is_active": false,
-                "price": 0.0417
+                "price": 0.04144
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
                 "super_indent": -13.2976,
                 "is_active": false,
-                "price": 0.04368
+                "price": 0.0434
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
                 "super_indent": -21.4808,
                 "is_active": false,
-                "price": 0.04683
+                "price": 0.04654
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
                 "super_indent": -34.7784,
                 "is_active": false,
-                "price": 0.05196
+                "price": 0.05163
             }
         },
         "tp_map": {
@@ -176,13 +176,13 @@
                 "is_active": false
             }
         },
-        "total_volume": -1344.0,
-        "avg_entry_price": 0.03855,
+        "total_volume": -1353.0,
+        "avg_entry_price": 0.03831,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 0.03855,
-        "open_time": 1785068389709,
-        "next_avg_price": 0.04052,
-        "fallback_price": 0.03816,
+        "initial_entry_price": 0.03831,
+        "open_time": 1785098389154,
+        "next_avg_price": 0.04027,
+        "fallback_price": 0.03793,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
