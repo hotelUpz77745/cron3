@@ -11,7 +11,8 @@ from __future__ import annotations
 import os
 from consts import TG_ENABLED
 from TG.tg_receiver import TelegramReceiver
-import requests
+import urllib.request
+import json
 from consts import TG_TOKEN, TG_ALLOWED_USERS
 import logging
 from c_log import UnifiedLogger
@@ -41,7 +42,13 @@ def send_telegram_fatal(msg: str):
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
     for user_id in TG_ALLOWED_USERS:
         try:
-            requests.post(url, json={"chat_id": user_id, "text": f"🚨 СТАРТОВАЯ ОШИБКА!\nБот упал при запуске:\n\n{msg}"}, timeout=5)
+            data = json.dumps({
+                "chat_id": user_id, 
+                "text": f"🚨 СТАРТОВАЯ ОШИБКА!\nБот упал при запуске:\n\n{msg}"
+            }).encode('utf-8')
+            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(req, timeout=5):
+                pass
         except Exception:
             pass
 
