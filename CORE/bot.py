@@ -63,15 +63,7 @@ class BotCore:
         self.prices = {}   # Структура для хранения цен
         self.runtime_manager = RuntimeFsmManager()
         
-        if BACKUP_ENABLED:
-            self.backup_manager = RuntimeBackupManager(
-                debounce_sec=BACKUP_DEBOUNCE_SEC,
-                max_interval_sec=BACKUP_MAX_INTERVAL_SEC
-            )
-            self.runtime_manager.backup_manager = self.backup_manager
-            self.analytics.backup_manager = self.backup_manager
-        else:
-            self.backup_manager = None
+
             
         self.notifier = NotifierManager()
         
@@ -98,6 +90,16 @@ class BotCore:
         self.spec_manager = SpecManager(self)
         
         self.analytics = AnalyticsManager()
+        
+        if BACKUP_ENABLED:
+            self.backup_manager = RuntimeBackupManager(
+                debounce_sec=BACKUP_DEBOUNCE_SEC,
+                max_interval_sec=BACKUP_MAX_INTERVAL_SEC
+            )
+            self.runtime_manager.backup_manager = self.backup_manager
+            self.analytics.backup_manager = self.backup_manager
+        else:
+            self.backup_manager = None
         
         auto_start = _CFG["app"]["auto_start"]
         if TG_ENABLED:
