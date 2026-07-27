@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\POS_FSM\pos_stream.py
+# Role: pos_stream.py module
+
 # ==============================================================================
 # Path: FSM/pos_stream.py
 # Role: Подключение к User Data Stream и менеджер Listen Key

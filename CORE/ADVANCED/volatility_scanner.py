@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ADVANCED\volatility_scanner.py
+# Role: volatility_scanner.py module
+
 # ==============================================================================
 # Path: CORE/ADVANCED/volatility_scanner.py
 # python -m CORE.ADVANCED.volatility_scanner

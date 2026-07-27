@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\GRID\avg_manager.py
+# Role: avg_manager.py module
+
 # ==============================================================================
 # Path: CORE/avg_manager.py
 # Role: Менеджер усреднений (Grid Manager)
@@ -8,6 +11,7 @@ from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 from c_utils import Utils
 
+from consts import _CFG
 logger = UnifiedLogger("AvgManager")
 
 class AverageManager:
@@ -40,7 +44,6 @@ class AverageManager:
             elif level_data.get("price") is None:
                 indent_pct = level_data["indent"]
                 
-                from consts import _CFG
                 app_adv = _CFG["super_grid"]
                 if app_adv.get("enabled", False) and level_data.get("super_indent") is not None:
                     indent_pct = level_data["super_indent"]

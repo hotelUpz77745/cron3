@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\notifier.py
+# Role: notifier.py module
+
 # ==============================================================================
 # Path: CORE/notifier.py
 # Role: Менеджер уведомлений по просадке и профициту
@@ -10,6 +13,7 @@ from consts import DATA_DIR, ANALYTICS_DIR
 from c_utils import Utils
 from c_log import UnifiedLogger
 
+from consts import TG_ALLOWED_USERS
 logger = UnifiedLogger("Notifier")
 
 class NotifierManager:
@@ -45,7 +49,6 @@ class NotifierManager:
     def _get_chat_ids(self):
         chat_ids = []
         try:
-            from consts import TG_ALLOWED_USERS
             if TG_ALLOWED_USERS:
                 chat_ids.extend(TG_ALLOWED_USERS)
         except Exception:

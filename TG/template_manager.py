@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\TG\template_manager.py
+# Role: template_manager.py module
+
 # ==============================================================================
 # Path: TG/template_manager.py
 # Role: Менеджер генерации и слияния шаблонов настроек для Telegram
@@ -8,6 +11,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from consts import DATA_DIR
 
+from RUNTIME_FSM.runtime_builder import build_runtime_caches
 logger = UnifiedLogger("TemplateManager")
 
 class TemplateManager:
@@ -56,7 +60,6 @@ class TemplateManager:
         else:
             # Если рантайма еще нет, просто копируем базовый шаблон. 
             # (Рантайм-поля добавятся при старте/ресете, но можно добавить и тут)
-            from RUNTIME_FSM.runtime_builder import build_runtime_caches
             final_data = json.loads(json.dumps(base_data))
 
         changes_applied = 0

@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\c_log.py
+# Role: c_log.py module
+
 # ==============================================================================
 # Path: c_log.py
 # Role: Единая система логирования
@@ -15,6 +18,9 @@ import os
 import logging
 import traceback
 
+import sys
+from consts import LOG_TO_CONSOLE, LOG_TO_FILE
+import time
 class UnlockedRotatingFileHandler(RotatingFileHandler):
     """
     Кастомный RotatingFileHandler, который не держит файл постоянно открытым.
@@ -125,13 +131,11 @@ class UnifiedLogger:
 
         # 🔑 КРИТИЧНО: handler добавляем ТОЛЬКО если его ещё нет
         if not logger.handlers:
-            import sys
             formatter = logging.Formatter(
                 "%(asctime)s | %(levelname)s | %(context)s | %(message)s",
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             
-            from consts import LOG_TO_CONSOLE, LOG_TO_FILE
             
             if LOG_TO_FILE:
                 handler = UnlockedRotatingFileHandler(
@@ -169,7 +173,6 @@ class UnifiedLogger:
     def _should_throttle(self, msg: str, throttle_sec: int, throttle_key: Optional[str] = None) -> bool:
         if throttle_sec <= 0:
             return False
-        import time
         current_time = time.time()
         key = throttle_key if throttle_key is not None else msg
         last_time = self._last_log_times.get(key, 0)

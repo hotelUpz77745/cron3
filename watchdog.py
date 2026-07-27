@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\watchdog.py
+# Role: watchdog.py module
+
 # ============================================================
 # File: watchdog.py
 # Role: Фоновый контроллер состояния главного цикла (отслеживание зависаний и производительности)
@@ -10,6 +13,8 @@ import datetime
 import pytz
 import aiohttp
 
+from consts import TG_ALLOWED_USERS
+import logging
 class WatchdogTGAdapter:
     """
     Адаптер для отправки алертов и heartbeat в Telegram.
@@ -29,7 +34,6 @@ class WatchdogTGAdapter:
         chat_ids = []
         # Из consts (TG_ALLOWED_USERS)
         try:
-            from consts import TG_ALLOWED_USERS
             if TG_ALLOWED_USERS:
                 chat_ids.extend(TG_ALLOWED_USERS)
         except Exception:
@@ -159,7 +163,6 @@ class LoopWatchdog:
     def logger(self):
         if hasattr(self.bot, "logger") and self.bot.logger:
             return self.bot.logger
-        import logging
         return logging.getLogger("Watchdog")
 
     @property

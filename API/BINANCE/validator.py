@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\API\BINANCE\validator.py
+# Role: validator.py module
+
 # ==============================================================================
 # Path: API/BINANCE/validator.py
 # Role: Валидатор ответов и формирование APIResponse
@@ -8,8 +11,8 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 from c_utils import now
 
+from c_log import UnifiedLogger
 if TYPE_CHECKING:
-    from c_log import UnifiedLogger
 
 @dataclass
 class APIResponse:

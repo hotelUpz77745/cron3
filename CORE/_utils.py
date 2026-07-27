@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\_utils.py
+# Role: _utils.py module
+
 # ==============================================================================
 # Role: Математика для трейдинга (расчет объема, тейк-профитов и прочего)
 # ==============================================================================
@@ -5,6 +8,11 @@
 from typing import Dict, Any
 from c_utils import Utils
 
+import asyncio
+from consts import SPEC_TTL_SEC, CACHE_DIR
+from API.BINANCE.public import BinancePublic
+from c_utils import Utils
+from c_log import UnifiedLogger
 class TradeMath:
     @staticmethod
     def calculate_order_volume(
@@ -124,11 +132,6 @@ class SpecManager:
         self._task = None
 
     async def _specification_task(self):
-        import asyncio
-        from consts import SPEC_TTL_SEC, CACHE_DIR
-        from API.BINANCE.public import BinancePublic
-        from c_utils import Utils
-        from c_log import UnifiedLogger
         logger = UnifiedLogger("SpecManager")
         
         try:
@@ -145,7 +148,6 @@ class SpecManager:
             logger.error(f"Ошибка в _specification_task: {e}")
 
     def start(self):
-        import asyncio
         self.is_running = True
         self._task = asyncio.create_task(self._specification_task())
 

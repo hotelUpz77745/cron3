@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\c_utils.py
+# Role: c_utils.py module
+
 # ==============================================================================
 # Path: c_utils.py
 # Role: Утилитарные и вспомогательные функции

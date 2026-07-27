@@ -10,22 +10,22 @@ PROJECT_NAME = "hron"
 
 | Документ | Что там |
 |---|---|
-| `../../../WORKSPACE/TRADING_SYSTEM/COMMON/DOCS/manifest.md` | Стандарты кодинга: SRP, лимиты строк (500 max, 150–350 gold), правила деплоя. |
+| `../../../WORKSPACE/COMMON/DOCS/manifest.md` | Стандарты кодинга: SRP, лимиты строк (500 max, 150–350 gold), правила деплоя. |
 
-| `../../../WORKSPACE/TRADING_SYSTEM/COMMON/DOCS/{PROJECT_NAME}/tech_debt.md` | Документ описывает основные технические долги и проблемы архитектуры, которые требуют немедленного устранения. |
+| `../../../WORKSPACE/COMMON/DOCS/{PROJECT_NAME}/tech_debt.md` | Документ описывает основные технические долги и проблемы архитектуры, которые требуют немедленного устранения. |
 
-| `../../../WORKSPACE/TRADING_SYSTEM/COMMON/DOCS/{PROJECT_NAME}/TZ.md` | **Все** бизнес-инварианты системы. Например: алгоритм балансировки, FSM инцидентов, газ-буфер, уведомления, ... |
+| `../../../WORKSPACE/COMMON/DOCS/{PROJECT_NAME}/TZ.md` | **Все** бизнес-инварианты системы. Например: алгоритм балансировки, FSM инцидентов, газ-буфер, уведомления, ... |
 
-| `../../../WORKSPACE/TRADING_SYSTEM/COMMON/wiki/{PROJECT_NAME}/` | Obsidian-заметки: архитектура, плейбук... |
+| `../../../WORKSPACE/COMMON/wiki/{PROJECT_NAME}/` | Obsidian-заметки: архитектура, плейбук... |
 
 ---
 
 ## 2. Карта файлов (где что)
 
-- ../../../WORKSPACE/TRADING_SYSTEM/COMMON/DOCS/
+- ../../../WORKSPACE/COMMON/DOCS/
   - manifest.md
   - {PROJECT_NAME}/
-- ../../../WORKSPACE/TRADING_SYSTEM/COMMON/wiki/
+- ../../../WORKSPACE/COMMON/wiki/
 - {PROJECT_NAME}/
 
 ---
@@ -54,7 +54,7 @@ PROJECT_NAME = "hron"
 ## 5. CRITICAL RULE:
 - "NEVER run main.py, tests, or any mutating commands without EXPLICIT permission from the user." -- status: ENABLED
 
-## После каждой правки обновляй WORKSPACE/TRADING_SYSTEM/COMMON/wiki/{PROJECT_NAME}
+## После каждой правки обновляй WORKSPACE/COMMON/wiki/{PROJECT_NAME}
 
 ## 6. Latest Commits
 - `09fa888 - feat(core): integrate LoopWatchdog into BotCore with WatchdogTGAdapter and TG_TOKEN from .env`

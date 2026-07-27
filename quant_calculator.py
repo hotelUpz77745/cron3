@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\quant_calculator.py
+# Role: quant_calculator.py module
+
 # ==============================================================================
 # Path: quant_calculator.py
 # Role: Калькулятор ликвидации для DCA-стратегии (Crossed Margin)

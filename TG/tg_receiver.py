@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\TG\tg_receiver.py
+# Role: tg_receiver.py module
+
 # ==============================================================================
 # Path: TG/tg_receiver.py
 # Role: Telegram-бот для управления торговым ядром (Start/Stop, Настройки)
@@ -17,6 +20,21 @@ from c_log import UnifiedLogger
 from consts import TG_TOKEN, ANALYTICS_DIR, TG_ALLOWED_USERS
 from TG.template_manager import TemplateManager
 
+from quant_calculator import QuantCalculator
+from consts import _CFG
+import json
+from consts import DATA_DIR
+from c_utils import Utils
+import json, time, csv
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+import csv
+from ANALYTICS.plotter import generate_coin_analytics
+import asyncio
+import io
+from consts import DATA_DIR, _CFG
+import sys
+import subprocess
 logger = UnifiedLogger("TGReceiver")
 
 class TGStates(StatesGroup):
@@ -145,7 +163,6 @@ class TelegramReceiver:
         async def secret_quant_cmd(message: Message, state: FSMContext):
             msg = await message.answer("⏳ Симуляция ликвидаций запущена...")
             try:
-                from quant_calculator import QuantCalculator
                 calc = QuantCalculator()
                 report = calc.generate_report()
                 await msg.edit_text(f"```text\n{report}\n```", parse_mode="Markdown")
@@ -157,7 +174,7 @@ class TelegramReceiver:
         async def sonnik_restore_cmd(message: Message):
             msg = await message.answer("⏳ Запуск принудительного Deep Sync. Это займет некоторое время...")
             try:
-                await self.bot_core.analytics.deep_sync_analytics(self.bot_core.client)
+                await self.bot_core.analytics.deep_sync_analytics(self.bot_core.client, self.bot_core.prices)
                 await msg.edit_text("✅ Принудительный Deep Sync успешно завершен! Исторические данные восстановлены по первой строке леджера.")
             except Exception as e:
                 logger.error(f"Failed to execute manual deep sync: {e}")
@@ -192,14 +209,12 @@ class TelegramReceiver:
                 await message.answer("⚠️ Trading is already running!", reply_markup=self._get_main_keyboard())
                 return
                 
-            from consts import _CFG
             symbols = _CFG["symbols"]
             
             for sym in symbols:
                 sym_lower = sym.lower()
                 runtime_path = self.template_manager.runtime_dir / f"{sym_lower}.json"
                 if runtime_path.exists():
-                    import json
                     try:
                         with open(runtime_path, 'r', encoding='utf-8') as f:
                             data = json.load(f)
@@ -225,7 +240,6 @@ class TelegramReceiver:
                                     super_indents.append(str(si) if si is not None else "-")
                                 lines.append(f"    ├ Grid: [{', '.join(indents)}]")
                                 
-                                from consts import _CFG
                                 if _CFG["super_grid"]["enabled"] and any(si != "-" for si in super_indents):
                                     lines.append(f"    ├ Super: [{', '.join(super_indents)}]")
                                     
@@ -257,8 +271,6 @@ class TelegramReceiver:
             await state.clear()
             
             # Save auto_start = True to app.json
-            from consts import DATA_DIR
-            from c_utils import Utils
             app_json_path = DATA_DIR / "app.json"
             app_data = Utils.read_json_file(app_json_path)
             if "app" not in app_data:
@@ -278,8 +290,6 @@ class TelegramReceiver:
             await state.clear()
             
             # Save auto_start = False to app.json
-            from consts import DATA_DIR
-            from c_utils import Utils
             app_json_path = DATA_DIR / "app.json"
             app_data = Utils.read_json_file(app_json_path)
             if "app" not in app_data:
@@ -298,7 +308,6 @@ class TelegramReceiver:
         async def on_status(message: Message, state: FSMContext):
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
-            from consts import _CFG
             super_grid_enabled = _CFG["super_grid"]["enabled"]
             super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"
             text = f"<b>Control Panel</b>\nCurrent Status: {status}\nSuper Grid (Volatility): {super_grid_status}"
@@ -327,9 +336,6 @@ class TelegramReceiver:
         async def on_get_cfg(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            from consts import DATA_DIR
-            from c_utils import Utils
-            import json
             
             dump_data = {}
             
@@ -409,7 +415,6 @@ class TelegramReceiver:
                 await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Back:")
                 return
                 
-            import json, time, csv
             analytics_path = ANALYTICS_DIR / "analytics.json"
             ledger_path = ANALYTICS_DIR / "trades_ledger.txt"
             if analytics_path.exists():
@@ -512,7 +517,6 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data.startswith("analytics_ranking"))
         async def process_analytics_ranking(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            import json
             
             # Parse criterion
             parts = callback.data.split(":")
@@ -607,7 +611,6 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data == "analytics_full_report")
         async def process_analytics_full_report(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            import json
             analytics_path = ANALYTICS_DIR / "analytics.json"
             if not analytics_path.exists():
                 await callback.message.answer("Analytics JSON not found.")
@@ -685,10 +688,6 @@ class TelegramReceiver:
             await callback.answer()
             message = callback.message
             
-            import json
-            from datetime import datetime, timezone
-            from zoneinfo import ZoneInfo
-            from consts import _CFG
             
             analytics_path = ANALYTICS_DIR / "analytics.json"
             if analytics_path.exists():
@@ -698,14 +697,12 @@ class TelegramReceiver:
                     data = json.loads(text)
                     ts = data.get("last_updated_ts")
                     if ts:
-                        from datetime import datetime, timezone
                         dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
                         time_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
                         
                         last_trade_time = "Нет сделок"
                         csv_path = ANALYTICS_DIR / "trades_ledger.txt"
                         if csv_path.exists():
-                            import csv
                             try:
                                 with open(csv_path, 'r', encoding='utf-8') as f:
                                     reader = csv.reader(f, delimiter=';')
@@ -761,7 +758,6 @@ class TelegramReceiver:
             await callback.answer()
             message = callback.message
             
-            import json
             all_coins = set(self.bot_core.symbols)
             analytics_path = ANALYTICS_DIR / "analytics.json"
             if analytics_path.exists():
@@ -793,7 +789,6 @@ class TelegramReceiver:
             is_active = symbol in self.bot_core.symbols
             status_text = "🟢 Активна" if is_active else "🔴 Отключена"
             
-            import json
             analytics_path = ANALYTICS_DIR / "analytics.json"
             if analytics_path.exists():
                 try:
@@ -824,7 +819,6 @@ class TelegramReceiver:
                 except Exception as e:
                     logger.error(f"Error reading per_coin data for {symbol}: {e}")
 
-            from ANALYTICS.plotter import generate_coin_analytics
             try:
                 plot_path = generate_coin_analytics(symbol)
                 if plot_path and os.path.exists(plot_path):
@@ -877,7 +871,6 @@ class TelegramReceiver:
                 return
 
             # Apply base template automatically and add to BotCore
-            import json
             base_data = self.template_manager.apply_tg_template(json.dumps({"symbol": symbol}))
             # Wait, apply_tg_template parses JSON, but if we don't pass full JSON it might fail or reset.
             # We need to manually construct the config or use a helper.
@@ -992,7 +985,6 @@ class TelegramReceiver:
                 await callback.message.answer(f"❌ Конфиг {symbol} не найден.")
                 return
 
-            import json
             try:
                 rt_data = json.loads(runtime_path.read_text(encoding="utf-8"))
                 side_data = rt_data.get(side, {})
@@ -1233,7 +1225,6 @@ class TelegramReceiver:
                         await self.bot_core.runtime_manager.sync_with_fsm(self.bot_core.fsm_states, force_save=True)
                         
                     if hasattr(self.bot_core, 'volatility_manager') and self.bot_core.volatility_manager.is_running:
-                        import asyncio
                         asyncio.create_task(self.bot_core.volatility_manager.process_all())
                         
                 await state.clear()
@@ -1370,9 +1361,7 @@ class TelegramReceiver:
         # =========================================================
         @self.dp.message(F.text == "📄 _base")
         async def on_base_btn(message: Message, state: FSMContext):
-            from c_utils import Utils
             base_data = Utils.read_json_file(self.template_manager.base_file)
-            import json
             base_str = json.dumps(base_data, indent=4)
             
             dump_path = os.path.join("logs", "_base_edit.json")
@@ -1391,7 +1380,6 @@ class TelegramReceiver:
                 
             json_str = ""
             if message.document:
-                import io
                 file = await self.bot.get_file(message.document.file_id)
                 out = io.BytesIO()
                 await self.bot.download_file(file.file_path, out)
@@ -1402,7 +1390,6 @@ class TelegramReceiver:
                 await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
                 return
                 
-            import json
             try:
                 new_base = json.loads(json_str)
                 
@@ -1415,7 +1402,6 @@ class TelegramReceiver:
                             await message.answer(f"❌ ОШИБКА КОНФИГУРАЦИИ ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)}).\nШаблон НЕ сохранен!")
                             return
                             
-                from c_utils import Utils
                 Utils.write_json_file(self.template_manager.base_file, new_base)
                 await message.answer("✅ Базовый шаблон успешно обновлен!", reply_markup=self._get_set_coins_keyboard())
                 await state.clear()
@@ -1427,9 +1413,6 @@ class TelegramReceiver:
         # =========================================================
         @self.dp.message(F.text == "🔧 Super Grid")
         async def on_super_grid_btn(message: Message, state: FSMContext):
-            from consts import DATA_DIR
-            from c_utils import Utils
-            import json
             app_json_path = DATA_DIR / "app.json"
             app_data = Utils.read_json_file(app_json_path)
             
@@ -1465,7 +1448,6 @@ class TelegramReceiver:
                 
             json_str = ""
             if message.document:
-                import io
                 file = await self.bot.get_file(message.document.file_id)
                 out = io.BytesIO()
                 await self.bot.download_file(file.file_path, out)
@@ -1476,11 +1458,8 @@ class TelegramReceiver:
                 await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
                 return
                 
-            import json
             try:
                 new_super_grid = json.loads(json_str)
-                from c_utils import Utils
-                from consts import DATA_DIR, _CFG
                 app_json_path = DATA_DIR / "app.json"
                 app_data = Utils.read_json_file(app_json_path)
                 app_data["super_grid"] = new_super_grid
@@ -1516,9 +1495,6 @@ class TelegramReceiver:
             msg = await callback.message.answer("⏳ Сканирование волатильности запущено, пожалуйста подождите...")
             
             try:
-                import sys
-                import subprocess
-                from consts import DATA_DIR
                 output_path = DATA_DIR / "volatile_symbols.json"
                 if output_path.exists():
                     try:
@@ -1549,9 +1525,6 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data == "cb_edit_scanner_config")
         async def process_cb_edit_scanner_config(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            from c_utils import Utils
-            from consts import DATA_DIR
-            import json
             
             config_path = DATA_DIR / "app.json"
             cfg = {
@@ -1587,7 +1560,6 @@ class TelegramReceiver:
                 
             json_str = ""
             if message.document:
-                import io
                 file = await self.bot.get_file(message.document.file_id)
                 out = io.BytesIO()
                 await self.bot.download_file(file.file_path, out)
@@ -1598,11 +1570,8 @@ class TelegramReceiver:
                 await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
                 return
                 
-            import json
             try:
                 new_cfg = json.loads(json_str)
-                from c_utils import Utils
-                from consts import DATA_DIR
                 
                 config_path = DATA_DIR / "app.json"
                 app_data = {}
@@ -1620,8 +1589,6 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🔔 Notifications")
         async def on_notifications_menu(message: Message, state: FSMContext):
             await state.clear()
-            from consts import DATA_DIR
-            from c_utils import Utils
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
             notif_cfg = app_cfg.get("notifications", {})
             enabled = notif_cfg.get("enabled", False)
@@ -1677,8 +1644,6 @@ class TelegramReceiver:
                 return
             try:
                 new_th = float(message.text.replace(',', '.'))
-                from consts import DATA_DIR
-                from c_utils import Utils
                 app_path = DATA_DIR / "app.json"
                 app_data = Utils.read_json_file(app_path)
                 if "notifications" not in app_data:
@@ -1699,8 +1664,6 @@ class TelegramReceiver:
                 return
             try:
                 new_th = float(message.text.replace(',', '.'))
-                from consts import DATA_DIR
-                from c_utils import Utils
                 app_path = DATA_DIR / "app.json"
                 app_data = Utils.read_json_file(app_path)
                 if "notifications" not in app_data:

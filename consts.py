@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\consts.py
+# Role: consts.py module
+
 # ==============================================================================
 # Path: consts.py
 # Role: Глобальные константы и настройки конфигурации

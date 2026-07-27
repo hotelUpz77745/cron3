@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\POS_FSM\models.py
+# Role: models.py module
+
 # ==============================================================================
 # Path: FSM/models.py
 # Role: Модели состояний FSM

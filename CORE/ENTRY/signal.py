@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ENTRY\signal.py
+# Role: signal.py module
+
 # ==============================================================================
 # Path: CORE/ENTRY/signal.py
 # Role: Обработка сигналов и логика первичного входа в позицию
@@ -11,6 +14,7 @@
 from datetime import datetime, timezone
 import pytz
 
+import time
 GRACE_PERIOD_SEC = 89.0 # Буфер времени от начала свечи, в пределах которого происходит проверка новых сигналов
 SHIFT_INTERVAL = 11
 
@@ -70,7 +74,6 @@ class TimeControl:
         return (virtual_time - nearest_timestamp) < GRACE_PERIOD_SEC
 
 if __name__ == "__main__":
-    import time
     
     print(f"Запуск тестового цикла (интервал 5m, SHIFT_INTERVAL={SHIFT_INTERVAL}, GRACE_PERIOD_SEC={GRACE_PERIOD_SEC})...")
     tc = TimeControl(interval="5m")

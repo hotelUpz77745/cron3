@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\runtime_backup.py
+# Role: runtime_backup.py module
+
 # ==============================================================================
 # Path: CORE/runtime_backup.py
 # Role: Автоматическое резервное копирование CFG/runtime в Telegram
@@ -11,6 +14,10 @@ import zipfile
 import aiohttp
 from c_log import UnifiedLogger
 
+from consts import TG_ALLOWED_USERS
+from consts import DATA_DIR, ANALYTICS_DIR
+import datetime
+import pytz
 logger = UnifiedLogger("RuntimeBackup")
 
 class RuntimeBackupManager:
@@ -33,7 +40,6 @@ class RuntimeBackupManager:
         
     def _get_chat_id(self):
         try:
-            from consts import TG_ALLOWED_USERS
             if TG_ALLOWED_USERS:
                 return TG_ALLOWED_USERS[0]
         except Exception:
@@ -67,7 +73,6 @@ class RuntimeBackupManager:
             
     async def _create_and_send_backup(self):
         try:
-            from consts import DATA_DIR, ANALYTICS_DIR
             runtime_dir = DATA_DIR / "runtime"
             
             if not runtime_dir.exists():
@@ -108,9 +113,6 @@ class RuntimeBackupManager:
                 form = aiohttp.FormData()
                 form.add_field('chat_id', str(self._chat_id))
                 
-                import datetime
-                import pytz
-                import datetime
                 utc_now = datetime.datetime.now(datetime.timezone.utc)
                 date_str = utc_now.strftime("%Y-%m-%d_%H-%M-%S")
                 filename = f"runtime_backup_{date_str}.zip"

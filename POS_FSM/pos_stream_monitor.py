@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\POS_FSM\pos_stream_monitor.py
+# Role: pos_stream_monitor.py module
+
 # ==============================================================================
 # Path: FSM/pos_stream_monitor.py
 # Role: Тупой бухгалтер: только фиксирует total_volume и avg_entry_price, и на их основе переключает флаги in_position и is_finished. На этом его роль заканчивается.

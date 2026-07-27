@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\ANALYTICS\plotter.py
+# Role: plotter.py module
+
 # ==============================================================================
 # Path: ANALYTICS/plotter.py
 # Role: Генератор графиков эквити и метрик
@@ -9,6 +12,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from datetime import datetime
 
+from datetime import timedelta
 ANALYTICS_DIR = Path(__file__).parent
 IMAGES_DIR = ANALYTICS_DIR / "images"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -80,7 +84,6 @@ def generate_equity_curve() -> str:
         return ""
 
     # Prepend the start balance before the first trade (e.g. 1 hour before)
-    from datetime import timedelta
     times.insert(0, times[0] - timedelta(hours=1))
     balances.insert(0, start_balance)
     

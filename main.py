@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\main.py
+# Role: main.py module
+
 # ==============================================================================
 # Path: main.py
 # Role: Точка входа в приложение
@@ -6,6 +9,13 @@
 from __future__ import annotations
 
 import os
+from consts import TG_ENABLED
+from TG.tg_receiver import TelegramReceiver
+import requests
+from consts import TG_TOKEN, TG_ALLOWED_USERS
+import logging
+from c_log import UnifiedLogger
+from CORE.bot import BotCore
 os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"
 
 import asyncio
@@ -13,12 +23,10 @@ from typing import *
 
 
 async def run_app(bot, logger):
-    from consts import TG_ENABLED
     tasks = [bot.start()]
     
     if TG_ENABLED:
         try:
-            from TG.tg_receiver import TelegramReceiver
             tg_bot = TelegramReceiver(bot)
             tasks.append(tg_bot.start())
             logger.info("TGReceiver will be started alongside BotCore.")
@@ -28,8 +36,6 @@ async def run_app(bot, logger):
     await asyncio.gather(*tasks)
 
 def send_telegram_fatal(msg: str):
-    import requests
-    from consts import TG_TOKEN, TG_ALLOWED_USERS
     if not TG_TOKEN or not TG_ALLOWED_USERS:
         return
     url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
@@ -40,9 +46,6 @@ def send_telegram_fatal(msg: str):
             pass
 
 def main():
-    import logging
-    from c_log import UnifiedLogger
-    from CORE.bot import BotCore
     
     logger = UnifiedLogger("App")
     

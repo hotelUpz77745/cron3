@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\RUNTIME_FSM\runtime_manager.py
+# Role: runtime_manager.py module
+
 # ==============================================================================
 # Path: RUNTIME_FSM/runtime_manager.py
 # Role: Менеджер рантайм-кешей и их синхронизации с состоянием позиций
@@ -11,6 +14,7 @@ from consts import DATA_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 
+import copy
 logger = UnifiedLogger("RuntimeManager")
 RUNTIME_DIR = DATA_DIR / "runtime"
 
@@ -55,7 +59,6 @@ class RuntimeFsmManager:
         Инициализируем PositionState из рантайм-кеша при старте (до REST-синхронизации).
         Копируем все переменные стейта из JSON.
         """
-        import copy
         for symbol, states in fsm_states.items():
             cache = self.caches.get(symbol, {})
             for side in ("LONG", "SHORT"):
@@ -94,7 +97,6 @@ class RuntimeFsmManager:
         Метод-синхронизатор. Сериализует актуальный PositionState обратно в json-кеш.
         Работает как "дамп" оперативной памяти на HDD.
         """
-        import copy
         for symbol, cache in self.caches.items():
             sym_states = fsm_states.get(symbol, {})
             needs_save = force_save

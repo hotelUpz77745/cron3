@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\TP\tp_manager.py
+# Role: tp_manager.py module
+
 # ==============================================================================
 # Path: CORE/tp_manager.py
 # Role: Менеджер постановки лимитных тейк-профит ордеров
@@ -6,6 +9,8 @@
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 
+from CORE._utils import RiskCalculatingUtils
+import asyncio
 logger = UnifiedLogger("TakeProfitManager")
 
 class TakeProfitManager:
@@ -14,8 +19,6 @@ class TakeProfitManager:
 
     async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, volume: float = None):
         """Расчет и постановка лимитного TP ордера с ретраями и предварительной отменой."""
-        from CORE._utils import RiskCalculatingUtils
-        import asyncio
         
         # Предварительно отменяем все лимитки для этой стороны
         logger.info(f"[{symbol}] {side} Canceling old limit orders before placing new TP...")

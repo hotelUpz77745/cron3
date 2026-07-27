@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\bot.py
+# Role: bot.py module
+
 # ==============================================================================
 # Path: CORE/bot.py
 # Role: Торговое ядро и основная логика
@@ -20,6 +23,34 @@ from POS_FSM.models import PositionState
 from c_utils import Utils
 
 from c_log import UnifiedLogger
+from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
+from consts import BACKUP_ENABLED, BACKUP_DEBOUNCE_SEC, BACKUP_MAX_INTERVAL_SEC
+from CORE.runtime_backup import RuntimeBackupManager
+from CORE.notifier import NotifierManager
+from CORE.ENTRY.leverage_manager import LeverageManager
+from CORE.TP.tp_manager import TakeProfitManager
+from CORE.GRID.avg_manager import AverageManager
+from CORE.TP.fallback_tp_manager import FallbackTpManager
+from CORE._utils import SpecManager
+from ANALYTICS.analytics import AnalyticsManager
+from consts import TG_ENABLED
+from consts import API_KEY, API_SECRET
+from watchdog import LoopWatchdog
+from consts import (
+    WATCHDOG_TIMEOUT_SEC,
+    WATCHDOG_CHECK_INTERVAL_SEC,
+    WATCHDOG_HEARTBEAT_INTERVAL_SEC,
+    WATCHDOG_HEARTBEAT_AUTODELETE_SEC
+)
+from CORE._utils import TradeMath
+from consts import REST_FAILSAFE_SEC
+from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
+from POS_FSM.pos_stream_monitor import PositionMonitor
+from POS_FSM.pos_stream import PositionStream
+from consts import API_KEY
+from API.BINANCE.public import BinancePublic
+from CORE.ADVANCED.volatility_manager import VolatilityManager
+from consts import _CFG
 logger = UnifiedLogger("BotCore")
 
 BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
@@ -30,12 +61,9 @@ class BotCore:
         # Работаем только с теми символами, которые прописаны в конфигах .app.json в разделе symbols
         self.symbols = _CFG["symbols"]
         self.prices = {}   # Структура для хранения цен
-        from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
         self.runtime_manager = RuntimeFsmManager()
         
-        from consts import BACKUP_ENABLED, BACKUP_DEBOUNCE_SEC, BACKUP_MAX_INTERVAL_SEC
         if BACKUP_ENABLED:
-            from CORE.runtime_backup import RuntimeBackupManager
             self.backup_manager = RuntimeBackupManager(
                 debounce_sec=BACKUP_DEBOUNCE_SEC,
                 max_interval_sec=BACKUP_MAX_INTERVAL_SEC
@@ -45,7 +73,6 @@ class BotCore:
         else:
             self.backup_manager = None
             
-        from CORE.notifier import NotifierManager
         self.notifier = NotifierManager()
         
         self.runtime_configs = self.runtime_manager.caches # Кеш рантаймов
@@ -60,25 +87,18 @@ class BotCore:
         self.time_control = TimeControl(interval=timeframe)
         
         # 2. Менеджеры
-        from CORE.ENTRY.leverage_manager import LeverageManager
         self.leverage_manager = LeverageManager()
         
-        from CORE.TP.tp_manager import TakeProfitManager
         self.tp_manager = TakeProfitManager(self.runtime_manager)
         
-        from CORE.GRID.avg_manager import AverageManager
         self.avg_manager = AverageManager()
         
-        from CORE.TP.fallback_tp_manager import FallbackTpManager
         self.fallback_tp_manager = FallbackTpManager()
         
-        from CORE._utils import SpecManager
         self.spec_manager = SpecManager(self)
         
-        from ANALYTICS.analytics import AnalyticsManager
         self.analytics = AnalyticsManager()
         
-        from consts import TG_ENABLED
         auto_start = _CFG["app"]["auto_start"]
         if TG_ENABLED:
             self.is_paused = not auto_start
@@ -89,14 +109,14 @@ class BotCore:
         self.spec_data = Utils.read_json_file(spec_cache_path)
         
 
-        from consts import API_KEY, API_SECRET
         self.client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
         
         # Кеш FSM-состояний в формате {symbol: {"LONG": PositionState, "SHORT": PositionState}}
         self.fsm_states = {}
         
         # Сетевые адаптеры и стримы
-        self.price_stream = BinanceHotPriceStream(self.symbols)
+        stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
+        self.price_stream = BinanceHotPriceStream(stream_symbols)
 
         # Контроль главный петли (Watchdog)
         self._last_tick = time.time()
@@ -105,13 +125,7 @@ class BotCore:
         # server_name is purely cosmetic for Telegram, so it's genuinely optional
         self.server_name = _CFG["app"].get("server_name", "HronBot")
 
-        from watchdog import LoopWatchdog
-        from consts import (
-            WATCHDOG_TIMEOUT_SEC,
-            WATCHDOG_CHECK_INTERVAL_SEC,
-            WATCHDOG_HEARTBEAT_INTERVAL_SEC,
-            WATCHDOG_HEARTBEAT_AUTODELETE_SEC
-        )
+
         self.watchdog = LoopWatchdog(
             self,
             timeout_sec=WATCHDOG_TIMEOUT_SEC,
@@ -163,7 +177,8 @@ class BotCore:
             if task.get_name() == "price_stream":
                 task.cancel()
                 
-        self.price_stream = BinanceHotPriceStream(self.symbols)
+        stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
+        self.price_stream = BinanceHotPriceStream(stream_symbols)
         self.price_stream_synced.clear()
         asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
         
@@ -219,7 +234,8 @@ class BotCore:
             await self.price_stream.aclose()
             
         if self.symbols:
-            self.price_stream = BinanceHotPriceStream(self.symbols)
+            stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
+            self.price_stream = BinanceHotPriceStream(stream_symbols)
             asyncio.create_task(self.price_stream.run(self._on_tick))
         else:
             self.price_stream = None
@@ -243,7 +259,6 @@ class BotCore:
             invest_size = side_cfg["invest_size"]
             grid_0 = side_cfg["grid"]["0"]
             volume_pct = grid_0["volume"]
-            from CORE._utils import TradeMath
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
             
             order_side = "BUY" if side == "LONG" else "SELL"
@@ -343,7 +358,6 @@ class BotCore:
         states = self.fsm_states[symbol]
         
         # --- REST Failsafe (MUST run even if price is missing) ---
-        from consts import REST_FAILSAFE_SEC
         current_time = time.monotonic()
         if not hasattr(self, "_last_rest_syncs"):
             self._last_rest_syncs = {}
@@ -414,8 +428,6 @@ class BotCore:
         self.is_running = True
         
         # ШАГ 1. Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
-        from consts import TG_ENABLED
         created_new = build_runtime_caches()
         if created_new and not TG_ENABLED:
             prompt_runtime_check()
@@ -427,15 +439,12 @@ class BotCore:
         self.spec_manager.start()
         price_task = asyncio.create_task(self.price_stream.run(self._on_tick))
         
-        from POS_FSM.pos_stream_monitor import PositionMonitor
-        from POS_FSM.pos_stream import PositionStream
         
         self.pos_monitor = PositionMonitor(states_cache=self.fsm_states, target_symbols=self.symbols)
         
         # ПОДЧИНЯЕМ PositionState загруженному рантайм-кешу
         self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
         
-        from consts import API_KEY
         self.pos_stream = PositionStream(
             api_key=API_KEY,
             stop_flag=lambda: not self.is_running,
@@ -449,7 +458,6 @@ class BotCore:
         
         # Ожидание готовности прайс-стримов и первоначальная загрузка по REST
         logger.info("Prefetching initial prices via REST...")
-        from API.BINANCE.public import BinancePublic
         if self.symbols:
             initial_prices = await BinancePublic.get_prices_bulk(self.symbols)
             for sym, p in initial_prices.items():
@@ -514,7 +522,6 @@ class BotCore:
                 
                 if stale_symbols:
                     try:
-                        from API.BINANCE.public import BinancePublic
                         bulk_prices = await BinancePublic.get_prices_bulk(stale_symbols)
                         for sym, p in bulk_prices.items():
                             self.prices[sym] = (p, time.time())
@@ -561,11 +568,10 @@ class BotCore:
             logger.info("BotCore started in ACTIVE state (auto_start enabled). Trading loops are running.")
             
         logger.info("[BotCore] Running initial deep sync of analytics...")
-        await self.analytics.deep_sync_analytics(self.client)
+        await self.analytics.deep_sync_analytics(self.client, self.prices)
             
         self.analytics.start_realtime_tracker(self.client)
 
-        from CORE.ADVANCED.volatility_manager import VolatilityManager
         self.volatility_manager = VolatilityManager(self)
         self.volatility_manager.start()
         
@@ -582,7 +588,6 @@ class BotCore:
 
     async def close_all_positions(self):
         """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
-        from consts import _CFG
         symbols = _CFG["symbols"]
         
         # 1. Отмена лимитных ордеров

@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ENTRY\leverage_manager.py
+# Role: leverage_manager.py module
+
 # ==============================================================================
 # Path: CORE/leverage_manager.py
 # Role: Кеширование и установка плеча и типа маржи

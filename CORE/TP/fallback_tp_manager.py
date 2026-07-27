@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\TP\fallback_tp_manager.py
+# Role: fallback_tp_manager.py module
+
 # ==============================================================================
 # Path: CORE/TP/fallback_tp_manager.py
 # Role: Менеджер страховочного тейк-профита (Fallback Market Hit)
@@ -6,6 +9,7 @@
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath, RiskCalculatingUtils
 
+from CORE._utils import RiskCalculatingUtils
 logger = UnifiedLogger("FallbackMarketTP")
 
 class FallbackTpManager:
@@ -27,7 +31,6 @@ class FallbackTpManager:
                 return # Ждем пока сенсоры синхронизируют цену входа
             
             tp_map = state.tp_map
-            from CORE._utils import RiskCalculatingUtils
             current_level = RiskCalculatingUtils.get_current_grid_level(state.grid)
             
             if current_level not in tp_map:

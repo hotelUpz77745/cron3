@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\RUNTIME_FSM\runtime_builder.py
+# Role: runtime_builder.py module
+
 # ==============================================================================
 # Path: RUNTIME_FSM/runtime_builder.py
 # Role: Сборка пер-символьных рантайм конфигураций при старте
@@ -10,6 +13,7 @@ from consts import _CFG, DATA_DIR, AVOID_CHECK_RUNTIME_CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
 
+import sys
 logger = UnifiedLogger("RuntimeBuilder")
 
 RUNTIME_DIR = DATA_DIR / "runtime"
@@ -90,5 +94,4 @@ def prompt_runtime_check():
             logger.warning("No interactive stdin found, skipping runtime check pause.")
         except KeyboardInterrupt:
             print("Прервано пользователем.")
-            import sys
             sys.exit(0)

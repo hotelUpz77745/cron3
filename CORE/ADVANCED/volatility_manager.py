@@ -1,3 +1,6 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ADVANCED\volatility_manager.py
+# Role: volatility_manager.py module
+
 # ==============================================================================
 # Path: CORE/ADVANCED/volatility_manager.py
 # python -m CORE.ADVANCED.volatility_manager
@@ -11,6 +14,13 @@ from pathlib import Path
 from c_log import UnifiedLogger
 from consts import DATA_DIR, _CFG
 
+from c_utils import Utils
+import asyncio
+import sys
+from pathlib import Path
+from API.BINANCE.client import BinanceClient
+from consts import _CFG
+import json
 logger = UnifiedLogger("VolatilityManager")
 
 class VolatilityManager:
@@ -38,7 +48,6 @@ class VolatilityManager:
                 logger.error(f"[VolatilityManager] Error in loop: {e}")
             
             # Wait for next update interval
-            from c_utils import Utils
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
             app_cfg = app_data.get("super_grid", {})
             interval_hours = app_cfg.get("update_interval_hours", 12)
@@ -49,7 +58,6 @@ class VolatilityManager:
             await asyncio.sleep(wait_sec)
 
     async def process_all(self):
-        from c_utils import Utils
         app_data = Utils.read_json_file(DATA_DIR / "app.json")
         app_cfg = app_data.get("super_grid", {})
         
@@ -207,15 +215,10 @@ class VolatilityManager:
 
 
 if __name__ == "__main__":
-    import asyncio
-    import sys
-    from pathlib import Path
     
     root_dir = Path(__file__).parent.parent.parent
     sys.path.insert(0, str(root_dir))
     
-    from API.BINANCE.client import BinanceClient
-    from consts import _CFG
 
     class MockRuntimeManager:
         def __init__(self):
@@ -246,7 +249,6 @@ if __name__ == "__main__":
         test_dir.mkdir(exist_ok=True)
         dump_path = test_dir / "volatility_test.json"
         
-        import json
         with open(dump_path, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=4, ensure_ascii=False)
             
