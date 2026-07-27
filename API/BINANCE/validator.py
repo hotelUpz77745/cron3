@@ -12,7 +12,6 @@ from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 from c_utils import now
 
 from c_log import UnifiedLogger
-if TYPE_CHECKING:
 
 @dataclass
 class APIResponse:
