@@ -109,14 +109,14 @@ class AnalyticsManager:
 
 
 
-    def _write_data(self, data: dict):
+    def _write_data(self, data: dict, mark_backup: bool = True):
         try:
             AnalyticsMathEngine.calculate(data)
             temp_file = self.log_file.with_suffix('.tmp')
             temp_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
             os.replace(temp_file, self.log_file)
             
-            if getattr(self, 'backup_manager', None):
+            if mark_backup and getattr(self, 'backup_manager', None):
                 self.backup_manager.mark_changed()
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
@@ -694,7 +694,7 @@ class AnalyticsManager:
                 
             await self._update_drawdowns(client, data)
             data["last_updated_ts"] = int(time.time() * 1000)
-            self._write_data(data)
+            self._write_data(data, mark_backup=False)
 
     def start_realtime_tracker(self, client):
         if hasattr(self, "_tracker_task") and self._tracker_task:

@@ -476,10 +476,10 @@ class TelegramReceiver:
             # Level 2 Protection: Synchronized on-demand update without heavy deep sync
             msg = await message.answer("⏳ Синхронизация с Binance...")
             try:
-                await self.bot_core.analytics.sync_current_drawdowns(self.bot_core.client)
+                await self.bot_core.analytics.sync_lightweight_unrealized_pnl(self.bot_core.client)
                 await msg.delete()
             except Exception as e:
-                logger.error(f"Failed to sync current drawdowns: {e}")
+                logger.error(f"Failed to sync lightweight unrealized pnl: {e}")
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
