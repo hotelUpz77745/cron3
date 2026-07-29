@@ -1505,14 +1505,10 @@ class TelegramReceiver:
                     except:
                         pass
                         
-                # Запускаем как модуль из корня, чтобы корректно подтянулись импорты (c_log и др.)
-                process = await asyncio.create_subprocess_exec(
-                    sys.executable, "-m", "CORE.ADVANCED.volatility_scanner",
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    cwd=os.getcwd()
-                )
-                stdout, stderr = await process.communicate()
+                # Запускаем напрямую в текущем процессе с передачей общего клиента
+                from CORE.ADVANCED.volatility_scanner import VolatilityScanner
+                scanner = VolatilityScanner(client=self.bot_core.client)
+                await scanner.scan()
                 
                 output_path = DATA_DIR / "volatile_symbols.json"
                 txt_output_path = DATA_DIR / "volatile_symbols.txt"

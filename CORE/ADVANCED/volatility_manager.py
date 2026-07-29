@@ -26,6 +26,7 @@ logger = UnifiedLogger("VolatilityManager")
 class VolatilityManager:
     def __init__(self, bot_core):
         self.bot_core = bot_core
+        self.client = bot_core.client
         self._task = None
         self.is_running = False
 

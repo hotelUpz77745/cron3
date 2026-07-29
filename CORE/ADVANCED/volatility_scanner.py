@@ -19,12 +19,12 @@ from API.BINANCE.client import BinanceClient
 logger = UnifiedLogger("VolatilityScanner")
 
 class VolatilityScanner:
-    def __init__(self):
+    def __init__(self, client=None):
         self.config_path = DATA_DIR / "app.json"
         self.output_path = DATA_DIR / "volatile_symbols.json"
         
         # We need a BinanceClient to get klines. In an isolated script, we can initialize it without keys.
-        self.client = BinanceClient("", "")
+        self.client = client or BinanceClient("", "")
         self.semaphore = asyncio.Semaphore(5)
 
     def _get_config(self):
