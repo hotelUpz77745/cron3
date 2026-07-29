@@ -10,6 +10,7 @@ from typing import Dict, Tuple
 from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
 import time
+import asyncio
 
 logger = UnifiedLogger("FSM_Monitor")
 IS_SHOW_SIGNAL = False
