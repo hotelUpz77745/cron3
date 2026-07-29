@@ -9,6 +9,7 @@
 from typing import Dict, Tuple
 from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
+import time
 
 logger = UnifiedLogger("FSM_Monitor")
 IS_SHOW_SIGNAL = False
@@ -27,11 +28,17 @@ class PositionMonitor:
                         "LONG": PositionState(symbol=symbol, side="LONG"),
                         "SHORT": PositionState(symbol=symbol, side="SHORT")
                     }
+        self._last_rest_sync_time = 0.0
+        self._cached_positions = None
 
     async def sync_from_rest(self, client, symbols: list):
         """Запрашивает актуальные позиции по REST и инициализирует/синхронизирует FSM стейт."""
-        # logger.debug("[REST] Syncing active positions as failsafe...")
-        positions = await client.fetch_positions()
+        now = time.monotonic()
+        if now - self._last_rest_sync_time > 1.0 or self._cached_positions is None:
+            self._cached_positions = await client.fetch_positions()
+            self._last_rest_sync_time = now
+
+        positions = self._cached_positions
         if not positions:
             # logger.warning("[REST] No positions returned (or API error), skipping sync_from_rest to prevent accidental wipe.")
             return
