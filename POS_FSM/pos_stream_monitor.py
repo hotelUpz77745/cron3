@@ -30,13 +30,15 @@ class PositionMonitor:
                     }
         self._last_rest_sync_time = 0.0
         self._cached_positions = None
+        self._rest_lock = asyncio.Lock()
 
     async def sync_from_rest(self, client, symbols: list):
         """Запрашивает актуальные позиции по REST и инициализирует/синхронизирует FSM стейт."""
-        now = time.monotonic()
-        if now - self._last_rest_sync_time > 1.0 or self._cached_positions is None:
-            self._cached_positions = await client.fetch_positions()
-            self._last_rest_sync_time = now
+        async with self._rest_lock:
+            now = time.monotonic()
+            if now - self._last_rest_sync_time > 1.0 or self._cached_positions is None:
+                self._cached_positions = await client.fetch_positions()
+                self._last_rest_sync_time = time.monotonic()
 
         positions = self._cached_positions
         if not positions:
