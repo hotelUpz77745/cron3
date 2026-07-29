@@ -27,7 +27,7 @@
     },
     "symbols": [
         "STABLEUSDT",
-        "DASHUSDT",
+        "JUPUSDT",
         "KGENUSDT",
         "MMTUSDT",
         "SOLUSDT"
@@ -69,8 +69,8 @@
     },
     "notifications": {
         "enabled": true,
-        "negative_threshold": -50.0,
-        "positive_threshold": 50.0
+        "negative_threshold": -20.0,
+        "positive_threshold": 20.0
     },
     "auto_closing": {
         "negative": {
@@ -78,8 +78,8 @@
             "threshold_increment": null
         },
         "positive": {
-            "threshold": 50,
-            "threshold_increment": 50
+            "threshold": 20,
+            "threshold_increment": 20
         }
     }
 }
