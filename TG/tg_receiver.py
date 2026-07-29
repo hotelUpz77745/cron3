@@ -52,6 +52,10 @@ class TGStates(StatesGroup):
     waiting_for_close_all_confirm = State()
     waiting_for_notif_neg = State()
     waiting_for_notif_pos = State()
+    waiting_for_autoclose_pos_th = State()
+    waiting_for_autoclose_pos_inc = State()
+    waiting_for_autoclose_neg_th = State()
+    waiting_for_autoclose_neg_inc = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -98,7 +102,8 @@ class TelegramReceiver:
             [
                 KeyboardButton(text="🔔 Notifications"),
                 KeyboardButton(text="🔧 Super Grid"),
-                KeyboardButton(text="🚨 Close All")
+                KeyboardButton(text="🚨 Close All"),
+                KeyboardButton(text="🛑 Auto Closing")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)

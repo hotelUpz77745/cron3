@@ -37,6 +37,9 @@ class AutoCloser:
         
         # Check Positive
         th_pos = pos_cfg.get("threshold")
+        if th_pos == 0 or th_pos == 0.0:
+            th_pos = None
+            
         if th_pos is not None and net_usdt >= th_pos:
             self._is_closing = True
             triggered = True
@@ -59,6 +62,9 @@ class AutoCloser:
                 
         # Check Negative (only if positive didn't trigger)
         th_neg = neg_cfg.get("threshold")
+        if th_neg == 0 or th_neg == 0.0:
+            th_neg = None
+            
         if not triggered and th_neg is not None and net_usdt <= th_neg:
             self._is_closing = True
             triggered = True
