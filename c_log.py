@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 import pytz
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import wraps
 from logging.handlers import RotatingFileHandler
 from pprint import pformat

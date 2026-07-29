@@ -33,7 +33,8 @@ class VolatilityScanner:
             "window": 8,
             "min_volatility_pct": 15.0,
             "max_volatility_pct": None,
-            "strict_window": True
+            "strict_window": True,
+            "min_dayly_vol_usdt": None
         }
         
         if self.config_path.exists():
@@ -98,8 +99,10 @@ class VolatilityScanner:
         if max_vol is not None: max_vol = float(max_vol)
         
         strict_window = cfg.get("strict_window", True)
+        min_dayly_vol_usdt = cfg.get("min_dayly_vol_usdt")
+        if min_dayly_vol_usdt is not None: min_dayly_vol_usdt = float(min_dayly_vol_usdt)
         
-        logger.info(f"[Scanner] Starting scan. TF={timeframe}, window={window}, min_vol={min_vol}%, max_vol={max_vol}%, strict={strict_window}")
+        logger.info(f"[Scanner] Starting scan. TF={timeframe}, window={window}, min_vol={min_vol}%, max_vol={max_vol}%, strict={strict_window}, min_dayly_vol_usdt={min_dayly_vol_usdt}")
         
         symbols = await BinancePublic.get_perp_symbols()
         if not symbols:
@@ -107,6 +110,16 @@ class VolatilityScanner:
             return None
             
         logger.info(f"[Scanner] Found {len(symbols)} USDT-M Perpetual symbols.")
+        
+        if min_dayly_vol_usdt is not None:
+            logger.info(f"[Scanner] Filtering symbols by min_dayly_vol_usdt >= {min_dayly_vol_usdt}")
+            tickers = await BinancePublic.get_24h_ticker()
+            if tickers:
+                vol_map = {t["symbol"]: float(t.get("quoteVolume", 0.0)) for t in tickers}
+                symbols = [s for s in symbols if vol_map.get(s, 0.0) >= min_dayly_vol_usdt]
+                logger.info(f"[Scanner] {len(symbols)} symbols passed volume filter.")
+            else:
+                logger.warning("[Scanner] Failed to fetch 24h tickers, skipping volume filter.")
         
         tasks = []
         for symbol in symbols:

@@ -1491,10 +1491,13 @@ class TelegramReceiver:
 
         @self.dp.callback_query(F.data == "cb_run_scanner")
         async def process_cb_run_scanner(callback: CallbackQuery, state: FSMContext):
-            await callback.answer("Запускаю сканирование... Это займет некоторое время.")
-            msg = await callback.message.answer("⏳ Сканирование волатильности запущено, пожалуйста подождите...")
-            
+            if getattr(self, '_scanner_running', False):
+                await callback.answer("Команда уже запущена дождитесь результата", show_alert=True)
+                return
+            self._scanner_running = True
             try:
+                await callback.answer("Запускаю сканирование... Это займет некоторое время.")
+                msg = await callback.message.answer("⏳ Сканирование волатильности запущено, пожалуйста подождите...")
                 output_path = DATA_DIR / "volatile_symbols.json"
                 if output_path.exists():
                     try:
@@ -1512,15 +1515,44 @@ class TelegramReceiver:
                 stdout, stderr = await process.communicate()
                 
                 output_path = DATA_DIR / "volatile_symbols.json"
+                txt_output_path = DATA_DIR / "volatile_symbols.txt"
                 if output_path.exists():
-                    await msg.delete()
-                    await callback.message.answer_document(FSInputFile(output_path), caption="✅ Сканирование завершено. Результаты в файле.")
+                    try:
+                        with open(output_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        
+                        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        lines = [f"Дата: {now_str}"]
+                        lines.append(f"Количество монет: {len(data)}")
+                        
+                        coin_list = [item["symbol"] for item in data]
+                        lines.append(f"Список монет для Python:")
+                        lines.append(str(coin_list))
+                        lines.append("\nДетализация:")
+                        lines.append("_____")
+                        
+                        for item in data:
+                            lines.append(f"Символ: {item['symbol']}")
+                            lines.append(f"Волатильность: {item['volatility']}%")
+                            lines.append(f"Свечей: {item['candles']}")
+                            lines.append("_____")
+                            
+                        with open(txt_output_path, "w", encoding="utf-8") as f:
+                            f.write("\n".join(lines))
+                        
+                        await msg.delete()
+                        await callback.message.answer_document(FSInputFile(txt_output_path), caption="✅ Сканирование завершено. Результаты в файле.")
+                    except Exception as e:
+                        logger.error(f"Error formatting scanner output: {e}")
+                        await msg.edit_text(f"❌ Ошибка форматирования результатов: {e}")
                 else:
                     await msg.edit_text(f"❌ Ошибка сканирования (файл не создан).\n\nЛоги:\n{stderr.decode('utf-8')}")
                     
             except Exception as e:
                 logger.error(f"Error running scanner: {e}")
                 await msg.edit_text(f"❌ Системная ошибка при запуске сканера: {e}")
+            finally:
+                self._scanner_running = False
 
         @self.dp.callback_query(F.data == "cb_edit_scanner_config")
         async def process_cb_edit_scanner_config(callback: CallbackQuery, state: FSMContext):

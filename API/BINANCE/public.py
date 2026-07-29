@@ -53,6 +53,14 @@ class BinancePublic:
         return None
 
     @staticmethod
+    async def get_24h_ticker() -> Optional[List[Dict]]:
+        """GET /fapi/v1/ticker/24hr"""
+        data = await BinancePublic._get("/fapi/v1/ticker/24hr")
+        if isinstance(data, list):
+            return data
+        return None
+
+    @staticmethod
     async def get_perp_symbols(quote: str = "USDT", limit: Optional[int] = None) -> List[str]:
         """GET /fapi/v1/exchangeInfo (filtered for PERPETUAL + TRADING + quote)"""
         data = await BinancePublic._get("/fapi/v1/exchangeInfo")

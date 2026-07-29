@@ -29,7 +29,8 @@
         "STABLEUSDT",
         "DASHUSDT",
         "KGENUSDT",
-        "MMTUSDT"
+        "MMTUSDT",
+        "SOLUSDT"
     ],
     "telegram": {
         "enabled": true,
@@ -52,7 +53,8 @@
         "window": 12,
         "min_volatility_pct": 25.0,
         "max_volatility_pct": 40.0,
-        "strict_window": true
+        "strict_window": true,
+        "min_dayly_vol_usdt": null
     },
     "watchdog": {
         "timeout_sec": 60,
