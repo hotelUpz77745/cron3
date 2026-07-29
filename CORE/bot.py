@@ -47,6 +47,7 @@ from consts import REST_FAILSAFE_SEC
 from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
 from POS_FSM.pos_stream_monitor import PositionMonitor
 from POS_FSM.pos_stream import PositionStream
+from CORE.auto_closer import AutoCloser
 from consts import API_KEY
 from API.BINANCE.public import BinancePublic
 from CORE.ADVANCED.volatility_manager import VolatilityManager
@@ -135,6 +136,8 @@ class BotCore:
             heartbeat_interval_sec=WATCHDOG_HEARTBEAT_INTERVAL_SEC,
             heartbeat_autodelete_sec=WATCHDOG_HEARTBEAT_AUTODELETE_SEC
         )
+        
+        self.auto_closer = AutoCloser(self)
 
     async def add_symbol(self, symbol: str):
         symbol = symbol.upper()
@@ -538,6 +541,10 @@ class BotCore:
 
                 if getattr(self, 'backup_manager', None):
                     await self.backup_manager.check_and_backup()
+
+                # Автоматическое закрытие по триггеру профита
+                if hasattr(self, 'auto_closer'):
+                    await self.auto_closer.check()
 
                 # Предотвращение блокировки event loop
                 await asyncio.sleep(TIME_SLACK_SEC)

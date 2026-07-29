@@ -71,5 +71,15 @@
         "enabled": true,
         "negative_threshold": -50.0,
         "positive_threshold": 50.0
+    },
+    "auto_closing": {
+        "negative": {
+            "threshold": null,
+            "threshold_increment": null
+        },
+        "positive": {
+            "threshold": 50,
+            "threshold_increment": 50
+        }
     }
 }
