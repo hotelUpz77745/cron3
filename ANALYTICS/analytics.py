@@ -507,6 +507,29 @@ class AnalyticsManager:
                 logger.warning("[ANALYTICS] _update_drawdowns: no symbols in config or per_coin, skipping.")
                 return False
                 
+            # SECONDARY RACE CONDITION FIX: 
+            # Deep check for REST vs Local State desync (Partial/Full Closes)
+            if is_lightweight:
+                for sym in config_symbols:
+                    rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                    if rt_path.exists():
+                        try:
+                            import json as _json_local
+                            rt_data = _json_local.loads(rt_path.read_text(encoding="utf-8"))
+                            local_long_vol = float(rt_data.get("LONG", {}).get("volume", 0.0))
+                            local_short_vol = float(rt_data.get("SHORT", {}).get("volume", 0.0))
+                            
+                            rest_details = coin_details.get(sym, {})
+                            rest_long_amt = abs(rest_details.get("long_amt", 0.0))
+                            rest_short_amt = abs(rest_details.get("short_amt", 0.0))
+                            
+                            if (local_long_vol > 0 and rest_long_amt < local_long_vol * 0.99) or \
+                               (local_short_vol > 0 and rest_short_amt < local_short_vol * 0.99):
+                                logger.info(f"[ANALYTICS] Sync race condition detected for {sym}! REST amt < Local vol. Aborting lightweight sync.")
+                                return False
+                        except Exception:
+                            pass
+                
             if "per_coin" not in data:
                 data["per_coin"] = {}
 
