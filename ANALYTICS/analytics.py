@@ -431,34 +431,42 @@ class AnalyticsManager:
                         c["funding_usdt"] = c_fund
                         c_net = round(c_gross + c_comm + c_fund, 4)
                         c["realized_pnl_net_usdt"] = c_net
-                # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
-                await self._update_drawdowns(client, data)
+                    # Update drawdowns logic calculates net_profit_usdt and cur_balance_usdt based on realized_pnl
+                    await self._update_drawdowns(client, data)
+                    
+                    # Save after drawdown update
+                    self._write_data(data)
                 
-                # Save after drawdown update
-                self._write_data(data)
                 logger.info(f"Absolute Deep Sync completed. PnL: {total_pnl}, Comm: {total_comm}")
                 
             except Exception as e:
                 logger.error(f"Absolute Deep Sync error: {e}")
 
-    async def _update_drawdowns(self, client, data: dict):
+    async def _update_drawdowns(self, client, data: dict, is_lightweight: bool = False):
         """Fetches account info to update current unrealized drawdowns globally and per-coin."""
         try:
             # If IP is currently banned, wait until ban expires before making any REST call
             await _wait_ban_lifted()
 
             res = await client.fetch_account_info()
+            
+            # CRITICAL RACE CONDITION FIX: 
+            # Check if a deep sync lock was added while we were waiting for the REST API.
+            if is_lightweight and self._sync_locks:
+                logger.info("[ANALYTICS] Deep Sync lock acquired during REST fetch. Aborting lightweight PnL sync to prevent extremes corruption.")
+                return False
+
             if not res.success or not isinstance(res.data, dict):
                 err = getattr(res, 'error_msg', 'Unknown Error') or ''
                 _update_ban_from_error(err)
                 logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}")
-                return
+                return False
             
             acc_data = res.data
             
             if "positions" not in acc_data or "totalMarginBalance" not in acc_data:
                 logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data from Binance! Skipping update to protect stats.")
-                return
+                return False
                 
             positions = acc_data.get("positions", [])
             coin_drawdowns = {}
@@ -497,7 +505,7 @@ class AnalyticsManager:
                 
             if not config_symbols:
                 logger.warning("[ANALYTICS] _update_drawdowns: no symbols in config or per_coin, skipping.")
-                return
+                return False
                 
             if "per_coin" not in data:
                 data["per_coin"] = {}
@@ -671,9 +679,12 @@ class AnalyticsManager:
                 data["recovery_factor"] = round(bot_gross_profit / abs(data["max_drawdown_usdt"]), 2)
             else:
                 data["recovery_factor"] = 0.0
+                
+            return True
                     
         except Exception as e:
             logger.error(f"[ANALYTICS] Error updating drawdowns: {e}\n{traceback.format_exc()}")
+            return False
 
     async def _get_bnb_usdt_rate(self, client, cached_prices: dict = None) -> float:
         if cached_prices and "BNBUSDT" in cached_prices:
@@ -692,9 +703,10 @@ class AnalyticsManager:
             if not data:
                 return
                 
-            await self._update_drawdowns(client, data)
-            data["last_updated_ts"] = int(time.time() * 1000)
-            self._write_data(data, mark_backup=False)
+            success = await self._update_drawdowns(client, data, is_lightweight=True)
+            if success:
+                data["last_updated_ts"] = int(time.time() * 1000)
+                self._write_data(data, mark_backup=False)
 
     def start_realtime_tracker(self, client):
         if hasattr(self, "_tracker_task") and self._tracker_task:
