@@ -59,6 +59,13 @@ class PositionMonitor:
                     pos_amt = 0.0
                     entry_price = 0.0
                 
+                # Check for desync before updating
+                state = self.states.get(sym, {}).get(side)
+                if state:
+                    if abs(state.total_volume - pos_amt) > 1e-8 or abs(state.avg_entry_price - entry_price) > 1e-8:
+                        if state.in_position or abs(pos_amt) > 0:
+                            logger.warning(f"[REST_FALLBACK] Stream desync detected for {sym} {side}! WS missed an update. Forcing FSM update from REST. Local Qty: {state.total_volume}, Remote Qty: {pos_amt}")
+
                 self.update_from_stream(sym, side, pos_amt, entry_price)
 
     def update_from_stream(self, symbol: str, side: str, pos_amt: float, entry_price: float):
