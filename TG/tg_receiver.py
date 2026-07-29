@@ -1709,6 +1709,102 @@ class TelegramReceiver:
             except ValueError:
                 await message.answer("❌ Некорректное число. Введите порог еще раз (например, 150.0) или нажмите Back:")
 
+        @self.dp.message(F.text == "🛑 Auto Closing")
+        async def on_auto_closing_menu(message: Message, state: FSMContext):
+            await state.clear()
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            auto_cfg = app_cfg.get("auto_closing", {})
+            
+            pos = auto_cfg.get("positive", {})
+            neg = auto_cfg.get("negative", {})
+            
+            pos_th = pos.get("threshold")
+            pos_inc = pos.get("threshold_increment")
+            neg_th = neg.get("threshold")
+            neg_inc = neg.get("threshold_increment")
+            
+            def fmt(v): return "Выкл (0/null)" if (v is None or v == 0) else str(v)
+            
+            text = (
+                f"<b>Управление Авто-Закрытием:</b>\n\n"
+                f"🟢 <b>Positive (Тейк Профит):</b>\n"
+                f"├ Порог: <b>{fmt(pos_th)}</b>\n"
+                f"└ Шаг инкремента: <b>{fmt(pos_inc)}</b>\n\n"
+                f"🔴 <b>Negative (Стоп Лосс):</b>\n"
+                f"├ Порог: <b>{fmt(neg_th)}</b>\n"
+                f"└ Шаг инкремента: <b>{fmt(neg_inc)}</b>\n\n"
+                f"<i>Примечание: отправьте 0 чтобы отключить (null).</i>"
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="🟢 Изменить POS порог", callback_data="autoclose_edit_pos_th"),
+                    InlineKeyboardButton(text="🟢 Изменить POS шаг", callback_data="autoclose_edit_pos_inc")
+                ],
+                [
+                    InlineKeyboardButton(text="🔴 Изменить NEG порог", callback_data="autoclose_edit_neg_th"),
+                    InlineKeyboardButton(text="🔴 Изменить NEG шаг", callback_data="autoclose_edit_neg_inc")
+                ]
+            ])
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        async def edit_autoclose_field(callback: CallbackQuery, state: FSMContext, state_val: State, msg: str):
+            await callback.answer()
+            await callback.message.answer(msg)
+            await state.set_state(state_val)
+
+        @self.dp.callback_query(F.data == "autoclose_edit_pos_th")
+        async def process_autoclose_edit_pos_th(callback: CallbackQuery, state: FSMContext):
+            await edit_autoclose_field(callback, state, TGStates.waiting_for_autoclose_pos_th, "Введите новый POSITIVE порог (например, 50. Введите 0 для отключения):")
+            
+        @self.dp.callback_query(F.data == "autoclose_edit_pos_inc")
+        async def process_autoclose_edit_pos_inc(callback: CallbackQuery, state: FSMContext):
+            await edit_autoclose_field(callback, state, TGStates.waiting_for_autoclose_pos_inc, "Введите новый POSITIVE шаг инкремента (например, 50. Введите 0 для отключения):")
+            
+        @self.dp.callback_query(F.data == "autoclose_edit_neg_th")
+        async def process_autoclose_edit_neg_th(callback: CallbackQuery, state: FSMContext):
+            await edit_autoclose_field(callback, state, TGStates.waiting_for_autoclose_neg_th, "Введите новый NEGATIVE порог (например, -50. Введите 0 для отключения):")
+            
+        @self.dp.callback_query(F.data == "autoclose_edit_neg_inc")
+        async def process_autoclose_edit_neg_inc(callback: CallbackQuery, state: FSMContext):
+            await edit_autoclose_field(callback, state, TGStates.waiting_for_autoclose_neg_inc, "Введите новый NEGATIVE шаг инкремента (например, 50. Введите 0 для отключения):")
+
+        async def save_autoclose_field(message: Message, state: FSMContext, section: str, field: str):
+            try:
+                val = float(message.text.replace(",", "."))
+                if val == 0:
+                    val = None
+                    
+                app_data = Utils.read_json_file(DATA_DIR / "app.json")
+                if "auto_closing" not in app_data:
+                    app_data["auto_closing"] = {"negative": {"threshold": None, "threshold_increment": None}, "positive": {"threshold": 50, "threshold_increment": 50}}
+                if section not in app_data["auto_closing"]:
+                    app_data["auto_closing"][section] = {}
+                    
+                app_data["auto_closing"][section][field] = val
+                Utils.write_json_file(DATA_DIR / "app.json", app_data)
+                
+                await message.answer(f"✅ Параметр {section} -> {field} успешно обновлен.", parse_mode="HTML")
+                await on_auto_closing_menu(message, state)
+            except ValueError:
+                await message.answer("❌ Неверный формат числа. Введите число.")
+
+        @self.dp.message(StateFilter(TGStates.waiting_for_autoclose_pos_th))
+        async def handle_autoclose_pos_th(message: Message, state: FSMContext):
+            await save_autoclose_field(message, state, "positive", "threshold")
+            
+        @self.dp.message(StateFilter(TGStates.waiting_for_autoclose_pos_inc))
+        async def handle_autoclose_pos_inc(message: Message, state: FSMContext):
+            await save_autoclose_field(message, state, "positive", "threshold_increment")
+            
+        @self.dp.message(StateFilter(TGStates.waiting_for_autoclose_neg_th))
+        async def handle_autoclose_neg_th(message: Message, state: FSMContext):
+            await save_autoclose_field(message, state, "negative", "threshold")
+            
+        @self.dp.message(StateFilter(TGStates.waiting_for_autoclose_neg_inc))
+        async def handle_autoclose_neg_inc(message: Message, state: FSMContext):
+            await save_autoclose_field(message, state, "negative", "threshold_increment")
+
     async def start(self):
         logger.info("Starting Telegram Receiver...")
         await self.dp.start_polling(self.bot)
