@@ -1,6 +1,7 @@
 import asyncio
 import time
-from consts import DATA_DIR, UnifiedLogger
+from consts import DATA_DIR
+from c_log import UnifiedLogger
 from c_utils import Utils
 
 logger = UnifiedLogger("AutoCloser")
