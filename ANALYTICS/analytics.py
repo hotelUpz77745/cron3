@@ -118,6 +118,8 @@ class AnalyticsManager:
             
             if mark_backup and getattr(self, 'backup_manager', None):
                 self.backup_manager.mark_changed()
+            if mark_backup and getattr(self, 'redis_manager', None):
+                self.redis_manager.mark_changed()
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
 

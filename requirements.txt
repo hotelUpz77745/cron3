@@ -4,3 +4,6 @@ aiohttp-socks
 pytz
 aiogram
 matplotlib
+pyzmq
+zmq
+redis

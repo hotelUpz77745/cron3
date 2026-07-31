@@ -36,7 +36,9 @@
     },
     "symbols": [
         "COLLECTUSDT",
-        "PRLUSDT"
+        "PRLUSDT",
+        "STABLEUSDT",
+        "SOLUSDT"
     ],
     "telegram": {
         "enabled": true,

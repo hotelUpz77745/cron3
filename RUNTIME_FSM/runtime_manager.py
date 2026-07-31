@@ -164,3 +164,5 @@ class RuntimeFsmManager:
                 Utils.write_json_file(path, self.caches[symbol])
                 if self.backup_manager:
                     self.backup_manager.mark_changed()
+                if getattr(self, 'redis_manager', None):
+                    self.redis_manager.mark_changed()

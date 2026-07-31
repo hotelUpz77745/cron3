@@ -101,6 +101,28 @@ class BotCore:
             self.analytics.backup_manager = self.backup_manager
         else:
             self.backup_manager = None
+            
+        from CORE.redis_manager import RedisManager
+        self.redis_manager = RedisManager(debounce_sec=1.0)
+        self.runtime_manager.redis_manager = self.redis_manager
+        self.analytics.redis_manager = self.redis_manager
+        
+        from consts import SEMAPHORE_ENABLED, SEMAPHORE_BOT_NAME, SEMAPHORE_SERVER_NAME, SEMAPHORE_ARBITER_IP, SEMAPHORE_PULL_PORT, SEMAPHORE_PUB_PORT
+        if SEMAPHORE_ENABLED:
+            from semaphore import NodeSemaphore
+            self.semaphore = NodeSemaphore(
+                bot_name=SEMAPHORE_BOT_NAME,
+                server_name=SEMAPHORE_SERVER_NAME,
+                arbiter_ip=SEMAPHORE_ARBITER_IP,
+                pull_port=SEMAPHORE_PULL_PORT,
+                pub_port=SEMAPHORE_PUB_PORT
+            )
+            # Принудительно ставим True, чтобы при первом входе в АКТИВНЫЙ режим 
+            # (даже при старте) бот скачал свежий стейт из Redis.
+            self.was_passive = True
+        else:
+            self.semaphore = None
+            self.was_passive = False
         
         auto_start = _CFG["app"]["auto_start"]
         if TG_ENABLED:
@@ -537,9 +559,36 @@ class BotCore:
         while self.is_running:
             self._last_tick = time.time()
             self._tick_count += 1
+            
             try:
+                if self.semaphore:
+                    self.semaphore.tick("start")
+                    if not self.semaphore.is_active:
+                        if not self.was_passive:
+                            from consts import SEMAPHORE_SERVER_NAME
+                            logger.info(f"[{SEMAPHORE_SERVER_NAME}] 🟡 Я РЕЗЕРВ. Сплю, жду отвала основного сервера...")
+                            self.was_passive = True
+                        await asyncio.sleep(1.0)
+                        self.semaphore.tick("end")
+                        continue
+                    else:
+                        if self.was_passive:
+                            from consts import SEMAPHORE_SERVER_NAME
+                            logger.info(f"[{SEMAPHORE_SERVER_NAME}] 🟢 Я АКТИВЕН. Кручу торговую логику бота...")
+                            self.was_passive = False
+                            
+                            if self.redis_manager:
+                                success = await self.redis_manager.pull_failover_data()
+                                if success:
+                                    self.runtime_manager.load_initial_caches(self.symbols)
+                                    self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
+                                    await self.pos_monitor.sync_from_rest(self.client, self.symbols)
+                                    logger.info("Failover sync complete. Resuming trading.")
+
                 if self.is_paused:
                     await asyncio.sleep(1.0)
+                    if self.semaphore:
+                        self.semaphore.tick("end")
                     continue
 
                 # Pre-flight bulk price update
@@ -566,6 +615,9 @@ class BotCore:
 
                 if getattr(self, 'backup_manager', None):
                     await self.backup_manager.check_and_backup()
+                
+                if getattr(self, 'redis_manager', None):
+                    await self.redis_manager.check_and_backup()
 
                 # Автоматическое закрытие по триггеру профита
                 if hasattr(self, 'auto_closer'):
@@ -573,6 +625,9 @@ class BotCore:
 
                 # Предотвращение блокировки event loop
                 await asyncio.sleep(TIME_SLACK_SEC)
+                
+                if self.semaphore:
+                    self.semaphore.tick("end")
 
             except asyncio.CancelledError:
                 logger.info("_game_loop cancelled.")
