@@ -93,5 +93,16 @@
     "stop_bot_rirk_system": {
         "enabled": false,
         "roi_critical_level_pct": -41
+    },
+    "redis": {
+        "enabled": false,
+        "url": "redis://localhost:6379/0"
+    },
+    "node": {
+        "semaphore_enabled": false,
+        "bot_name": "hron",
+        "arbiter_ip": "127.0.0.1",
+        "pull_port": 5555,
+        "pub_port": 5556
     }
 }
