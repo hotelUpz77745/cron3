@@ -129,6 +129,8 @@ class BotCore:
             self.is_paused = not auto_start
         else:
             self.is_paused = False
+            
+        self.entry_blocked = False
         
         spec_cache_path = DATA_DIR / "CACHE" / "specifications.json"
         self.spec_data = Utils.read_json_file(spec_cache_path)
@@ -455,7 +457,7 @@ class BotCore:
                         logger.info(f"[{symbol}] {side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
                     state.last_grace_period = current_grace
                     
-                if is_signal and not BLOCK_ENTRY:
+                if is_signal and not BLOCK_ENTRY and not getattr(self, 'entry_blocked', False):
                     logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
                     # Ставим временный флаг идемпотентности
                     state.in_position_papper = True

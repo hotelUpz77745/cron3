@@ -20,13 +20,62 @@ class AutoCloser:
         if not app_data:
             return
             
+        analytics_data = Utils.read_json_file(DATA_DIR / "analytics.json")
+        if not analytics_data:
+            return
+            
+        # RISK SYSTEM CHECK
+        risk_cfg = app_data.get("stop_bot_rirk_system", {})
+        if risk_cfg.get("enabled"):
+            roi_pct = analytics_data.get("roi_pct", 0.0)
+            
+            try:
+                raw_critical_roi = float(risk_cfg.get("roi_critical_level_pct", -41.0))
+                critical_roi = -abs(raw_critical_roi)
+            except (ValueError, TypeError):
+                logger.error(f"[RISK_SYSTEM] Invalid roi_critical_level_pct in config: {risk_cfg.get('roi_critical_level_pct')}")
+                critical_roi = None
+            
+            if critical_roi is not None and roi_pct <= critical_roi:
+                if not getattr(self.bot_core, "is_paused", False):
+                    self._is_closing = True
+                    logger.critical(f"[RISK_SYSTEM] ROI {roi_pct}% drops below critical {critical_roi}%! Stopping bot.")
+                    
+                    # 1. Block new entries
+                    self.bot_core.entry_blocked = True
+                    
+                    try:
+                        # 2. Close all positions
+                        await self.bot_core.close_all_positions()
+                        
+                        # 3. Wait for analytics to sync (debounce timeout in AnalyticsManager is 10 sec)
+                        logger.info("[RISK_SYSTEM] Waiting for analytics sync (12s)...")
+                        await asyncio.sleep(12.0)
+                        
+                        # 4. Turn off bot
+                        self.bot_core.is_paused = True
+                        
+                        # Turn off the risk system in config so it doesn't loop
+                        app_data["stop_bot_rirk_system"]["enabled"] = False
+                        Utils.write_json_file(app_json_path, app_data)
+                        
+                        msg = f"⛔ <b>CRITICAL RISK STOP</b> ⛔\n\nROI dropped to <b>{roi_pct}%</b> (Threshold: {critical_roi}%).\nAll positions closed. Bot is PAUSED."
+                        if getattr(self.bot_core, 'notifier', None):
+                            await self.bot_core.notifier.send_alert(msg)
+                            
+                    except Exception as e:
+                        logger.error(f"[RISK_SYSTEM] Error during stop sequence: {e}")
+                    finally:
+                        self.bot_core.entry_blocked = False
+                        self._is_closing = False
+                    
+                    return # Exit check early
+        
         auto_cfg = app_data.get("auto_closing")
         if not auto_cfg:
             return
             
-        analytics_data = Utils.read_json_file(DATA_DIR / "analytics.json")
-        if not analytics_data:
-            return
+
             
         net_usdt = analytics_data.get("net_profit_usdt", 0.0)
         

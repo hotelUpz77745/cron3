@@ -89,5 +89,9 @@
             "threshold": 20,
             "threshold_increment": 20
         }
+    },
+    "stop_bot_rirk_system": {
+        "enabled": false,
+        "roi_critical_level_pct": -41
     }
 }
