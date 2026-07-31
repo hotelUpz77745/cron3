@@ -7,6 +7,7 @@
 # ==============================================================================
 
 import asyncio
+import time
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 from c_utils import Utils
@@ -45,7 +46,7 @@ class AverageManager:
                 indent_pct = level_data["indent"]
                 
                 app_adv = _CFG["super_grid"]
-                if app_adv.get("enabled", False) and level_data.get("super_indent") is not None:
+                if app_adv["enabled"] and level_data.get("super_indent") is not None:
                     indent_pct = level_data["super_indent"]
                     
                 price = TradeMath.calculate_grid_price(initial_price, indent_pct, side, spec_data, symbol)
@@ -58,7 +59,7 @@ class AverageManager:
             
         return True # Расчет проведен
 
-    async def process(self, client, runtime_manager, symbol: str, side: str, state, current_price: float, spec_data: dict, tp_manager):
+    async def process(self, client, runtime_manager, symbol: str, side: str, state, opposite_state, current_price: float, spec_data: dict, tp_manager):
         """Проверяет и выполняет логику усреднения для позиции."""
         if not state.in_position or state.pending_avg or current_price is None:
             return
@@ -112,13 +113,14 @@ class AverageManager:
             state.pending_avg = True
             state.pre_avg_price = state.avg_entry_price
             grid[next_level]["is_active"] = True
+            grid[next_level]["timestamp"] = int(time.time() * 1000)
             
             # Асинхронно ставим ордер и ждем завершения полного пайплайна
             await self._execute_averaging_order(
-                client, runtime_manager, symbol, side, next_level, grid[next_level], current_price, spec_data, state, tp_manager
+                client, runtime_manager, symbol, side, next_level, grid[next_level], current_price, spec_data, state, opposite_state, tp_manager
             )
 
-    async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, tp_manager):
+    async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager):
         invest_size = runtime_manager.caches[symbol][side].get("invest_size", 100) # берем из статического кэша
         volume_pct = level_data["volume"]
         
@@ -143,6 +145,7 @@ class AverageManager:
             logger.error(f"[{symbol}] Failed to open {side} averaging position: {res.error_msg}")
             # Rollback in case of failure
             level_data["is_active"] = False
+            level_data["timestamp"] = None
             state.pending_avg = False
             state.next_avg_price = None
             return
@@ -171,7 +174,7 @@ class AverageManager:
             logger.info(f"[{symbol}] {side} FSM synced! New avg_entry_price: {state.avg_entry_price}")
 
         # 4. ПОСТАНОВКА НОВОГО ЛИМИТНОГО ТЕЙК ПРОФИТА
-        await tp_manager.place_take_profit(client, symbol, side, current_price, spec_data, state)
+        await tp_manager.place_take_profit(client, symbol, side, current_price, spec_data, state, opposite_state)
 
         # Освобождаем флаги
         state.pending_avg = False

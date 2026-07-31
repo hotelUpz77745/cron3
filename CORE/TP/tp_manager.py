@@ -17,7 +17,7 @@ class TakeProfitManager:
     def __init__(self, runtime_manager):
         self.runtime_manager = runtime_manager
 
-    async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, volume: float = None):
+    async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, opposite_state=None, volume: float = None):
         """Расчет и постановка лимитного TP ордера с ретраями и предварительной отменой."""
         
         # Предварительно отменяем все лимитки для этой стороны
@@ -25,20 +25,29 @@ class TakeProfitManager:
         await client.cancel_orders_for_side(symbol, side)
 
         grid = state.grid
-        current_level_str = RiskCalculatingUtils.get_current_grid_level(grid)
+        level_self = RiskCalculatingUtils.get_current_grid_level(grid)
         
+        if state.tp_purpose == "opposite" and opposite_state:
+            level_opp = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
+            active_level_str = level_opp
+        elif state.tp_purpose == "both" and opposite_state:
+            level_opp = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
+            active_level_str = str(max(int(level_self), int(level_opp)))
+        else:
+            active_level_str = level_self
+            
         tp_map = state.tp_map
-        current_tp = tp_map.get(current_level_str)
+        current_tp = tp_map.get(active_level_str)
         if not current_tp:
-            logger.error(f"[{symbol}] {side} Missing TP config for level {current_level_str}")
+            logger.error(f"[{symbol}] {side} Missing TP config for level {active_level_str} (purpose: {state.tp_purpose})")
             return False
             
         tp_indent = current_tp.get("indent")
         if tp_indent is None:
             logger.info(f"[{symbol}] {side} TP indent is null. Skipping LIMIT order placement to rely on Fallback TP.")
-            if current_level_str not in state.tp_map:
-                state.tp_map[current_level_str] = {}
-            state.tp_map[current_level_str]["is_active"] = True
+            if active_level_str not in state.tp_map:
+                state.tp_map[active_level_str] = {}
+            state.tp_map[active_level_str]["is_active"] = True
             return True
         # Расчет цены TP (строго от средней цены входа, а не от плавающего тикера)
         base_price = state.avg_entry_price if state.avg_entry_price > 0 else current_price
@@ -73,10 +82,10 @@ class TakeProfitManager:
                 if order_id:
                     logger.info(f"[{symbol}] {side} Take profit LIMIT order placed successfully! ID: {order_id}")
                     # Помечаем tp_map текущий уровень как активный
-                    if current_level_str not in state.tp_map:
-                        state.tp_map[current_level_str] = {}
+                    if active_level_str not in state.tp_map:
+                        state.tp_map[active_level_str] = {}
                         
-                    state.tp_map[current_level_str]["is_active"] = True
+                    state.tp_map[active_level_str]["is_active"] = True
                     
                     # Не вызываем save_cache здесь, sync_with_fsm сделает это
                     return True

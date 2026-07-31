@@ -71,11 +71,12 @@ class QuantCalculator:
         
         grid_steps = grid_steps if grid_steps else [0, -5, -8, -13, -21, -34]
         
-        super_grid_cfg = app_data.get("super_grid", {})
-        if super_grid_cfg.get("enabled", False):
-            self.super_grid_enabled = True
-            self.super_grid_multiplier = float(super_grid_cfg.get("multiplier", 1.0))
-            grid_steps = [round(step * self.super_grid_multiplier, 2) for step in grid_steps]
+        if "super_grid" in app_data:
+            super_grid_cfg = app_data["super_grid"]
+            if super_grid_cfg["enabled"]:
+                self.super_grid_enabled = True
+                self.super_grid_multiplier = float(super_grid_cfg["multiplier"])
+                grid_steps = [round(step * self.super_grid_multiplier, 2) for step in grid_steps]
             
         self.grid_steps_pct = grid_steps
         self.volume_pct = volumes if volumes else [12.96, 14.26, 15.68, 17.25, 18.98, 20.87]

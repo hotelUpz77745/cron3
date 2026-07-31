@@ -549,6 +549,15 @@ class TelegramReceiver:
                 elif criterion == "mdme":
                     sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("MDME", float('inf'))))
                     title = "по MDME (меньше = лучше)"
+                elif criterion == "nr":
+                    def nr_ratio(cdata):
+                        net = float(cdata.get("net_profit_usdt", 0))
+                        realized = float(cdata.get("realized_pnl_net_usdt", 0))
+                        if realized == 0:
+                            return 0
+                        return net / realized
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: nr_ratio(x[1]), reverse=True)
+                    title = "по N/R (Net/Realized, больше = лучше)"
                 else: # Default net
                     sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("net_profit_usdt", -float('inf'))), reverse=True)
                     title = "по Net Profit"
@@ -562,6 +571,11 @@ class TelegramReceiver:
                         val_str = f"DRME: {cdata.get('DRME', 0)}"
                     elif criterion == "mdme":
                         val_str = f"MDME: {cdata.get('MDME', 0)}"
+                    elif criterion == "nr":
+                        net = float(cdata.get("net_profit_usdt", 0))
+                        realized = float(cdata.get("realized_pnl_net_usdt", 0))
+                        ratio = round(net / realized, 4) if realized != 0 else 0
+                        val_str = f"N/R: {ratio}"
                     else:
                         net_profit = cdata.get("net_profit_usdt", 0)
                         realized_net = cdata.get("realized_pnl_net_usdt", 0)
@@ -586,7 +600,8 @@ class TelegramReceiver:
                     ],
                     [
                         InlineKeyboardButton(text="DRME", callback_data="analytics_ranking:drme"),
-                        InlineKeyboardButton(text="MDME", callback_data="analytics_ranking:mdme")
+                        InlineKeyboardButton(text="MDME", callback_data="analytics_ranking:mdme"),
+                        InlineKeyboardButton(text="N/R", callback_data="analytics_ranking:nr")
                     ]
                 ])
                     
@@ -1018,10 +1033,13 @@ class TelegramReceiver:
                     fb = lvl_data.get('fallback_indent', 0)
                     tp_lines.append(f"  • Lvl {k}: Indent <b>{ind}</b> | Fallback <b>{fb}</b>")
 
+                tp_purpose = side_data.get("tp_purpose", "self")
+                
                 msg_text = (
                     f"⚙️ <b>{symbol} - {side}</b>\n"
                     f"Status: {'✅ On' if en else '❌ Off'}\n\n"
-                    f"💰 Invest Size: <b>{sz}</b> USDT (Lev: {lev}x)\n\n"
+                    f"💰 Invest Size: <b>{sz}</b> USDT (Lev: {lev}x)\n"
+                    f"🔄 TP Purpose: <b>{tp_purpose}</b>\n\n"
                     + "\n".join(grid_lines) + "\n\n"
                     + "\n".join(tp_lines)
                 )
@@ -1032,6 +1050,7 @@ class TelegramReceiver:
                     [InlineKeyboardButton(text="💰 Edit Invest Size", callback_data=f"edit_act_size_{symbol}_{side}")],
                     [InlineKeyboardButton(text="📊 Edit Set Avg", callback_data=f"edit_act_avg_{symbol}_{side}")],
                     [InlineKeyboardButton(text="🎯 Edit Set TP", callback_data=f"edit_act_tp_{symbol}_{side}")],
+                    [InlineKeyboardButton(text=f"🔄 Edit TP Purpose", callback_data=f"edit_act_purp_{symbol}_{side}")],
                     [InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_coin_{symbol}")]
                 ])
                 
@@ -1062,6 +1081,40 @@ class TelegramReceiver:
                 runtime_cfg[side]["enable"] = not current
                 msg = f"{side} Включен! ✅" if not current else f"{side} Отключен! ❌"
                 await callback.answer(msg, show_alert=False)
+                await _apply_instant_update(symbol, side, callback)
+            else:
+                await callback.answer("Runtime config not found in RAM")
+
+        @self.dp.callback_query(F.data.startswith("edit_act_purp_"))
+        async def process_edit_purp(callback: CallbackQuery, state: FSMContext):
+            data_parts = callback.data.split("_")
+            symbol = data_parts[3]
+            side = data_parts[4]
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="1. self", callback_data=f"set_purp_{symbol}_{side}_self"),
+                    InlineKeyboardButton(text="2. opposite", callback_data=f"set_purp_{symbol}_{side}_opposite"),
+                    InlineKeyboardButton(text="3. both", callback_data=f"set_purp_{symbol}_{side}_both")
+                ],
+                [InlineKeyboardButton(text="🔙 Back", callback_data=f"edit_side_{symbol}_{side}")]
+            ])
+            await callback.message.edit_text(f"⚙️ <b>{symbol} {side}</b>\nВыберите настройку <b>TP Purpose</b>:\n\n1. self — по своему уровню\n2. opposite — по уровню противоположной стороны\n3. both — по уровню наибольшей просадки", reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("set_purp_"))
+        async def process_set_purp(callback: CallbackQuery, state: FSMContext):
+            data_parts = callback.data.split("_")
+            symbol = data_parts[2]
+            side = data_parts[3]
+            purpose = data_parts[4]
+            
+            runtime_cfg = self.bot_core.runtime_configs.get(symbol)
+            if runtime_cfg and side in runtime_cfg:
+                runtime_cfg[side]["tp_purpose"] = purpose
+                fsm_state = self.bot_core.fsm_states.get(symbol, {}).get(side)
+                if fsm_state:
+                    fsm_state.tp_purpose = purpose
+                await callback.answer(f"TP Purpose изменен на {purpose} ✅", show_alert=False)
                 await _apply_instant_update(symbol, side, callback)
             else:
                 await callback.answer("Runtime config not found in RAM")
@@ -1547,7 +1600,7 @@ class TelegramReceiver:
                         logger.error(f"Error formatting scanner output: {e}")
                         await msg.edit_text(f"❌ Ошибка форматирования результатов: {e}")
                 else:
-                    await msg.edit_text(f"❌ Ошибка сканирования (файл не создан).\n\nЛоги:\n{stderr.decode('utf-8')}")
+                    await msg.edit_text("❌ Ошибка сканирования (файл не создан).")
                     
             except Exception as e:
                 logger.error(f"Error running scanner: {e}")

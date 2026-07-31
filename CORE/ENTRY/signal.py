@@ -54,13 +54,44 @@ class TimeControl:
         }
         return mapping.get(interval, 60)  # По умолчанию "1m"
 
-    def is_new_interval(self) -> bool:
+    def is_new_interval(self, closed_count: int = 0, smart_grace_cfg: dict = None) -> tuple[bool, float]:
         """
-        Возвращает True, если текущее время находится в пределах первой минуты (60 сек)
-        с начала текущего интервала (свечи).
+        Возвращает (is_signal, current_grace_period), где is_signal == True, если текущее время 
+        находится в пределах динамического окна с начала текущего интервала (свечи).
         """
         if not self.interval_seconds:
-            return False
+            return False, 0.0
+            
+        grace_period = 89.0
+        if smart_grace_cfg:
+            grace_period = smart_grace_cfg.get("start_period_sec", 90)
+            increments_card = smart_grace_cfg.get("increments_card", {})
+            
+            # Find the best matching increment
+            # Rules: <X, >X, >=X, <=X, ==X
+            max_increment = 0
+            for rule, inc in increments_card.items():
+                try:
+                    inc_val = float(inc)
+                    matched = False
+                    if rule.startswith(">="):
+                        matched = closed_count >= int(rule[2:])
+                    elif rule.startswith("<="):
+                        matched = closed_count <= int(rule[2:])
+                    elif rule.startswith("=="):
+                        matched = closed_count == int(rule[2:])
+                    elif rule.startswith(">"):
+                        matched = closed_count > int(rule[1:])
+                    elif rule.startswith("<"):
+                        matched = closed_count < int(rule[1:])
+                    elif rule.isdigit():
+                        matched = closed_count == int(rule)
+                        
+                    if matched and inc_val > max_increment:
+                        max_increment = inc_val
+                except ValueError:
+                    pass
+            grace_period += max_increment
             
         now = datetime.now(timezone.utc)
         current_timestamp = int(now.timestamp())
@@ -70,8 +101,7 @@ class TimeControl:
         virtual_time = current_timestamp + SHIFT_INTERVAL
         nearest_timestamp = (virtual_time // self.interval_seconds) * self.interval_seconds
 
-        # Если с момента начала свечи прошло меньше 60 секунд — окно открыто
-        return (virtual_time - nearest_timestamp) < GRACE_PERIOD_SEC
+        return (virtual_time - nearest_timestamp) < grace_period, grace_period
 
 if __name__ == "__main__":
     
@@ -80,7 +110,8 @@ if __name__ == "__main__":
     
     try:
         while True:
-            if tc.is_new_interval():
+            is_signal, grace = tc.is_new_interval()
+            if is_signal:
                 now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
                 print(f"СИГНАЛ! Точное время (UTC): {now_utc}")
             time.sleep(1)

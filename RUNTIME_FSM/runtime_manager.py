@@ -87,6 +87,7 @@ class RuntimeFsmManager:
                 # Копируем словари
                 state.grid = copy.deepcopy(side_cache.get("grid", {}))
                 state.tp_map = copy.deepcopy(side_cache.get("tp_map", {}))
+                state.tp_purpose = side_cache.get("tp_purpose", "self")
                 
     # =========================================================================
     # СИНХРОНИЗАЦИЯ ПОСЛЕ ЗАПУСКА СТРИМА И СНЕПШОТОВ
@@ -126,6 +127,8 @@ class RuntimeFsmManager:
                     "pending_rolling_tp": state.pending_rolling_tp,
                     "grid": copy.deepcopy(state.grid),
                     "tp_map": copy.deepcopy(state.tp_map),
+                    "tp_purpose": state.tp_purpose,
+                    "recent_closes": state.recent_closes,
                 }
                 
                 changed = False

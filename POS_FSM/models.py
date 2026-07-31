@@ -29,6 +29,9 @@ class PositionState:
     
     grid: dict = field(default_factory=dict)
     tp_map: dict = field(default_factory=dict)
+    tp_purpose: str = "self"
+    recent_closes: list = field(default_factory=list)
+    last_grace_period: float = 0.0
     
     def set_in_position(self, status: bool):
         self.in_position = status
@@ -53,6 +56,7 @@ class PositionState:
         for k, v in self.grid.items():
             v["is_active"] = False
             v["price"] = None
+            v["timestamp"] = None
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

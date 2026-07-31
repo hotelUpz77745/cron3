@@ -317,7 +317,8 @@ class BotCore:
                 logger.info(f"[{symbol}] {side} FSM synced at start! New avg_entry_price: {state.avg_entry_price}")
 
             # 2. Математика расчета объема и TP (Используем реальный объем из стрима)
-            await self.tp_manager.place_take_profit(self.client, symbol, side, current_price, self.spec_data, state)
+            opposite_state = self.fsm_states[symbol]["SHORT"] if side == "LONG" else self.fsm_states[symbol]["LONG"]
+            await self.tp_manager.place_take_profit(self.client, symbol, side, current_price, self.spec_data, state, opposite_state)
             
         finally:
             # ВСЕГДА сбрасываем временный флаг защиты от двойного входа
@@ -336,6 +337,9 @@ class BotCore:
         if sides_to_reset:
             for idx, side in enumerate(sides_to_reset):
                 logger.info(f"[{symbol}] {side} is_finished. Running analytics and resetting runtime cache...")
+                
+                # Записываем метку времени для smart_grace
+                states[side].recent_closes.append(time.time())
                 
                 # Вызов аналитики
                 open_time = runtime_cfg.get(side, {}).get("open_time", 0)
@@ -358,7 +362,7 @@ class BotCore:
             # Сохраняем рантайм (сразу за обе стороны, если их было две)
             await self.runtime_manager.save_cache(symbol)
 
-    async def _process_symbol_loop(self, symbol: str, is_signal: bool):
+    async def _process_symbol_loop(self, symbol: str):
         runtime_cfg = self.runtime_configs.get(symbol, {})
         states = self.fsm_states[symbol]
         
@@ -414,6 +418,21 @@ class BotCore:
                 continue
             
             if not state.in_position and not state.in_position_papper:
+                # Calculate closed_count for smart_grace
+                now = time.time()
+                smart_grace_cfg = _CFG.get("signal", {}).get("smart_grace", {})
+                eval_window = smart_grace_cfg.get("eval_window_sec", 300)
+                state.recent_closes = [t for t in state.recent_closes if now - t <= eval_window]
+                closed_count = len(state.recent_closes)
+                
+                is_signal, current_grace = self.time_control.is_new_interval(closed_count, smart_grace_cfg)
+                
+                # Логируем изменения окна благодати
+                if state.last_grace_period != current_grace:
+                    if state.last_grace_period != 0.0:
+                        logger.info(f"[{symbol}] {side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
+                    state.last_grace_period = current_grace
+                    
                 if is_signal and not BLOCK_ENTRY:
                     logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
                     # Ставим временный флаг идемпотентности
@@ -422,7 +441,8 @@ class BotCore:
             
             else:
                 # Позиция уже открыта (или в процессе in_position_papper)
-                await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, self.tp_manager)
+                opposite_state = states["SHORT"] if side == "LONG" else states["LONG"]
+                await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
                 await self.fallback_tp_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data)
 
         if signal_tasks:
@@ -436,6 +456,14 @@ class BotCore:
         created_new = build_runtime_caches()
         if created_new and not TG_ENABLED:
             prompt_runtime_check()
+            
+        # ШАГ 1.5. ПЕРВЫЙ РАСЧЕТ ВОЛАТИЛЬНОСТИ
+        if hasattr(self, 'volatility_manager'):
+            try:
+                await self.volatility_manager.process_all()
+            except Exception as e:
+                logger.error(f"Error during initial VolatilityManager process_all: {e}")
+            self.volatility_manager.start()
         
         self.runtime_manager.load_initial_caches(self.symbols)
         self.runtime_configs = self.runtime_manager.caches
@@ -514,9 +542,6 @@ class BotCore:
                     await asyncio.sleep(1.0)
                     continue
 
-                # Источник сигнала для позиции, которая не в позиции
-                is_signal = self.time_control.is_new_interval()
-
                 # Pre-flight bulk price update
                 stale_symbols = []
                 now = time.time()
@@ -533,7 +558,7 @@ class BotCore:
                     except Exception as e:
                         logger.error(f"Bulk price fetch failed: {e}")
 
-                tasks = [self._process_symbol_loop(symbol, is_signal) for symbol in self.symbols]
+                tasks = [self._process_symbol_loop(symbol) for symbol in self.symbols]
                 await asyncio.gather(*tasks)
                 
                 # Синхронизация рантаймов при изменениях в PositionState (постоянный контроль)
@@ -582,7 +607,6 @@ class BotCore:
         self.analytics.start_realtime_tracker(self.client)
 
         self.volatility_manager = VolatilityManager(self)
-        self.volatility_manager.start()
         
         await self._game_loop()
 

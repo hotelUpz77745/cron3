@@ -50,8 +50,11 @@ class VolatilityManager:
             
             # Wait for next update interval
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            app_cfg = app_data.get("super_grid", {})
-            interval_hours = app_cfg.get("update_interval_hours", 12)
+            if "super_grid" in app_data:
+                app_cfg = app_data["super_grid"]
+                interval_hours = app_cfg["update_interval_hours"]
+            else:
+                interval_hours = 12
             wait_sec = interval_hours * 3600
             if wait_sec <= 0:
                 wait_sec = 3600 # default 1 hour fallback
@@ -60,9 +63,12 @@ class VolatilityManager:
 
     async def process_all(self):
         app_data = Utils.read_json_file(DATA_DIR / "app.json")
-        app_cfg = app_data.get("super_grid", {})
+        if "super_grid" not in app_data:
+            return
+            
+        app_cfg = app_data["super_grid"]
         
-        is_enabled = app_cfg.get("enabled", False)
+        is_enabled = app_cfg["enabled"]
 
         symbols = list(self.bot_core.symbols)
         if not symbols:
@@ -91,10 +97,15 @@ class VolatilityManager:
             
             if is_advanced:
                 safe_window = min(window, 1500)
-                klines = await self.bot_core.client.get_klines(symbol, timeframe, safe_window)
-                if not klines or len(klines) == 0:
-                    logger.warning(f"[VolatilityManager] [{symbol}] Failed to fetch klines or empty.")
+                try:
+                    klines = await self.bot_core.client.get_klines(symbol, timeframe, safe_window)
+                    if not klines or len(klines) == 0:
+                        logger.warning(f"[VolatilityManager] [{symbol}] Failed to fetch klines or empty.")
+                        continue
+                except Exception as e:
+                    logger.error(f"[VolatilityManager] [{symbol}] API error fetching klines: {e}")
                     continue
+                    
                     
                 # Calculate average volatility
                 total_vol = 0.0

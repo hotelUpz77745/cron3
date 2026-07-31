@@ -11,10 +11,19 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": false
+        "auto_start": true
     },
     "signal": {
-        "timeframe": "5m"
+        "timeframe": "5m",
+        "smart_grace": {
+            "start_period_sec": 90,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "<2": 0,
+                ">2": 120,
+                ">4": 150
+            }
+        }
     },
     "logging": {
         "debug": true,
@@ -26,11 +35,8 @@
         "log_to_file": true
     },
     "symbols": [
-        "STABLEUSDT",
-        "JUPUSDT",
-        "KGENUSDT",
-        "MMTUSDT",
-        "SOLUSDT"
+        "COLLECTUSDT",
+        "PRLUSDT"
     ],
     "telegram": {
         "enabled": true,
