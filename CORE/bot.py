@@ -54,7 +54,7 @@ from CORE.ADVANCED.volatility_manager import VolatilityManager
 from consts import _CFG
 logger = UnifiedLogger("BotCore")
 
-BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
+BLOCK_ENTRY = True  # Глобальный флаг блокировки входа в позиции (для отладки)
 
 class BotCore:
     def __init__(self):
