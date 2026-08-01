@@ -96,11 +96,21 @@ class RedisManager:
                 except Exception:
                     pass
             
+            cfg_map = {}
+            for file_path in DATA_DIR.glob("*.json"):
+                try:
+                    content = file_path.read_text(encoding="utf-8")
+                    cfg_map[file_path.name] = content
+                except Exception:
+                    pass
+            
             async with self.redis_client.pipeline(transaction=True) as pipe:
                 if states_map:
                     pipe.hset(f"{SEMAPHORE_BOT_NAME}:runtime:states", mapping=states_map)
                 if analytics_map:
                     pipe.hset(f"{SEMAPHORE_BOT_NAME}:runtime:analytics", mapping=analytics_map)
+                if cfg_map:
+                    pipe.hset(f"{SEMAPHORE_BOT_NAME}:runtime:cfg", mapping=cfg_map)
                 
                 await pipe.execute()
                 
@@ -137,6 +147,16 @@ class RedisManager:
                 if "ledger" in analytics_data:
                     (ANALYTICS_DIR / "trades_ledger.txt").write_text(analytics_data["ledger"], encoding="utf-8")
                     logger.info("Restored trades_ledger.txt from Redis.")
+                    
+            # 3. Pull CFG
+            cfg_data = await self.redis_client.hgetall(f"{SEMAPHORE_BOT_NAME}:runtime:cfg")
+            if cfg_data:
+                for filename, content in cfg_data.items():
+                    try:
+                        (DATA_DIR / filename).write_text(content, encoding="utf-8")
+                    except Exception as e:
+                        logger.error(f"Failed to restore {filename}: {e}")
+                logger.info(f"Restored {len(cfg_data)} CFG files from Redis.")
                     
             logger.info("Failover data pull completed successfully.")
             return True

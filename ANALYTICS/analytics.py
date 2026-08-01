@@ -149,6 +149,61 @@ class AnalyticsManager:
             except Exception as e:
                 logger.error(f"Error appending to CSV: {e}")
 
+    async def reset_analytics_state(self):
+        """Полный сброс аналитики (удаление файлов) с соблюдением блокировок."""
+        async with self._lock:
+            async with self._csv_lock:
+                if self.log_file.exists():
+                    try:
+                        os.remove(self.log_file)
+                    except Exception as e:
+                        logger.error(f"Error removing {self.log_file}: {e}")
+                
+                if self.txt_file.exists():
+                    try:
+                        os.remove(self.txt_file)
+                    except Exception as e:
+                        logger.error(f"Error removing {self.txt_file}: {e}")
+
+    async def set_initial_balance(self, new_balance: float):
+        """Установка начального баланса с соблюдением блокировок и сбросом истории."""
+        async with self._lock:
+            data = self._read_data()
+            now_ms = int(time.time() * 1000)
+            
+            data["start_balance_usdt"] = round(new_balance, 4)
+            data["cur_balance_usdt"] = round(new_balance, 4)
+            data["first_trade_ts"] = now_ms
+            
+            data["total_trades"] = 0
+            data["winning_trades"] = 0
+            data["winrate_pct"] = 0.0
+            data["realized_pnl_usdt"] = 0.0
+            data["realized_pnl_net_usdt"] = 0.0
+            data["net_profit_usdt"] = 0.0
+            data["unrealized_pnl_usdt"] = 0.0
+            data["total_commission_usdt"] = 0.0
+            data["total_funding_usdt"] = 0.0
+            data["per_coin"] = {}
+            
+            data["peak_balance_usdt"] = round(new_balance, 4)
+            data["_current_trough_usdt"] = round(new_balance, 4)
+            data["min_balance_usdt"] = round(new_balance, 4)
+            data["max_drawdown_usdt"] = 0.0
+            data["performance_usdt"] = 0.0
+            data["recovery_factor"] = 0.0
+            data["roi_pct"] = 0.0
+            
+            self._write_data(data)
+            
+            async with self._csv_lock:
+                try:
+                    with open(self.txt_file, "w", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=";")
+                        writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                except Exception as e:
+                    logger.error(f"Error resetting CSV: {e}")
+
 
     def record_finished_position(self, client, symbol: str, side: str, open_time: int, close_time: int):
         """Запускает фоновую задачу для подтягивания PnL и записи в лог."""

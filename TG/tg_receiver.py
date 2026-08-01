@@ -165,7 +165,15 @@ class TelegramReceiver:
         async def start_cmd(message: Message, state: FSMContext):
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
-            text = f"<b>Control Panel</b>\nCurrent Status: {status}"
+            
+            node_status = ""
+            if getattr(self.bot_core, 'semaphore', None):
+                if self.bot_core.semaphore.is_active:
+                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
+                else:
+                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
+                    
+            text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         @self.dp.message(Command("quant"))
@@ -272,7 +280,15 @@ class TelegramReceiver:
         async def on_cancel(message: Message, state: FSMContext):
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
-            text = f"<b>Control Panel</b>\nCurrent Status: {status}"
+            
+            node_status = ""
+            if getattr(self.bot_core, 'semaphore', None):
+                if self.bot_core.semaphore.is_active:
+                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
+                else:
+                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
+                    
+            text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         @self.dp.message(F.text == "✅ Confirm Start")
@@ -317,9 +333,17 @@ class TelegramReceiver:
         async def on_status(message: Message, state: FSMContext):
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+            
+            node_status = ""
+            if getattr(self.bot_core, 'semaphore', None):
+                if self.bot_core.semaphore.is_active:
+                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
+                else:
+                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
+                    
             super_grid_enabled = _CFG["super_grid"]["enabled"]
             super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"
-            text = f"<b>Control Panel</b>\nCurrent Status: {status}\nSuper Grid (Volatility): {super_grid_status}"
+            text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}\nSuper Grid (Volatility): {super_grid_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         @self.dp.message(F.text == "📜 Logs")
@@ -388,18 +412,11 @@ class TelegramReceiver:
                 
             if message.text.strip().upper() == "СБРОС":
                 await state.clear()
-                analytics_path = ANALYTICS_DIR / "analytics.json"
-                if analytics_path.exists():
-                    try:
-                        os.remove(analytics_path)
-                        csv_path = ANALYTICS_DIR / "trades_ledger.txt"
-                        if csv_path.exists():
-                            os.remove(csv_path)
-                        await message.answer("✅ Файл аналитики успешно удален. Он будет создан заново при следующем обновлении.", reply_markup=self._get_main_keyboard())
-                    except Exception as e:
-                        await message.answer(f"❌ Ошибка при удалении файла аналитики: {e}", reply_markup=self._get_main_keyboard())
-                else:
-                    await message.answer("⚠️ Файл аналитики не найден.", reply_markup=self._get_main_keyboard())
+                try:
+                    await self.bot_core.analytics.reset_analytics_state()
+                    await message.answer("✅ Файл аналитики успешно удален. Он будет создан заново при следующем обновлении.", reply_markup=self._get_main_keyboard())
+                except Exception as e:
+                    await message.answer(f"❌ Ошибка при удалении файла аналитики: {e}", reply_markup=self._get_main_keyboard())
             else:
                 await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
         @self.dp.callback_query(F.data == "analytics_set_balance")
@@ -424,56 +441,11 @@ class TelegramReceiver:
                 await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Back:")
                 return
                 
-            analytics_path = ANALYTICS_DIR / "analytics.json"
-            ledger_path = ANALYTICS_DIR / "trades_ledger.txt"
-            if analytics_path.exists():
-                try:
-                    with open(analytics_path, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                    
-                    now_ms = int(time.time() * 1000)
-                    
-                    data["start_balance_usdt"] = round(new_balance, 4)
-                    data["cur_balance_usdt"] = round(new_balance, 4)
-                    
-                    # Сбрасываем точку отсчета Deep Sync на текущий момент,
-                    # чтобы после сброса не подтягивались старые сделки с биржи
-                    data["first_trade_ts"] = now_ms
-                    
-                    # Сбрасываем все PnL и счётчики
-                    data["total_trades"] = 0
-                    data["winning_trades"] = 0
-                    data["winrate_pct"] = 0.0
-                    data["realized_pnl_usdt"] = 0.0
-                    data["realized_pnl_net_usdt"] = 0.0
-                    data["net_profit_usdt"] = 0.0
-                    data["unrealized_pnl_usdt"] = 0.0
-                    data["total_commission_usdt"] = 0.0
-                    data["total_funding_usdt"] = 0.0
-                    data["per_coin"] = {}
-                    
-                    # Сбрасываем пики/просадки
-                    data["peak_balance_usdt"] = round(new_balance, 4)
-                    data["_current_trough_usdt"] = round(new_balance, 4)
-                    data["min_balance_usdt"] = round(new_balance, 4)
-                    data["max_drawdown_usdt"] = 0.0
-                    data["performance_usdt"] = 0.0
-                    data["recovery_factor"] = 0.0
-                    data["roi_pct"] = 0.0
-
-                    with open(analytics_path, "w", encoding="utf-8") as f:
-                        json.dump(data, f, indent=4)
-                    
-                    # Очищаем лог сделок (оставляем только заголовок)
-                    with open(ledger_path, "w", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f, delimiter=";")
-                        writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
-                        
-                    await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.\nСтатистика и журнал сделок сброшены.", reply_markup=self._get_main_keyboard())
-                except Exception as e:
-                    await message.answer(f"❌ Ошибка обновления файла аналитики: {e}", reply_markup=self._get_main_keyboard())
-            else:
-                await message.answer("⚠️ Файл аналитики пока не существует. Подождите, пока бот создаст его.", reply_markup=self._get_main_keyboard())
+            try:
+                await self.bot_core.analytics.set_initial_balance(new_balance)
+                await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.\nСтатистика и журнал сделок сброшены.", reply_markup=self._get_main_keyboard())
+            except Exception as e:
+                await message.answer(f"❌ Ошибка обновления файла аналитики: {e}", reply_markup=self._get_main_keyboard())
                 
             await state.clear()
 

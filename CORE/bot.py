@@ -54,7 +54,7 @@ from CORE.ADVANCED.volatility_manager import VolatilityManager
 from consts import _CFG
 logger = UnifiedLogger("BotCore")
 
-BLOCK_ENTRY = True  # Глобальный флаг блокировки входа в позиции (для отладки)
+BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
 
 class BotCore:
     def __init__(self):
@@ -566,10 +566,11 @@ class BotCore:
                 if self.semaphore:
                     self.semaphore.tick("start")
                     if not self.semaphore.is_active:
-                        if not self.was_passive:
+                        if not self.was_passive or getattr(self, '_first_passive_log', True):
                             from consts import SEMAPHORE_SERVER_NAME
                             logger.info(f"[{SEMAPHORE_SERVER_NAME}] 🟡 Я РЕЗЕРВ. Сплю, жду отвала основного сервера...")
                             self.was_passive = True
+                            self._first_passive_log = False
                         await asyncio.sleep(1.0)
                         self.semaphore.tick("end")
                         continue
@@ -582,6 +583,27 @@ class BotCore:
                             if self.redis_manager:
                                 success = await self.redis_manager.pull_failover_data()
                                 if success:
+                                    try:
+                                        from c_utils import Utils
+                                        from consts import CFG_PATH
+                                        new_app = Utils.read_json_file(CFG_PATH)
+                                        if "symbols" in new_app:
+                                            new_symbols = new_app["symbols"]
+                                            if isinstance(new_symbols, dict):
+                                                new_symbols = list(new_symbols.keys())
+                                            else:
+                                                new_symbols = list(new_symbols)
+                                                
+                                            to_add = set(new_symbols) - set(self.symbols)
+                                            to_remove = set(self.symbols) - set(new_symbols)
+                                            
+                                            for sym in to_add:
+                                                await self.add_symbol(sym)
+                                            for sym in to_remove:
+                                                await self.delete_symbol(sym)
+                                    except Exception as e:
+                                        logger.error(f"Error dynamically syncing symbols after failover: {e}")
+                                
                                     self.runtime_manager.load_initial_caches(self.symbols)
                                     self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
                                     await self.pos_monitor.sync_from_rest(self.client, self.symbols)
@@ -678,6 +700,9 @@ class BotCore:
 
     async def close_all_positions(self):
         """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
+        if getattr(self, 'semaphore', None) and not self.semaphore.is_active:
+            raise Exception("Действие заблокировано: Эта нода сейчас в пассивном режиме (РЕЗЕРВ)!")
+            
         symbols = _CFG["symbols"]
         
         # 1. Отмена лимитных ордеров
