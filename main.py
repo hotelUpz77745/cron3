@@ -97,7 +97,7 @@ if __name__ == "__main__":
 # В терминале Git Bash, находясь в папке с проектом:
 # source C:/Users/User/Desktop/My_Pro/HP_EliteBook_735_old/WORKSPACE/COMMON/.ssh-autostart.sh
 
-# git push --set-upstream origin master
+# git push --set-upstream origin master 
 # # git config --global push.autoSetupRemote true
 # # ssh -T git@github.com 
 # # git log -1
