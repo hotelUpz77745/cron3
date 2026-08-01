@@ -15,7 +15,7 @@ except ImportError:
     redis = None
     
 from c_log import UnifiedLogger
-from consts import REDIS_ENABLED, REDIS_URL, DATA_DIR, ANALYTICS_DIR
+from consts import REDIS_ENABLED, REDIS_URL, DATA_DIR, ANALYTICS_DIR, SEMAPHORE_BOT_NAME
 
 logger = UnifiedLogger("RedisManager")
 
@@ -98,9 +98,9 @@ class RedisManager:
             
             async with self.redis_client.pipeline(transaction=True) as pipe:
                 if states_map:
-                    pipe.hset("bot:runtime:states", mapping=states_map)
+                    pipe.hset(f"{SEMAPHORE_BOT_NAME}:runtime:states", mapping=states_map)
                 if analytics_map:
-                    pipe.hset("bot:runtime:analytics", mapping=analytics_map)
+                    pipe.hset(f"{SEMAPHORE_BOT_NAME}:runtime:analytics", mapping=analytics_map)
                 
                 await pipe.execute()
                 
@@ -120,7 +120,7 @@ class RedisManager:
         try:
             logger.info("Pulling failover data from Redis...")
             # 1. Pull states
-            states = await self.redis_client.hgetall("bot:runtime:states")
+            states = await self.redis_client.hgetall(f"{SEMAPHORE_BOT_NAME}:runtime:states")
             if states:
                 runtime_dir = DATA_DIR / "runtime"
                 runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -129,7 +129,7 @@ class RedisManager:
                 logger.info(f"Restored {len(states)} symbol states from Redis.")
                 
             # 2. Pull analytics
-            analytics_data = await self.redis_client.hgetall("bot:runtime:analytics")
+            analytics_data = await self.redis_client.hgetall(f"{SEMAPHORE_BOT_NAME}:runtime:analytics")
             if analytics_data:
                 if "global" in analytics_data:
                     (ANALYTICS_DIR / "analytics.json").write_text(analytics_data["global"], encoding="utf-8")
