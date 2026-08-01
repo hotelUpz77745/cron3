@@ -56,6 +56,7 @@ class TGStates(StatesGroup):
     waiting_for_autoclose_pos_inc = State()
     waiting_for_autoclose_neg_th = State()
     waiting_for_autoclose_neg_inc = State()
+    waiting_for_risk_roi = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -102,8 +103,11 @@ class TelegramReceiver:
             [
                 KeyboardButton(text="🔔 Notifications"),
                 KeyboardButton(text="🔧 Super Grid"),
-                KeyboardButton(text="🚨 Close All"),
-                KeyboardButton(text="🛑 Auto Closing")
+                KeyboardButton(text="🚨 Close All")
+            ],
+            [
+                KeyboardButton(text="🛑 Auto Closing"),
+                KeyboardButton(text="🛡️ Risk System")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -1857,6 +1861,80 @@ class TelegramReceiver:
         @self.dp.message(StateFilter(TGStates.waiting_for_autoclose_neg_inc))
         async def handle_autoclose_neg_inc(message: Message, state: FSMContext):
             await save_autoclose_field(message, state, "negative", "threshold_increment")
+
+        @self.dp.message(F.text == "🛡️ Risk System")
+        async def on_risk_system(message: Message, state: FSMContext):
+            await state.clear()
+            app_data = Utils.read_json_file(DATA_DIR / "app.json")
+            risk_cfg = app_data.get("stop_bot_rirk_system", {})
+            enabled = risk_cfg.get("enabled", False)
+            roi = risk_cfg.get("roi_critical_level_pct", -41.0)
+            
+            status = "✅ Включена" if enabled else "❌ Выключена"
+            text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Выключить" if enabled else "Включить", callback_data="risk_toggle")],
+                [InlineKeyboardButton(text="Изменить уровень ROI", callback_data="risk_set_roi")]
+            ])
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "risk_toggle")
+        async def on_risk_toggle(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path)
+            risk_cfg = app_data.get("stop_bot_rirk_system", {})
+            
+            enabled = not risk_cfg.get("enabled", False)
+            if "stop_bot_rirk_system" not in app_data:
+                app_data["stop_bot_rirk_system"] = {}
+            app_data["stop_bot_rirk_system"]["enabled"] = enabled
+            Utils.write_json_file(app_json_path, app_data)
+            
+            await callback.answer(f"Risk System {'включена' if enabled else 'выключена'}!")
+            
+            roi = app_data["stop_bot_rirk_system"].get("roi_critical_level_pct", -41.0)
+            status = "✅ Включена" if enabled else "❌ Выключена"
+            text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Выключить" if enabled else "Включить", callback_data="risk_toggle")],
+                [InlineKeyboardButton(text="Изменить уровень ROI", callback_data="risk_set_roi")]
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "risk_set_roi")
+        async def on_risk_set_roi(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            await callback.answer()
+            await callback.message.answer("Введите новый критический уровень ROI (в процентах, например -40.5):", reply_markup=self._get_back_keyboard())
+            await state.set_state(TGStates.waiting_for_risk_roi)
+
+        @self.dp.message(StateFilter(TGStates.waiting_for_risk_roi))
+        async def process_risk_roi(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Изменение уровня ROI отменено.", reply_markup=self._get_main_keyboard())
+                return
+                
+            try:
+                new_roi = float(message.text.replace(',', '.'))
+                if new_roi > 0:
+                    new_roi = -new_roi # auto convert to negative
+            except ValueError:
+                await message.answer("❌ Некорректное число. Попробуйте еще раз:")
+                return
+                
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path)
+            if "stop_bot_rirk_system" not in app_data:
+                app_data["stop_bot_rirk_system"] = {}
+                
+            app_data["stop_bot_rirk_system"]["roi_critical_level_pct"] = new_roi
+            Utils.write_json_file(app_json_path, app_data)
+            
+            await message.answer(f"✅ Критический уровень ROI установлен на <b>{new_roi}%</b>.", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+            await state.clear()
 
     async def start(self):
         logger.info("Starting Telegram Receiver...")

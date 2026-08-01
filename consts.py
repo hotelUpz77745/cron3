@@ -50,7 +50,7 @@ API_KEY: str = os.getenv("API_KEY") or ""
 API_SECRET: str = os.getenv("API_SECRET") or ""
 TG_TOKEN: str = os.getenv("TG_TOKEN") or ""
 REDIS_ENABLED: bool = bool(_CFG["redis"]["enabled"])
-REDIS_URL: str = str(_CFG["redis"]["url"])
+REDIS_URL: str = os.getenv("REDIS_URL") or ""
 
 SEMAPHORE_ENABLED: bool = bool(_CFG["node"]["semaphore_enabled"])
 SEMAPHORE_BOT_NAME: str = str(_CFG["node"]["bot_name"])

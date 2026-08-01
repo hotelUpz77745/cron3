@@ -95,12 +95,12 @@
         "roi_critical_level_pct": -41
     },
     "redis": {
-        "enabled": false,
-        "url": "redis://localhost:6379/0"
+        "_comment": "URL для подключения теперь спрятан в файле .env (ключ REDIS_URL)",
+        "enabled": true
     },
     "node": {
         "_comment": "arbiter_ip_home: 127.0.0.1",
-        "semaphore_enabled": false,
+        "semaphore_enabled": true,
         "bot_name": "hron",
         "arbiter_ip": "103.27.132.132",
         "pull_port": 5555,
