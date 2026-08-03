@@ -40,9 +40,11 @@ class NodeSemaphore:
         self.ctx = zmq.Context()
         
         self.push_sock = self.ctx.socket(zmq.PUSH)
+        self.push_sock.setsockopt(zmq.LINGER, 0)
         self.push_sock.connect(f"tcp://{arbiter_ip}:{pull_port}")
         
         self.sub_sock = self.ctx.socket(zmq.SUB)
+        self.sub_sock.setsockopt(zmq.LINGER, 0)
         self.sub_sock.connect(f"tcp://{arbiter_ip}:{pub_port}")
         self.sub_sock.setsockopt_string(zmq.SUBSCRIBE, "")
         self.sub_sock.setsockopt(zmq.CONFLATE, 1) # Только самое свежее сообщение
@@ -75,6 +77,6 @@ class NodeSemaphore:
                 "server_name": self.server_name,
                 "status": status,
                 "timestamp": time.time()
-            })
+            }, flags=zmq.NOBLOCK)
         except Exception:
             pass

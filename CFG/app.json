@@ -26,7 +26,7 @@
         }
     },
     "logging": {
-        "debug": true,
+        "debug": false,
         "info": true,
         "warning": true,
         "error": true,
@@ -59,7 +59,7 @@
         "min_volatility_pct": 25.0,
         "max_volatility_pct": 40.0,
         "strict_window": true,
-        "min_dayly_vol_usdt": null
+        "min_dayly_vol_usdt": 3000000
     },
     "watchdog": {
         "timeout_sec": 60,
@@ -93,11 +93,11 @@
     },
     "redis": {
         "_comment": "URL для подключения теперь спрятан в файле .env (ключ REDIS_URL)",
-        "enabled": true
+        "enabled": false
     },
     "node": {
         "_comment": "arbiter_ip_home: 127.0.0.1",
-        "semaphore_enabled": true,
+        "semaphore_enabled": false,
         "bot_name": "hron",
         "arbiter_ip": "103.27.132.132",
         "pull_port": 5555,

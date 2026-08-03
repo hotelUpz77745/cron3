@@ -213,3 +213,8 @@ sudo systemctl status redis-server
 ```
 
 Всё! Теперь ваш сервер Redis защищен паролем и готов безопасно общаться с торговыми нодами. Не забудьте обновить пароль в файле `.env` на обеих нодах.
+
+
+
+
+sudo systemctl stop redis-server
