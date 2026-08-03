@@ -3,9 +3,10 @@
         "enable": true,
         "invest_size": 400,
         "leverage": 10,
-        "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
+        "_comment_tp_purpose": "self, opposite, both",
         "tp_purpose": "both",
+        "margin_type": "CROSSED",
         "grid": {
             "0": {
                 "indent": 0,

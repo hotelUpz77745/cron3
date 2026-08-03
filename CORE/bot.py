@@ -458,10 +458,13 @@ class BotCore:
                     state.last_grace_period = current_grace
                     
                 if is_signal and not BLOCK_ENTRY and not getattr(self, 'entry_blocked', False):
-                    logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
-                    # Ставим временный флаг идемпотентности
-                    state.in_position_papper = True
-                    signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
+                    if getattr(self, 'block_until_timestamp', 0) > time.time():
+                        logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked due to Close All until {self.block_until_timestamp}")
+                    else:
+                        logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
+                        # Ставим временный флаг идемпотентности
+                        state.in_position_papper = True
+                        signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
             
             else:
                 # Позиция уже открыта (или в процессе in_position_papper)
@@ -735,6 +738,16 @@ class BotCore:
                     )
         except Exception as e:
             logger.error(f"Error while fetching/closing positions: {e}")
+            
+        # Блокируем новые входы до начала следующей свечи
+        try:
+            now = time.time()
+            interval = self.time_control.interval_seconds
+            next_candle = ((now // interval) + 1) * interval
+            self.block_until_timestamp = next_candle
+            logger.warning(f"Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
+        except Exception as e:
+            logger.error(f"Error while calculating block_until_timestamp: {e}")
 
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""

@@ -531,7 +531,10 @@ class TelegramReceiver:
                         realized = float(cdata.get("realized_pnl_net_usdt", 0))
                         if realized == 0:
                             return 0
-                        return net / realized
+                        val = abs(net / realized)
+                        if net < 0 or realized < 0:
+                            return -val
+                        return val
                     sorted_coins = sorted(per_coin.items(), key=lambda x: nr_ratio(x[1]), reverse=True)
                     title = "по N/R (Net/Realized, больше = лучше)"
                 else: # Default net
@@ -550,7 +553,11 @@ class TelegramReceiver:
                     elif criterion == "nr":
                         net = float(cdata.get("net_profit_usdt", 0))
                         realized = float(cdata.get("realized_pnl_net_usdt", 0))
-                        ratio = round(net / realized, 4) if realized != 0 else 0
+                        if realized == 0:
+                            ratio = 0
+                        else:
+                            val = abs(net / realized)
+                            ratio = round(-val if (net < 0 or realized < 0) else val, 4)
                         val_str = f"N/R: {ratio}"
                     else:
                         net_profit = cdata.get("net_profit_usdt", 0)
