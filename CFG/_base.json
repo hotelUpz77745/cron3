@@ -1,7 +1,7 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 25,
+        "invest_size": 400,
         "leverage": 10,
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "_comment_tp_purpose": "self, opposite, both",
@@ -10,7 +10,32 @@
         "grid": {
             "0": {
                 "indent": 0,
-                "volume": 100,
+                "volume": 12.96,
+                "super_indent": null
+            },
+            "1": {
+                "indent": -5.0,
+                "volume": 14.26,
+                "super_indent": null
+            },
+            "2": {
+                "indent": -8.0,
+                "volume": 15.68,
+                "super_indent": null
+            },
+            "3": {
+                "indent": -13.0,
+                "volume": 17.25,
+                "super_indent": null
+            },
+            "4": {
+                "indent": -21.0,
+                "volume": 18.98,
+                "super_indent": null
+            },
+            "5": {
+                "indent": -34.0,
+                "volume": 20.87,
                 "super_indent": null
             }
         },
@@ -18,12 +43,32 @@
             "0": {
                 "indent": 0.6,
                 "fallback_indent": 1.0
+            },
+            "1": {
+                "indent": 0.7,
+                "fallback_indent": 1.6
+            },
+            "2": {
+                "indent": 1.0,
+                "fallback_indent": 2.3
+            },
+            "3": {
+                "indent": 1.4,
+                "fallback_indent": 3.0
+            },
+            "4": {
+                "indent": 1.9,
+                "fallback_indent": 3.6
+            },
+            "5": {
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 25,
+        "invest_size": 400,
         "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
@@ -31,7 +76,32 @@
         "grid": {
             "0": {
                 "indent": 0,
-                "volume": 100,
+                "volume": 12.96,
+                "super_indent": null
+            },
+            "1": {
+                "indent": -5.0,
+                "volume": 14.26,
+                "super_indent": null
+            },
+            "2": {
+                "indent": -8.0,
+                "volume": 15.68,
+                "super_indent": null
+            },
+            "3": {
+                "indent": -13.0,
+                "volume": 17.25,
+                "super_indent": null
+            },
+            "4": {
+                "indent": -21.0,
+                "volume": 18.98,
+                "super_indent": null
+            },
+            "5": {
+                "indent": -34.0,
+                "volume": 20.87,
                 "super_indent": null
             }
         },
@@ -39,6 +109,26 @@
             "0": {
                 "indent": 0.6,
                 "fallback_indent": 1.0
+            },
+            "1": {
+                "indent": 0.7,
+                "fallback_indent": 1.6
+            },
+            "2": {
+                "indent": 1.0,
+                "fallback_indent": 2.3
+            },
+            "3": {
+                "indent": 1.4,
+                "fallback_indent": 3.0
+            },
+            "4": {
+                "indent": 1.9,
+                "fallback_indent": 3.6
+            },
+            "5": {
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
