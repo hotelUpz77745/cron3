@@ -588,16 +588,33 @@ class TelegramReceiver:
                     ]
                 ])
                     
-                # If callback was a direct button press from the main menu, we send a new message.
-                # If it was a switch from the ranking menu itself, we can edit the message.
-                if len(parts) > 1:
+                # Split messages if too long
+                messages = []
+                current_msg = ""
+                for line in lines:
+                    if len(current_msg) + len(line) + 1 > 4000:
+                        messages.append(current_msg)
+                        current_msg = line + "\n"
+                    else:
+                        current_msg += line + "\n"
+                if current_msg:
+                    messages.append(current_msg)
+
+                if len(parts) > 1 and len(messages) == 1:
                     try:
-                        await callback.message.edit_text("\n".join(lines), parse_mode="HTML", reply_markup=switch_kb)
+                        await callback.message.edit_text(messages[0], parse_mode="HTML", reply_markup=switch_kb)
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
                             raise
                 else:
-                    await callback.message.answer("\n".join(lines), parse_mode="HTML", reply_markup=switch_kb)
+                    if len(parts) > 1:
+                        try:
+                            await callback.message.delete()
+                        except Exception:
+                            pass
+                    for i, msg in enumerate(messages):
+                        rm = switch_kb if i == len(messages) - 1 else None
+                        await callback.message.answer(msg, parse_mode="HTML", reply_markup=rm)
             except Exception as e:
                 logger.error(f"Error generating ranking: {e}")
                 await callback.message.answer("Ошибка генерации рейтинга.")

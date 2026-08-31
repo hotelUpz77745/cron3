@@ -11,8 +11,74 @@ from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
 import time
 import asyncio
+from typing import Dict, Any, Tuple
+from POS_FSM.models import PositionState
+from c_log import UnifiedLogger
+from c_utils import Utils
 
 logger = UnifiedLogger("FSM_Monitor")
+IS_SHOW_SIGNAL = False
+
+class BinanceWsInterpreter:
+    """
+    Интерпретатор событий WebSocket (ACCOUNT_UPDATE).
+    Преобразует сырые данные биржи и передает в PositionMonitor.
+    """
+    def __init__(self, monitor, target_symbols=None):
+        self.monitor = monitor
+        self.target_symbols = {s.upper() for s in target_symbols} if target_symbols else set()
+
+    @staticmethod
+    def _safe_float(val: Any, default: float = 0.0) -> float:
+        try: return float(val) if val is not None else default
+        except (ValueError, TypeError): return default
+
+    async def process_message(self, event_data: Dict[str, Any]):
+        event_type = event_data.get("e")
+        if event_type == "ACCOUNT_UPDATE":
+            positions = event_data.get("a", {}).get("P", [])
+            for pos in positions:
+                await self._handle_position_update(pos)
+
+    async def _handle_position_update(self, p: Dict[str, Any]):
+        raw_symbol = p.get("s", "")
+        symbol = Utils.normalize_symbol(raw_symbol)
+        if not symbol: return
+
+        pos_side = str(p.get("ps", "")).upper()
+        if not pos_side: return
+        
+        if pos_side == "BOTH":
+            pa_val = self._safe_float(p.get("pa", 0.0))
+            if pa_val > 0:
+                pos_side = "LONG"
+            elif pa_val < 0:
+                pos_side = "SHORT"
+            else:
+                # Если позиция закрыта в BOTH, сбросим обе стороны для надежности,
+                # либо ту, что была открыта (но у нас нет session_lock как в ARB боте).
+                # Просто вызовем update_from_stream для LONG и SHORT.
+                if self.target_symbols and symbol not in self.target_symbols:
+                    return
+                self.monitor.update_from_stream(symbol, "LONG", 0.0, 0.0)
+                self.monitor.update_from_stream(symbol, "SHORT", 0.0, 0.0)
+                return
+
+        if pos_side not in ("LONG", "SHORT"):
+            return
+
+        if self.target_symbols and symbol not in self.target_symbols:
+            return
+
+        pos_amt = abs(self._safe_float(p.get("pa", 0.0)))
+        entry = self._safe_float(p.get("ep", 0.0))
+
+        self.monitor.update_from_stream(
+            symbol=symbol,
+            side=pos_side,
+            pos_amt=pos_amt,
+            entry_price=entry
+        )
 IS_SHOW_SIGNAL = False
 
 class PositionMonitor:

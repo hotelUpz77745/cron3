@@ -45,7 +45,7 @@ from consts import (
 from CORE._utils import TradeMath
 from consts import REST_FAILSAFE_SEC
 from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
-from POS_FSM.pos_stream_monitor import PositionMonitor
+from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
 from POS_FSM.pos_stream import PositionStream
 from CORE.auto_closer import AutoCloser
 from consts import API_KEY
@@ -508,10 +508,16 @@ class BotCore:
         self.pos_stream = PositionStream(
             api_key=API_KEY,
             stop_flag=lambda: not self.is_running,
-            monitor=self.pos_monitor,
             target_symbols=set(self.symbols),
             client=self.client
         )
+        
+        self.ws_interpreter = BinanceWsInterpreter(
+            monitor=self.pos_monitor, 
+            target_symbols=set(self.symbols)
+        )
+        self.pos_stream.register_callback(self.ws_interpreter.process_message)
+        
         pos_task = asyncio.create_task(self.pos_stream.start())
         
         logger.info("Main _game_loop started. Specifications and price streams are running.")

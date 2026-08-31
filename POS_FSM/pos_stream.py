@@ -84,13 +84,11 @@ class PositionStream:
         *,
         api_key: str,
         stop_flag: Callable[[], bool],
-        monitor: PositionMonitor,
         target_symbols: Optional[Set[str]] = None,
         client = None,
     ):
         self.api_key = api_key
         self.stop_flag = stop_flag
-        self.monitor = monitor
         self.target_symbols = {s.upper() for s in target_symbols} if target_symbols else set()
         self.client = client
 
@@ -102,6 +100,11 @@ class PositionStream:
         self.ready = False
         self.is_connected = False
         self._external_stop = False
+        
+        self.callbacks = []
+
+    def register_callback(self, callback):
+        self.callbacks.append(callback)
 
     def stop(self):
         self._external_stop = True
@@ -161,43 +164,7 @@ class PositionStream:
 
         logger.info("PositionStream: WS disconnected")
 
-    async def _handle_account_update(self, data: dict):
-        acc = data.get("a", {})
-        positions = acc.get("P", [])
-        
-        # logger.debug(f"[MASTER WS] _handle_account_update positions count: {len(positions)}")
 
-        for p in positions:
-            raw_symbol = p.get("s", "")
-            symbol = Utils.normalize_symbol(raw_symbol)
-            if not symbol:
-                continue
-
-            pos_side_raw = (p.get("ps") or "").upper()
-            pos_amt = p.get("pa")
-            ep_raw = p.get("ep") or p.get("bep") or "0"
-
-            if not pos_side_raw or pos_amt is None:
-                continue
-
-            if pos_side_raw not in ("LONG", "SHORT"):
-                continue
-
-            if self.target_symbols and symbol not in self.target_symbols:
-                continue
-
-            try:
-                pos_amt_f = float(pos_amt)
-                avg_price_f = float(ep_raw)
-            except (ValueError, TypeError):
-                continue
-
-            self.monitor.update_from_stream(
-                symbol=symbol,
-                side=pos_side_raw,
-                pos_amt=pos_amt_f,
-                entry_price=avg_price_f
-            )
 
     async def _handle_messages(self):
         while not self._external_stop and not self.stop_flag():
@@ -235,8 +202,11 @@ class PositionStream:
             if IS_SHOW_SIGNAL:
                 logger.debug(f"[MASTER WS] EVENT {etype}", throttle_sec=60, throttle_key=f"ws_event_{etype}")
 
-            if etype == "ACCOUNT_UPDATE":
-                await self._handle_account_update(data)
+            for cb in self.callbacks:
+                if asyncio.iscoroutinefunction(cb):
+                    asyncio.create_task(cb(data))
+                else:
+                    cb(data)
 
     async def start(self):
         self._external_stop = False
@@ -251,7 +221,7 @@ class PositionStream:
                     listen_key = await self.listen_mgr.create()
                     self.listen_mgr.start_keepalive()
 
-                    self.ws_url = f"wss://fstream.binance.com/ws/{listen_key}"
+                    self.ws_url = f"wss://fstream.binance.com/private/ws/{listen_key}"
 
                     if not await self._connect():
                         raise RuntimeError("ws_connect_failed")
