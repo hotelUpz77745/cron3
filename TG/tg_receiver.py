@@ -443,7 +443,7 @@ class TelegramReceiver:
                 
             try:
                 await self.bot_core.analytics.set_initial_balance(new_balance)
-                await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.\nСтатистика и журнал сделок сброшены.", reply_markup=self._get_main_keyboard())
+                await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.", reply_markup=self._get_main_keyboard())
             except Exception as e:
                 await message.answer(f"❌ Ошибка обновления файла аналитики: {e}", reply_markup=self._get_main_keyboard())
                 

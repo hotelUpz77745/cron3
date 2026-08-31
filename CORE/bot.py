@@ -508,6 +508,7 @@ class BotCore:
         self.pos_stream = PositionStream(
             api_key=API_KEY,
             stop_flag=lambda: not self.is_running,
+            monitor=self.pos_monitor,
             target_symbols=set(self.symbols),
             client=self.client
         )

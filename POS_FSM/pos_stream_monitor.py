@@ -70,7 +70,7 @@ class BinanceWsInterpreter:
         if self.target_symbols and symbol not in self.target_symbols:
             return
 
-        pos_amt = abs(self._safe_float(p.get("pa", 0.0)))
+        pos_amt = self._safe_float(p.get("pa", 0.0))
         entry = self._safe_float(p.get("ep", 0.0))
 
         self.monitor.update_from_stream(

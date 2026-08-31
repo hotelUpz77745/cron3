@@ -84,11 +84,13 @@ class PositionStream:
         *,
         api_key: str,
         stop_flag: Callable[[], bool],
+        monitor,
         target_symbols: Optional[Set[str]] = None,
         client = None,
     ):
         self.api_key = api_key
         self.stop_flag = stop_flag
+        self.monitor = monitor
         self.target_symbols = {s.upper() for s in target_symbols} if target_symbols else set()
         self.client = client
 
