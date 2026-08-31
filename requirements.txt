@@ -1,9 +1,6 @@
 python-dotenv
 aiohttp
-aiohttp-socks
 pytz
 aiogram
 matplotlib
-pyzmq
-zmq
-redis
+numpy

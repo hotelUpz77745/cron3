@@ -1,12 +1,3 @@
 {
-    "STABLEUSDT_CROSSED_10": true,
-    "DASHUSDT_CROSSED_10": true,
-    "SOLUSDT_CROSSED_10": true,
-    "VVVUSDT_CROSSED_10": true,
-    "XPLUSDT_CROSSED_10": true,
-    "HYPERUSDT_CROSSED_10": true,
-    "XNYUSDT_CROSSED_10": true,
-    "MMTUSDT_CROSSED_10": true,
-    "KGENUSDT_CROSSED_10": true,
-    "XRPUSDT_CROSSED_20": true
+    "XRPUSDT_CROSSED_10": true
 }

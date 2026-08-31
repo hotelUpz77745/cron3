@@ -102,27 +102,9 @@ class BotCore:
         else:
             self.backup_manager = None
             
-        from CORE.redis_manager import RedisManager
-        self.redis_manager = RedisManager(debounce_sec=1.0)
-        self.runtime_manager.redis_manager = self.redis_manager
-        self.analytics.redis_manager = self.redis_manager
+
         
-        from consts import SEMAPHORE_ENABLED, SEMAPHORE_BOT_NAME, SEMAPHORE_SERVER_NAME, SEMAPHORE_ARBITER_IP, SEMAPHORE_PULL_PORT, SEMAPHORE_PUB_PORT
-        if SEMAPHORE_ENABLED:
-            from semaphore import NodeSemaphore
-            self.semaphore = NodeSemaphore(
-                bot_name=SEMAPHORE_BOT_NAME,
-                server_name=SEMAPHORE_SERVER_NAME,
-                arbiter_ip=SEMAPHORE_ARBITER_IP,
-                pull_port=SEMAPHORE_PULL_PORT,
-                pub_port=SEMAPHORE_PUB_PORT
-            )
-            # Принудительно ставим True, чтобы при первом входе в АКТИВНЫЙ режим 
-            # (даже при старте) бот скачал свежий стейт из Redis.
-            self.was_passive = True
-        else:
-            self.semaphore = None
-            self.was_passive = False
+        self.was_passive = False
         
         auto_start = _CFG["app"]["auto_start"]
         if TG_ENABLED:
@@ -573,56 +555,9 @@ class BotCore:
             self._tick_count += 1
             
             try:
-                if self.semaphore:
-                    self.semaphore.tick("start")
-                    if not self.semaphore.is_active:
-                        if not self.was_passive or getattr(self, '_first_passive_log', True):
-                            from consts import SEMAPHORE_SERVER_NAME
-                            logger.info(f"[{SEMAPHORE_SERVER_NAME}] 🟡 Я РЕЗЕРВ. Сплю, жду отвала основного сервера...")
-                            self.was_passive = True
-                            self._first_passive_log = False
-                        await asyncio.sleep(1.0)
-                        self.semaphore.tick("end")
-                        continue
-                    else:
-                        if self.was_passive:
-                            from consts import SEMAPHORE_SERVER_NAME
-                            logger.info(f"[{SEMAPHORE_SERVER_NAME}] 🟢 Я АКТИВЕН. Кручу торговую логику бота...")
-                            self.was_passive = False
-                            
-                            if self.redis_manager:
-                                success = await self.redis_manager.pull_failover_data()
-                                if success:
-                                    try:
-                                        from c_utils import Utils
-                                        from consts import CFG_PATH
-                                        new_app = Utils.read_json_file(CFG_PATH)
-                                        if "symbols" in new_app:
-                                            new_symbols = new_app["symbols"]
-                                            if isinstance(new_symbols, dict):
-                                                new_symbols = list(new_symbols.keys())
-                                            else:
-                                                new_symbols = list(new_symbols)
-                                                
-                                            to_add = set(new_symbols) - set(self.symbols)
-                                            to_remove = set(self.symbols) - set(new_symbols)
-                                            
-                                            for sym in to_add:
-                                                await self.add_symbol(sym)
-                                            for sym in to_remove:
-                                                await self.delete_symbol(sym)
-                                    except Exception as e:
-                                        logger.error(f"Error dynamically syncing symbols after failover: {e}")
-                                
-                                    self.runtime_manager.load_initial_caches(self.symbols)
-                                    self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
-                                    await self.pos_monitor.sync_from_rest(self.client, self.symbols)
-                                    logger.info("Failover sync complete. Resuming trading.")
 
                 if self.is_paused:
                     await asyncio.sleep(1.0)
-                    if self.semaphore:
-                        self.semaphore.tick("end")
                     continue
 
                 # Pre-flight bulk price update
@@ -650,18 +585,15 @@ class BotCore:
                 if getattr(self, 'backup_manager', None):
                     await self.backup_manager.check_and_backup()
                 
-                if getattr(self, 'redis_manager', None):
-                    await self.redis_manager.check_and_backup()
+
 
                 # Автоматическое закрытие по триггеру профита
                 if hasattr(self, 'auto_closer'):
                     await self.auto_closer.check()
 
                 # Предотвращение блокировки event loop
-                await asyncio.sleep(TIME_SLACK_SEC)
-                
-                if self.semaphore:
-                    self.semaphore.tick("end")
+                await asyncio.sleep(TIME_SLACK_SEC)                
+
 
             except asyncio.CancelledError:
                 logger.info("_game_loop cancelled.")
@@ -710,7 +642,7 @@ class BotCore:
 
     async def close_all_positions(self):
         """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
-        if getattr(self, 'semaphore', None) and not self.semaphore.is_active:
+        if False:
             raise Exception("Действие заблокировано: Эта нода сейчас в пассивном режиме (РЕЗЕРВ)!")
             
         symbols = _CFG["symbols"]

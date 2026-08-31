@@ -1,8 +1,8 @@
 {
     "LONG": {
         "enable": true,
-        "invest_size": 80,
-        "leverage": 20,
+        "invest_size": 25,
+        "leverage": 10,
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "_comment_tp_purpose": "self, opposite, both",
         "tp_purpose": "both",
@@ -10,7 +10,7 @@
         "grid": {
             "0": {
                 "indent": 0,
-                "volume": 100.0,
+                "volume": 100,
                 "super_indent": null
             }
         },
@@ -23,15 +23,15 @@
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 80,
-        "leverage": 20,
+        "invest_size": 25,
+        "leverage": 10,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "tp_purpose": "both",
         "grid": {
             "0": {
                 "indent": 0,
-                "volume": 100.0,
+                "volume": 100,
                 "super_indent": null
             }
         },

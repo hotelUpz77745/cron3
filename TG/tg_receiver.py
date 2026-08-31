@@ -167,11 +167,6 @@ class TelegramReceiver:
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             
             node_status = ""
-            if getattr(self.bot_core, 'semaphore', None):
-                if self.bot_core.semaphore.is_active:
-                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
-                else:
-                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
                     
             text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
@@ -282,11 +277,6 @@ class TelegramReceiver:
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             
             node_status = ""
-            if getattr(self.bot_core, 'semaphore', None):
-                if self.bot_core.semaphore.is_active:
-                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
-                else:
-                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
                     
             text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
@@ -335,11 +325,6 @@ class TelegramReceiver:
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             
             node_status = ""
-            if getattr(self.bot_core, 'semaphore', None):
-                if self.bot_core.semaphore.is_active:
-                    node_status = "\nFailover: 🟢 АКТИВНАЯ НОДА (Торгует)"
-                else:
-                    node_status = "\nFailover: 🟡 РЕЗЕРВ (Спит в ожидании)"
                     
             super_grid_enabled = _CFG["super_grid"]["enabled"]
             super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"

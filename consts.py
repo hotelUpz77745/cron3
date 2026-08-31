@@ -49,15 +49,8 @@ _CFG: Dict[str, Any] = _read_json(CFG_PATH)
 API_KEY: str = os.getenv("API_KEY") or ""
 API_SECRET: str = os.getenv("API_SECRET") or ""
 TG_TOKEN: str = os.getenv("TG_TOKEN") or ""
-REDIS_ENABLED: bool = bool(_CFG["redis"]["enabled"])
-REDIS_URL: str = os.getenv("REDIS_URL") or ""
 
-SEMAPHORE_ENABLED: bool = bool(_CFG["node"]["semaphore_enabled"])
-SEMAPHORE_BOT_NAME: str = str(_CFG["node"]["bot_name"])
-SEMAPHORE_SERVER_NAME: str = os.getenv("SEMAPHORE_SERVER_NAME", "A")
-SEMAPHORE_ARBITER_IP: str = str(_CFG["node"]["arbiter_ip"])
-SEMAPHORE_PULL_PORT: int = int(_CFG["node"]["pull_port"])
-SEMAPHORE_PUB_PORT: int = int(_CFG["node"]["pub_port"])
+
 
 # ============================================================
 # APP / UTILS

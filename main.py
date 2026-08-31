@@ -59,6 +59,12 @@ def main():
     try:
         bot = BotCore()
         logger.info("Starting BotCore...")
+        print("\n" + "="*50)
+        print("🟢 БОТ УСПЕШНО ЗАПУЩЕН!")
+        status = "⏸️ ПАУЗА (Ждет старта)" if bot.is_paused else "▶️ АКТИВЕН (Торгует)"
+        print(f"Текущий статус: {status}")
+        print("👉 ПЕРЕЙДИТЕ В TELEGRAM К ЭЛЕМЕНТАМ УПРАВЛЕНИЯ!")
+        print("="*50 + "\n")
         asyncio.run(run_app(bot, logger))
         
     except KeyboardInterrupt:
