@@ -13,7 +13,7 @@
                 "volume": 100.0,
                 "super_indent": null,
                 "is_active": true,
-                "price": 1.3721,
+                "price": 1.3773,
                 "timestamp": null
             }
         },
@@ -24,19 +24,21 @@
                 "is_active": true
             }
         },
-        "total_volume": 58.3,
-        "avg_entry_price": 1.3721,
+        "total_volume": 58.1,
+        "avg_entry_price": 1.3773,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 1.3721,
-        "open_time": 1788190503818,
+        "initial_entry_price": 1.3773,
+        "open_time": 1788191089365,
         "next_avg_price": null,
-        "fallback_price": 1.3858,
+        "fallback_price": 1.3911,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
         "pending_rolling_tp": false,
-        "recent_closes": []
+        "recent_closes": [
+            1788191074.4634447
+        ]
     },
     "SHORT": {
         "enable": true,
@@ -51,7 +53,7 @@
                 "volume": 100.0,
                 "super_indent": null,
                 "is_active": true,
-                "price": 1.372,
+                "price": 1.3745,
                 "timestamp": null
             }
         },
@@ -62,19 +64,22 @@
                 "is_active": true
             }
         },
-        "total_volume": -58.3,
-        "avg_entry_price": 1.372,
+        "total_volume": -58.2,
+        "avg_entry_price": 1.3745,
         "pre_avg_price": 0.0,
-        "initial_entry_price": 1.372,
-        "open_time": 1788190503838,
+        "initial_entry_price": 1.3745,
+        "open_time": 1788191264342,
         "next_avg_price": null,
-        "fallback_price": 1.3583,
+        "fallback_price": 1.3608,
         "in_position": true,
         "in_position_papper": false,
         "is_finished": false,
         "pending_avg": false,
         "pending_rolling_tp": false,
-        "recent_closes": []
+        "recent_closes": [
+            1788191074.823474,
+            1788191263.8179054
+        ]
     },
     "super_grid": {
         "enabled": false
