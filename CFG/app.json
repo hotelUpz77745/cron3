@@ -35,7 +35,7 @@
         "log_to_file": true
     },
     "symbols": [
-        "XRPUSDT"
+        "CROSSUSDT"
     ],
     "telegram": {
         "enabled": true,
@@ -83,8 +83,8 @@
             "threshold_increment": null
         },
         "positive": {
-            "threshold": 20,
-            "threshold_increment": 20
+            "threshold": null,
+            "threshold_increment": null
         }
     },
     "stop_bot_rirk_system": {
