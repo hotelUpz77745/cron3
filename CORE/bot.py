@@ -294,6 +294,10 @@ class BotCore:
             current_time_ms = int(time.time() * 1000)
             state.open_time = current_time_ms
             side_cfg["open_time"] = current_time_ms
+            if "0" in state.grid:
+                state.grid["0"]["is_active"] = True
+                state.grid["0"]["activated_at"] = current_time_ms / 1000.0
+                state.grid["0"]["timestamp"] = current_time_ms
 
             # Очищаем кэши от прошлых сделок, чтобы они не стрельнули ложным фолбеком
             state.fallback_price = None

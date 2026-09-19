@@ -57,6 +57,7 @@ class PositionState:
             v["is_active"] = False
             v["price"] = None
             v["timestamp"] = None
+            v["activated_at"] = None
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

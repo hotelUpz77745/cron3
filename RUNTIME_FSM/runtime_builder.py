@@ -67,6 +67,8 @@ def build_runtime_caches():
                         for grid_id, grid_cfg in new_data[side]["grid"].items():
                             grid_cfg["is_active"] = False
                             grid_cfg["price"] = None
+                            grid_cfg["activated_at"] = None
+                            grid_cfg["timestamp"] = None
                     else:
                         logger.error(f"[CRITICAL] Секция 'grid' ОТСУТСТВУЕТ для {side} в _base.json!")
                     

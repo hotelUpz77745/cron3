@@ -38,9 +38,12 @@ class AverageManager:
         needs_save = False
         for level_str, level_data in grid.items():
             if level_str == "0":
-                if not level_data.get("is_active"):
+                if not level_data.get("is_active") or level_data.get("activated_at") is None:
                     level_data["is_active"] = True
                     level_data["price"] = initial_price
+                    act_time = (state.open_time / 1000.0) if (state.open_time and state.open_time > 0) else time.time()
+                    level_data["activated_at"] = act_time
+                    level_data["timestamp"] = int(act_time * 1000)
                     needs_save = True
             elif level_data.get("price") is None:
                 indent_pct = level_data["indent"]
@@ -113,7 +116,9 @@ class AverageManager:
             state.pending_avg = True
             state.pre_avg_price = state.avg_entry_price
             grid[next_level]["is_active"] = True
-            grid[next_level]["timestamp"] = int(time.time() * 1000)
+            now_sec = time.time()
+            grid[next_level]["activated_at"] = now_sec
+            grid[next_level]["timestamp"] = int(now_sec * 1000)
             
             # Асинхронно ставим ордер и ждем завершения полного пайплайна
             await self._execute_averaging_order(

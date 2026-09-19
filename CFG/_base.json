@@ -11,32 +11,44 @@
             "0": {
                 "indent": 0,
                 "volume": 12.96,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             }
         },
         "tp_map": {
@@ -77,32 +89,44 @@
             "0": {
                 "indent": 0,
                 "volume": 12.96,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "1": {
                 "indent": -5.0,
                 "volume": 14.26,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "2": {
                 "indent": -8.0,
                 "volume": 15.68,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "3": {
                 "indent": -13.0,
                 "volume": 17.25,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "4": {
                 "indent": -21.0,
                 "volume": 18.98,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             },
             "5": {
                 "indent": -34.0,
                 "volume": 20.87,
-                "super_indent": null
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null
             }
         },
         "tp_map": {
