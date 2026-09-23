@@ -1,6 +1,6 @@
 import asyncio
 import time
-from consts import DATA_DIR
+from consts import DATA_DIR, ANALYTICS_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 
@@ -20,7 +20,7 @@ class AutoCloser:
         if not app_data:
             return
             
-        analytics_data = Utils.read_json_file(DATA_DIR / "analytics.json")
+        analytics_data = Utils.read_json_file(ANALYTICS_DIR / "analytics.json")
         if not analytics_data:
             return
             

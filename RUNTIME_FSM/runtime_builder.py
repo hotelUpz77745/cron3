@@ -13,6 +13,7 @@ from consts import _CFG, DATA_DIR, AVOID_CHECK_RUNTIME_CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
 
+from typing import Optional, List
 import sys
 logger = UnifiedLogger("RuntimeBuilder")
 
@@ -21,7 +22,7 @@ RUNTIME_DIR = DATA_DIR / "runtime"
 def _ensure_dirs():
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
-def build_runtime_caches():
+def build_runtime_caches(symbols: Optional[List[str]] = None) -> bool:
     _ensure_dirs()
     
     base_file = DATA_DIR / "_base.json"
@@ -38,7 +39,9 @@ def build_runtime_caches():
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
     created_new = False
-    symbols = _CFG["symbols"]
+    if symbols is None:
+        cfg = Utils.read_json_file(DATA_DIR / "app.json")
+        symbols = cfg.get("symbols", []) if cfg else _CFG.get("symbols", [])
     for symbol in symbols:
         sym_lower = symbol.lower()
         target_file = RUNTIME_DIR / f"{sym_lower}.json"

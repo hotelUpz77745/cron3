@@ -18,9 +18,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ============================================================
-# Где лежит const.json
+# Где лежит const.json и общие модули
 # ============================================================
+import sys
+
 BASE_DIR = Path(__file__).resolve().parent
+PARENT_DIR = BASE_DIR.parent
+if str(PARENT_DIR) not in sys.path:
+    sys.path.insert(0, str(PARENT_DIR))
+
+SHARED_API_DIR = PARENT_DIR / "API"
+PAPER_BOT_DIR = PARENT_DIR / "cron3Papper"
 DATA_DIR = BASE_DIR / "CFG"
 CFG_PATH = DATA_DIR / "app.json"
 ANALYTICS_DIR = BASE_DIR / "ANALYTICS"

@@ -48,6 +48,7 @@ from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_che
 from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
 from POS_FSM.pos_stream import PositionStream
 from CORE.auto_closer import AutoCloser
+from CORE.dynamic_coin_selector import DynamicCoinSelector
 from consts import API_KEY
 from API.BINANCE.public import BinancePublic
 from CORE.ADVANCED.volatility_manager import VolatilityManager
@@ -63,6 +64,7 @@ class BotCore:
         self.symbols = _CFG["symbols"]
         self.prices = {}   # Структура для хранения цен
         self.runtime_manager = RuntimeFsmManager()
+        self.dynamic_selector = DynamicCoinSelector()
         
 
             
@@ -465,8 +467,25 @@ class BotCore:
         """Главный цикл торгового ядра."""
         self.is_running = True
         
+        # ШАГ 0. ПРОВЕРКА НА МОНЕТНОСТЬ (если symbols пуст — ожидаем и динамически отбираем из бумажного бота)
+        while self.is_running and not self.symbols:
+            logger.warning("[COIN_SELECTOR] Symbol list is empty. Attempting dynamic coin selection from paper bot...")
+            selected = self.dynamic_selector.select_and_lock()
+            if selected:
+                self.symbols = selected
+                stream_syms = list(self.symbols) + (["BNBUSDT"] if "BNBUSDT" not in self.symbols else [])
+                self.price_stream.symbols = stream_syms
+                logger.info(f"[COIN_SELECTOR] Successfully locked {len(selected)} coins: {selected}")
+                break
+            poll_interval = self.dynamic_selector.poll_interval_sec
+            logger.info(f"[COIN_SELECTOR] Conditions not met (market velocity or min profit). Waiting {poll_interval}s before retry...")
+            await asyncio.sleep(poll_interval)
+
+        if not self.is_running:
+            return
+
         # ШАГ 1. Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        created_new = build_runtime_caches()
+        created_new = build_runtime_caches(self.symbols)
         if created_new and not TG_ENABLED:
             prompt_runtime_check()
             
@@ -559,6 +578,10 @@ class BotCore:
             self._tick_count += 1
             
             try:
+
+                if not self.symbols:
+                    await asyncio.sleep(1.0)
+                    continue
 
                 if self.is_paused:
                     await asyncio.sleep(1.0)
