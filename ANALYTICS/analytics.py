@@ -162,10 +162,18 @@ class AnalyticsManager:
                         logger.error(f"Error removing {self.txt_file}: {e}")
 
     async def set_initial_balance(self, new_balance: float):
-        """Установка начального баланса."""
+        """Установка начального баланса с корректным перерасчетом пиков (rebase)."""
         async with self._lock:
             data = self._read_data()
+            old_balance = float(data.get("start_balance_usdt", 0.0))
+            delta = new_balance - old_balance
+            
             data["start_balance_usdt"] = round(new_balance, 4)
+            data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
+            data["peak_balance_usdt"] = round(float(data.get("peak_balance_usdt", old_balance)) + delta, 4)
+            data["_current_trough_usdt"] = round(float(data.get("_current_trough_usdt", old_balance)) + delta, 4)
+            data["min_balance_usdt"] = round(float(data.get("min_balance_usdt", old_balance)) + delta, 4)
+            
             self._write_data(data)
 
 
