@@ -20,25 +20,9 @@ load_dotenv()
 # ============================================================
 # Где лежит const.json и общие модули
 # ============================================================
-import sys
-
 BASE_DIR = Path(__file__).resolve().parent
-PARENT_DIR = BASE_DIR.parent
-if str(PARENT_DIR) not in sys.path:
-    sys.path.insert(0, str(PARENT_DIR))
-
-SHARED_API_DIR = PARENT_DIR / "API"
-PAPER_BOT_DIR = PARENT_DIR / "cron3Papper"
 DATA_DIR = BASE_DIR / "CFG"
 CFG_PATH = DATA_DIR / "app.json"
-ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
-CACHE_DIR = BASE_DIR / "CACHE"
-
-# Создаем директории если их нет
-ANALYTICS_DIR.mkdir(parents=True, exist_ok=True)
-CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-
 
 def _read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
@@ -50,6 +34,23 @@ def _read_json(path: Path) -> Dict[str, Any]:
         return {}
 
 _CFG: Dict[str, Any] = _read_json(CFG_PATH)
+
+import sys
+# Динамически подключаем внешнюю папку API из конфига
+_shared_api_dir = _CFG.get("paths", {}).get("shared_api_dir")
+if _shared_api_dir:
+    _api_parent = str(Path(_shared_api_dir).resolve().parent)
+    if _api_parent not in sys.path:
+        sys.path.insert(0, _api_parent)
+
+SHARED_API_DIR = Path(_shared_api_dir) if _shared_api_dir else (BASE_DIR.parent / "API")
+PAPER_BOT_DIR = Path(_CFG.get("paths", {}).get("paper_bot_dir", BASE_DIR.parent / "cron3Papper"))
+ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
+CACHE_DIR = BASE_DIR / "CACHE"
+
+# Создаем директории если их нет
+ANALYTICS_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
 # SECRETS (.env only)
