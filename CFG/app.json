@@ -19,13 +19,13 @@
     },
     "dynamic_selection": {
         "enabled": true,
-        "max_coins_num": 10,
+        "max_coins_num": 2,
         "_desc_max_coins_num": "Максимальное число монет для выборки из бумажного бота (число или null).",
         "ranking_metric": "net_profit_usdt",
         "_desc_ranking_metric": "Критерий ранжирования: 'net_profit_usdt', 'winrate_pct', 'total_trades', 'recovery_factor', 'realized_pnl_net_usdt'.",
-        "min_coin_profit_usdt": 1.0,
+        "min_coin_profit_usdt": 5.0,
         "_desc_min_coin_profit_usdt": "Минимальный чистый PnL (USDT) для каждой отдельной монеты из среза.",
-        "min_velocity_ratio": 0.75,
+        "min_velocity_ratio": 0.6,
         "_desc_min_velocity_ratio": "Минимальный коэффициент активности рынка (Trade Velocity Ratio) из бумажного бота для допуска к торгам.",
         "poll_interval_sec": 30.0,
         "_desc_poll_interval_sec": "Интервал проверки бумажного бота при пустом списке монет."
@@ -47,7 +47,7 @@
         "info": true,
         "warning": true,
         "error": true,
-        "max_log_lines": 10000,
+        "max_log_lines": 5000,
         "log_to_console": true,
         "log_to_file": true
     },
@@ -98,12 +98,12 @@
             "threshold_increment": null
         },
         "positive": {
-            "threshold": null,
-            "threshold_increment": null
+            "threshold": 20,
+            "threshold_increment": 20
         }
     },
     "stop_bot_rirk_system": {
         "enabled": false,
-        "roi_critical_level_pct": -41
+        "roi_critical_level_pct": null
     }
 }
