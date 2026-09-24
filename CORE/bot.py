@@ -18,7 +18,7 @@ from API.BINANCE.price_stream import BinanceHotPriceStream, HotPriceTick
 from CORE.ENTRY.signal import TimeControl
 from CORE.ENTRY.leverage_manager import LeverageManager
 from CORE._utils import TradeMath
-from API.BINANCE.client_prod import BinanceClient
+from API.BINANCE.client import BinanceClient
 from POS_FSM.models import PositionState
 from c_utils import Utils
 

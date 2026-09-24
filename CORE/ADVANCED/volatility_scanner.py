@@ -14,7 +14,7 @@ from c_log import UnifiedLogger
 from consts import DATA_DIR
 from c_utils import Utils
 from API.BINANCE.public import BinancePublic
-from API.BINANCE.client_prod import BinanceClient
+from API.BINANCE.client import BinanceClient
 
 logger = UnifiedLogger("VolatilityScanner")
 
