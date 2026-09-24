@@ -27,7 +27,6 @@ from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
 from consts import BACKUP_ENABLED, BACKUP_DEBOUNCE_SEC, BACKUP_MAX_INTERVAL_SEC
 from CORE.runtime_backup import RuntimeBackupManager
 from CORE.notifier import NotifierManager
-from CORE.ENTRY.leverage_manager import LeverageManager
 from CORE.TP.tp_manager import TakeProfitManager
 from CORE.GRID.avg_manager import AverageManager
 from CORE.TP.fallback_tp_manager import FallbackTpManager

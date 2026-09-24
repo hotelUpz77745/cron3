@@ -30,10 +30,8 @@ from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 import csv
 from ANALYTICS.plotter import generate_coin_analytics
-import asyncio
 import io
 from consts import DATA_DIR, _CFG
-import sys
 import subprocess
 logger = UnifiedLogger("TGReceiver")
 

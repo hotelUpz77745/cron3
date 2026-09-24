@@ -17,8 +17,6 @@ from consts import DATA_DIR
 import math
 import os
 import json, csv
-import csv
-from datetime import datetime, timezone
 import json as _json
 import traceback
 from ANALYTICS.metrics import AnalyticsMathEngine
@@ -106,7 +104,6 @@ class AnalyticsManager:
         except Exception as e:
             logger.error(f"Error reading analytics file: {e}")
             return {}
-
 
 
     def _write_data(self, data: dict, mark_backup: bool = True):

@@ -14,7 +14,6 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 
 from typing import Optional, List
-import sys
 logger = UnifiedLogger("RuntimeBuilder")
 
 RUNTIME_DIR = DATA_DIR / "runtime"

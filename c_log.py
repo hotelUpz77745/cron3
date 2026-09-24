@@ -18,7 +18,6 @@ import os
 import logging
 import traceback
 
-import sys
 from consts import LOG_TO_CONSOLE, LOG_TO_FILE
 import time
 class UnlockedRotatingFileHandler(RotatingFileHandler):

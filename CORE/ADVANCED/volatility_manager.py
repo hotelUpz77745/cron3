@@ -15,12 +15,8 @@ from c_log import UnifiedLogger
 from consts import DATA_DIR, _CFG
 
 from c_utils import Utils
-import asyncio
-import sys
-from pathlib import Path
 from API.BINANCE.client_prod import BinanceClient
 from consts import _CFG
-import json
 logger = UnifiedLogger("VolatilityManager")
 
 class VolatilityManager:

@@ -12,8 +12,6 @@ from c_log import UnifiedLogger
 import time
 import asyncio
 from typing import Dict, Any, Tuple
-from POS_FSM.models import PositionState
-from c_log import UnifiedLogger
 from c_utils import Utils
 
 logger = UnifiedLogger("FSM_Monitor")

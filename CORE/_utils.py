@@ -11,7 +11,6 @@ from c_utils import Utils
 import asyncio
 from consts import SPEC_TTL_SEC, CACHE_DIR
 from API.BINANCE.public import BinancePublic
-from c_utils import Utils
 from c_log import UnifiedLogger
 class TradeMath:
     @staticmethod
