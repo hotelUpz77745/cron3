@@ -131,6 +131,7 @@ class UnifiedLogger:
         max_bytes = calc_max_bytes(avg_len, max_lines)
 
         desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
+        logger = logging.getLogger(name)
         logger.setLevel(desired_level)
         logger.propagate = False  # 🔒 важно: не всплывать в root
 
