@@ -18,9 +18,12 @@ import os
 import sys
 import logging
 import traceback
+from pathlib import Path
 
 from consts import LOG_TO_CONSOLE, LOG_TO_FILE
 import time
+
+DEFAULT_LOG_DIR = str(Path(__file__).resolve().parent / "logs")
 class UnlockedRotatingFileHandler(RotatingFileHandler):
     """
     Кастомный RotatingFileHandler, который не держит файл постоянно открытым.
@@ -115,10 +118,12 @@ class UnifiedLogger:
     def __init__(
         self,
         name: str,
-        log_dir: str = "./logs",
+        log_dir: Optional[str] = None,
         max_lines: int = MAX_LOG_LINES,
         context: Optional[dict] = None,
     ):
+        if log_dir is None:
+            log_dir = DEFAULT_LOG_DIR
         os.makedirs(log_dir, exist_ok=True)
         log_path = os.path.join(log_dir, f"{name}.log")
 
