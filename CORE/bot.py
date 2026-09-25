@@ -14,7 +14,8 @@ from pathlib import Path
 
 from consts import _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC
 from API.BINANCE.public import BinancePublic
-from API.BINANCE.price_stream import BinanceHotPriceStream, HotPriceTick
+from API.BINANCE.price_stream import HotPriceTick
+from API.IPC.streamer_hub import CrossProcessHotPriceStream
 from CORE.ENTRY.signal import TimeControl
 from CORE.ENTRY.leverage_manager import LeverageManager
 from CORE._utils import TradeMath
@@ -126,7 +127,7 @@ class BotCore:
         
         # Сетевые адаптеры и стримы
         stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-        self.price_stream = BinanceHotPriceStream(stream_symbols)
+        self.price_stream = CrossProcessHotPriceStream(stream_symbols)
 
         # Контроль главный петли (Watchdog)
         self._last_tick = time.time()
@@ -190,7 +191,7 @@ class BotCore:
                 task.cancel()
                 
         stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-        self.price_stream = BinanceHotPriceStream(stream_symbols)
+        self.price_stream = CrossProcessHotPriceStream(stream_symbols)
         self.price_stream_synced.clear()
         asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
         
@@ -247,7 +248,7 @@ class BotCore:
             
         if self.symbols:
             stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-            self.price_stream = BinanceHotPriceStream(stream_symbols)
+            self.price_stream = CrossProcessHotPriceStream(stream_symbols)
             asyncio.create_task(self.price_stream.run(self._on_tick))
         else:
             self.price_stream = None
