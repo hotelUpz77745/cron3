@@ -614,10 +614,10 @@ class BotCore:
                 now = time.time()
                 for sym in self.symbols:
                     price_data = self.prices.get(sym)
-                    if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 5.0):
+                    if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 300.0):
                         stale_symbols.append(sym)
                 
-                if stale_symbols and (now - getattr(self, "_last_bulk_price_fetch", 0.0) >= 15.0):
+                if stale_symbols and (now - getattr(self, "_last_bulk_price_fetch", 0.0) >= 60.0):
                     self._last_bulk_price_fetch = now
                     logger.warning(
                         f"[REST_FAILSAFE] Abnormal situation: Stale or missing prices for {len(stale_symbols)}/{len(self.symbols)} symbols: "
