@@ -6,6 +6,8 @@
 # Role: Калькулятор ликвидации для DCA-стратегии (Crossed Margin)
 # ==============================================================================
 
+import sys
+
 sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 from pathlib import Path

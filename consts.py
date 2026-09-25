@@ -15,14 +15,11 @@ from typing import Any, Dict
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# ============================================================
-# Где лежит const.json и общие модули
-# ============================================================
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "CFG"
 CFG_PATH = DATA_DIR / "app.json"
+
+load_dotenv(BASE_DIR / ".env")
 
 def _read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():
