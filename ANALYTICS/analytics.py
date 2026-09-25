@@ -744,9 +744,13 @@ class AnalyticsManager:
             if val:
                 return float(val)
                 
-        p_res = await client._request("GET", "https://fapi.binance.com/fapi/v1/ticker/price", params={"symbol": "BNBUSDT"})
-        if p_res and p_res.success:
-            return float(p_res.data.get("price", 0.0))
+        try:
+            from API.BINANCE.public import BinancePublic
+            prices = await BinancePublic.get_prices_bulk(["BNBUSDT"])
+            if "BNBUSDT" in prices:
+                return float(prices["BNBUSDT"])
+        except Exception as e:
+            logger.warning(f"[ANALYTICS] Failed to fetch BNB rate via bulk: {e}")
         return 0.0
 
     async def sync_lightweight_unrealized_pnl(self, client):

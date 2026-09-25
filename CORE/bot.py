@@ -12,7 +12,7 @@ import os
 import time
 from pathlib import Path
 
-from consts import _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC
+from consts import _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.price_stream import HotPriceTick
 from API.IPC.streamer_hub import CrossProcessHotPriceStream
@@ -127,7 +127,7 @@ class BotCore:
         
         # Сетевые адаптеры и стримы
         stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-        self.price_stream = CrossProcessHotPriceStream(stream_symbols)
+        self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
 
         # Контроль главный петли (Watchdog)
         self._last_tick = time.time()
@@ -191,7 +191,7 @@ class BotCore:
                 task.cancel()
                 
         stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-        self.price_stream = CrossProcessHotPriceStream(stream_symbols)
+        self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
         self.price_stream_synced.clear()
         asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
         
@@ -248,7 +248,7 @@ class BotCore:
             
         if self.symbols:
             stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-            self.price_stream = CrossProcessHotPriceStream(stream_symbols)
+            self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
             asyncio.create_task(self.price_stream.run(self._on_tick))
         else:
             self.price_stream = None
@@ -528,19 +528,40 @@ class BotCore:
         
         logger.info("Main _game_loop started. Specifications and price streams are running.")
         
-        # Ожидание готовности прайс-стримов и первоначальная загрузка по REST
-        logger.info("Prefetching initial prices via REST...")
-        if self.symbols:
-            initial_prices = await BinancePublic.get_prices_bulk(self.symbols)
-            for sym, p in initial_prices.items():
-                self.prices[sym] = (p, time.time())
-                
-        logger.info("Waiting for price streams to connect...")
+        logger.info("Waiting for price streams to connect and snapshot...")
         try:
-            await asyncio.wait_for(self.price_stream.ready.wait(), timeout=3.0)
-            logger.info("Price streams connected successfully.")
+            await asyncio.wait_for(self.price_stream.ready.wait(), timeout=10.0)
+            if hasattr(self.price_stream, "snapshot_received"):
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(self.price_stream.snapshot_received.wait(), timeout=5.0)
+            logger.info("Price streams connected and snapshot received.")
         except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for price streams! Relying on REST prefetch.")
+            logger.warning("Timeout waiting for price streams! Waiting for prices...")
+
+        # Дожидаемся инициализации цен по всем монетам от стрима (таймаут 30 секунд)
+        logger.info(f"Waiting for price initialization for all {len(self.symbols)} symbols (up to 30s)...")
+        wait_start = time.time()
+        while time.time() - wait_start < 30.0 and self.is_running:
+            missing = [s for s in self.symbols if not self.prices.get(s) or (isinstance(self.prices.get(s), tuple) and self.prices[s][0] <= 0)]
+            if not missing:
+                logger.info(f"All {len(self.symbols)} symbol prices successfully initialized from stream in {time.time() - wait_start:.1f}s!")
+                break
+            await asyncio.sleep(0.5)
+        else:
+            missing = [s for s in self.symbols if not self.prices.get(s) or (isinstance(self.prices.get(s), tuple) and self.prices[s][0] <= 0)]
+            if missing:
+                logger.warning(
+                    f"[PRICE_INIT] Price init timeout (30s): {len(missing)}/{len(self.symbols)} symbols missing. "
+                    f"Executing abnormal bulk REST fallback for all symbols..."
+                )
+                try:
+                    bulk_prices = await BinancePublic.get_prices_bulk(self.symbols)
+                    now_ts = time.time()
+                    for sym, p in bulk_prices.items():
+                        self.prices[sym] = (p, now_ts)
+                    logger.info(f"[PRICE_INIT] Bulk REST fallback populated {len(bulk_prices)}/{len(self.symbols)} symbols.")
+                except Exception as e:
+                    logger.warning(f"[PRICE_INIT] Bulk REST fallback failed: {e}")
 
         logger.info("Waiting for Position Stream to connect...")
         wait_cycles = 0
@@ -595,13 +616,18 @@ class BotCore:
                     if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 5.0):
                         stale_symbols.append(sym)
                 
-                if stale_symbols:
+                if stale_symbols and (now - getattr(self, "_last_bulk_price_fetch", 0.0) >= 15.0):
+                    self._last_bulk_price_fetch = now
+                    logger.warning(
+                        f"[REST_FAILSAFE] Abnormal situation: Stale or missing prices for {len(stale_symbols)}/{len(self.symbols)} symbols: "
+                        f"{stale_symbols[:5]}... Executing single bulk REST fallback."
+                    )
                     try:
                         bulk_prices = await BinancePublic.get_prices_bulk(stale_symbols)
                         for sym, p in bulk_prices.items():
                             self.prices[sym] = (p, time.time())
                     except Exception as e:
-                        logger.error(f"Bulk price fetch failed: {e}")
+                        logger.warning(f"[REST_FAILSAFE] Bulk price fetch failed: {e}")
 
                 tasks = [self._process_symbol_loop(symbol) for symbol in self.symbols]
                 await asyncio.gather(*tasks)

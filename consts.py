@@ -84,6 +84,8 @@ WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodel
 BACKUP_ENABLED: bool = bool(_CFG["backup"]["enabled"])
 BACKUP_DEBOUNCE_SEC: int = int(_CFG["backup"]["debounce_sec"])
 BACKUP_MAX_INTERVAL_SEC: int = int(_CFG["backup"]["max_interval_sec"])
+STREAMER_PORT: int = int(_CFG.get("streamer", {}).get("port", 48123))
+STREAMER_LOCK_NAME: str = str(_CFG.get("streamer", {}).get("lock_name", "streamer.lock"))
 
 # ============================================================
 # LOGGING
