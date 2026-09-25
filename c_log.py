@@ -130,8 +130,8 @@ class UnifiedLogger:
         avg_len = estimate_average_line_length(log_path)
         max_bytes = calc_max_bytes(avg_len, max_lines)
 
-        logger = logging.getLogger(name)
-        logger.setLevel(logging.DEBUG)
+        desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
+        logger.setLevel(desired_level)
         logger.propagate = False  # 🔒 важно: не всплывать в root
 
         # 🔑 КРИТИЧНО: handler добавляем ТОЛЬКО если его ещё нет
@@ -149,6 +149,7 @@ class UnifiedLogger:
                     backupCount=1,
                     encoding="utf-8",
                 )
+                handler.setLevel(desired_level)
                 handler.setFormatter(formatter)
                 logger.addHandler(handler)
                 
@@ -160,12 +161,14 @@ class UnifiedLogger:
                     backupCount=1,
                     encoding="utf-8",
                 )
+                all_handler.setLevel(desired_level)
                 all_handler.setFormatter(formatter)
                 logger.addHandler(all_handler)
 
             # Console
             if LOG_TO_CONSOLE:
                 console_handler = logging.StreamHandler(sys.stdout)
+                console_handler.setLevel(desired_level)
                 console_handler.setFormatter(formatter)
                 logger.addHandler(console_handler)
 
