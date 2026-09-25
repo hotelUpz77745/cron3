@@ -33,12 +33,14 @@
     "signal": {
         "timeframe": "5m",
         "smart_grace": {
-            "start_period_sec": 90,
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
             "eval_window_sec": 300,
             "increments_card": {
-                "<2": 0,
-                ">=2": 120,
-                ">4": 150
+                "==1": 30,
+                "==2": 90,
+                "==3": 150,
+                ">=4": 185
             }
         }
     },

@@ -88,6 +88,14 @@ STREAMER_PORT: int = int(_CFG.get("streamer", {}).get("port", 48123))
 STREAMER_LOCK_NAME: str = str(_CFG.get("streamer", {}).get("lock_name", "streamer.lock"))
 
 # ============================================================
+# SIGNAL & SMART GRACE DECLARATIONS
+# ============================================================
+DEFAULT_TIMEFRAME: str = str(_CFG.get("signal", {}).get("timeframe", "5m"))
+DEFAULT_SMART_GRACE: Dict[str, Any] = _CFG.get("signal", {}).get("smart_grace", {})
+DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_sec", 57.0))
+DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE.get("shift_interval_sec", 13))
+
+# ============================================================
 # LOGGING
 # ============================================================
 LOG_DEBUG: bool = bool(_CFG["logging"]["debug"])
