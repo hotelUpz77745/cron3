@@ -627,11 +627,16 @@ class TelegramReceiver:
                 lines.append("GLOBAL ANALYTICS REPORT")
                 lines.append("="*50 + "\n")
                 
+                start_val = data.get('start_balance_usdt', 0)
+                cur_val = data.get('cur_balance_usdt', 0)
+                peak_val = data.get('peak_balance_usdt') or start_val or cur_val
+                min_val = data.get('min_balance_usdt') or cur_val or start_val
+                
                 lines.append("Balances:")
-                lines.append(f"  Start: {data.get('start_balance_usdt', 0)} USDT")
-                lines.append(f"  Current: {data.get('cur_balance_usdt', 0)} USDT")
-                lines.append(f"  Peak: {data.get('peak_balance_usdt', 0)} USDT")
-                lines.append(f"  Min (Bottom): {data.get('min_balance_usdt', 0)} USDT\n")
+                lines.append(f"  Start: {start_val} USDT")
+                lines.append(f"  Current: {cur_val} USDT")
+                lines.append(f"  Peak: {peak_val} USDT")
+                lines.append(f"  Min (Bottom): {min_val} USDT\n")
                 
                 realized = float(data.get('realized_pnl_usdt', 0))
                 realized_net = float(data.get('realized_pnl_net_usdt', 0))
@@ -724,11 +729,16 @@ class TelegramReceiver:
                         
                     msg = "<b>🌍 GLOBAL ANALYTICS</b>\n\n"
                     
+                    start_val = data.get('start_balance_usdt', 0)
+                    cur_val = data.get('cur_balance_usdt', 0)
+                    peak_val = data.get('peak_balance_usdt') or start_val or cur_val
+                    min_val = data.get('min_balance_usdt') or cur_val or start_val
+
                     msg += "<b>💰 Balances:</b>\n"
-                    msg += f"▪️ Start: <b>{data.get('start_balance_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Current: <b>{data.get('cur_balance_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Peak: <b>{data.get('peak_balance_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Min (Bottom): <b>{data.get('min_balance_usdt', 0)}</b> USDT\n\n"
+                    msg += f"▪️ Start: <b>{start_val}</b> USDT\n"
+                    msg += f"▪️ Current: <b>{cur_val}</b> USDT\n"
+                    msg += f"▪️ Peak: <b>{peak_val}</b> USDT\n"
+                    msg += f"▪️ Min (Bottom): <b>{min_val}</b> USDT\n\n"
                     
                     realized = float(data.get('realized_pnl_usdt', 0))
                     realized_net = float(data.get('realized_pnl_net_usdt', 0))

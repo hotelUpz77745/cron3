@@ -78,8 +78,12 @@ class AnalyticsManager:
             current_ms = int(time.time() * 1000)
             default_data = {
                 "start_balance_usdt": 0.0,
+                "_rebased_start_balance_usdt": 0.0,
                 "first_trade_ts": current_ms,
                 "cur_balance_usdt": 0.0,
+                "peak_balance_usdt": 0.0,
+                "min_balance_usdt": 0.0,
+                "_current_trough_usdt": 0.0,
                 "total_trades": 0,
                 "winning_trades": 0,
                 "winrate_pct": 0.0,
@@ -170,9 +174,10 @@ class AnalyticsManager:
             
             data["start_balance_usdt"] = round(new_balance, 4)
             data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
-            data["peak_balance_usdt"] = round(float(data.get("peak_balance_usdt", old_balance)) + delta, 4)
-            data["_current_trough_usdt"] = round(float(data.get("_current_trough_usdt", old_balance)) + delta, 4)
-            data["min_balance_usdt"] = round(float(data.get("min_balance_usdt", old_balance)) + delta, 4)
+            data["peak_balance_usdt"] = round(float(data.get("peak_balance_usdt") or old_balance) + delta, 4)
+            data["_current_trough_usdt"] = round(float(data.get("_current_trough_usdt") or old_balance) + delta, 4)
+            data["min_balance_usdt"] = round(float(data.get("min_balance_usdt") or old_balance) + delta, 4)
+            data["_rebased_start_balance_usdt"] = round(new_balance, 4)
             
             self._write_data(data)
 
@@ -513,10 +518,10 @@ class AnalyticsManager:
                 if sym not in coin_details:
                     coin_details[sym] = {"long_unrealized": 0.0, "short_unrealized": 0.0, "long_amt": 0.0, "short_amt": 0.0}
                     
-                if side == "LONG":
+                if side == "LONG" or (side == "BOTH" and amt > 0):
                     coin_details[sym]["long_unrealized"] = round(unrealized, 4)
                     coin_details[sym]["long_amt"] = amt
-                elif side == "SHORT":
+                elif side == "SHORT" or (side == "BOTH" and amt < 0):
                     coin_details[sym]["short_unrealized"] = round(unrealized, 4)
                     coin_details[sym]["short_amt"] = amt
                 
@@ -526,15 +531,16 @@ class AnalyticsManager:
             # This ensures unrealized PnL is tracked even before any trades close.
             try:
                 with open("CFG/app.json", "r", encoding="utf-8") as _f:
-                    _app = _json.load(_f)
-                    _syms = _app["symbols"]
+                    _app = json.load(_f)
+                    _syms = _app.get("symbols", {})
                     config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
             except Exception:
-                config_symbols = list(data.get("per_coin", {}).keys())
+                config_symbols = []
                 
             if not config_symbols:
-                logger.warning("[ANALYTICS] _update_drawdowns: no symbols in config or per_coin, skipping.")
-                return False
+                config_symbols = list(data.get("per_coin", {}).keys())
+            if not config_symbols:
+                config_symbols = list(coin_details.keys())
                 
             # SECONDARY RACE CONDITION FIX: 
             # Deep check for REST vs Local State desync (Partial/Full Closes)
@@ -690,6 +696,14 @@ class AnalyticsManager:
             data["net_profit_usdt"] = round(bot_realized_net + bot_unrealized, 4)
             
             initial = float(data.get("start_balance_usdt", 0.0))
+            last_rebase = float(data.get("_rebased_start_balance_usdt", initial))
+            if initial != last_rebase:
+                delta = initial - last_rebase
+                data["peak_balance_usdt"] = float(data.get("peak_balance_usdt") or initial) + delta
+                data["_current_trough_usdt"] = float(data.get("_current_trough_usdt") or initial) + delta
+                data["min_balance_usdt"] = float(data.get("min_balance_usdt") or initial) + delta
+                data["_rebased_start_balance_usdt"] = initial
+
             bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
             data["cur_balance_usdt"] = bot_cur_balance
             
@@ -703,23 +717,31 @@ class AnalyticsManager:
             else:
                 data["load_ratio"] = 0.0
                 
-            peak = data.get("peak_balance_usdt", initial)
-            trough = data.get("_current_trough_usdt", peak)
-            min_bal = data.get("min_balance_usdt", initial)
+            peak = float(data.get("peak_balance_usdt") or 0.0)
+            if peak <= 0.0:
+                peak = max(initial, bot_cur_balance)
+                
+            trough = float(data.get("_current_trough_usdt") or 0.0)
+            if trough <= 0.0:
+                trough = min(bot_cur_balance, peak) if peak > 0.0 else bot_cur_balance
+                
+            min_bal = float(data.get("min_balance_usdt") or 0.0)
+            if min_bal <= 0.0:
+                min_bal = min(bot_cur_balance, peak) if peak > 0.0 else bot_cur_balance
             
             if bot_cur_balance > peak:
                 peak = bot_cur_balance
                 trough = bot_cur_balance
-                data["peak_balance_usdt"] = peak
                 
             if bot_cur_balance < trough:
                 trough = bot_cur_balance
                 
             if bot_cur_balance < min_bal:
                 min_bal = bot_cur_balance
-                data["min_balance_usdt"] = min_bal
                 
-            data["_current_trough_usdt"] = trough
+            data["peak_balance_usdt"] = round(peak, 4)
+            data["_current_trough_usdt"] = round(trough, 4)
+            data["min_balance_usdt"] = round(min_bal, 4)
                 
             max_drawdown = trough - peak
             data["max_drawdown_usdt"] = round(min(data.get("max_drawdown_usdt", 0.0), max_drawdown), 4)
