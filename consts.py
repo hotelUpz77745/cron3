@@ -34,14 +34,13 @@ _CFG: Dict[str, Any] = _read_json(CFG_PATH)
 
 import sys
 # Динамически подключаем внешнюю папку API из конфига
-_shared_api_dir = _CFG.get("paths", {}).get("shared_api_dir")
-if _shared_api_dir:
-    _api_parent = str(Path(_shared_api_dir).resolve().parent)
-    if _api_parent not in sys.path:
-        sys.path.insert(0, _api_parent)
+_shared_api_dir = _CFG["paths"]["shared_api_dir"]
+_api_parent = str(Path(_shared_api_dir).resolve().parent)
+if _api_parent not in sys.path:
+    sys.path.insert(0, _api_parent)
 
-SHARED_API_DIR = Path(_shared_api_dir) if _shared_api_dir else (BASE_DIR.parent / "API")
-PAPER_BOT_DIR = Path(_CFG.get("paths", {}).get("paper_bot_dir", BASE_DIR.parent / "cron3Papper"))
+SHARED_API_DIR = Path(_shared_api_dir)
+PAPER_BOT_DIR = Path(_CFG["paths"]["paper_bot_dir"])
 ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
 CACHE_DIR = BASE_DIR / "CACHE"
 
@@ -84,16 +83,16 @@ WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodel
 BACKUP_ENABLED: bool = bool(_CFG["backup"]["enabled"])
 BACKUP_DEBOUNCE_SEC: int = int(_CFG["backup"]["debounce_sec"])
 BACKUP_MAX_INTERVAL_SEC: int = int(_CFG["backup"]["max_interval_sec"])
-STREAMER_PORT: int = int(_CFG.get("streamer", {}).get("port", 48123))
-STREAMER_LOCK_NAME: str = str(_CFG.get("streamer", {}).get("lock_name", "streamer.lock"))
+STREAMER_PORT: int = int(_CFG["streamer"]["port"])
+STREAMER_LOCK_NAME: str = str(_CFG["streamer"]["lock_name"])
 
 # ============================================================
 # SIGNAL & SMART GRACE DECLARATIONS
 # ============================================================
-DEFAULT_TIMEFRAME: str = str(_CFG.get("signal", {}).get("timeframe", "5m"))
-DEFAULT_SMART_GRACE: Dict[str, Any] = _CFG.get("signal", {}).get("smart_grace", {})
-DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_sec", 57.0))
-DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE.get("shift_interval_sec", 13))
+DEFAULT_TIMEFRAME: str = str(_CFG["signal"]["timeframe"])
+DEFAULT_SMART_GRACE: Dict[str, Any] = _CFG["signal"]["smart_grace"]
+DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE["start_period_sec"])
+DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE["shift_interval_sec"])
 
 # ============================================================
 # LOGGING

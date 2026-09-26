@@ -17,6 +17,10 @@
         "shared_api_dir": "c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/API",
         "paper_bot_dir": "c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3Papper"
     },
+    "streamer": {
+        "port": 48123,
+        "lock_name": "streamer.lock"
+    },
     "dynamic_selection": {
         "enabled": true,
         "max_coins_num": 2,
