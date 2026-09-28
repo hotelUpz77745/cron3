@@ -75,11 +75,11 @@
         "_comment_constraints": "min_volatility_pct и max_volatility_pct обязаны принимать строго численные значения (float/int), null запрещен",
         "timeframe": "1w",
         "window": 12,
-        "min_volatility_pct": 25.0,
+        "min_volatility_pct": 20.0,
         "max_volatility_pct": 40.0,
         "strict_window": true,
         "min_dayly_vol_usdt": 3000000,
-        "minimum_density": 50,
+        "minimum_density": 58,
         "last_candle": true
     },
     "analytics": {

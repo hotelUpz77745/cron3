@@ -9,6 +9,7 @@
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from c_log import UnifiedLogger
 from consts import DATA_DIR
@@ -22,10 +23,10 @@ class VolatilityScanner:
     def __init__(self, client=None):
         self.config_path = DATA_DIR / "app.json"
         self.output_path = DATA_DIR / "volatile_symbols.json"
+        self.output_txt_path = DATA_DIR / "volatile_symbols.txt"
         
-        # We need a BinanceClient to get klines. In an isolated script, we can initialize it without keys.
-        self.client = client or BinanceClient("", "")
-        self.semaphore = asyncio.Semaphore(5)
+        self.client = client
+        self.semaphore = asyncio.Semaphore(10)
 
     def _get_config(self):
         default_cfg = {
@@ -50,7 +51,9 @@ class VolatilityScanner:
     async def _process_symbol(self, symbol, timeframe, window, min_vol, max_vol, strict_window):
         async with self.semaphore:
             try:
-                klines = await self.client.get_klines(symbol, timeframe, window)
+                klines = await BinancePublic.get_klines(symbol, timeframe, window)
+                if not klines and self.client:
+                    klines = await self.client.get_klines(symbol, timeframe, window)
                 if not klines:
                     return None
                     
@@ -138,6 +141,36 @@ class VolatilityScanner:
             logger.info(f"[Scanner] Saved {len(matching_symbols)} matching symbols to {self.output_path}")
         except Exception as e:
             logger.error(f"[Scanner] Error saving to {self.output_path}: {e}")
+
+        # Сохранение TXT отчета с двойными кавычками
+        try:
+            now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            symbols_list = [item["symbol"] for item in matching_symbols]
+            json_symbols_inline = json.dumps(symbols_list, ensure_ascii=False)
+            json_symbols_multiline = json.dumps(symbols_list, indent=4, ensure_ascii=False)
+            lines = [
+                f"Дата: {now_str}",
+                f"Количество монет: {len(matching_symbols)}",
+                "",
+                "JSON Symbols List (для app.json):",
+                json_symbols_inline,
+                "",
+                "JSON Symbols List (развернутый):",
+                json_symbols_multiline,
+                "",
+                "Детализация:",
+                "_____"
+            ]
+            for item in matching_symbols:
+                lines.append(f"Символ: {item['symbol']}")
+                lines.append(f"Волатильность: {item['volatility']}%")
+                lines.append(f"Свечей: {item['candles']}")
+                lines.append("_____")
+            with open(self.output_txt_path, "w", encoding="utf-8") as f:
+                f.write("\n".join(lines))
+            logger.info(f"[Scanner] Saved TXT report to {self.output_txt_path}")
+        except Exception as e:
+            logger.error(f"[Scanner] Error saving TXT: {e}")
             
         return self.output_path
 
@@ -147,7 +180,8 @@ async def run_scanner():
         path = await scanner.scan()
         return path
     finally:
-        await scanner.client.shutdown()
+        if scanner.client:
+            await scanner.client.shutdown()
 
 if __name__ == "__main__":
     asyncio.run(run_scanner())

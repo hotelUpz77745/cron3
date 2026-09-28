@@ -215,6 +215,9 @@ class VolatilityScanner2:
         # Генерация форматированного TXT отчета
         try:
             now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            symbols_list = [item["symbol"] for item in matching_symbols]
+            json_symbols_inline = json.dumps(symbols_list, ensure_ascii=False)
+            json_symbols_multiline = json.dumps(symbols_list, indent=4, ensure_ascii=False)
             lines = [
                 "=" * 80,
                 "VOLATILITY SCANNER 2 (DENSITY & PERCENTILE) REPORT",
@@ -224,8 +227,11 @@ class VolatilityScanner2:
                 "=" * 80,
                 f"Found matching symbols: {len(matching_symbols)}",
                 "",
-                "Python Symbols List:",
-                str([item["symbol"] for item in matching_symbols]),
+                "JSON Symbols List (для app.json):",
+                json_symbols_inline,
+                "",
+                "JSON Symbols List (развернутый):",
+                json_symbols_multiline,
                 "",
                 "Detailed Breakdown:",
                 "-" * 80

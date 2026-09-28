@@ -1601,8 +1601,12 @@ class TelegramReceiver:
                         lines.append(f"Количество монет: {len(data)}")
                         
                         coin_list = [item["symbol"] for item in data]
-                        lines.append(f"Список монет для Python:")
-                        lines.append(str(coin_list))
+                        lines.append("")
+                        lines.append("JSON Symbols List (для app.json):")
+                        lines.append(json.dumps(coin_list, ensure_ascii=False))
+                        lines.append("")
+                        lines.append("JSON Symbols List (развернутый):")
+                        lines.append(json.dumps(coin_list, indent=4, ensure_ascii=False))
                         lines.append("\nДетализация:")
                         lines.append("_____")
                         
