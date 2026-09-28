@@ -1584,9 +1584,11 @@ class TelegramReceiver:
                     except:
                         pass
                         
-                # Запускаем напрямую в текущем процессе с передачей общего клиента
-                from CORE.ADVANCED.volatility_scanner import VolatilityScanner
-                scanner = VolatilityScanner(client=self.bot_core.client)
+                # Запускаем напрямую в текущем процессе с перезагрузкой модуля
+                import importlib
+                import CORE.ADVANCED.volatility_scanner as vs
+                importlib.reload(vs)
+                scanner = vs.VolatilityScanner(client=self.bot_core.client)
                 await scanner.scan()
                 
                 output_path = DATA_DIR / "volatile_symbols.json"
@@ -1642,8 +1644,10 @@ class TelegramReceiver:
             try:
                 await callback.answer("Запускаю Скринер 2 (Плотность и Перцентили)...")
                 msg = await callback.message.answer("⏳ Сканирование волатильности v2 (Плотность и Перцентили) запущено, пожалуйста подождите...")
-                from CORE.ADVANCED.volatility_scanner2 import VolatilityScanner2
-                scanner = VolatilityScanner2(client=self.bot_core.client)
+                import importlib
+                import CORE.ADVANCED.volatility_scanner2 as vs2
+                importlib.reload(vs2)
+                scanner = vs2.VolatilityScanner2(client=self.bot_core.client)
                 await scanner.scan()
                 
                 txt_output_path = DATA_DIR / "volatile_symbols2.txt"
