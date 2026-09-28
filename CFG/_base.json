@@ -2,7 +2,7 @@
     "LONG": {
         "enable": true,
         "invest_size": 400,
-        "leverage": 10,
+        "leverage": 20,
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "_comment_tp_purpose": "self, opposite, both",
         "tp_purpose": "both",
@@ -81,7 +81,7 @@
     "SHORT": {
         "enable": true,
         "invest_size": 400,
-        "leverage": 10,
+        "leverage": 20,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "tp_purpose": "both",
