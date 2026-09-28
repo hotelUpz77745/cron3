@@ -1697,15 +1697,22 @@ class TelegramReceiver:
             config_path = DATA_DIR / "app.json"
             cfg = {
                 "timeframe": "1w",
-                "window": 12,
-                "min_volatility_pct": 20.0,
-                "max_volatility_pct": 40.0,
-                "strict_window": True,
                 "min_dayly_vol_usdt": 3000000.0,
-                "minimum_density": 50.0,
+                "window": 12,
+                "strict_window": True,
                 "last_candle": True,
-                "high_vol_threshold_pct": 65.0,
-                "max_high_vol_density_pct": 5.0
+                "layers": [
+                    {
+                        "name": "target_corridor",
+                        "range": [20.0, 40.0],
+                        "min_density": 50.0
+                    },
+                    {
+                        "name": "anti_spike",
+                        "range": [70.0, None],
+                        "max_density": 5.0
+                    }
+                ]
             }
             if config_path.exists():
                 try:
@@ -1721,8 +1728,8 @@ class TelegramReceiver:
                 json.dump(cfg, f, indent=4, ensure_ascii=False)
                 
             await callback.message.answer(
-                "<b>Текущие настройки Скринера 2 (Плотность и Перцентили):</b>\n"
-                "<i>Внимание: min_volatility_pct и max_volatility_pct обязаны быть строго числами (null запрещен).</i>\n"
+                "<b>Текущие настройки Скринера 2 (Многослойная плотность и анти-дурная свеча):</b>\n"
+                "<i>Поддерживает слои (layers) с диапазонами [min, max] (где max может быть null) и задачами: min_density или max_density.</i>\n"
                 "Отредактируйте файл и отправьте обратно документом (или текстом).",
                 reply_markup=self._get_back_keyboard(),
                 parse_mode="HTML"
@@ -1786,13 +1793,9 @@ class TelegramReceiver:
                 
             try:
                 new_cfg = json.loads(json_str)
-                min_v = new_cfg.get("min_volatility_pct")
-                max_v = new_cfg.get("max_volatility_pct")
-                if min_v is None or max_v is None:
-                    await message.answer("❌ Ошибка: min_volatility_pct и max_volatility_pct обязаны быть строго числами (null запрещен)!")
+                if "layers" not in new_cfg and "ranges" not in new_cfg and "min_volatility_pct" not in new_cfg:
+                    await message.answer("❌ Ошибка: укажите 'layers' (список диапазонов) или 'min_volatility_pct'!")
                     return
-                float(min_v)
-                float(max_v)
                 
                 config_path = DATA_DIR / "app.json"
                 app_data = {}

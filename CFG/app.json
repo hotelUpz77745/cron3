@@ -72,17 +72,29 @@
     },
     "volatility_scanner2": {
         "_comment_call": "Запуск в Telegram: команда /sonnik -> кнопка 'Run Scanner 2 (Density/Percentile)' или команда /sonnik2",
-        "_comment_constraints": "min_volatility_pct и max_volatility_pct обязаны принимать строго численные значения (float/int), null запрещен",
         "timeframe": "1w",
-        "window": 12,
-        "min_volatility_pct": 20.0,
-        "max_volatility_pct": 40.0,
-        "strict_window": true,
         "min_dayly_vol_usdt": 3000000,
-        "minimum_density": 50.0,
+        "window": 12,
+        "strict_window": true,
         "last_candle": true,
-        "high_vol_threshold_pct": 65.0,
-        "max_high_vol_density_pct": 5.0
+        "layers": [
+            {
+                "name": "target_corridor",
+                "range": [
+                    20.0,
+                    40.0
+                ],
+                "min_density": 50.0
+            },
+            {
+                "name": "anti_spike",
+                "range": [
+                    60.0,
+                    null
+                ],
+                "max_density": 5.0
+            }
+        ]
     },
     "analytics": {
         "start_balance_usdt": 150.0,

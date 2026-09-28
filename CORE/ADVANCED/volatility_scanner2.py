@@ -39,18 +39,71 @@ class VolatilityScanner2:
         self.client = client
         self.semaphore = asyncio.Semaphore(10)
 
+    def _normalize_layers(self, cfg: dict) -> list[dict]:
+        """
+        Нормализует слои / диапазоны волатильности из конфига.
+        Поддерживает:
+        - "layers": [...] или {...}
+        - "ranges": [...] или {...}
+        - Fallback на старые плоские ключи: min_volatility_pct, max_volatility_pct, minimum_density, high_vol_threshold_pct, max_high_vol_density_pct
+        """
+        raw_layers = cfg.get("layers") or cfg.get("ranges")
+        normalized = []
+
+        if isinstance(raw_layers, list):
+            for idx, item in enumerate(raw_layers):
+                if isinstance(item, dict):
+                    entry = dict(item)
+                    if "name" not in entry:
+                        entry["name"] = f"layer_{idx + 1}"
+                    normalized.append(entry)
+        elif isinstance(raw_layers, dict):
+            for name, item in raw_layers.items():
+                if isinstance(item, dict):
+                    entry = dict(item)
+                    entry["name"] = name
+                    normalized.append(entry)
+
+        if not normalized:
+            # Fallback на плоский формат параметров
+            min_v = cfg.get("min_volatility_pct", 20.0)
+            max_v = cfg.get("max_volatility_pct", 40.0)
+            min_d = cfg.get("minimum_density", 50.0)
+            normalized.append({
+                "name": "target_corridor",
+                "range": [min_v, max_v],
+                "min_density": min_d
+            })
+            high_th = cfg.get("high_vol_threshold_pct")
+            max_hd = cfg.get("max_high_vol_density_pct")
+            if high_th is not None and max_hd is not None:
+                normalized.append({
+                    "name": "anti_spike",
+                    "range": [high_th, None],
+                    "max_density": max_hd
+                })
+
+        return normalized
+
     def _get_config(self) -> dict:
         default_cfg = {
             "timeframe": "1w",
             "window": 12,
-            "min_volatility_pct": 20.0,
-            "max_volatility_pct": 40.0,
             "strict_window": True,
             "min_dayly_vol_usdt": 3000000.0,
-            "minimum_density": 50.0,
             "last_candle": True,
-            "high_vol_threshold_pct": 65.0,
-            "max_high_vol_density_pct": 5.0
+            "layers": [
+                {
+                    "name": "target_corridor",
+                    "range": [20.0, 40.0],
+                    "min_density": 50.0
+                },
+                {
+                    "name": "anti_spike",
+                    "range": [70.0, None],
+                    "max_density": 5.0
+                }
+            ]
         }
 
         if self.config_path.exists():
@@ -65,18 +118,22 @@ class VolatilityScanner2:
 
         return default_cfg
 
+    @staticmethod
+    def _in_range(val: float, r_min: float | None, r_max: float | None) -> bool:
+        if r_min is not None and val < r_min:
+            return False
+        if r_max is not None and val > r_max:
+            return False
+        return True
+
     async def _process_symbol(
         self,
         symbol: str,
         timeframe: str,
         window: int,
-        min_vol: float,
-        max_vol: float,
         strict_window: bool,
-        minimum_density: float,
-        check_last_candle: bool,
-        high_vol_threshold_pct: float | None = None,
-        max_high_vol_density_pct: float | None = None
+        layers: list[dict],
+        global_last_candle: bool = True
     ):
         async with self.semaphore:
             try:
@@ -101,33 +158,50 @@ class VolatilityScanner2:
                     return None
 
                 total_count = len(vols)
-                matching_count = sum(1 for v in vols if min_vol <= v <= max_vol)
-                density_pct = (matching_count / total_count) * 100.0
-
-                # 1. Проверка плотности слоя целевой волатильности
-                if density_pct < minimum_density:
-                    return None
-
-                # 2. Проверка последней свечи на вхождение в рабочий коридор
                 last_candle_vol = vols[-1]
-                if check_last_candle:
-                    if not (min_vol <= last_candle_vol <= max_vol):
+
+                layer_results = []
+                for idx, layer in enumerate(layers):
+                    name = layer.get("name", f"layer_{idx + 1}")
+                    r = layer.get("range", [None, None])
+                    r_min = float(r[0]) if len(r) > 0 and r[0] is not None else None
+                    r_max = float(r[1]) if len(r) > 1 and r[1] is not None else None
+
+                    # Подсчет свечей, попавших в диапазон слоя
+                    match_count = sum(1 for v in vols if self._in_range(v, r_min, r_max))
+                    density_pct = (match_count / total_count) * 100.0
+
+                    min_d = layer.get("min_density")
+                    if min_d is not None and density_pct < float(min_d):
                         return None
 
-                # 3. Запрет дурной свечи (High Vol Density Ceiling)
-                max_vol_observed = max(vols)
-                if high_vol_threshold_pct is not None and max_high_vol_density_pct is not None:
-                    high_vol_count = sum(1 for v in vols if v > high_vol_threshold_pct)
-                    high_vol_density_pct = (high_vol_count / total_count) * 100.0
-                    if high_vol_density_pct > max_high_vol_density_pct:
+                    max_d = layer.get("max_density")
+                    if max_d is not None and density_pct > float(max_d):
                         return None
-                else:
-                    high_vol_count = 0
-                    high_vol_density_pct = 0.0
 
-                # 4. Расчет статистических перцентилей
+                    # Проверка последней свечи
+                    check_lc = layer.get("last_candle")
+                    if check_lc is None and idx == 0 and global_last_candle:
+                        check_lc = True
+
+                    if check_lc:
+                        if not self._in_range(last_candle_vol, r_min, r_max):
+                            return None
+
+                    layer_results.append({
+                        "name": name,
+                        "range": [r_min, r_max],
+                        "matching_candles": match_count,
+                        "density_pct": round(density_pct, 2),
+                        "min_density": min_d,
+                        "max_density": max_d
+                    })
+
+                # Статистические показатели
                 med_vol = statistics.median(vols)
                 avg_vol = sum(vols) / total_count
+                max_vol_observed = max(vols)
+                min_vol_observed = min(vols)
 
                 if total_count >= 4:
                     q = statistics.quantiles(vols, n=4)
@@ -137,14 +211,16 @@ class VolatilityScanner2:
                     p25 = min(vols)
                     p75 = max(vols)
 
+                primary_density = layer_results[0]["density_pct"] if layer_results else 0.0
+
                 return {
                     "symbol": symbol,
-                    "density_pct": round(density_pct, 2),
-                    "matching_candles": matching_count,
+                    "density_pct": primary_density,
+                    "layers": layer_results,
                     "total_candles": total_count,
                     "last_candle_vol": round(last_candle_vol, 2),
                     "max_vol": round(max_vol_observed, 2),
-                    "high_vol_count": high_vol_count,
+                    "min_vol": round(min_vol_observed, 2),
                     "median_vol": round(med_vol, 2),
                     "avg_vol": round(avg_vol, 2),
                     "p25_vol": round(p25, 2),
@@ -159,38 +235,35 @@ class VolatilityScanner2:
         cfg = self._get_config()
         timeframe = cfg.get("timeframe", "1w")
         window = int(cfg.get("window", 12))
-
-        min_vol = cfg.get("min_volatility_pct")
-        max_vol = cfg.get("max_volatility_pct")
-        if min_vol is None or max_vol is None:
-            raise ValueError("[Scanner2] min_volatility_pct and max_volatility_pct MUST be numeric, null is forbidden!")
-
-        min_vol = float(min_vol)
-        max_vol = float(max_vol)
-        if min_vol > max_vol:
-            raise ValueError(f"[Scanner2] min_volatility_pct ({min_vol}) cannot exceed max_volatility_pct ({max_vol})!")
-
         strict_window = bool(cfg.get("strict_window", True))
+        global_last_candle = bool(cfg.get("last_candle", True))
+
         min_dayly_vol_usdt = cfg.get("min_dayly_vol_usdt")
         if min_dayly_vol_usdt is not None:
             min_dayly_vol_usdt = float(min_dayly_vol_usdt)
 
-        minimum_density = float(cfg.get("minimum_density", 50.0))
-        check_last_candle = bool(cfg.get("last_candle", True))
+        layers = self._normalize_layers(cfg)
+        if not layers:
+            raise ValueError("[Scanner2] No layers/ranges defined in configuration!")
 
-        high_vol_threshold_pct = cfg.get("high_vol_threshold_pct")
-        if high_vol_threshold_pct is not None:
-            high_vol_threshold_pct = float(high_vol_threshold_pct)
-
-        max_high_vol_density_pct = cfg.get("max_high_vol_density_pct")
-        if max_high_vol_density_pct is not None:
-            max_high_vol_density_pct = float(max_high_vol_density_pct)
+        # Формирование описания слоев для логов и отчета
+        layer_descs = []
+        for idx, l in enumerate(layers, 1):
+            r = l.get("range", [None, None])
+            r_low = f"{r[0]:.1f}%" if len(r) > 0 and r[0] is not None else "0%"
+            r_high = f"{r[1]:.1f}%" if len(r) > 1 and r[1] is not None else "inf"
+            conds = []
+            if "min_density" in l and l["min_density"] is not None:
+                conds.append(f"MinDens>={l['min_density']}%")
+            if "max_density" in l and l["max_density"] is not None:
+                conds.append(f"MaxDens<={l['max_density']}%")
+            if l.get("last_candle") or (idx == 1 and global_last_candle and l.get("last_candle") is not False):
+                conds.append("LastCandle=True")
+            layer_descs.append(f"#{idx} '{l.get('name', f'layer_{idx}')}': [{r_low}..{r_high}] ({', '.join(conds)})")
 
         logger.info(
-            f"[Scanner2] Starting scan. TF={timeframe}, window={window}, range=[{min_vol}%..{max_vol}%], "
-            f"min_density={minimum_density}%, last_candle={check_last_candle}, strict={strict_window}, "
-            f"anti_spike: threshold>{high_vol_threshold_pct}%, max_density<={max_high_vol_density_pct}%, "
-            f"min_dayly_vol_usdt={min_dayly_vol_usdt}"
+            f"[Scanner2] Starting multi-layer scan. TF={timeframe}, window={window}, strict={strict_window}, "
+            f"min_dayly_vol_usdt={min_dayly_vol_usdt} | Layers: {'; '.join(layer_descs)}"
         )
 
         symbols = await BinancePublic.get_perp_symbols()
@@ -213,13 +286,9 @@ class VolatilityScanner2:
                 symbol=s,
                 timeframe=timeframe,
                 window=window,
-                min_vol=min_vol,
-                max_vol=max_vol,
                 strict_window=strict_window,
-                minimum_density=minimum_density,
-                check_last_candle=check_last_candle,
-                high_vol_threshold_pct=high_vol_threshold_pct,
-                max_high_vol_density_pct=max_high_vol_density_pct
+                layers=layers,
+                global_last_candle=global_last_candle
             )
             for s in symbols
         ]
@@ -231,7 +300,7 @@ class VolatilityScanner2:
         for item in matching_symbols:
             item["volume_24h_usdt"] = round(daily_vol_map.get(item["symbol"], 0.0), 2)
 
-        # Ранжирование: сначала по плотности слоя (desc), затем по медиане волатильности (desc)
+        # Ранжирование: сначала по плотности основного слоя (desc), затем по медиане волатильности (desc)
         matching_symbols.sort(key=lambda x: (x["density_pct"], x["median_vol"]), reverse=True)
 
         # Сохранение JSON
@@ -250,12 +319,14 @@ class VolatilityScanner2:
             json_symbols_multiline = json.dumps(symbols_list, indent=4, ensure_ascii=False)
             lines = [
                 "=" * 80,
-                "VOLATILITY SCANNER 2 (DENSITY, PERCENTILE & ANTI-SPIKE) REPORT",
+                "VOLATILITY SCANNER 2 (MULTI-LAYER DENSITY & ANTI-SPIKE) REPORT",
                 f"Generated at: {now_str}",
-                f"Settings: TF={timeframe} | Window={window} candles | Target Vol Range=[{min_vol:.1f}% .. {max_vol:.1f}%]",
-                f"Criteria: Min Density={minimum_density:.1f}% | Last Candle in Range={check_last_candle}",
-                f"Anti-Spike: Max High Vol (> {high_vol_threshold_pct or 0:.1f}%): <= {max_high_vol_density_pct or 0:.1f}% of window",
-                f"Liquidity: Min 24h Vol=${min_dayly_vol_usdt or 0:,.0f}",
+                f"Settings: TF={timeframe} | Window={window} candles | Liquidity: Min 24h Vol=${min_dayly_vol_usdt or 0:,.0f}",
+                "Active Layers / Tasks:"
+            ]
+            for desc in layer_descs:
+                lines.append(f"  * {desc}")
+            lines.extend([
                 "=" * 80,
                 f"Found matching symbols: {len(matching_symbols)}",
                 "",
@@ -267,13 +338,18 @@ class VolatilityScanner2:
                 "",
                 "Detailed Breakdown:",
                 "-" * 80
-            ]
+            ])
 
             for rank, item in enumerate(matching_symbols, 1):
                 vol_str = f"${item.get('volume_24h_usdt', 0):,.0f}"
                 history_str = ", ".join(f"{v:.1f}%" for v in item["candle_vols"])
+                layer_strs = []
+                for lr in item.get("layers", []):
+                    layer_strs.append(f"{lr['name']}: {lr['density_pct']}% ({lr['matching_candles']}/{item['total_candles']})")
+                layers_summary = " | ".join(layer_strs)
+
                 lines.append(
-                    f"#{rank:<2} {item['symbol']:<12} | Density: {item['density_pct']}% ({item['matching_candles']}/{item['total_candles']} candles) | "
+                    f"#{rank:<2} {item['symbol']:<12} | {layers_summary} | "
                     f"Last: {item['last_candle_vol']}% | Med(P50): {item['median_vol']}% | MaxVol: {item['max_vol']}% | 24h Vol: {vol_str}"
                 )
                 lines.append(f"    History ({item['total_candles']} candles): [{history_str}]")

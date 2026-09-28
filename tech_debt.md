@@ -85,36 +85,39 @@
 * **Суть проблемы**: Алгоритм сетки/качелей критически зависит от характера волатильности. Безоткатные пампы/дампы истощают маржу, а монеты в анабиозе замораживают капитал.
 * **Решение**: Регулярный систематический скрининг всего рынка фьючерсов Binance на предмет устойчивой плотности волатильности и ликвидности.
 
-#### 3. Спецификация и план имплементации `volatility_scanner2` (Density & Percentile Scanner)
+#### 3. Спецификация и реализация `volatility_scanner2` (Multi-Layer Density Scanner)
 * **Конфигурация в `CFG/app.json`**:
   ```json
   "volatility_scanner2": {
       "_comment_call": "Запуск в Telegram: /sonnik -> кнопка 'Run Scanner 2 (Density)' или команда /sonnik2",
-      "_comment_constraints": "min_volatility_pct и max_volatility_pct обязаны принимать строго численные значения (float/int), null запрещен",
       "timeframe": "1w",
       "window": 12,
-      "min_volatility_pct": 20.0,
-      "max_volatility_pct": 40.0,
       "strict_window": true,
       "min_dayly_vol_usdt": 3000000,
-      "minimum_density": 50.0,
       "last_candle": true,
-      "high_vol_threshold_pct": 65.0,
-      "max_high_vol_density_pct": 5.0
+      "layers": [
+          {
+              "name": "target_corridor",
+              "range": [20.0, 40.0],
+              "min_density": 50.0
+          },
+          {
+              "name": "anti_spike",
+              "range": [70.0, null],
+              "max_density": 5.0
+          }
+      ]
   }
   ```
-* **Базовый алгоритм плотности слоя (Density Layer)**:
+* **Многослойный алгоритм плотности (Multi-Layer Density System)**:
   * Для каждой свечи $i$ из окна $N=12$: $vol_i = ((High_i / Low_i) - 1) \times 100\%$.
-  * Подсчет свечей $K$, где $min\_volatility\_pct \le vol_i \le max\_volatility\_pct$.
-  * Плотность слоя: $Density = (K / N) \times 100\% \ge minimum\_density$ (по умолчанию $\ge 50\%$, т.е. от 6 свечей из 12).
+  * Каждый слой (`layer`) определяет целевой диапазон волатильности `[min, max]` (где `min` или `max` могут быть `null` для открытых интервалов) и критерий отбора:
+    * `min_density`: минимально необходимый процент свечей в диапазоне (для `target_corridor` $\ge 50\%$, т.е. от 6 из 12 свечей).
+    * `max_density`: максимально допустимый процент аномальных свечей (для `anti_spike` $\le 5\%$, т.е. ровно 0 свечей $\ge 70\%$).
 * **Требование к последней свече (`last_candle`)**:
-  * Если `true`: последняя свеча $vol_{last}$ обязана лежать в $[min\_volatility\_pct, max\_volatility\_pct]$.
-* **Запрет дурной свечи (High Vol Density Ceiling)**:
-  * Подсчет свечей с размахом $vol_i > high\_vol\_threshold\_pct$ (65.0%).
-  * Допустимая плотность аномальных свечей: $SpikeDensity \le max\_high\_vol\_density\_pct$ (5.0%). Для окна из 12 свечей это означает **ровно 0 свечей** выше 65% (так как 1 свеча = 8.33%).
-  * Надежно отсекает памп-дампы и безумные мемкоины (`USELESS` 385%, `MUBARAK` 164%, `PHAUSDT` 171%, `SKYAI` 401%).
+  * Если `true`: последняя закрытая свеча $vol_{last}$ обязана лежать внутри целевого рабочего коридора.
 * **Ранжирование и вывод**:
-  * Сортировка по плотности слоя (Density %, desc), затем по медиане волатильности (P50).
+  * Сортировка по плотности основного слоя (Density %, desc), затем по медиане волатильности (P50).
   * Вывод списков монет в строгом JSON-формате `["SYMBOL1", "SYMBOL2"]` с двойными кавычками.
 * **Команды вызова**:
   * Telegram: `/sonnik` (инлайн-меню со Скринером 1 и Скринером 2) и `/sonnik2` (прямой запуск Скринера 2).
