@@ -53,6 +53,8 @@ from consts import API_KEY
 from API.BINANCE.public import BinancePublic
 from CORE.ADVANCED.volatility_manager import VolatilityManager
 from consts import _CFG
+from CORE.STRATEGY.strategy_registry import StrategyRegistry
+from CORE.STRATEGY.momentum_engine import MomentumEngine
 logger = UnifiedLogger("BotCore")
 
 BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
@@ -60,8 +62,10 @@ BLOCK_ENTRY = False  # Глобальный флаг блокировки вхо
 class BotCore:
     def __init__(self):
         self.is_running = False
-        # Работаем только с теми символами, которые прописаны в конфигах .app.json в разделе symbols
-        self.symbols = _CFG["symbols"]
+        # Инициализация реестра стратегий и мультивселенных
+        self.strategy_registry = StrategyRegistry()
+        active_syms = self.strategy_registry.get_all_active_symbols()
+        self.symbols = active_syms if active_syms else _CFG["symbols"]
         self.prices = {}   # Структура для хранения цен
         self.runtime_manager = RuntimeFsmManager()
         
@@ -299,7 +303,15 @@ class BotCore:
             await self.leverage_manager.set_leverage_and_margin(self.client, symbol, side_cfg)
 
             # 1.5. Открытие позиции по маркету
-            invest_size = side_cfg["invest_size"]
+            invest_size = float(side_cfg["invest_size"])
+            strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+            if strat and strat.smart_size_cfg:
+                closed_count = len(state.recent_closes)
+                size_mult = MomentumEngine.calculate_smart_size_multiplier(closed_count, strat.smart_size_cfg)
+                if size_mult != 1.0:
+                    invest_size *= size_mult
+                    logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied: x{size_mult:.2f} -> invest_size={invest_size:.2f} USDT (closes: {closed_count})")
+
             grid_0 = side_cfg["grid"]["0"]
             volume_pct = grid_0["volume"]
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
@@ -460,26 +472,40 @@ class BotCore:
                 continue
             
             if not state.in_position and not state.in_position_papper:
-                # Calculate closed_count for smart_grace
-                now = time.time()
-                smart_grace_cfg = _CFG["signal"]["smart_grace"]
+                # Получаем стратегию для символа
+                strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+                smart_grace_cfg = strat.smart_grace_cfg if strat else _CFG["signal"]["smart_grace"]
+                smart_size_cfg = strat.smart_size_cfg if strat else None
                 eval_window = smart_grace_cfg["eval_window_sec"]
+
+                now = time.time()
                 state.recent_closes = [t for t in state.recent_closes if now - t <= eval_window]
                 closed_count = len(state.recent_closes)
-                
+
+                # Проверка Knife Blocker (запрет входа страдающей стороне)
+                opposite_side = "SHORT" if side == "LONG" else "LONG"
+                opposite_state = states[opposite_side]
+                opposite_state.recent_closes = [t for t in opposite_state.recent_closes if now - t <= eval_window]
+                opposite_closed_count = len(opposite_state.recent_closes)
+
+                if MomentumEngine.is_knife_blocked(opposite_closed_count, smart_size_cfg):
+                    continue
+
                 is_signal, current_grace = self.time_control.is_new_interval(closed_count, smart_grace_cfg)
-                
+
                 # Логируем изменения окна благодати
                 if state.last_grace_period != current_grace:
                     if state.last_grace_period != 0.0:
-                        logger.info(f"[{symbol}] {side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
+                        strat_tag = f"[{strat.strategy_id}] " if strat else ""
+                        logger.info(f"[{symbol}] {strat_tag}{side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
                     state.last_grace_period = current_grace
-                    
+
                 if is_signal and not BLOCK_ENTRY and not getattr(self, 'entry_blocked', False):
                     if getattr(self, 'block_until_timestamp', 0) > time.time():
                         logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked due to Close All until {self.block_until_timestamp}")
                     else:
-                        logger.info(f"[{symbol}] {side}: Signal is TRUE! Entering position...")
+                        strat_tag = f"[{strat.strategy_id}] " if strat else ""
+                        logger.info(f"[{symbol}] {strat_tag}{side}: Signal is TRUE! Entering position...")
                         # Ставим временный флаг идемпотентности
                         state.in_position_papper = True
                         signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
@@ -501,15 +527,20 @@ class BotCore:
         while self.is_running and not self.symbols:
             logger.warning("[BotCore] Symbol list is empty. Waiting for symbols to be configured in app.json...")
             await asyncio.sleep(5.0)
-            app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            if app_cfg and "symbols" in app_cfg:
-                self.symbols = app_cfg["symbols"]
+            self.strategy_registry = StrategyRegistry()
+            active_syms = self.strategy_registry.get_all_active_symbols()
+            if active_syms:
+                self.symbols = active_syms
+            else:
+                app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
+                if app_cfg and "symbols" in app_cfg:
+                    self.symbols = app_cfg["symbols"]
 
         if not self.is_running:
             return
 
         # ШАГ 1. Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        created_new = build_runtime_caches(self.symbols)
+        created_new = build_runtime_caches(self.symbols, registry=self.strategy_registry)
         if created_new and not TG_ENABLED:
             prompt_runtime_check()
             

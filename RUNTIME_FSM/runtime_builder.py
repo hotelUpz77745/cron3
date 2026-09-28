@@ -7,11 +7,14 @@
 # ==============================================================================
 
 import os
+import sys
 import json
 from pathlib import Path
 from consts import _CFG, DATA_DIR, AVOID_CHECK_RUNTIME_CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.STRATEGY.strategy_registry import StrategyRegistry
+from CORE.STRATEGY.strategy_applicator import StrategyApplicator
 
 from typing import Optional, List
 logger = UnifiedLogger("RuntimeBuilder")
@@ -21,15 +24,35 @@ RUNTIME_DIR = DATA_DIR / "runtime"
 def _ensure_dirs():
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
-def build_runtime_caches(symbols: Optional[List[str]] = None) -> bool:
+def build_runtime_caches(
+    symbols: Optional[List[str]] = None,
+    registry: Optional[StrategyRegistry] = None
+) -> bool:
     _ensure_dirs()
-    
+    created_new = False
+
+    if registry is None:
+        try:
+            registry = StrategyRegistry()
+        except Exception as e:
+            logger.warning(f"Could not load StrategyRegistry: {e}. Falling back to _base.json.")
+            registry = None
+
+    if symbols is None:
+        if registry and registry.get_all_active_symbols():
+            symbols = registry.get_all_active_symbols()
+        else:
+            cfg = Utils.read_json_file(DATA_DIR / "app.json")
+            symbols = cfg["symbols"] if cfg else _CFG["symbols"]
+
+    applicator = StrategyApplicator()
+
     base_file = DATA_DIR / "_base.json"
     base_data = Utils.read_json_file(base_file)
     if not base_data:
         logger.error(f"Base template not found or empty at {base_file}")
         return False
-        
+
     for side in ("LONG", "SHORT"):
         if side in base_data:
             grid = base_data[side]["grid"]
@@ -37,15 +60,17 @@ def build_runtime_caches(symbols: Optional[List[str]] = None) -> bool:
             if grid and tp_map and len(grid) != len(tp_map):
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
-    created_new = False
-    if symbols is None:
-        cfg = Utils.read_json_file(DATA_DIR / "app.json")
-        symbols = cfg["symbols"] if cfg else _CFG["symbols"]
     for symbol in symbols:
         sym_lower = symbol.lower()
         target_file = RUNTIME_DIR / f"{sym_lower}.json"
-        
-        if not target_file.exists():
+        strat = registry.get_strategy_for_symbol(symbol) if registry else None
+
+        if strat:
+            was_existing = target_file.exists()
+            applicator.build_runtime_for_symbol(symbol, strat)
+            if not was_existing and target_file.exists():
+                created_new = True
+        elif not target_file.exists():
             # Create from base template and add is_active / price
             new_data = json.loads(json.dumps(base_data))  # deep copy
             
