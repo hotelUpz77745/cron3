@@ -463,8 +463,10 @@ class TelegramReceiver:
             help_str = (
                 "<b>📚 Analytics Cheat Sheet (Global)</b>\n"
                 "▪️ <b>roi_pct</b>: Return on Investment (%) → <i>(Cur_Balance - Start_Balance) / Start_Balance * 100</i>\n"
-                "▪️ <b>load_ratio</b>: Grid Load Ratio → <i>|Unrealized PnL| / Realized PnL</i>\n"
-                "▪️ <b>recovery_factor</b>: Recovery Factor → <i>Realized PnL / |Max Drawdown|</i>\n"
+                "▪️ <b>grid_load_pct</b>: Grid Capacity Utilization (%) → <i>Current Grid Load / Total Grid Size * 100</i>\n"
+                "▪️ <b>margin_load_pct</b>: Margin Usage (%) → <i>Margin Used / Floating Balance * 100</i>\n"
+                "▪️ <b>free_margin_usdt</b>: Free Margin → <i>Floating Balance - Margin Used</i>\n"
+                "▪️ <b>recovery_factor</b>: Recovery Factor → <i>Net Profit / |Max Drawdown|</i>\n"
                 "▪️ <b>realized_pnl_usdt</b>: Total realized profit from all closed trades\n"
                 "▪️ <b>net_profit_usdt</b>: True mathematical growth → <i>Realized PnL + Unrealized PnL</i>\n"
                 "▪️ <b>cur_balance_usdt</b>: Current margin balance → <i>Start Balance + Net Profit</i>\n\n"
@@ -653,7 +655,9 @@ class TelegramReceiver:
                 lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0)} USDT")
                 lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0)} USDT")
                 lines.append(f"  ROI: {data.get('roi_pct', 0)}%")
-                lines.append(f"  Load Ratio: {data.get('load_ratio', 0)}")
+                lines.append(f"  Grid Load: {data.get('grid_load_pct', 0)}% ({data.get('current_grid_load_usdt', 0)} / {data.get('total_grid_size_usdt', 0)} USDT | Max: {data.get('max_grid_load_pct', 0)}%)")
+                lines.append(f"  Margin Load: {data.get('margin_load_pct', 0)}% (Used: {data.get('total_margin_used_usdt', 0)} USDT | Max: {data.get('max_margin_load_pct', 0)}%)")
+                lines.append(f"  Free Margin: {data.get('free_margin_usdt', 0)} USDT ({data.get('free_margin_pct', 0)}% | Min: {data.get('min_free_margin_usdt', 0)} USDT)")
                 lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0)}")
                 lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0)}%)\n")
                 
@@ -678,6 +682,8 @@ class TelegramReceiver:
                         lines.append(f"  Unrealized PnL: {cdata.get('current_drawdown', 0)} USDT")
                         lines.append(f"  Hist. Drawdown: Max {cdata.get('max_drawdown', 0)} / Min {cdata.get('min_drawdown', 0)}")
                         lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0)} USDT")
+                        lines.append(f"  Grid Load: {cdata.get('current_grid_load_pct', 0)}% ({cdata.get('current_grid_load_usdt', 0)} / {cdata.get('grid_capacity_usdt', 0)} USDT | Max: {cdata.get('max_grid_load_pct', 0)}%)")
+                        lines.append(f"  Margin Used: {cdata.get('current_margin_usdt', 0)} USDT ({cdata.get('margin_load_pct', 0)}% balance | Max: {cdata.get('max_margin_usdt', 0)} USDT)")
                         lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
                         lines.append(f"  Recovery Factor: {cdata.get('recovery_factor', 0)}")
                         lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
@@ -756,7 +762,9 @@ class TelegramReceiver:
                     msg += f"▪️ Max Drawdown: <b>{data.get('max_drawdown_usdt', 0)}</b> USDT\n"
                     msg += f"▪️ Performance (Peak-Start): <b>{data.get('performance_usdt', 0)}</b> USDT\n"
                     msg += f"▪️ ROI: <b>{data.get('roi_pct', 0)}%</b>\n"
-                    msg += f"▪️ Load Ratio: <b>{data.get('load_ratio', 0)}</b>\n"
+                    msg += f"▪️ Grid Load: <b>{data.get('grid_load_pct', 0)}%</b> ({data.get('current_grid_load_usdt', 0)}/{data.get('total_grid_size_usdt', 0)} USDT | Max: <b>{data.get('max_grid_load_pct', 0)}%</b>)\n"
+                    msg += f"▪️ Margin Load: <b>{data.get('margin_load_pct', 0)}%</b> (Used: <b>{data.get('total_margin_used_usdt', 0)}</b> USDT | Max: <b>{data.get('max_margin_load_pct', 0)}%</b>)\n"
+                    msg += f"▪️ Free Margin: <b>{data.get('free_margin_usdt', 0)}</b> USDT ({data.get('free_margin_pct', 0)}% | Min: <b>{data.get('min_free_margin_usdt', 0)}</b> USDT)\n"
                     msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0)}</b>\n"
                     msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0)}%</b>)\n\n"
                     
@@ -825,6 +833,8 @@ class TelegramReceiver:
                         msg_coins += f"  • Unrealized PnL: <b>{cdata.get('current_drawdown', 0)}</b> USDT\n"
                         msg_coins += f"  • Hist. Drawdown: Max <b>{cdata.get('max_drawdown', 0)}</b> / Min <b>{cdata.get('min_drawdown', 0)}</b>\n"
                         msg_coins += f"  • Avg Daily Profit (Net): <b>{cdata.get('avg_daily_profit', 0)}</b> USDT\n"
+                        msg_coins += f"  • Grid Load: <b>{cdata.get('current_grid_load_pct', 0)}%</b> ({cdata.get('current_grid_load_usdt', 0)}/{cdata.get('grid_capacity_usdt', 0)} USDT | Max: <b>{cdata.get('max_grid_load_pct', 0)}%</b>)\n"
+                        msg_coins += f"  • Margin Used: <b>{cdata.get('current_margin_usdt', 0)}</b> USDT ({cdata.get('margin_load_pct', 0)}% balance | Max: <b>{cdata.get('max_margin_usdt', 0)}</b> USDT)\n"
                         msg_coins += f"  • Max Position Size: <b>{cdata.get('max_position_size', 0)}</b> USDT\n"
                         msg_coins += f"  • Recovery Factor: <b>{cdata.get('recovery_factor', 0)}</b>\n"
                         msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"

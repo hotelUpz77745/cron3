@@ -533,18 +533,31 @@ class AnalyticsManager:
                 sym = p.get("symbol", "")
                 unrealized = float(p.get("unrealizedProfit", 0.0))
                 side = p.get("positionSide", "BOTH")
+                entry_p = float(p.get("entryPrice", 0.0))
+                notional_val = abs(float(p.get("notional", 0.0)))
+                if notional_val == 0.0 and entry_p > 0:
+                    notional_val = abs(amt) * entry_p
                 
                 coin_drawdowns[sym] = coin_drawdowns.get(sym, 0.0) + unrealized
                 
                 if sym not in coin_details:
-                    coin_details[sym] = {"long_unrealized": 0.0, "short_unrealized": 0.0, "long_amt": 0.0, "short_amt": 0.0}
+                    coin_details[sym] = {
+                        "long_unrealized": 0.0, "short_unrealized": 0.0,
+                        "long_amt": 0.0, "short_amt": 0.0,
+                        "long_notional": 0.0, "short_notional": 0.0,
+                        "long_entry": 0.0, "short_entry": 0.0
+                    }
                     
                 if side == "LONG" or (side == "BOTH" and amt > 0):
                     coin_details[sym]["long_unrealized"] = round(unrealized, 4)
                     coin_details[sym]["long_amt"] = amt
+                    coin_details[sym]["long_notional"] = notional_val
+                    coin_details[sym]["long_entry"] = entry_p
                 elif side == "SHORT" or (side == "BOTH" and amt < 0):
                     coin_details[sym]["short_unrealized"] = round(unrealized, 4)
                     coin_details[sym]["short_amt"] = amt
+                    coin_details[sym]["short_notional"] = notional_val
+                    coin_details[sym]["short_entry"] = entry_p
                 
             bot_unrealized = 0.0
             
@@ -627,17 +640,51 @@ class AnalyticsManager:
                 cdata["max_drawdown"] = round(min(cdata.get("max_drawdown", 0.0), drawdown), 4)
                 cdata["min_drawdown"] = round(max(cdata.get("min_drawdown", drawdown), drawdown), 4)
                 
-                # Adaptive MDME calculation
+                # Grid Capacity and Margin calculation for sym
                 rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
-                current_margin = 0.0
+                rt_data = {}
                 if rt_path.exists():
                     try:
                         rt_data = json.loads(rt_path.read_text(encoding="utf-8"))
-                        long_size = float(rt_data.get("LONG", {}).get("invest_size", 0.0)) if rt_data.get("LONG", {}).get("enable") else 0.0
-                        short_size = float(rt_data.get("SHORT", {}).get("invest_size", 0.0)) if rt_data.get("SHORT", {}).get("enable") else 0.0
-                        current_margin = (long_size + short_size) / 2.0
                     except Exception:
-                        pass
+                        rt_data = {}
+                
+                base_data = Utils.read_json_file(DATA_DIR / "_base.json") or {}
+                long_cfg = rt_data.get("LONG", base_data.get("LONG", {}))
+                short_cfg = rt_data.get("SHORT", base_data.get("SHORT", {}))
+                
+                long_size = float(long_cfg.get("invest_size", 400.0)) if long_cfg.get("enable", True) else 0.0
+                short_size = float(short_cfg.get("invest_size", 400.0)) if short_cfg.get("enable", True) else 0.0
+                long_lev = float(long_cfg.get("leverage", 20.0)) or 20.0
+                short_lev = float(short_cfg.get("leverage", 20.0)) or 20.0
+                
+                grid_capacity = long_size + short_size
+                current_margin = grid_capacity / 2.0
+                
+                # Notional exposure (Load)
+                long_notional = float(details.get("long_notional", 0.0))
+                if long_notional <= 0 and details.get("long_amt", 0.0) != 0:
+                    l_entry = float(details.get("long_entry", 0.0)) or float(rt_data.get("LONG", {}).get("avg_entry_price", 0.0))
+                    long_notional = abs(float(details["long_amt"])) * l_entry
+                    
+                short_notional = float(details.get("short_notional", 0.0))
+                if short_notional <= 0 and details.get("short_amt", 0.0) != 0:
+                    s_entry = float(details.get("short_entry", 0.0)) or float(rt_data.get("SHORT", {}).get("avg_entry_price", 0.0))
+                    short_notional = abs(float(details["short_amt"])) * s_entry
+                    
+                coin_load_usdt = round(long_notional + short_notional, 4)
+                coin_load_pct = round((coin_load_usdt / grid_capacity) * 100.0, 2) if grid_capacity > 0 else 0.0
+                
+                cdata["grid_capacity_usdt"] = round(grid_capacity, 2)
+                cdata["current_grid_load_usdt"] = coin_load_usdt
+                cdata["current_grid_load_pct"] = coin_load_pct
+                cdata["max_grid_load_usdt"] = round(max(float(cdata.get("max_grid_load_usdt", 0.0)), coin_load_usdt), 4)
+                cdata["max_grid_load_pct"] = round((cdata["max_grid_load_usdt"] / grid_capacity) * 100.0, 2) if grid_capacity > 0 else 0.0
+                cdata["load_ratio"] = round(coin_load_usdt / grid_capacity, 4) if grid_capacity > 0 else 0.0
+                
+                coin_margin_used = round((long_notional / long_lev) + (short_notional / short_lev), 4)
+                cdata["current_margin_usdt"] = coin_margin_used
+                cdata["max_margin_usdt"] = round(max(float(cdata.get("max_margin_usdt", 0.0)), coin_margin_used), 4)
                 
                 safe_margin = current_margin if current_margin > 0 else 1.0
                 current_mdme = abs(drawdown) / safe_margin
@@ -736,10 +783,46 @@ class AnalyticsManager:
             else:
                 data["roi_pct"] = 0.0
                 
-            if bot_gross_profit > 0:
-                data["load_ratio"] = round(abs(bot_unrealized) / bot_gross_profit, 2)
+            # --- Global Grid Load & Margin Load Calculations ---
+            total_grid_cap = sum(float(c.get("grid_capacity_usdt", 0.0)) for c in data.get("per_coin", {}).values())
+            total_grid_load = sum(float(c.get("current_grid_load_usdt", 0.0)) for c in data.get("per_coin", {}).values())
+            total_margin_used = sum(float(c.get("current_margin_usdt", 0.0)) for c in data.get("per_coin", {}).values())
+
+            data["total_grid_size_usdt"] = round(total_grid_cap, 2)
+            data["current_grid_load_usdt"] = round(total_grid_load, 4)
+            data["grid_load_pct"] = round((total_grid_load / total_grid_cap) * 100.0, 2) if total_grid_cap > 0 else 0.0
+            data["max_grid_load_usdt"] = round(max(float(data.get("max_grid_load_usdt", 0.0)), total_grid_load), 4)
+            data["max_grid_load_pct"] = round((data["max_grid_load_usdt"] / total_grid_cap) * 100.0, 2) if total_grid_cap > 0 else 0.0
+            data["load_ratio"] = round(total_grid_load / total_grid_cap, 4) if total_grid_cap > 0 else 0.0
+
+            # Margin load & free margin relative to floating account balance (bot_cur_balance)
+            data["total_margin_used_usdt"] = round(total_margin_used, 4)
+            data["max_margin_used_usdt"] = round(max(float(data.get("max_margin_used_usdt", 0.0)), total_margin_used), 4)
+
+            if bot_cur_balance > 0:
+                data["margin_load_pct"] = round((total_margin_used / bot_cur_balance) * 100.0, 2)
+                data["max_margin_load_pct"] = round((data["max_margin_used_usdt"] / bot_cur_balance) * 100.0, 2)
             else:
-                data["load_ratio"] = 0.0
+                data["margin_load_pct"] = 0.0
+                data["max_margin_load_pct"] = 0.0
+
+            free_margin = max(0.0, bot_cur_balance - total_margin_used)
+            data["free_margin_usdt"] = round(free_margin, 4)
+            data["free_margin_pct"] = round((free_margin / bot_cur_balance) * 100.0, 2) if bot_cur_balance > 0 else 0.0
+
+            prev_min_free = data.get("min_free_margin_usdt")
+            if prev_min_free is None:
+                data["min_free_margin_usdt"] = round(free_margin, 4)
+            else:
+                data["min_free_margin_usdt"] = round(min(float(prev_min_free), free_margin), 4)
+            data["min_free_margin_pct"] = round((data["min_free_margin_usdt"] / bot_cur_balance) * 100.0, 2) if bot_cur_balance > 0 else 0.0
+
+            # Per-coin margin percentages relative to current floating balance
+            for c in data.get("per_coin", {}).values():
+                c_m = float(c.get("current_margin_usdt", 0.0))
+                c["margin_load_pct"] = round((c_m / bot_cur_balance) * 100.0, 2) if bot_cur_balance > 0 else 0.0
+                c_m_max = float(c.get("max_margin_usdt", 0.0))
+                c["max_margin_load_pct"] = round((c_m_max / bot_cur_balance) * 100.0, 2) if bot_cur_balance > 0 else 0.0
                 
             peak = float(data.get("peak_balance_usdt") if data.get("peak_balance_usdt") is not None else initial)
             trough = float(data.get("_current_trough_usdt") if data.get("_current_trough_usdt") is not None else initial)

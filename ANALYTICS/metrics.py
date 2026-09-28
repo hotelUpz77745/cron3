@@ -32,7 +32,20 @@ class AnalyticsMathEngine:
         """
         data["_help"] = {
             "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
-            "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
+            "load_ratio": "Grid Load Ratio (0.0-1.0). current_grid_load_usdt / total_grid_size_usdt.",
+            "grid_load_pct": "Current Grid Capacity Utilization (%). (current_grid_load_usdt / total_grid_size_usdt) * 100",
+            "max_grid_load_pct": "Historical Maximum Grid Capacity Utilization (%).",
+            "total_grid_size_usdt": "Total combined configured notional size of all active coin grids.",
+            "current_grid_load_usdt": "Current total notional position size across all active coin grids in USDT.",
+            "max_grid_load_usdt": "Historical maximum total notional position size reached in USDT.",
+            "margin_load_pct": "Current Margin Usage relative to floating account balance (%). (total_margin_used_usdt / cur_balance_usdt) * 100",
+            "max_margin_load_pct": "Historical Maximum Margin Usage relative to account balance (%).",
+            "total_margin_used_usdt": "Total margin currently locked in positions across all coins in USDT.",
+            "max_margin_used_usdt": "Historical maximum margin locked in positions in USDT.",
+            "free_margin_usdt": "Current available free margin in USDT (cur_balance_usdt - total_margin_used_usdt).",
+            "free_margin_pct": "Current free margin percentage of floating balance (%).",
+            "min_free_margin_usdt": "Historical minimum free margin in USDT reached.",
+            "min_free_margin_pct": "Historical minimum free margin percentage reached.",
             "recovery_factor": "Recovery Factor. net_profit_usdt / abs(max_drawdown_usdt). Shows if the bots profit can cover historical max drawdowns.",
             "recovery_factor_coin": "[Per-Coin] Recovery Factor (Rec): net_profit_usdt / abs(max_drawdown_net_usdt).",
             "max_drawdown_net_usdt": "[Per-Coin] Historical maximum drawdown of Net Profit (realized + floating).",
@@ -172,7 +185,7 @@ class AnalyticsMathEngine:
                 except Exception:
                     pass
                     
-            cdata["max_position_size"] = round(current_margin, 4)
+            cdata["max_position_size"] = round(float(cdata.get("max_grid_load_usdt", current_margin)), 4)
             
             safe_max = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
             global_drme = cdata.get("avg_daily_profit", 0.0) / safe_max

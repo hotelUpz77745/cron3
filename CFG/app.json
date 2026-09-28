@@ -11,7 +11,7 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": false
+        "auto_start": true
     },
     "paths": {
         "shared_api_dir": "../API"
@@ -43,7 +43,7 @@
         "log_to_file": true
     },
     "symbols": [
-        "DOGSUSDT"
+        "ARXUSDT"
     ],
     "telegram": {
         "enabled": true,
@@ -95,8 +95,8 @@
             "threshold_increment": null
         },
         "positive": {
-            "threshold": null,
-            "threshold_increment": null
+            "threshold": 100,
+            "threshold_increment": 100
         }
     },
     "stop_bot_rirk_system": {
