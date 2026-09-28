@@ -100,8 +100,8 @@ class StrategyApplicator:
 
         side_configs = self.build_side_configs(strategy)
 
-        if target_file.exists() and not force:
-            existing = Utils.read_json_file(target_file)
+        existing = Utils.read_json_file(target_file) if target_file.exists() else {}
+        if existing and not force:
             existing_strat = existing.get("LONG", {}).get("strategy_id")
             if existing_strat == strategy.strategy_id:
                 # Конфигурация уже соответствует назначенной стратегии
@@ -110,29 +110,52 @@ class StrategyApplicator:
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():
             new_side = copy.deepcopy(side_cfg)
-            new_side.update({
-                "total_volume": 0.0,
-                "avg_entry_price": 0.0,
-                "pre_avg_price": 0.0,
-                "initial_entry_price": 0.0,
-                "open_time": 0,
-                "next_avg_price": None,
-                "fallback_price": None,
-                "in_position": False,
-                "in_position_papper": False,
-                "is_finished": False,
-                "pending_avg": False,
-                "pending_rolling_tp": False
-            })
-            if "grid" in new_side:
-                for grid_cfg in new_side["grid"].values():
-                    grid_cfg["is_active"] = False
-                    grid_cfg["price"] = None
-                    grid_cfg["activated_at"] = None
-                    grid_cfg["timestamp"] = None
-            if "tp_map" in new_side:
-                for tp_cfg in new_side["tp_map"].values():
-                    tp_cfg["is_active"] = False
+            exist_side = existing.get(side, {})
+            # Если позиция открыта, сохраняем состояние FSM
+            if exist_side.get("in_position", False):
+                for state_key in [
+                    "total_volume", "avg_entry_price", "pre_avg_price",
+                    "initial_entry_price", "open_time", "next_avg_price",
+                    "fallback_price", "in_position", "in_position_papper",
+                    "is_finished", "pending_avg", "pending_rolling_tp"
+                ]:
+                    if state_key in exist_side:
+                        new_side[state_key] = exist_side[state_key]
+                if "grid" in exist_side and "grid" in new_side:
+                    for g_idx, g_val in exist_side["grid"].items():
+                        if g_idx in new_side["grid"] and isinstance(g_val, dict):
+                            for k in ["is_active", "price", "activated_at", "timestamp"]:
+                                if k in g_val:
+                                    new_side["grid"][g_idx][k] = g_val[k]
+                if "tp_map" in exist_side and "tp_map" in new_side:
+                    for tp_idx, tp_val in exist_side["tp_map"].items():
+                        if tp_idx in new_side["tp_map"] and isinstance(tp_val, dict):
+                            if "is_active" in tp_val:
+                                new_side["tp_map"][tp_idx]["is_active"] = tp_val["is_active"]
+            else:
+                new_side.update({
+                    "total_volume": 0.0,
+                    "avg_entry_price": 0.0,
+                    "pre_avg_price": 0.0,
+                    "initial_entry_price": 0.0,
+                    "open_time": 0,
+                    "next_avg_price": None,
+                    "fallback_price": None,
+                    "in_position": False,
+                    "in_position_papper": False,
+                    "is_finished": False,
+                    "pending_avg": False,
+                    "pending_rolling_tp": False
+                })
+                if "grid" in new_side:
+                    for grid_cfg in new_side["grid"].values():
+                        grid_cfg["is_active"] = False
+                        grid_cfg["price"] = None
+                        grid_cfg["activated_at"] = None
+                        grid_cfg["timestamp"] = None
+                if "tp_map" in new_side:
+                    for tp_cfg in new_side["tp_map"].values():
+                        tp_cfg["is_active"] = False
 
             new_data[side] = new_side
 
