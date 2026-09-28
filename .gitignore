@@ -12,3 +12,4 @@ API/
 ANALYTICS/analytics.json
 ANALYTICS/trades_ledger.txt
 CFG/runtime/
+CFG/volatile_symbols*

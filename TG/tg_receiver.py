@@ -47,6 +47,7 @@ class TGStates(StatesGroup):
     waiting_for_initial_balance = State()
     waiting_for_reset_confirm = State()
     waiting_for_scanner_json = State()
+    waiting_for_scanner2_json = State()
     waiting_for_close_all_confirm = State()
     waiting_for_notif_neg = State()
     waiting_for_notif_pos = State()
@@ -1541,16 +1542,31 @@ class TelegramReceiver:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
 
         # =========================================================
-        # /sonnik - VOLATILITY SCANNER
+        # /sonnik & /sonnik2 - VOLATILITY SCANNERS
         # =========================================================
         @self.dp.message(Command("sonnik"))
         async def on_sonnik_cmd(message: Message, state: FSMContext):
             await state.clear()
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔍 Запустить фильтр (Run Scanner)", callback_data="cb_run_scanner")],
-                [InlineKeyboardButton(text="⚙️ Изменить настройки фильтра", callback_data="cb_edit_scanner_config")]
+                [
+                    InlineKeyboardButton(text="🔍 Скринер 1 (Avg Vol)", callback_data="cb_run_scanner"),
+                    InlineKeyboardButton(text="🎯 Скринер 2 (Density/Pct)", callback_data="cb_run_scanner2")
+                ],
+                [
+                    InlineKeyboardButton(text="⚙️ Настройки Скринера 1", callback_data="cb_edit_scanner_config"),
+                    InlineKeyboardButton(text="⚙️ Настройки Скринера 2", callback_data="cb_edit_scanner2_config")
+                ]
             ])
-            await message.answer("<b>Сонник (Volatility Scanner)</b>\nВыберите действие:", reply_markup=keyboard, parse_mode="HTML")
+            await message.answer("<b>Сонник (Сканеры волатильности)</b>\nВыберите действие:", reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.message(Command("sonnik2"))
+        async def on_sonnik2_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🎯 Запустить Скринер 2 сейчас", callback_data="cb_run_scanner2")],
+                [InlineKeyboardButton(text="⚙️ Настройки Скринера 2", callback_data="cb_edit_scanner2_config")]
+            ])
+            await message.answer("<b>Скринер 2 (Плотность слоя и перцентили)</b>\nВыберите действие:", reply_markup=keyboard, parse_mode="HTML")
 
         @self.dp.callback_query(F.data == "cb_run_scanner")
         async def process_cb_run_scanner(callback: CallbackQuery, state: FSMContext):
@@ -1600,7 +1616,7 @@ class TelegramReceiver:
                             f.write("\n".join(lines))
                         
                         await msg.delete()
-                        await callback.message.answer_document(FSInputFile(txt_output_path), caption="✅ Сканирование завершено. Результаты в файле.")
+                        await callback.message.answer_document(FSInputFile(txt_output_path), caption="✅ Сканирование Скринером 1 завершено. Результаты в файле.")
                     except Exception as e:
                         logger.error(f"Error formatting scanner output: {e}")
                         await msg.edit_text(f"❌ Ошибка форматирования результатов: {e}")
@@ -1612,6 +1628,34 @@ class TelegramReceiver:
                 await msg.edit_text(f"❌ Системная ошибка при запуске сканера: {e}")
             finally:
                 self._scanner_running = False
+
+        @self.dp.callback_query(F.data == "cb_run_scanner2")
+        async def process_cb_run_scanner2(callback: CallbackQuery, state: FSMContext):
+            if getattr(self, '_scanner2_running', False):
+                await callback.answer("Команда уже запущена, дождитесь результата", show_alert=True)
+                return
+            self._scanner2_running = True
+            try:
+                await callback.answer("Запускаю Скринер 2 (Плотность и Перцентили)...")
+                msg = await callback.message.answer("⏳ Сканирование волатильности v2 (Плотность и Перцентили) запущено, пожалуйста подождите...")
+                from CORE.ADVANCED.volatility_scanner2 import VolatilityScanner2
+                scanner = VolatilityScanner2(client=self.bot_core.client)
+                await scanner.scan()
+                
+                txt_output_path = DATA_DIR / "volatile_symbols2.txt"
+                if txt_output_path.exists():
+                    await msg.delete()
+                    await callback.message.answer_document(
+                        FSInputFile(txt_output_path),
+                        caption="✅ Сканирование Скринером 2 (Плотность и Перцентили) завершено. Результаты в файле."
+                    )
+                else:
+                    await msg.edit_text("❌ Ошибка сканирования (файл отчета не создан).")
+            except Exception as e:
+                logger.error(f"Error running scanner 2: {e}")
+                await msg.edit_text(f"❌ Системная ошибка при запуске Скринера 2: {e}")
+            finally:
+                self._scanner2_running = False
 
         @self.dp.callback_query(F.data == "cb_edit_scanner_config")
         async def process_cb_edit_scanner_config(callback: CallbackQuery, state: FSMContext):
@@ -1638,9 +1682,47 @@ class TelegramReceiver:
             with open(dump_path, "w", encoding="utf-8") as f:
                 json.dump(cfg, f, indent=4)
                 
-            await callback.message.answer("<b>Текущие настройки сканера:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
+            await callback.message.answer("<b>Текущие настройки Скринера 1:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
             await callback.message.answer_document(FSInputFile(dump_path))
             await state.set_state(TGStates.waiting_for_scanner_json)
+
+        @self.dp.callback_query(F.data == "cb_edit_scanner2_config")
+        async def process_cb_edit_scanner2_config(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            
+            config_path = DATA_DIR / "app.json"
+            cfg = {
+                "timeframe": "1w",
+                "window": 12,
+                "min_volatility_pct": 25.0,
+                "max_volatility_pct": 40.0,
+                "strict_window": True,
+                "min_dayly_vol_usdt": 3000000.0,
+                "minimum_density": 50.0,
+                "last_candle": True
+            }
+            if config_path.exists():
+                try:
+                    data = Utils.read_json_file(config_path)
+                    if "volatility_scanner2" in data:
+                        cfg.update(data["volatility_scanner2"])
+                except Exception:
+                    pass
+                    
+            dump_path = os.path.join("logs", "scanner2_app.json")
+            os.makedirs("logs", exist_ok=True)
+            with open(dump_path, "w", encoding="utf-8") as f:
+                json.dump(cfg, f, indent=4, ensure_ascii=False)
+                
+            await callback.message.answer(
+                "<b>Текущие настройки Скринера 2 (Плотность и Перцентили):</b>\n"
+                "<i>Внимание: min_volatility_pct и max_volatility_pct обязаны быть строго числами (null запрещен).</i>\n"
+                "Отредактируйте файл и отправьте обратно документом (или текстом).",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await callback.message.answer_document(FSInputFile(dump_path))
+            await state.set_state(TGStates.waiting_for_scanner2_json)
 
         @self.dp.message(TGStates.waiting_for_scanner_json)
         async def process_scanner_json(message: Message, state: FSMContext):
@@ -1672,7 +1754,49 @@ class TelegramReceiver:
                 app_data["volatility_scanner"] = new_cfg
                 Utils.write_json_file(config_path, app_data)
                 
-                await message.answer("✅ Настройки сканера успешно обновлены!", reply_markup=self._get_main_keyboard())
+                await message.answer("✅ Настройки Скринера 1 успешно обновлены!", reply_markup=self._get_main_keyboard())
+                await state.clear()
+            except Exception as e:
+                await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
+
+        @self.dp.message(TGStates.waiting_for_scanner2_json)
+        async def process_scanner2_json(message: Message, state: FSMContext):
+            if message.text and message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Отменено.", reply_markup=self._get_main_keyboard())
+                return
+                
+            json_str = ""
+            if message.document:
+                file = await self.bot.get_file(message.document.file_id)
+                out = io.BytesIO()
+                await self.bot.download_file(file.file_path, out)
+                json_str = out.getvalue().decode('utf-8')
+            elif message.text:
+                json_str = message.text.strip()
+            else:
+                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
+                return
+                
+            try:
+                new_cfg = json.loads(json_str)
+                min_v = new_cfg.get("min_volatility_pct")
+                max_v = new_cfg.get("max_volatility_pct")
+                if min_v is None or max_v is None:
+                    await message.answer("❌ Ошибка: min_volatility_pct и max_volatility_pct обязаны быть строго числами (null запрещен)!")
+                    return
+                float(min_v)
+                float(max_v)
+                
+                config_path = DATA_DIR / "app.json"
+                app_data = {}
+                if config_path.exists():
+                    app_data = Utils.read_json_file(config_path)
+                
+                app_data["volatility_scanner2"] = new_cfg
+                Utils.write_json_file(config_path, app_data)
+                
+                await message.answer("✅ Настройки Скринера 2 успешно обновлены!", reply_markup=self._get_main_keyboard())
                 await state.clear()
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
