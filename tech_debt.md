@@ -30,6 +30,9 @@
     - **Золотой стандарт:** 150 – 450 строк кода. Код должен быть компактным, модульным, атомарным и легко кэшироваться ИИ-моделями (Prompt Caching).
     ---
 
+
+
+
 ## 2. ADR Log
 
 ### ADR-2026-09-28: Синхронизация u0_fat_swing_supergrid, исправление Rec.Fact и аудит Протокола 2/3
@@ -45,3 +48,25 @@
   - Устранены вызовы `.get(..., default)` при чтении конфигов — теперь прямое обращение `['']`.
   - Устранены магические значения в коде: все параметры (`start_balance_usdt`, `timeframe`, `window`, `multiplier`, пороги нотификаций, авто-закрытия и стоп-системы) считываются строго из JSON-конфигураций.
   - Обновлены модули: `consts.py`, `CORE/bot.py`, `CORE/ADVANCED/volatility_manager.py`, `CORE/notifier.py`, `CORE/auto_closer.py`, `CORE/dynamic_coin_selector.py`, `RUNTIME_FSM/runtime_builder.py`, `quant_calculator.py`, `TG/tg_receiver.py`.
+
+
+
+
+## Аналитика.
+
+### ADR-2026-09-28: Переработка Grid Load Ratio, внедрение Margin Load и Free Margin
+
+1. **Рефакторинг Grid Load Ratio -> Загрузка сетки (Grid Capacity Utilization):**
+   - Устаревшая формула `abs(unrealized_pnl) / realized_pnl` заменена на физическую загрузку сетки от суммарного сайза (LONG + SHORT): `grid_capacity_usdt = LONG.invest_size + SHORT.invest_size`.
+   - Метрики по монете: `current_grid_load_usdt`, `current_grid_load_pct`, `max_grid_load_usdt`, `max_grid_load_pct`.
+   - Глобальные метрики: `total_grid_size_usdt`, `current_grid_load_usdt`, `grid_load_pct`, `max_grid_load_pct`, `load_ratio` (0.0-1.0).
+
+2. **Загрузка маржи (Margin Load) и свободная маржа (Free Margin) от плавающего баланса:**
+   - Плавающий баланс: `cur_balance_usdt = start_balance_usdt + net_profit_usdt`.
+   - Задействованная маржа по монете: `current_margin_usdt = (long_notional / long_leverage) + (short_notional / short_leverage)`.
+   - Задействованная маржа глобально: `total_margin_used_usdt`, `margin_load_pct = (total_margin_used_usdt / cur_balance_usdt) * 100`, `max_margin_load_pct`, `max_margin_used_usdt`.
+   - Свободная маржа: `free_margin_usdt = max(0.0, cur_balance_usdt - total_margin_used_usdt)`, `free_margin_pct`, `min_free_margin_usdt`, `min_free_margin_pct`.
+
+3. **Интерфейсы (TG, TXT-отчет, Cheat Sheet):**
+   - Добавлены блоки `Grid Load`, `Margin Load`, `Free Margin` в `/analytics` и посимвольные экраны.
+
