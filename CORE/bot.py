@@ -595,6 +595,11 @@ class BotCore:
         # Запускаем watchdog
         watchdog_task = asyncio.create_task(self.watchdog.start())
 
+        # ФИНАЛЬНАЯ ТОЧКА ПРОГРЕВА: Запуск аналитики только ПОСЛЕ полной готовности цен, FSM-стейтов и спецификаций
+        logger.info("[BotCore] All systems & prices fully warmed up. Running initial sync and starting analytics tracker...")
+        await self.analytics.deep_sync_analytics(self.client, self.prices)
+        self.analytics.start_realtime_tracker(self.client)
+
         while self.is_running:
             self._last_tick = time.time()
             self._tick_count += 1
@@ -676,11 +681,6 @@ class BotCore:
         else:
             logger.info("BotCore started in ACTIVE state (auto_start enabled). Trading loops are running.")
             
-        logger.info("[BotCore] Running initial deep sync of analytics...")
-        await self.analytics.deep_sync_analytics(self.client, self.prices)
-            
-        self.analytics.start_realtime_tracker(self.client)
-
         self.volatility_manager = VolatilityManager(self)
         
         await self._game_loop()

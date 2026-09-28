@@ -9,15 +9,13 @@ import re
 import time as _time_module
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PAGINATION_DELAY_SEC, POST_CLOSE_SYNC_DEBOUNCE_SEC, BG_UNREALIZED_POLL_FREQ_SEC
+from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PAGINATION_DELAY_SEC, POST_CLOSE_SYNC_DEBOUNCE_SEC, BG_UNREALIZED_POLL_FREQ_SEC, ANALYTICS_START_BALANCE_USDT
 from c_log import UnifiedLogger
+from c_utils import Utils
 
 import time
-from consts import DATA_DIR
 import math
 import os
-import json, csv
-import json as _json
 import traceback
 from ANALYTICS.metrics import AnalyticsMathEngine
 logger = UnifiedLogger("Analytics")
@@ -73,6 +71,15 @@ class AnalyticsManager:
         self._sync_in_progress = asyncio.Lock()
         self._ensure_files()
 
+        # Sync start balance from config upon restart
+        data = self._read_data()
+        if data:
+            stored_start = float(data.get("start_balance_usdt", 0.0))
+            config_start = float(ANALYTICS_START_BALANCE_USDT)
+            if config_start > 0 and abs(stored_start - config_start) > 0.0001:
+                logger.info(f"Syncing analytics start balance from config: {stored_start} -> {config_start}")
+                self.rebase_start_balance(config_start)
+
     def _ensure_files(self):
         if not self.log_file.exists():
             current_ms = int(time.time() * 1000)
@@ -113,9 +120,8 @@ class AnalyticsManager:
     def _write_data(self, data: dict, mark_backup: bool = True):
         try:
             AnalyticsMathEngine.calculate(data)
-            temp_file = self.log_file.with_suffix('.tmp')
-            temp_file.write_text(json.dumps(data, indent=4), encoding="utf-8")
-            os.replace(temp_file, self.log_file)
+            json_str = json.dumps(data, indent=4, ensure_ascii=False)
+            Utils.atomic_write_text(self.log_file, json_str)
             
             if mark_backup and getattr(self, 'backup_manager', None):
                 self.backup_manager.mark_changed()
@@ -165,21 +171,36 @@ class AnalyticsManager:
                     except Exception as e:
                         logger.error(f"Error removing {self.txt_file}: {e}")
 
+    def rebase_start_balance(self, new_balance: float) -> dict:
+        """
+        Корректно обновляет стартовый баланс без создания ложной просадки.
+        Сдвигает пики, впадины и текущий баланс на delta.
+        """
+        data = self._read_data()
+        old_balance = float(data.get("start_balance_usdt", 0.0))
+        delta = round(new_balance - old_balance, 4)
+        
+        data["start_balance_usdt"] = round(new_balance, 4)
+        data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
+        
+        peak_val = data.get("peak_balance_usdt")
+        data["peak_balance_usdt"] = round((float(peak_val) if peak_val is not None else old_balance) + delta, 4)
+        
+        trough_val = data.get("_current_trough_usdt")
+        data["_current_trough_usdt"] = round((float(trough_val) if trough_val is not None else old_balance) + delta, 4)
+        
+        min_val = data.get("min_balance_usdt")
+        data["min_balance_usdt"] = round((float(min_val) if min_val is not None else old_balance) + delta, 4)
+        
+        data["_rebased_start_balance_usdt"] = round(new_balance, 4)
+        
+        self._write_data(data)
+        return data
+
     async def set_initial_balance(self, new_balance: float):
         """Установка начального баланса с корректным перерасчетом пиков (rebase)."""
         async with self._lock:
-            data = self._read_data()
-            old_balance = float(data.get("start_balance_usdt", 0.0))
-            delta = new_balance - old_balance
-            
-            data["start_balance_usdt"] = round(new_balance, 4)
-            data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
-            data["peak_balance_usdt"] = round(float(data.get("peak_balance_usdt") or old_balance) + delta, 4)
-            data["_current_trough_usdt"] = round(float(data.get("_current_trough_usdt") or old_balance) + delta, 4)
-            data["min_balance_usdt"] = round(float(data.get("min_balance_usdt") or old_balance) + delta, 4)
-            data["_rebased_start_balance_usdt"] = round(new_balance, 4)
-            
-            self._write_data(data)
+            self.rebase_start_balance(new_balance)
 
 
     def record_finished_position(self, client, symbol: str, side: str, open_time: int, close_time: int):
@@ -697,11 +718,14 @@ class AnalyticsManager:
             
             initial = float(data.get("start_balance_usdt", 0.0))
             last_rebase = float(data.get("_rebased_start_balance_usdt", initial))
-            if initial != last_rebase:
+            if abs(initial - last_rebase) > 0.0001:
                 delta = initial - last_rebase
-                data["peak_balance_usdt"] = float(data.get("peak_balance_usdt") or initial) + delta
-                data["_current_trough_usdt"] = float(data.get("_current_trough_usdt") or initial) + delta
-                data["min_balance_usdt"] = float(data.get("min_balance_usdt") or initial) + delta
+                peak_cur = float(data["peak_balance_usdt"]) if data.get("peak_balance_usdt") is not None else initial
+                data["peak_balance_usdt"] = round(peak_cur + delta, 4)
+                trough_cur = float(data["_current_trough_usdt"]) if data.get("_current_trough_usdt") is not None else initial
+                data["_current_trough_usdt"] = round(trough_cur + delta, 4)
+                min_cur = float(data["min_balance_usdt"]) if data.get("min_balance_usdt") is not None else initial
+                data["min_balance_usdt"] = round(min_cur + delta, 4)
                 data["_rebased_start_balance_usdt"] = initial
 
             bot_cur_balance = round(initial + data["net_profit_usdt"], 4)
@@ -717,19 +741,20 @@ class AnalyticsManager:
             else:
                 data["load_ratio"] = 0.0
                 
-            peak = float(data.get("peak_balance_usdt") or 0.0)
-            if peak <= 0.0:
-                peak = max(initial, bot_cur_balance)
-                
-            trough = float(data.get("_current_trough_usdt") or 0.0)
-            if trough <= 0.0:
-                trough = min(bot_cur_balance, peak) if peak > 0.0 else bot_cur_balance
-                
-            min_bal = float(data.get("min_balance_usdt") or 0.0)
-            if min_bal <= 0.0:
-                min_bal = min(bot_cur_balance, peak) if peak > 0.0 else bot_cur_balance
+            peak = float(data.get("peak_balance_usdt") if data.get("peak_balance_usdt") is not None else initial)
+            trough = float(data.get("_current_trough_usdt") if data.get("_current_trough_usdt") is not None else initial)
+            min_bal = float(data.get("min_balance_usdt") if data.get("min_balance_usdt") is not None else initial)
             
-            if bot_cur_balance > peak:
+            # Active positions detection & Peak Guard
+            can_update_peak = True
+            if len(coin_details) > 0 and abs(bot_unrealized) < 1e-5:
+                can_update_peak = False
+                logger.warning(
+                    f"[ANALYTICS] Peak guard triggered: {len(coin_details)} active position(s) exist, "
+                    f"but bot_unrealized is 0.0. Blocking peak balance update."
+                )
+
+            if bot_cur_balance > peak and can_update_peak:
                 peak = bot_cur_balance
                 trough = bot_cur_balance
                 
@@ -761,16 +786,23 @@ class AnalyticsManager:
             return False
 
     async def _get_bnb_usdt_rate(self, client, cached_prices: dict = None) -> float:
-        if cached_prices and "BNBUSDT" in cached_prices:
-            val = cached_prices.get("BNBUSDT")
-            if val:
-                return float(val)
+        if cached_prices:
+            val = cached_prices.get("BNBUSDT") or cached_prices.get("bnbusdt")
+            if val is not None:
+                raw_price = val[0] if isinstance(val, (tuple, list)) else val
+                parsed = Utils.safe_float(raw_price, default=0.0)
+                if parsed > 0:
+                    return parsed
                 
         try:
             from API.BINANCE.public import BinancePublic
             prices = await BinancePublic.get_prices_bulk(["BNBUSDT"])
-            if "BNBUSDT" in prices:
-                return float(prices["BNBUSDT"])
+            if prices and "BNBUSDT" in prices:
+                val = prices["BNBUSDT"]
+                raw_price = val[0] if isinstance(val, (tuple, list)) else val
+                parsed = Utils.safe_float(raw_price, default=0.0)
+                if parsed > 0:
+                    return parsed
         except Exception as e:
             logger.warning(f"[ANALYTICS] Failed to fetch BNB rate via bulk: {e}")
         return 0.0

@@ -14,15 +14,15 @@
         "auto_start": false
     },
     "paths": {
-        "shared_api_dir": "c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/API",
-        "paper_bot_dir": "c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3Papper"
+        "shared_api_dir": "../API",
+        "paper_bot_dir": "../cron3Papper"
     },
     "streamer": {
         "port": 48123,
         "lock_name": "streamer.lock"
     },
     "dynamic_selection": {
-        "enabled": true,
+        "enabled": false,
         "max_coins_num": 2,
         "_desc_max_coins_num": "Максимальное число монет для выборки из бумажного бота (число или null).",
         "ranking_metric": "net_profit_usdt",
@@ -56,7 +56,9 @@
         "log_to_console": true,
         "log_to_file": true
     },
-    "symbols": [],
+    "symbols": [
+        "DOGSUSDT"
+    ],
     "telegram": {
         "enabled": true,
         "allowed_users": [
@@ -103,8 +105,8 @@
             "threshold_increment": null
         },
         "positive": {
-            "threshold": 20,
-            "threshold_increment": 20
+            "threshold": null,
+            "threshold_increment": null
         }
     },
     "stop_bot_rirk_system": {

@@ -629,8 +629,8 @@ class TelegramReceiver:
                 
                 start_val = data.get('start_balance_usdt', 0)
                 cur_val = data.get('cur_balance_usdt', 0)
-                peak_val = data.get('peak_balance_usdt') or start_val or cur_val
-                min_val = data.get('min_balance_usdt') or cur_val or start_val
+                peak_val = data.get('peak_balance_usdt') if data.get('peak_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
+                min_val = data.get('min_balance_usdt') if data.get('min_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
                 
                 lines.append("Balances:")
                 lines.append(f"  Start: {start_val} USDT")
@@ -731,8 +731,8 @@ class TelegramReceiver:
                     
                     start_val = data.get('start_balance_usdt', 0)
                     cur_val = data.get('cur_balance_usdt', 0)
-                    peak_val = data.get('peak_balance_usdt') or start_val or cur_val
-                    min_val = data.get('min_balance_usdt') or cur_val or start_val
+                    peak_val = data.get('peak_balance_usdt') if data.get('peak_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
+                    min_val = data.get('min_balance_usdt') if data.get('min_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
 
                     msg += "<b>💰 Balances:</b>\n"
                     msg += f"▪️ Start: <b>{start_val}</b> USDT\n"

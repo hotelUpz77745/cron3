@@ -68,6 +68,15 @@ class AnalyticsMathEngine:
         else:
             data["roi_pct"] = 0.0
 
+        total = int(data.get("total_trades", 0))
+        wins = int(data.get("winning_trades", 0))
+        data["total_trades"] = total
+        data["winning_trades"] = wins
+        if total > 0:
+            data["winrate_pct"] = round((wins / total) * 100.0, 2)
+        else:
+            data["winrate_pct"] = 0.0
+
     @staticmethod
     def _calculate_per_coin_metrics(data: dict) -> None:
         """

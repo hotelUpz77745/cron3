@@ -9,3 +9,6 @@ test/
 logs/
 scratch/
 API/
+ANALYTICS/analytics.json
+ANALYTICS/trades_ledger.txt
+CFG/runtime/

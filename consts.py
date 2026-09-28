@@ -33,14 +33,37 @@ def _read_json(path: Path) -> Dict[str, Any]:
 _CFG: Dict[str, Any] = _read_json(CFG_PATH)
 
 import sys
-# Динамически подключаем внешнюю папку API из конфига
-_shared_api_dir = _CFG["paths"]["shared_api_dir"]
-_api_parent = str(Path(_shared_api_dir).resolve().parent)
+PARENT_DIR = BASE_DIR.parent
+
+# Гарантируем наличие BASE_DIR и PARENT_DIR в sys.path (запуск изнутри и извне)
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+if str(PARENT_DIR) not in sys.path:
+    sys.path.insert(0, str(PARENT_DIR))
+
+# Динамически подключаем внешнюю папку API (с поддержкой относительных путей и автопоиска)
+_paths_cfg = _CFG.get("paths", {})
+_shared_api_cfg = _paths_cfg.get("shared_api_dir")
+if _shared_api_cfg:
+    _p = Path(_shared_api_cfg)
+    if not _p.is_absolute():
+        _p = (BASE_DIR / _p).resolve()
+    SHARED_API_DIR = _p if _p.exists() else (PARENT_DIR / "API").resolve()
+else:
+    SHARED_API_DIR = (PARENT_DIR / "API").resolve()
+
+_api_parent = str(SHARED_API_DIR.parent)
 if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 
-SHARED_API_DIR = Path(_shared_api_dir)
-PAPER_BOT_DIR = Path(_CFG["paths"]["paper_bot_dir"])
+_paper_bot_cfg = _paths_cfg.get("paper_bot_dir")
+if _paper_bot_cfg:
+    _p = Path(_paper_bot_cfg)
+    if not _p.is_absolute():
+        _p = (BASE_DIR / _p).resolve()
+    PAPER_BOT_DIR = _p if _p.exists() else (PARENT_DIR / "cron3Papper").resolve()
+else:
+    PAPER_BOT_DIR = (PARENT_DIR / "cron3Papper").resolve()
 ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
 CACHE_DIR = BASE_DIR / "CACHE"
 
@@ -76,6 +99,7 @@ REST_FAILSAFE_SEC: float = float(_CFG["app"]["rest_failsafe_sec"])
 INCOME_PAGINATION_DELAY_SEC: float = float(_CFG["app"]["income_pagination_delay_sec"])
 POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounce_sec"])
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
+ANALYTICS_START_BALANCE_USDT: float = float(_CFG.get("analytics", {}).get("start_balance_usdt", 0.0))
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])

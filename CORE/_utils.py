@@ -52,7 +52,7 @@ class TradeMath:
         Для SHORT: TP ниже средней цены входа.
         """
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
-        price_precision = precisions[1] if precisions else 2
+        price_precision = precisions[1] if precisions else (8 if avg_entry_price < 1.0 else 2)
         
         indent_abs = abs(tp_percent_indent)
         
@@ -80,7 +80,7 @@ class TradeMath:
         Для SHORT цена усреднения выше входа: initial_price * (1 + indent_abs / 100.0)
         """
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
-        price_precision = precisions[1] if precisions else 2
+        price_precision = precisions[1] if precisions else (8 if initial_price < 1.0 else 2)
         
         indent_abs = abs(indent_pct)
         

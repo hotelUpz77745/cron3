@@ -13,8 +13,11 @@ import sys
 from pathlib import Path
 
 _CUR_DIR = Path(__file__).resolve().parent
+_PARENT_DIR = _CUR_DIR.parent
 if str(_CUR_DIR) not in sys.path:
     sys.path.insert(0, str(_CUR_DIR))
+if str(_PARENT_DIR) not in sys.path:
+    sys.path.insert(0, str(_PARENT_DIR))
 
 from consts import TG_ENABLED
 from TG.tg_receiver import TelegramReceiver

@@ -10,6 +10,7 @@ from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 
 from CORE._utils import RiskCalculatingUtils
+from c_utils import Utils
 import asyncio
 logger = UnifiedLogger("TakeProfitManager")
 
@@ -66,8 +67,10 @@ class TakeProfitManager:
         order_side = "SELL" if side == "LONG" else "BUY"
         
         max_retries = 3
+        display_price = Utils.to_human_digit(tp_price)
+        display_vol = Utils.to_human_digit(volume)
         for attempt in range(1, max_retries + 1):
-            logger.info(f"[{symbol}] Placing {side} take profit limit order at {tp_price}. Vol: {volume} (Attempt {attempt}/{max_retries})")
+            logger.info(f"[{symbol}] Placing {side} take profit limit order at {display_price}. Vol: {display_vol} (Attempt {attempt}/{max_retries})")
             res = await client.make_order(
                 symbol=symbol,
                 qty=volume,

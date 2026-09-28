@@ -150,21 +150,26 @@ class Utils:
         if not symbol_data:
             return None
 
-        lot_size_filter = next((f for f in symbol_data["filters"] if f["filterType"] == "LOT_SIZE"), None)
-        price_filter = next((f for f in symbol_data["filters"] if f["filterType"] == "PRICE_FILTER"), None)
-
-        if not lot_size_filter or not price_filter:
-            return
+        filters = symbol_data.get("filters", [])
+        lot_size_filter = next((f for f in filters if f.get("filterType") == "LOT_SIZE"), None)
+        price_filter = next((f for f in filters if f.get("filterType") == "PRICE_FILTER"), None)
 
         def count_decimal_places(number_str):
-            if '.' in number_str:
-                return len(number_str.rstrip('0').split('.')[-1])
+            if number_str and '.' in str(number_str):
+                return len(str(number_str).rstrip('0').split('.')[-1])
             return 0
 
-        qty_precission = count_decimal_places(lot_size_filter['stepSize'])
-        price_precision = count_decimal_places(price_filter['tickSize'])
+        if lot_size_filter and "stepSize" in lot_size_filter:
+            qty_precision = count_decimal_places(lot_size_filter["stepSize"])
+        else:
+            qty_precision = int(symbol_data.get("quantityPrecision", 3))
 
-        return qty_precission, price_precision
+        if price_filter and "tickSize" in price_filter:
+            price_precision = count_decimal_places(price_filter["tickSize"])
+        else:
+            price_precision = int(symbol_data.get("pricePrecision", 2))
+
+        return qty_precision, price_precision
 
     @staticmethod
     def read_json_file(file_path: str) -> dict:
@@ -186,6 +191,45 @@ class Utils:
                 json.dump(data, f, indent=4, ensure_ascii=False)
         except Exception:
             pass
+
+    @staticmethod
+    def atomic_write_text(file_path: Union[str, Path], text: str, retries: int = 7, delay: float = 0.05) -> bool:
+        """
+        Атомарная запись текста в файл с защитой от WinError 5 / WinError 32 (блокировки файлов на Windows).
+        """
+        p = Path(file_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path = p.with_suffix(f".tmp_{os.getpid()}_{int(time.time() * 1000) % 1000000}")
+        try:
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                f.write(text)
+
+            for attempt in range(retries):
+                try:
+                    os.replace(tmp_path, p)
+                    return True
+                except (PermissionError, OSError) as e:
+                    if attempt == retries - 1:
+                        try:
+                            shutil.copyfile(tmp_path, p)
+                            if tmp_path.exists():
+                                tmp_path.unlink()
+                            return True
+                        except Exception:
+                            raise e
+                    time.sleep(delay * (attempt + 1))
+        finally:
+            if tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+        return False
+
+    @staticmethod
+    def atomic_write_json(file_path: Union[str, Path], data: Any, indent: int = 4, retries: int = 7, delay: float = 0.05) -> bool:
+        json_str = json.dumps(data, indent=indent, ensure_ascii=False)
+        return Utils.atomic_write_text(file_path, json_str, retries=retries, delay=delay)
 
     @staticmethod
     async def wait_for_fsm_sync(state, timeout_sec: float = 3.0, poll_interval: float = 0.01) -> bool:
