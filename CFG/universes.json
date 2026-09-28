@@ -1,0 +1,1807 @@
+{
+    "u0_base_classic": {
+        "name": "U0: Base Classic Benchmark",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {},
+        "super_grid_enabled": false
+    },
+    "u0_tight_scalper": {
+        "name": "U0: Tight Scalper Benchmark",
+        "description": "Быстрый скальпер малых тейков (0.45%..1.5%) для максимальной частоты оборота капитала во флэте",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.55,
+                    "fallback_indent": 1.1
+                },
+                "2": {
+                    "indent": 0.7,
+                    "fallback_indent": 1.4
+                },
+                "3": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.8
+                },
+                "4": {
+                    "indent": 1.2,
+                    "fallback_indent": 2.4
+                },
+                "5": {
+                    "indent": 1.5,
+                    "fallback_indent": 3.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u0_fat_swing": {
+        "name": "U0: Fat Swing Benchmark (Classic Grid)",
+        "description": "Широкий свинг-тейк (0.90%..3.0%) для спокойных трендовых выходов без лишней суеты",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u0_fat_swing123": {
+        "name": "U0: Fat Swing 123 (10-Level Fibonacci Grid)",
+        "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%) и начальным ордером ~50$ при множителе 1.1x",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 800.0,
+        "leverage": 10,
+        "overrides": {
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u0_fat_swing35": {
+        "name": "U0: Fat Swing 35 (9-Level Static Fibonacci Grid 3.5%..89%)",
+        "description": "Широкий свинг-тейк с модифицированной статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, до 89% просадки при множителе 1.1x",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 800.0,
+        "leverage": 10,
+        "overrides": {
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u0_fat_swing_supergrid": {
+        "name": "U0: Fat Swing Benchmark (Super Grid)",
+        "description": "Широкий свинг-тейк (0.90%..3.0%) с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                }
+            },
+            "super_grid": {
+                "enabled": true
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u0_smart_tp_fat_swing_supergrid": {
+        "name": "🔥 U0+: Smart TP Fat Swing SuperGrid (Anti-FOMO)",
+        "description": "5m SuperGrid: фиксированное окно 87с (Grace Incr 0), Knife Blocker OFF + адаптивный Smart TP (1.3x..2.1x) против покупок на хаях импульса",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 87,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "<2": 0,
+                    ">=2": 0,
+                    ">4": 0
+                }
+            },
+            "smart_tp": {
+                "eval_window_sec": 300,
+                "increments_tp": {
+                    "<2": 1.3,
+                    ">=2": 1.6,
+                    ">4": 2.1
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "knife_blocker_enabled": false,
+                "knife_blocker": {
+                    "enabled": false
+                },
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    ">=2": 1.0,
+                    ">4": 1.0
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                }
+            },
+            "super_grid": {
+                "enabled": true
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u0_sniper_baseline": {
+        "name": "U0: Strict Sniper Benchmark",
+        "description": "Чистый снайпер без импульса: окно строго 40с на открытии свечи, без расширений и с фиксированным сайзом 1.0x",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 40,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 0,
+                    "==2": 0,
+                    "==3": 0,
+                    ">=4": 0
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.0,
+                    "==3": 1.0,
+                    ">=4": 1.0
+                },
+                "knife_blocker_enabled": false
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u1_knife_off_free": {
+        "name": "U1: Knife Blocker OFF (Free Entry)",
+        "description": "Импульсный сбор БЕЗ Knife Blocker: страдающая сторона свободно входит на шуме в контртренд (максимум сделок)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": false,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u1_knife_standard_2": {
+        "name": "U1: Knife Blocker Standard (>=2)",
+        "description": "Каноническое правило ТЗ: блокирует вход страдающей стороны при подтвержденном тренде (>=2 тейка)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u1_knife_hyper_strict_1": {
+        "name": "U1: Knife Blocker Hyper-Strict (>=1)",
+        "description": "Экстремальная защита: блокирует вход страдающей стороны при первом же тейке противоположной стороны в окне",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 1
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u2_size_flat_100": {
+        "name": "U2: Flat Size Control (1.00x)",
+        "description": "Контроль сайзинга: строго фиксированный объем 1.00x на всех этапах импульса (без колокола)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.0,
+                    "==3": 1.0,
+                    ">=4": 1.0
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u2_size_bell_standard": {
+        "name": "U2: Standard Bell (1.0->1.25->1.35->0.75)",
+        "description": "Канонический колокол весов ТЗ: разгон, пик на 3-м тейке и сжатие до 0.75x на истощении для сохранения Мартингейла",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u2_size_bell_aggressive": {
+        "name": "U2: Aggressive Peak Bell (1.0->1.35->1.50->0.65)",
+        "description": "Агрессивный колокол: максимальная заливка на пике импульса (+50%) и глубокое сжатие на верхах (-35%)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.35,
+                    "==3": 1.5,
+                    ">=4": 0.65
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u2_size_deescalation": {
+        "name": "U2: Linear De-escalation (1.10->0.95->0.80->0.55)",
+        "description": "Линейное угасание риска: последовательное уменьшение сайза с каждым новым тейком на высоких ценах",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.1,
+                    "==2": 0.95,
+                    "==3": 0.8,
+                    ">=4": 0.55
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u3_grace_safe_58s_buffer": {
+        "name": "U3: Safe Standard Grace (58s Buffer)",
+        "description": "Эталонное окно ТЗ: 57с старт + [30, 90, 150, 185] -> максимум 242с, буфер тишины 58с до перещелкивания свечи",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 30,
+                    "==2": 90,
+                    "==3": 150,
+                    ">=4": 185
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u3_grace_aggressive_28s": {
+        "name": "U3: Aggressive Grace (28s Buffer)",
+        "description": "Сверхглубокий сбор импульса: 57с + [45, 120, 180, 215] -> до 272с (4м 19с свечи), буфер тишины 28с",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 45,
+                    "==2": 120,
+                    "==3": 180,
+                    ">=4": 215
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u4_tp_flat_quick_045": {
+        "name": "U4: Flat Quick TP 0.50%",
+        "description": "Быстрый плоский тейк: фиксированные 0.50% отката на всех уровнях сетки (0..5) для мгновенного закрытия",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "2": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "3": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "4": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u4_tp_flat_balanced_065": {
+        "name": "U4: Flat Balanced TP 0.65%",
+        "description": "Сбалансированный плоский тейк: фиксированные 0.65% отката на всех уровнях сетки (0..5)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "1": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "2": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "3": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "4": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u4_tp_fat_base_100": {
+        "name": "U4: Fat Base TP 1.00% (Classic Grid)",
+        "description": "Жирный первый тейк: Шаг 0 = 1.00% (съем максимума на старте), шаги усреднения 1..5 умеренные",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "1": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.5
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.0
+                },
+                "3": {
+                    "indent": 1.3,
+                    "fallback_indent": 2.6
+                },
+                "4": {
+                    "indent": 1.7,
+                    "fallback_indent": 3.2
+                },
+                "5": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.8
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u4_tp_fat_base_100_supergrid": {
+        "name": "U4: Fat Base TP 1.00% (Super Grid)",
+        "description": "Жирный базовый тейк: Шаг 0 = 1.00% с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "1": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.5
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.0
+                },
+                "3": {
+                    "indent": 1.3,
+                    "fallback_indent": 2.6
+                },
+                "4": {
+                    "indent": 1.7,
+                    "fallback_indent": 3.2
+                },
+                "5": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.8
+                }
+            },
+            "super_grid": {
+                "enabled": true
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u4_tp_inverted_damper": {
+        "name": "U4: Inverted TP Damper",
+        "description": "Классический демпфер: Шаг 0 = 1.0%, а при погружении в сетку тейк падает (до 0.40%) для мгновенного сброса объема",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "tp_map": {
+                "0": {
+                    "indent": 1.25,
+                    "fallback_indent": 1.8
+                },
+                "1": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.5
+                },
+                "2": {
+                    "indent": 0.88,
+                    "fallback_indent": 1.4
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.3
+                },
+                "4": {
+                    "indent": 0.62,
+                    "fallback_indent": 1.1
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u6_symbiosis_alpha_predator": {
+        "name": "U6: Flagship Alpha Predator (Classic Grid)",
+        "description": "Симбиоз альфа: агрессивный буфер 28с + крутой колокол весов (1.0->1.35->1.5->0.65) + инвертированный демпфер TP + Knife Blocker >=2",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 45,
+                    "==2": 120,
+                    "==3": 180,
+                    ">=4": 215
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.35,
+                    "==3": 1.5,
+                    ">=4": 0.65
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 1.25,
+                    "fallback_indent": 1.8
+                },
+                "1": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.5
+                },
+                "2": {
+                    "indent": 0.88,
+                    "fallback_indent": 1.4
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.3
+                },
+                "4": {
+                    "indent": 0.62,
+                    "fallback_indent": 1.1
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u6_symbiosis_alpha_predator_supergrid": {
+        "name": "U6: Flagship Alpha Predator (Super Grid)",
+        "description": "Флагман альфа-хищник: агрессивный буфер 28с + пиковый колокол объема + обратный демпфер TP + Knife Blocker >=2 с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 45,
+                    "==2": 120,
+                    "==3": 180,
+                    ">=4": 215
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.35,
+                    "==3": 1.5,
+                    ">=4": 0.65
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 1.25,
+                    "fallback_indent": 1.8
+                },
+                "1": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.5
+                },
+                "2": {
+                    "indent": 0.88,
+                    "fallback_indent": 1.4
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.3
+                },
+                "4": {
+                    "indent": 0.62,
+                    "fallback_indent": 1.1
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            },
+            "super_grid": {
+                "enabled": true
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u6_symbiosis_beta_scalper": {
+        "name": "U6: Fast Hyper-Scalper Machine",
+        "description": "Высокочастотный конвейер: экстремальное окно grace (287с) + плоский быстрый TP 0.45% + мягкий Knife Blocker >=3 (максимум оборота)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 50,
+                    "==2": 130,
+                    "==3": 195,
+                    ">=4": 230
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 3
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "2": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "3": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "4": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u6_symbiosis_gamma_fortress": {
+        "name": "U6: Gamma Fortress Shield",
+        "description": "Несокрушимая крепость: Ultra Panic Damper + гипер-строгий Knife Blocker >=1 + безопасное окно 58с + деэскалация сайза до 0.60x",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 30,
+                    "==2": 90,
+                    "==3": 140,
+                    ">=4": 170
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.15,
+                    "==3": 0.85,
+                    ">=4": 0.6
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 1
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 1.7,
+                    "fallback_indent": 2.4
+                },
+                "1": {
+                    "indent": 1.25,
+                    "fallback_indent": 1.9
+                },
+                "2": {
+                    "indent": 0.94,
+                    "fallback_indent": 1.5
+                },
+                "3": {
+                    "indent": 0.78,
+                    "fallback_indent": 1.3
+                },
+                "4": {
+                    "indent": 0.62,
+                    "fallback_indent": 1.1
+                },
+                "5": {
+                    "indent": 0.5,
+                    "fallback_indent": 1.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u6_symbiosis_gamma_fortress123": {
+        "name": "U6: Gamma Fortress Shield 123 (10-Level Fibonacci Grid)",
+        "description": "Несокрушимая крепость со 10-уровневой Fibonacci сеткой (1.6%..89%), Panic Damper TP, Knife Blocker >=1 и деэскалацией сайза",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 800.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 30,
+                    "==2": 90,
+                    "==3": 140,
+                    ">=4": 170
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.15,
+                    "==3": 0.85,
+                    ">=4": 0.6
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 1
+            },
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.64,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.6,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.56,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.52,
+                    "fallback_indent": 0.95
+                },
+                "9": {
+                    "indent": 0.5,
+                    "fallback_indent": 0.9
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u6_symbiosis_gamma_fortress35": {
+        "name": "U6: Gamma Fortress Shield 35 (9-Level Static Fibonacci Grid 3.5%..89%)",
+        "description": "Крепость со статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, Panic Damper TP (2.2% -> 0.50%), Knife Blocker >=1 и деэскалация сайза",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 800.0,
+        "leverage": 10,
+        "overrides": {
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "==1": 30,
+                    "==2": 90,
+                    "==3": 140,
+                    ">=4": 170
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.15,
+                    "==3": 0.85,
+                    ">=4": 0.6
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 1
+            },
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.58,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.53,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.5,
+                    "fallback_indent": 0.95
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u7_tf_10m_macro_momentum": {
+        "name": "U7: Macro 10m Timeframe (Scaled Momentum)",
+        "description": "10-минутный таймфрейм сигнала (600с бар): пропорционально масштабированные Smart Grace (114с..484с) и Smart Size (окно 600с, Knife Blocker >=2)",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "10m",
+            "smart_grace": {
+                "start_period_sec": 114,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 600,
+                "increments_card": {
+                    "==1": 60,
+                    "==2": 180,
+                    "==3": 300,
+                    ">=4": 370
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 600,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u7_tf_10m_half_grace": {
+        "name": "U7: 10m Half Grace (Tight Entry Window)",
+        "description": "10-минутный бар с урезанным вдвое окном благодати (57с..242с) и уменьшенными инкрементами для фильтрации запоздалых входов и снижения овертрейдинга",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "10m",
+            "smart_grace": {
+                "start_period_sec": 57,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 600,
+                "increments_card": {
+                    "==1": 30,
+                    "==2": 90,
+                    "==3": 150,
+                    ">=4": 185
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 600,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.25,
+                    "==3": 1.35,
+                    ">=4": 0.75
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 2
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u7_tf_10m_macro_sniper": {
+        "name": "U7: 10m Macro Sniper (Wide TP 0.9% + Strict Knife)",
+        "description": "10-минутный макро-снайпер: расширенный тейк-профит под 10m волатильность (0.9%..3.2%), жесткий Knife Blocker >=1 и компактное окно благодати 45с",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "10m",
+            "smart_grace": {
+                "start_period_sec": 45,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 600,
+                "increments_card": {
+                    "==1": 25,
+                    "==2": 50,
+                    "==3": 75,
+                    ">=4": 100
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 600,
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.15,
+                    "==3": 1.25,
+                    ">=4": 0.8
+                },
+                "knife_blocker_enabled": true,
+                "knife_blocker_threshold": 1
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.8
+                },
+                "1": {
+                    "indent": 1.2,
+                    "fallback_indent": 2.2
+                },
+                "2": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.8
+                },
+                "3": {
+                    "indent": 2.0,
+                    "fallback_indent": 3.5
+                },
+                "4": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.2
+                },
+                "5": {
+                    "indent": 3.2,
+                    "fallback_indent": 5.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u7_smart_tp_10m_macro_sniper": {
+        "name": "🔥 U7+: Smart TP 10m Macro Sniper (Anti-FOMO)",
+        "description": "10m Macro Sniper: окно 100с (Grace Incr 0), Knife Blocker OFF + адаптивный Smart TP (1.3x..2.1x в окне 600с) для глубокого снятия макро-импульсов",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "10m",
+            "smart_grace": {
+                "start_period_sec": 100,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 600,
+                "increments_card": {
+                    "<2": 0,
+                    ">=2": 0,
+                    ">4": 0
+                }
+            },
+            "smart_tp": {
+                "eval_window_sec": 600,
+                "increments_tp": {
+                    "<2": 1.3,
+                    ">=2": 1.6,
+                    ">4": 2.1
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 600,
+                "knife_blocker_enabled": false,
+                "knife_blocker": {
+                    "enabled": false
+                },
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    ">=2": 1.0,
+                    ">4": 1.0
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.8
+                },
+                "1": {
+                    "indent": 1.2,
+                    "fallback_indent": 2.2
+                },
+                "2": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.8
+                },
+                "3": {
+                    "indent": 2.0,
+                    "fallback_indent": 3.5
+                },
+                "4": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.2
+                },
+                "5": {
+                    "indent": 3.2,
+                    "fallback_indent": 5.0
+                }
+            }
+        },
+        "super_grid_enabled": false
+    },
+    "u8_golden_macro_symbiosis": {
+        "name": "👑 U8: Golden Macro Symbiosis (10m SuperGrid + Smart TP + Fat Swing TP)",
+        "description": "Золотое Руно: 10m Macro (низкие комиссии 8.6%) + SuperGrid ON + нарастающий Fat Swing TP (0.9%..3.4%) по канону стабильного лидера u0_fat_swing_supergrid + адаптивный Smart TP (1.3x..2.1x) + Knife Blocker OFF",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "10m",
+            "super_grid": {
+                "enabled": true
+            },
+            "smart_grace": {
+                "start_period_sec": 100,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 600,
+                "increments_card": {
+                    "<2": 0,
+                    ">=2": 0,
+                    ">4": 0
+                }
+            },
+            "smart_tp": {
+                "eval_window_sec": 600,
+                "increments_tp": {
+                    "<2": 1.3,
+                    ">=2": 1.6,
+                    ">4": 2.1
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 600,
+                "knife_blocker_enabled": false,
+                "knife_blocker": {
+                    "enabled": false
+                },
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    ">=2": 1.0,
+                    ">4": 1.0
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 2.1,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.7,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 3.4,
+                    "fallback_indent": 4.5
+                }
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u8_asymmetric_delta_predator": {
+        "name": "⚡ U8: Asymmetric Delta Predator (5m Peak Bell + SuperGrid + Smart TP)",
+        "description": "Асимметричный хищник дельты: 5m волны + пиковый колокол Smart Size (1.0x -> 1.35x -> 1.5x -> 0.65x) для максимальной выкачки прибыли на сильной стороне + SuperGrid ON для слабой стороны + Smart TP 1.3x..2.1x + Knife Blocker OFF",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "5m",
+            "super_grid": {
+                "enabled": true
+            },
+            "smart_grace": {
+                "start_period_sec": 87,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "<2": 0,
+                    ">=2": 0,
+                    ">4": 0
+                }
+            },
+            "smart_tp": {
+                "eval_window_sec": 300,
+                "increments_tp": {
+                    "<2": 1.3,
+                    ">=2": 1.6,
+                    ">4": 2.1
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "knife_blocker_enabled": false,
+                "knife_blocker": {
+                    "enabled": false
+                },
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    "==2": 1.35,
+                    "==3": 1.5,
+                    ">=4": 0.65
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                }
+            }
+        },
+        "super_grid_enabled": true
+    },
+    "u8_elastic_rebound_fortress": {
+        "name": "🛡️ U8: Elastic Rebound Fortress (5m SuperGrid + Flat TP 0.85% + Smart TP)",
+        "description": "Квантовая крепость отката: плоский тейк 0.85% на всех уровнях сетки (по канону стабильного топа u4_supergrid) для надежного сброса инвентаря без завышенного барьера на глубоких шагах + SuperGrid ON + адаптивный Smart TP (1.25x..1.9x) + Knife Blocker OFF",
+        "is_active": true,
+        "start_balance_usdt": 3000.0,
+        "invest_size": 400.0,
+        "leverage": 10,
+        "overrides": {
+            "timeframe": "5m",
+            "super_grid": {
+                "enabled": true
+            },
+            "smart_grace": {
+                "start_period_sec": 87,
+                "shift_interval_sec": 13,
+                "eval_window_sec": 300,
+                "increments_card": {
+                    "<2": 0,
+                    ">=2": 0,
+                    ">4": 0
+                }
+            },
+            "smart_tp": {
+                "eval_window_sec": 300,
+                "increments_tp": {
+                    "<2": 1.25,
+                    ">=2": 1.5,
+                    ">4": 1.9
+                }
+            },
+            "smart_size": {
+                "eval_window_sec": 300,
+                "knife_blocker_enabled": false,
+                "knife_blocker": {
+                    "enabled": false
+                },
+                "profiting_size_weights": {
+                    "<2": 1.0,
+                    ">=2": 1.0,
+                    ">4": 1.0
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                },
+                "1": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                },
+                "2": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                },
+                "3": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                },
+                "4": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                },
+                "5": {
+                    "indent": 0.85,
+                    "fallback_indent": 1.4
+                }
+            }
+        },
+        "super_grid_enabled": true
+    }
+}
