@@ -778,7 +778,7 @@ class AnalyticsManager:
             if data["max_drawdown_usdt"] < 0:
                 data["recovery_factor"] = round(net_profit_usdt / abs(data["max_drawdown_usdt"]), 2)
             else:
-                data["recovery_factor"] = round(net_profit_usdt, 2) if net_profit_usdt > 0 else 0.0
+                data["recovery_factor"] = 0.0
                 
             return True
                     

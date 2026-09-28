@@ -84,7 +84,7 @@ class AnalyticsMathEngine:
         if max_dd < 0:
             data["recovery_factor"] = round(net_profit / abs(max_dd), 2)
         else:
-            data["recovery_factor"] = round(net_profit, 2) if net_profit > 0 else 0.0
+            data["recovery_factor"] = 0.0
 
     @staticmethod
     def _calculate_per_coin_metrics(data: dict) -> None:
@@ -137,7 +137,7 @@ class AnalyticsMathEngine:
             if abs_net_dd > 0:
                 cdata["recovery_factor"] = round(net_profit / abs_net_dd, 2)
             else:
-                cdata["recovery_factor"] = round(net_profit, 2) if net_profit > 0 else 0.0
+                cdata["recovery_factor"] = 0.0
             
             avg_daily_profit = round(realized_net / days_active, 4)
             cdata["avg_daily_profit"] = avg_daily_profit
