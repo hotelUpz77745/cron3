@@ -45,20 +45,20 @@ class QuantCalculator:
         base_path = DATA_DIR / "_base.json"
         if base_path.exists() and (leverage is None or grid_steps is None or volumes is None or invest_size is None):
             base_data = Utils.read_json_file(base_path)
-            long_cfg = base_data.get("LONG", {})
+            long_cfg = base_data["LONG"]
             
             if invest_size is None:
-                invest_size = float(long_cfg.get("invest_size", 100.0))
+                invest_size = float(long_cfg["invest_size"])
             if leverage is None:
-                leverage = long_cfg.get("leverage", 10)
+                leverage = int(long_cfg["leverage"])
                 
             if grid_steps is None or volumes is None:
-                grid = long_cfg.get("grid", {})
+                grid = long_cfg["grid"]
                 loaded_steps = []
                 loaded_vols = []
                 for k in sorted(grid.keys(), key=lambda x: int(x)):
-                    loaded_steps.append(float(grid[k].get("indent", 0.0)))
-                    loaded_vols.append(float(grid[k].get("volume", 0.0)))
+                    loaded_steps.append(float(grid[k]["indent"]))
+                    loaded_vols.append(float(grid[k]["volume"]))
                 
                 if not grid_steps and loaded_steps:
                     grid_steps = loaded_steps

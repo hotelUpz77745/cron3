@@ -46,11 +46,8 @@ class VolatilityManager:
             
             # Wait for next update interval
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            if "super_grid" in app_data:
-                app_cfg = app_data["super_grid"]
-                interval_hours = app_cfg["update_interval_hours"]
-            else:
-                interval_hours = 12
+            app_cfg = app_data["super_grid"]
+            interval_hours = app_cfg["update_interval_hours"]
             wait_sec = interval_hours * 3600
             if wait_sec <= 0:
                 wait_sec = 3600 # default 1 hour fallback
@@ -59,9 +56,6 @@ class VolatilityManager:
 
     async def process_all(self):
         app_data = Utils.read_json_file(DATA_DIR / "app.json")
-        if "super_grid" not in app_data:
-            return
-            
         app_cfg = app_data["super_grid"]
         
         is_enabled = app_cfg["enabled"]
@@ -70,11 +64,11 @@ class VolatilityManager:
         if not symbols:
             return
 
-        timeframe = app_cfg.get("timeframe", "1d")
-        window = app_cfg.get("window", 14)
-        multiplier = app_cfg.get("multiplier", 1.0)
-        min_volatility_pct = app_cfg.get("min_volatility_pct", 15.0)
-        max_volatility_pct = app_cfg.get("max_volatility_pct", None)
+        timeframe = app_cfg["timeframe"]
+        window = app_cfg["window"]
+        multiplier = app_cfg["multiplier"]
+        min_volatility_pct = app_cfg["min_volatility_pct"]
+        max_volatility_pct = app_cfg["max_volatility_pct"]
 
         if is_enabled:
             logger.info(f"[VolatilityManager] Processing {len(symbols)} symbols. TF={timeframe}, window={window}, min_vol={min_volatility_pct}%, max_vol={max_volatility_pct}%")

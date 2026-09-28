@@ -25,15 +25,15 @@ class AutoCloser:
             return
             
         # RISK SYSTEM CHECK
-        risk_cfg = app_data.get("stop_bot_rirk_system", {})
-        if risk_cfg.get("enabled"):
+        risk_cfg = app_data["stop_bot_rirk_system"]
+        if risk_cfg["enabled"]:
             roi_pct = analytics_data.get("roi_pct", 0.0)
             
             try:
-                raw_critical_roi = float(risk_cfg.get("roi_critical_level_pct", -41.0))
+                raw_critical_roi = float(risk_cfg["roi_critical_level_pct"])
                 critical_roi = -abs(raw_critical_roi)
             except (ValueError, TypeError):
-                logger.error(f"[RISK_SYSTEM] Invalid roi_critical_level_pct in config: {risk_cfg.get('roi_critical_level_pct')}")
+                logger.error(f"[RISK_SYSTEM] Invalid roi_critical_level_pct in config: {risk_cfg['roi_critical_level_pct']}")
                 critical_roi = None
             
             if critical_roi is not None and roi_pct <= critical_roi:
@@ -79,8 +79,8 @@ class AutoCloser:
             
         net_usdt = analytics_data.get("net_profit_usdt", 0.0)
         
-        pos_cfg = auto_cfg.get("positive", {})
-        neg_cfg = auto_cfg.get("negative", {})
+        pos_cfg = auto_cfg["positive"]
+        neg_cfg = auto_cfg["negative"]
         
         triggered = False
         action_msg = ""

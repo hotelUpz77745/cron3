@@ -79,7 +79,7 @@ class BotCore:
         
         # Получаем таймфрейм из конфига app.json (секция signal)
         signal_cfg = _CFG["signal"]
-        timeframe = signal_cfg.get("timeframe", "5m")
+        timeframe = signal_cfg["timeframe"]
         self.time_control = TimeControl(interval=timeframe)
         
         # 2. Менеджеры
@@ -433,8 +433,8 @@ class BotCore:
             if not state.in_position and not state.in_position_papper:
                 # Calculate closed_count for smart_grace
                 now = time.time()
-                smart_grace_cfg = _CFG.get("signal", {}).get("smart_grace", {})
-                eval_window = smart_grace_cfg.get("eval_window_sec", 300)
+                smart_grace_cfg = _CFG["signal"]["smart_grace"]
+                eval_window = smart_grace_cfg["eval_window_sec"]
                 state.recent_closes = [t for t in state.recent_closes if now - t <= eval_window]
                 closed_count = len(state.recent_closes)
                 

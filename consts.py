@@ -42,8 +42,8 @@ if str(PARENT_DIR) not in sys.path:
     sys.path.insert(0, str(PARENT_DIR))
 
 # Динамически подключаем внешнюю папку API (с поддержкой относительных путей и автопоиска)
-_paths_cfg = _CFG.get("paths", {})
-_shared_api_cfg = _paths_cfg.get("shared_api_dir")
+_paths_cfg = _CFG["paths"]
+_shared_api_cfg = _paths_cfg["shared_api_dir"]
 if _shared_api_cfg:
     _p = Path(_shared_api_cfg)
     if not _p.is_absolute():
@@ -56,7 +56,7 @@ _api_parent = str(SHARED_API_DIR.parent)
 if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 
-_paper_bot_cfg = _paths_cfg.get("paper_bot_dir")
+_paper_bot_cfg = _paths_cfg["paper_bot_dir"]
 if _paper_bot_cfg:
     _p = Path(_paper_bot_cfg)
     if not _p.is_absolute():
@@ -99,7 +99,7 @@ REST_FAILSAFE_SEC: float = float(_CFG["app"]["rest_failsafe_sec"])
 INCOME_PAGINATION_DELAY_SEC: float = float(_CFG["app"]["income_pagination_delay_sec"])
 POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounce_sec"])
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
-ANALYTICS_START_BALANCE_USDT: float = float(_CFG.get("analytics", {}).get("start_balance_usdt", 0.0))
+ANALYTICS_START_BALANCE_USDT: float = float(_CFG["analytics"]["start_balance_usdt"])
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])

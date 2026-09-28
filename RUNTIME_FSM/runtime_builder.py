@@ -32,15 +32,15 @@ def build_runtime_caches(symbols: Optional[List[str]] = None) -> bool:
         
     for side in ("LONG", "SHORT"):
         if side in base_data:
-            grid = base_data[side].get("grid", {})
-            tp_map = base_data[side].get("tp_map", {})
+            grid = base_data[side]["grid"]
+            tp_map = base_data[side]["tp_map"]
             if grid and tp_map and len(grid) != len(tp_map):
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
     created_new = False
     if symbols is None:
         cfg = Utils.read_json_file(DATA_DIR / "app.json")
-        symbols = cfg.get("symbols", []) if cfg else _CFG.get("symbols", [])
+        symbols = cfg["symbols"] if cfg else _CFG["symbols"]
     for symbol in symbols:
         sym_lower = symbol.lower()
         target_file = RUNTIME_DIR / f"{sym_lower}.json"

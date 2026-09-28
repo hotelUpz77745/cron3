@@ -29,3 +29,19 @@
     - **Абсолютный верхний лимит:** 600 строк кода на один файл. Превышение лимита — признак архитектурного перекоса, требующий немедленной декомпозиции. Временное исключение может составить файл Оркестрации.
     - **Золотой стандарт:** 150 – 450 строк кода. Код должен быть компактным, модульным, атомарным и легко кэшироваться ИИ-моделями (Prompt Caching).
     ---
+
+## 2. ADR Log
+
+### ADR-2026-09-28: Синхронизация u0_fat_swing_supergrid, исправление Rec.Fact и аудит Протокола 2/3
+- **Концепт u0_fat_swing_supergrid:**
+  - `_base.json`: выставлены `leverage: 10`, `super_grid: {enabled: true}`, `invest_size: 400`, `tp_map`: 0 (0.9/1.5), 1 (1.1/1.8), 2 (1.4/2.2), 3 (1.8/2.8), 4 (2.3/3.5), 5 (3.0/4.2), 6-уровневая сетка.
+  - `app.json`: добавлен блок `analytics` (`start_balance_usdt: 3000.0`), `super_grid` активен (`timeframe: "1w"`, `window: 12`, `multiplier: 2.0`, `min_volatility_pct: 15.0`).
+- **Расчет Recovery Factor (Rec.Fact):**
+  - Приведен в точное соответствие с эталоном `cron3PapperUniverses`:
+    - Помонетный расчет (`ANALYTICS/metrics.py`): отслеживает `peak_net_profit_usdt` и `max_drawdown_net_usdt = round(min(prev_net_dd, net_dd, floating_dd), 4)`. Формула: `net_profit_usdt / abs(max_drawdown_net_usdt)`.
+    - Глобальный расчет (`ANALYTICS/analytics.py` & `metrics.py`): исправлена ошибка деления валовой прибыли `bot_gross_profit` — теперь строго `net_profit_usdt / abs(max_drawdown_usdt)`.
+    - Отображение: добавлено поле Recovery Factor в отчет `full_analytics_report.txt` и детальную карточку монеты в Telegram.
+- **Протокол (Правила 2 и 3):**
+  - Устранены вызовы `.get(..., default)` при чтении конфигов — теперь прямое обращение `['']`.
+  - Устранены магические значения в коде: все параметры (`start_balance_usdt`, `timeframe`, `window`, `multiplier`, пороги нотификаций, авто-закрытия и стоп-системы) считываются строго из JSON-конфигураций.
+  - Обновлены модули: `consts.py`, `CORE/bot.py`, `CORE/ADVANCED/volatility_manager.py`, `CORE/notifier.py`, `CORE/auto_closer.py`, `CORE/dynamic_coin_selector.py`, `RUNTIME_FSM/runtime_builder.py`, `quant_calculator.py`, `TG/tg_receiver.py`.

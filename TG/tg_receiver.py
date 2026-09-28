@@ -231,21 +231,21 @@ class TelegramReceiver:
                             
                         lines = [f"<b>{sym} Settings:</b>"]
                         for side in ["LONG", "SHORT"]:
-                            cfg = data.get(side, {})
-                            en = cfg.get("enable", False)
-                            sz = cfg.get("invest_size", 0)
-                            lev = cfg.get("leverage", 0)
-                            margin = cfg.get("margin_type", "CROSSED")
+                            cfg = data[side]
+                            en = cfg["enable"]
+                            sz = cfg["invest_size"]
+                            lev = cfg["leverage"]
+                            margin = cfg["margin_type"]
                             
                             lines.append(f"  <b>{side}</b>: {'✅ On' if en else '❌ Off'}")
                             if en:
                                 lines.append(f"    ├ Invest: {sz}$ | Lev: {lev}x | {margin}")
                                 
-                                grid = cfg.get("grid", {})
+                                grid = cfg["grid"]
                                 indents = []
                                 super_indents = []
                                 for k in sorted(grid.keys(), key=lambda x: int(x)):
-                                    indents.append(str(grid[k].get("indent", 0)))
+                                    indents.append(str(grid[k]["indent"]))
                                     si = grid[k].get("super_indent")
                                     super_indents.append(str(si) if si is not None else "-")
                                 lines.append(f"    ├ Grid: [{', '.join(indents)}]")
@@ -254,10 +254,10 @@ class TelegramReceiver:
                                     lines.append(f"    ├ Super: [{', '.join(super_indents)}]")
                                     
                                 
-                                tp_map = cfg.get("tp_map", {})
+                                tp_map = cfg["tp_map"]
                                 tps = []
                                 for k in sorted(tp_map.keys(), key=lambda x: int(x)):
-                                    tps.append(str(tp_map[k].get("indent", 0)))
+                                    tps.append(str(tp_map[k]["indent"]))
                                 lines.append(f"    └ TP: [{', '.join(tps)}]")
                                 
                         msg_text = "\n".join(lines)
@@ -679,6 +679,7 @@ class TelegramReceiver:
                         lines.append(f"  Hist. Drawdown: Max {cdata.get('max_drawdown', 0)} / Min {cdata.get('min_drawdown', 0)}")
                         lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0)} USDT")
                         lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
+                        lines.append(f"  Recovery Factor: {cdata.get('recovery_factor', 0)}")
                         lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
                         lines.append(f"  DRME: {cdata.get('DRME', 0)}")
                         lines.append(f"  MDME: {cdata.get('MDME', 0)}\n")
@@ -825,6 +826,7 @@ class TelegramReceiver:
                         msg_coins += f"  • Hist. Drawdown: Max <b>{cdata.get('max_drawdown', 0)}</b> / Min <b>{cdata.get('min_drawdown', 0)}</b>\n"
                         msg_coins += f"  • Avg Daily Profit (Net): <b>{cdata.get('avg_daily_profit', 0)}</b> USDT\n"
                         msg_coins += f"  • Max Position Size: <b>{cdata.get('max_position_size', 0)}</b> USDT\n"
+                        msg_coins += f"  • Recovery Factor: <b>{cdata.get('recovery_factor', 0)}</b>\n"
                         msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
                         msg_coins += f"  • DRME: <b>{cdata.get('DRME', 0)}</b>\n"
                         msg_coins += f"  • MDME: <b>{cdata.get('MDME', 0)}</b>\n\n"
@@ -1669,10 +1671,10 @@ class TelegramReceiver:
         async def on_notifications_menu(message: Message, state: FSMContext):
             await state.clear()
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            notif_cfg = app_cfg.get("notifications", {})
-            enabled = notif_cfg.get("enabled", False)
-            neg_th = notif_cfg.get("negative_threshold", -100.0)
-            pos_th = notif_cfg.get("positive_threshold", 100.0)
+            notif_cfg = app_cfg["notifications"]
+            enabled = notif_cfg["enabled"]
+            neg_th = notif_cfg["negative_threshold"]
+            pos_th = notif_cfg["positive_threshold"]
             
             neg_flag = self.bot_core.notifier.neg_flag if hasattr(self.bot_core, "notifier") else False
             pos_flag = self.bot_core.notifier.pos_flag if hasattr(self.bot_core, "notifier") else False
@@ -1759,15 +1761,15 @@ class TelegramReceiver:
         async def on_auto_closing_menu(message: Message, state: FSMContext):
             await state.clear()
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            auto_cfg = app_cfg.get("auto_closing", {})
+            auto_cfg = app_cfg["auto_closing"]
             
-            pos = auto_cfg.get("positive", {})
-            neg = auto_cfg.get("negative", {})
+            pos = auto_cfg["positive"]
+            neg = auto_cfg["negative"]
             
-            pos_th = pos.get("threshold")
-            pos_inc = pos.get("threshold_increment")
-            neg_th = neg.get("threshold")
-            neg_inc = neg.get("threshold_increment")
+            pos_th = pos["threshold"]
+            pos_inc = pos["threshold_increment"]
+            neg_th = neg["threshold"]
+            neg_inc = neg["threshold_increment"]
             
             def fmt(v): return "Выкл (0/null)" if (v is None or v == 0) else str(v)
             
@@ -1855,9 +1857,9 @@ class TelegramReceiver:
         async def on_risk_system(message: Message, state: FSMContext):
             await state.clear()
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            risk_cfg = app_data.get("stop_bot_rirk_system", {})
-            enabled = risk_cfg.get("enabled", False)
-            roi = risk_cfg.get("roi_critical_level_pct", -41.0)
+            risk_cfg = app_data["stop_bot_rirk_system"]
+            enabled = risk_cfg["enabled"]
+            roi = risk_cfg["roi_critical_level_pct"]
             
             status = "✅ Включена" if enabled else "❌ Выключена"
             text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."

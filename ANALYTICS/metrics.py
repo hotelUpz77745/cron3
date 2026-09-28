@@ -33,7 +33,10 @@ class AnalyticsMathEngine:
         data["_help"] = {
             "roi_pct": "Return on Investment (%). (cur_balance_usdt - start_balance_usdt) / start_balance_usdt * 100",
             "load_ratio": "Grid Load Ratio. abs(unrealized_pnl_usdt) / realized_pnl_usdt. Shows how much floating risk is taken per 1 USDT of closed profit.",
-            "recovery_factor": "Recovery Factor. realized_pnl_usdt / abs(max_drawdown_usdt). Shows if the bots profit can cover historical max drawdowns.",
+            "recovery_factor": "Recovery Factor. net_profit_usdt / abs(max_drawdown_usdt). Shows if the bots profit can cover historical max drawdowns.",
+            "recovery_factor_coin": "[Per-Coin] Recovery Factor (Rec): net_profit_usdt / abs(max_drawdown_net_usdt).",
+            "max_drawdown_net_usdt": "[Per-Coin] Historical maximum drawdown of Net Profit (realized + floating).",
+            "peak_net_profit_usdt": "[Per-Coin] Highest Net Profit reached by this coin.",
             "realized_pnl_usdt": "Total realized profit including commissions and funding fees from all closed trades.",
             "net_profit_usdt": "realized_pnl_usdt + unrealized_pnl_usdt. The true mathematical growth of the account.",
             "unrealized_pnl_usdt": "Current floating drawdown (unrealized PnL) of all open positions.",
@@ -77,6 +80,12 @@ class AnalyticsMathEngine:
         else:
             data["winrate_pct"] = 0.0
 
+        max_dd = float(data.get("max_drawdown_usdt", 0.0))
+        if max_dd < 0:
+            data["recovery_factor"] = round(net_profit / abs(max_dd), 2)
+        else:
+            data["recovery_factor"] = round(net_profit, 2) if net_profit > 0 else 0.0
+
     @staticmethod
     def _calculate_per_coin_metrics(data: dict) -> None:
         """
@@ -85,6 +94,19 @@ class AnalyticsMathEngine:
         current_ts = int(time.time() * 1000)
         
         for sym, cdata in data["per_coin"].items():
+            trades = int(cdata.get("total_trades", cdata.get("trades", 0)))
+            wins = int(cdata.get("winning_trades", cdata.get("win_count", 0)))
+            losses = int(cdata.get("loss_count", 0))
+            cdata["total_trades"] = trades
+            cdata["trades"] = trades
+            cdata["winning_trades"] = wins
+            cdata["win_count"] = wins
+            cdata["loss_count"] = losses
+            if trades > 0:
+                cdata["winrate_pct"] = round((wins / trades) * 100.0, 2)
+            else:
+                cdata["winrate_pct"] = 0.0
+
             first_trade_ts = cdata.get("first_trade_ts")
             if not first_trade_ts:
                 days_active = 1.0
@@ -96,6 +118,26 @@ class AnalyticsMathEngine:
             
             cdata["max_net_profit"] = round(max(cdata.get("max_net_profit", net_profit), net_profit), 4)
             cdata["min_net_profit"] = round(min(cdata.get("min_net_profit", net_profit), net_profit), 4)
+            
+            # Net profit peak and historical max drawdown of Net (realized + unrealized)
+            peak_net = cdata.get("peak_net_profit_usdt", max(0.0, net_profit))
+            if net_profit > peak_net:
+                peak_net = net_profit
+            cdata["peak_net_profit_usdt"] = round(peak_net, 4)
+            
+            net_dd = round(net_profit - peak_net, 4)
+            # Combine net_dd and unrealized floating drawdown for true safety
+            prev_net_dd = cdata.get("max_drawdown_net_usdt", 0.0)
+            floating_dd = cdata.get("max_drawdown", 0.0)
+            max_net_dd = round(min(prev_net_dd, net_dd, floating_dd), 4)
+            cdata["max_drawdown_net_usdt"] = max_net_dd
+            
+            # Recovery Factor (Rec) = Net Profit / abs(max DD of Net)
+            abs_net_dd = abs(max_net_dd)
+            if abs_net_dd > 0:
+                cdata["recovery_factor"] = round(net_profit / abs_net_dd, 2)
+            else:
+                cdata["recovery_factor"] = round(net_profit, 2) if net_profit > 0 else 0.0
             
             avg_daily_profit = round(realized_net / days_active, 4)
             cdata["avg_daily_profit"] = avg_daily_profit

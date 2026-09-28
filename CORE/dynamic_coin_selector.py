@@ -48,13 +48,12 @@ class DynamicCoinSelector:
 
     def _read_config(self) -> Dict[str, Any]:
         """Считывает свежую конфигурацию dynamic_selection из CFG/app.json."""
-        app_data = Utils.read_json_file(CFG_PATH) or {}
-        paths_cfg = app_data.get("paths", {})
-        if "paper_bot_dir" in paths_cfg and paths_cfg["paper_bot_dir"]:
-            self.paper_bot_dir = Path(paths_cfg["paper_bot_dir"])
+        app_data = Utils.read_json_file(CFG_PATH)
+        paths_cfg = app_data["paths"]
+        self.paper_bot_dir = Path(paths_cfg["paper_bot_dir"])
 
-        ds_cfg = app_data.get("dynamic_selection", {})
-        self.poll_interval_sec = float(ds_cfg.get("poll_interval_sec", 30.0))
+        ds_cfg = app_data["dynamic_selection"]
+        self.poll_interval_sec = float(ds_cfg["poll_interval_sec"])
         return ds_cfg
 
     def _read_paper_analytics(self) -> Optional[Dict[str, Any]]:
@@ -134,7 +133,7 @@ class DynamicCoinSelector:
         отбирает прибыльные монеты, сохраняет на диск в CFG/app.json и возвращает список.
         """
         ds_cfg = self._read_config()
-        if not ds_cfg.get("enabled", True):
+        if not ds_cfg["enabled"]:
             logger.info("[COIN_SELECTOR] Dynamic selection is disabled in config.")
             return []
 
@@ -142,11 +141,11 @@ class DynamicCoinSelector:
         if not analytics_data:
             return []
 
-        min_velocity_ratio = float(ds_cfg.get("min_velocity_ratio", 0.75))
-        min_coin_profit = float(ds_cfg.get("min_coin_profit_usdt", 1.0))
-        metric_name = str(ds_cfg.get("ranking_metric", "net_profit_usdt")).lower()
+        min_velocity_ratio = float(ds_cfg["min_velocity_ratio"])
+        min_coin_profit = float(ds_cfg["min_coin_profit_usdt"])
+        metric_name = str(ds_cfg["ranking_metric"]).lower()
         ranking_metric_key = self.RANKING_METRIC_MAP.get(metric_name, "net_profit_usdt")
-        max_coins = ds_cfg.get("max_coins_num")
+        max_coins = ds_cfg["max_coins_num"]
         if max_coins is not None:
             try:
                 max_coins = int(max_coins)

@@ -126,3 +126,19 @@ if __name__ == "__main__":
 
 # # export ANTHROPIC_API_KEY=...
 # taskkill /F /IM python.exe
+
+
+
+    # "signal": {
+    #     "timeframe": "5m",
+    #     "smart_grace": {
+    #         "start_period_sec": 87,
+    #         "shift_interval_sec": 13,
+    #         "eval_window_sec": 300,
+    #         "increments_card": {
+    #             "<2": 0,
+    #             ">=2": 120,
+    #             ">4": 150
+    #         }
+    #     }
+    # },

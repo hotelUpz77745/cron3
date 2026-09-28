@@ -240,7 +240,7 @@ class AnalyticsManager:
                 try:
                     with open("CFG/app.json", "r", encoding="utf-8") as f:
                         app_cfg = json.load(f)
-                        syms = app_cfg.get("symbols", [])
+                        syms = app_cfg["symbols"]
                         active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
                 except Exception:
                     active_symbols = []
@@ -774,10 +774,11 @@ class AnalyticsManager:
             max_perf = peak - initial
             data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)
             
+            net_profit_usdt = float(data.get("net_profit_usdt", 0.0))
             if data["max_drawdown_usdt"] < 0:
-                data["recovery_factor"] = round(bot_gross_profit / abs(data["max_drawdown_usdt"]), 2)
+                data["recovery_factor"] = round(net_profit_usdt / abs(data["max_drawdown_usdt"]), 2)
             else:
-                data["recovery_factor"] = 0.0
+                data["recovery_factor"] = round(net_profit_usdt, 2) if net_profit_usdt > 0 else 0.0
                 
             return True
                     

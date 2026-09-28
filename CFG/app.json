@@ -83,6 +83,10 @@
         "strict_window": true,
         "min_dayly_vol_usdt": 3000000
     },
+    "analytics": {
+        "start_balance_usdt": 3000.0,
+        "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
+    },
     "watchdog": {
         "timeout_sec": 60,
         "check_interval_sec": 1,

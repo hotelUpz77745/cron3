@@ -62,12 +62,12 @@ class NotifierManager:
     async def check_thresholds(self):
         # Читаем конфиг на лету, чтобы реагировать на изменения через Telegram
         app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-        notif_cfg = app_cfg.get("notifications", {})
-        if not notif_cfg.get("enabled", False):
+        notif_cfg = app_cfg["notifications"]
+        if not notif_cfg["enabled"]:
             return
 
-        neg_threshold = float(notif_cfg.get("negative_threshold", -100.0))
-        pos_threshold = float(notif_cfg.get("positive_threshold", 100.0))
+        neg_threshold = float(notif_cfg["negative_threshold"])
+        pos_threshold = float(notif_cfg["positive_threshold"])
 
         # Если пороги изменились с прошлого тика - сбрасываем флаги
         if self.last_neg_threshold is not None and self.last_neg_threshold != neg_threshold:
