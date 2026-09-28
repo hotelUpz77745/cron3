@@ -127,6 +127,9 @@ class BotCore:
         # Сетевые адаптеры и стримы
         stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
         self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
+        self._price_task = None
+        self._pos_task = None
+        self._watchdog_task = None
 
         # Контроль главный петли (Watchdog)
         self._last_tick = time.time()
@@ -145,6 +148,35 @@ class BotCore:
         )
         
         self.auto_closer = AutoCloser(self)
+
+    async def _restart_price_stream(self):
+        """Безопасный перезапуск price_stream с сохранением сильной ссылки на Task."""
+        if hasattr(self, '_price_task') and self._price_task and not self._price_task.done():
+            if hasattr(self, 'price_stream') and self.price_stream:
+                await self.price_stream.aclose()
+            self._price_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await self._price_task
+            self._price_task = None
+        elif hasattr(self, 'price_stream') and self.price_stream:
+            await self.price_stream.aclose()
+
+        for task in asyncio.all_tasks():
+            if task.get_name() == "price_stream" and task is not asyncio.current_task():
+                task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await task
+
+        await asyncio.sleep(0.2)
+
+        if self.symbols:
+            stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
+            self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
+            self.price_stream_synced.clear()
+            self._price_task = asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
+        else:
+            self.price_stream = None
+            self._price_task = None
 
     async def add_symbol(self, symbol: str):
         symbol = symbol.upper()
@@ -171,30 +203,33 @@ class BotCore:
             }
             
         # 3. Add to monitors and streams
-        if hasattr(self, 'pos_stream'):
+        if hasattr(self, 'pos_stream') and hasattr(self.pos_stream, 'target_symbols'):
             self.pos_stream.target_symbols.add(symbol)
+        if hasattr(self, 'ws_interpreter') and hasattr(self.ws_interpreter, 'target_symbols') and self.ws_interpreter.target_symbols is not None:
+            self.ws_interpreter.target_symbols.add(symbol)
+        if hasattr(self, 'pos_monitor') and hasattr(self.pos_monitor, 'target_symbols') and self.pos_monitor.target_symbols is not None:
+            if symbol not in self.pos_monitor.target_symbols:
+                self.pos_monitor.target_symbols.append(symbol)
+
+        # 4. Immediate REST price prefetch
+        try:
+            p = await BinancePublic.get_price(symbol)
+            if p and p > 0:
+                self.prices[symbol] = (p, time.time())
+                logger.info(f"[{symbol}] Initial REST price fetched: {p}")
+        except Exception as e:
+            logger.warning(f"[{symbol}] Failed initial REST price fetch: {e}")
             
-        # 4. Reload caches
+        # 5. Reload caches
         self.runtime_manager.load_initial_caches(self.symbols)
         self.runtime_configs = self.runtime_manager.caches
         self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
         
-        # 5. Restart price stream
+        # 6. Restart price stream
         logger.info(f"Restarting price stream to include new symbol: {symbol}")
-        if hasattr(self, 'price_stream') and self.price_stream:
-            await self.price_stream.aclose()
-            
-        # Завершаем текущую таску price_stream
-        for task in asyncio.all_tasks():
-            if task.get_name() == "price_stream":
-                task.cancel()
-                
-        stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-        self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
-        self.price_stream_synced.clear()
-        asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
+        await self._restart_price_stream()
         
-        # 6. Trigger VolatilityManager to compute super_indent for the new symbol
+        # 7. Trigger VolatilityManager to compute super_indent for the new symbol
         if hasattr(self, 'volatility_manager') and self.volatility_manager.is_running:
             asyncio.create_task(self.volatility_manager.process_all())
         
@@ -228,8 +263,12 @@ class BotCore:
             del self.prices[symbol]
             
         # 3. Remove from monitors and streams
-        if hasattr(self, 'pos_stream') and symbol in self.pos_stream.target_symbols:
+        if hasattr(self, 'pos_stream') and hasattr(self.pos_stream, 'target_symbols') and symbol in self.pos_stream.target_symbols:
             self.pos_stream.target_symbols.remove(symbol)
+        if hasattr(self, 'ws_interpreter') and hasattr(self.ws_interpreter, 'target_symbols') and self.ws_interpreter.target_symbols is not None:
+            self.ws_interpreter.target_symbols.discard(symbol)
+        if hasattr(self, 'pos_monitor') and hasattr(self.pos_monitor, 'target_symbols') and self.pos_monitor.target_symbols is not None:
+            self.pos_monitor.target_symbols = [s for s in self.pos_monitor.target_symbols if s != symbol]
             
         # 4. Delete the runtime JSON cache
         runtime_path = self.runtime_manager.runtime_dir / f"{symbol.lower()}.json"
@@ -242,15 +281,7 @@ class BotCore:
                 
         # 5. Restart price stream
         logger.info(f"Restarting price stream to exclude deleted symbol: {symbol}")
-        if hasattr(self, 'price_stream') and self.price_stream:
-            await self.price_stream.aclose()
-            
-        if self.symbols:
-            stream_symbols = list(self.symbols) + ["BNBUSDT"] if "BNBUSDT" not in self.symbols else list(self.symbols)
-            self.price_stream = CrossProcessHotPriceStream(stream_symbols, port=STREAMER_PORT, lock_name=STREAMER_LOCK_NAME)
-            asyncio.create_task(self.price_stream.run(self._on_tick))
-        else:
-            self.price_stream = None
+        await self._restart_price_stream()
             
         logger.info(f"[{symbol}] Successfully deleted from BotCore.")
 
@@ -495,7 +526,7 @@ class BotCore:
 
         # ШАГ 2. Инициализация стримов и фоновых задач
         self.spec_manager.start()
-        price_task = asyncio.create_task(self.price_stream.run(self._on_tick))
+        self._price_task = asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
         
         
         self.pos_monitor = PositionMonitor(states_cache=self.fsm_states, target_symbols=self.symbols)
@@ -517,7 +548,7 @@ class BotCore:
         )
         self.pos_stream.register_callback(self.ws_interpreter.process_message)
         
-        pos_task = asyncio.create_task(self.pos_stream.start())
+        self._pos_task = asyncio.create_task(self.pos_stream.start(), name="pos_stream")
         
         logger.info("Main _game_loop started. Specifications and price streams are running.")
         
@@ -585,7 +616,7 @@ class BotCore:
         await self.notifier.start()
 
         # Запускаем watchdog
-        watchdog_task = asyncio.create_task(self.watchdog.start())
+        self._watchdog_task = asyncio.create_task(self.watchdog.start(), name="watchdog")
 
         # ФИНАЛЬНАЯ ТОЧКА ПРОГРЕВА: Запуск аналитики только ПОСЛЕ полной готовности цен, FSM-стейтов и спецификаций
         logger.info("[BotCore] All systems & prices fully warmed up. Running initial sync and starting analytics tracker...")
@@ -656,15 +687,21 @@ class BotCore:
         self.is_running = False
         await self.notifier.stop()
         self.watchdog.stop()
-        watchdog_task.cancel()
+        if hasattr(self, '_watchdog_task') and self._watchdog_task:
+            self._watchdog_task.cancel()
         self.spec_manager.stop()
-        self.price_stream.stop()
-        price_task.cancel()
-        pos_task.cancel()
+        if hasattr(self, 'price_stream') and self.price_stream:
+            self.price_stream.stop()
+        if hasattr(self, '_price_task') and self._price_task:
+            self._price_task.cancel()
+        if hasattr(self, '_pos_task') and self._pos_task:
+            self._pos_task.cancel()
         # Попытка быстрого сохранения стейтов при нормальном завершении
         await self.runtime_manager.sync_with_fsm(self.fsm_states, force_save=True)
         await self.client.shutdown()
-        await asyncio.gather(price_task, pos_task, watchdog_task, return_exceptions=True)
+        tasks = [t for t in (getattr(self, '_price_task', None), getattr(self, '_pos_task', None), getattr(self, '_watchdog_task', None)) if t]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def start(self):
         """Запуск бота."""

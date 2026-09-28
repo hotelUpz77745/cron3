@@ -57,7 +57,8 @@ class BinanceWsInterpreter:
                 # либо ту, что была открыта (но у нас нет session_lock как в ARB боте).
                 # Просто вызовем update_from_stream для LONG и SHORT.
                 if self.target_symbols and symbol not in self.target_symbols:
-                    return
+                    if not (hasattr(self, 'monitor') and hasattr(self.monitor, 'states') and symbol in self.monitor.states):
+                        return
                 self.monitor.update_from_stream(symbol, "LONG", 0.0, 0.0)
                 self.monitor.update_from_stream(symbol, "SHORT", 0.0, 0.0)
                 return
@@ -66,7 +67,8 @@ class BinanceWsInterpreter:
             return
 
         if self.target_symbols and symbol not in self.target_symbols:
-            return
+            if not (hasattr(self, 'monitor') and hasattr(self.monitor, 'states') and symbol in self.monitor.states):
+                return
 
         pos_amt = self._safe_float(p.get("pa", 0.0))
         entry = self._safe_float(p.get("ep", 0.0))

@@ -43,7 +43,9 @@
         "log_to_file": true
     },
     "symbols": [
-        "ARXUSDT"
+        "ARXUSDT",
+        "FARTCOINUSDT",
+        "ZROUSDT"
     ],
     "telegram": {
         "enabled": true,
@@ -70,33 +72,7 @@
         "min_dayly_vol_usdt": 3000000,
         "_comment_call": "Запуск в Telegram: команда /sonnik -> кнопка 'Run Scanner'"
     },
-    "volatility_scanner2": {
-        "_comment_call": "Запуск в Telegram: команда /sonnik -> кнопка 'Run Scanner 2 (Density/Percentile)' или команда /sonnik2",
-        "timeframe": "1w",
-        "min_dayly_vol_usdt": 3000000,
-        "window": 12,
-        "strict_window": true,
-        "last_candle": true,
-        "layers": [
-            {
-                "name": "target_corridor",
-                "range": [
-                    20.0,
-                    45.0
-                ],
-                "min_density": 50.0
-            },
-            {
-                "name": "anti_spike",
-                "enabled": false,
-                "range": [
-                    80.0,
-                    null
-                ],
-                "max_density": 20.0
-            }
-        ]
-    },
+
     "analytics": {
         "start_balance_usdt": 150.0,
         "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
