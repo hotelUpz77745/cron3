@@ -88,12 +88,12 @@
             },
             {
                 "name": "anti_spike",
-                "enabled": true,
+                "enabled": false,
                 "range": [
                     80.0,
                     null
                 ],
-                "max_density": 5.0
+                "max_density": 20.0
             }
         ]
     },
