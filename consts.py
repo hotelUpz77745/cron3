@@ -84,7 +84,19 @@ TIME_SLACK_SEC: float = float(_CFG["app"]["time_slack_sec"])
 REQ_TIMEOUT_SEC: float = float(_CFG["app"]["req_timeout_sec"])
 AVOID_CHECK_RUNTIME_CFG: bool = bool(_CFG["app"]["avoid_check_runtime_cfg"])
 API_RATE_LIMIT_SEC: float = float(_CFG["app"]["api_rate_limit_sec"])
-_num_symbols: int = len(_CFG["symbols"])
+ACTIVE_STRATEGIES: Dict[str, Any] = _CFG["active_strategies"]
+
+def _resolve_active_symbols() -> list[str]:
+    active_syms: list[str] = []
+    for strat_id, sdata in ACTIVE_STRATEGIES.items():
+        if sdata.get("enabled", False):
+            active_syms.extend(sdata.get("symbols", []))
+    if active_syms:
+        return list(dict.fromkeys(active_syms))
+    return _CFG["symbols"]
+
+ACTIVE_SYMBOLS: list[str] = _resolve_active_symbols()
+_num_symbols: int = len(ACTIVE_SYMBOLS)
 _concurrent_multiplier: int = max(1, (_num_symbols - 1) // 5 + 1)
 API_CONCURRENT_RATE_LIMIT_SEC: float = min(0.05, _concurrent_multiplier * 0.01)
 REST_FAILSAFE_SEC: float = float(_CFG["app"]["rest_failsafe_sec"])

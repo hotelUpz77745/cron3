@@ -42,6 +42,30 @@
         "log_to_console": true,
         "log_to_file": true
     },
+    "active_strategies": {
+        "u6_symbiosis_beta_scalper": {
+            "enabled": true,
+            "symbols": [
+                "ARXUSDT"
+            ]
+        },
+        "u0_fat_swing": {
+            "enabled": true,
+            "symbols": [
+                "FARTCOINUSDT"
+            ]
+        },
+        "u4_tp_inverted_damper": {
+            "enabled": true,
+            "symbols": [
+                "ZROUSDT"
+            ]
+        },
+        "u8_golden_macro_symbiosis": {
+            "enabled": false,
+            "symbols": []
+        }
+    },
     "symbols": [
         "ARXUSDT",
         "FARTCOINUSDT",
