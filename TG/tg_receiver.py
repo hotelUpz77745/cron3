@@ -20,7 +20,10 @@ from c_log import UnifiedLogger
 from consts import TG_TOKEN, ANALYTICS_DIR, TG_ALLOWED_USERS
 from TG.template_manager import TemplateManager
 
-from quant_calculator import QuantCalculator
+try:
+    from quant_calculator import QuantCalculator
+except ImportError:
+    QuantCalculator = None
 from consts import _CFG
 import json
 from consts import DATA_DIR
@@ -174,6 +177,9 @@ class TelegramReceiver:
         async def secret_quant_cmd(message: Message, state: FSMContext):
             msg = await message.answer("⏳ Симуляция ликвидаций запущена...")
             try:
+                if QuantCalculator is None:
+                    await msg.edit_text("ℹ️ Калькулятор ликвидаций устарел для данной конфигурации.")
+                    return
                 calc = QuantCalculator()
                 report = calc.generate_report()
                 await msg.edit_text(f"```text\n{report}\n```", parse_mode="Markdown")
