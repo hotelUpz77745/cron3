@@ -82,14 +82,15 @@
                 "name": "target_corridor",
                 "range": [
                     20.0,
-                    40.0
+                    45.0
                 ],
                 "min_density": 50.0
             },
             {
                 "name": "anti_spike",
+                "enabled": true,
                 "range": [
-                    60.0,
+                    80.0,
                     null
                 ],
                 "max_density": 5.0

@@ -50,10 +50,14 @@ class VolatilityScanner2:
         raw_layers = cfg.get("layers") or cfg.get("ranges")
         normalized = []
 
+        has_raw_layers = isinstance(raw_layers, (list, dict))
+
         if isinstance(raw_layers, list):
             for idx, item in enumerate(raw_layers):
                 if isinstance(item, dict):
                     entry = dict(item)
+                    if not entry.get("enabled", entry.get("enable", True)):
+                        continue
                     if "name" not in entry:
                         entry["name"] = f"layer_{idx + 1}"
                     normalized.append(entry)
@@ -61,11 +65,13 @@ class VolatilityScanner2:
             for name, item in raw_layers.items():
                 if isinstance(item, dict):
                     entry = dict(item)
+                    if not entry.get("enabled", entry.get("enable", True)):
+                        continue
                     entry["name"] = name
                     normalized.append(entry)
 
-        if not normalized:
-            # Fallback на плоский формат параметров
+        if not normalized and not has_raw_layers:
+            # Fallback на плоский формат параметров ТОЛЬКО если слои вообще не были заданы
             min_v = cfg.get("min_volatility_pct", 20.0)
             max_v = cfg.get("max_volatility_pct", 40.0)
             min_d = cfg.get("minimum_density", 50.0)
