@@ -41,12 +41,15 @@ class VolatilityScanner2:
         default_cfg = {
             "timeframe": "1w",
             "window": 12,
-            "min_volatility_pct": 25.0,
+            "min_volatility_pct": 20.0,
             "max_volatility_pct": 40.0,
             "strict_window": True,
             "min_dayly_vol_usdt": 3000000.0,
-            "minimum_density": 50.0,
-            "last_candle": True
+            "minimum_density": 41.0,
+            "last_candle": True,
+            "min_range_position_pct": 20.0,
+            "max_dump_pct": -20.0,
+            "max_recent_dump_pct": -25.0
         }
 
         if self.config_path.exists():
@@ -70,7 +73,10 @@ class VolatilityScanner2:
         max_vol: float,
         strict_window: bool,
         minimum_density: float,
-        check_last_candle: bool
+        check_last_candle: bool,
+        min_range_position_pct: float | None = None,
+        max_dump_pct: float | None = None,
+        max_recent_dump_pct: float | None = None
     ):
         async with self.semaphore:
             try:
@@ -84,31 +90,63 @@ class VolatilityScanner2:
                     return None
 
                 vols = []
+                closes = []
+                highs = []
+                lows = []
                 for k in klines:
                     high = float(k.get("high", 0.0))
                     low = float(k.get("low", 0.0))
+                    close = float(k.get("close", 0.0))
                     if low > 0 and high >= low:
                         vol = ((high / low) - 1.0) * 100.0
                         vols.append(vol)
+                        closes.append(close)
+                        highs.append(high)
+                        lows.append(low)
 
-                if not vols:
+                if not vols or not closes:
                     return None
 
                 total_count = len(vols)
                 matching_count = sum(1 for v in vols if min_vol <= v <= max_vol)
                 density_pct = (matching_count / total_count) * 100.0
 
-                # 1. Проверка плотности слоя
+                # 1. Проверка плотности слоя волатильности
                 if density_pct < minimum_density:
                     return None
 
-                # 2. Проверка последней свечи
+                # 2. Проверка последней свечи на вхождение в рабочий коридор
                 last_candle_vol = vols[-1]
                 if check_last_candle:
                     if not (min_vol <= last_candle_vol <= max_vol):
                         return None
 
-                # 3. Расчет статистических перцентилей
+                # 3. Глобальный тренд и защита от слива (Anti-Dump Filters)
+                # 3.1. Положение в диапазоне окна (Anti-Waterfall: монета не скребет дно)
+                min_p = min(lows)
+                max_p = max(highs)
+                range_position_pct = ((closes[-1] - min_p) / (max_p - min_p) * 100.0) if max_p > min_p else 50.0
+                if min_range_position_pct is not None and range_position_pct < min_range_position_pct:
+                    return None
+
+                # 3.2. Макроснос за все окно (Anti-Death-Spiral)
+                drift_pct = ((closes[-1] - closes[0]) / closes[0]) * 100.0
+                if max_dump_pct is not None and drift_pct < max_dump_pct:
+                    return None
+
+                # 3.3. Краткосрочный обвал за последние 3 свечи (Anti-Flash-Dump)
+                if len(closes) >= 3:
+                    recent_drift_pct = ((closes[-1] - closes[-3]) / closes[-3]) * 100.0
+                    if max_recent_dump_pct is not None and recent_drift_pct < max_recent_dump_pct:
+                        return None
+                else:
+                    recent_drift_pct = drift_pct
+
+                # 3.4. Отклонение от средней цены окна (SMA)
+                sma_price = sum(closes) / len(closes)
+                sma_diff_pct = ((closes[-1] - sma_price) / sma_price) * 100.0
+
+                # 4. Расчет статистических перцентилей
                 med_vol = statistics.median(vols)
                 avg_vol = sum(vols) / total_count
 
@@ -126,6 +164,10 @@ class VolatilityScanner2:
                     "matching_candles": matching_count,
                     "total_candles": total_count,
                     "last_candle_vol": round(last_candle_vol, 2),
+                    "range_pos_pct": round(range_position_pct, 2),
+                    "drift_pct": round(drift_pct, 2),
+                    "recent_drift_pct": round(recent_drift_pct, 2),
+                    "sma_diff_pct": round(sma_diff_pct, 2),
                     "median_vol": round(med_vol, 2),
                     "avg_vol": round(avg_vol, 2),
                     "p25_vol": round(p25, 2),
@@ -156,12 +198,25 @@ class VolatilityScanner2:
         if min_dayly_vol_usdt is not None:
             min_dayly_vol_usdt = float(min_dayly_vol_usdt)
 
-        minimum_density = float(cfg.get("minimum_density", 50.0))
+        minimum_density = float(cfg.get("minimum_density", 41.0))
         check_last_candle = bool(cfg.get("last_candle", True))
+
+        min_range_position_pct = cfg.get("min_range_position_pct")
+        if min_range_position_pct is not None:
+            min_range_position_pct = float(min_range_position_pct)
+
+        max_dump_pct = cfg.get("max_dump_pct")
+        if max_dump_pct is not None:
+            max_dump_pct = float(max_dump_pct)
+
+        max_recent_dump_pct = cfg.get("max_recent_dump_pct")
+        if max_recent_dump_pct is not None:
+            max_recent_dump_pct = float(max_recent_dump_pct)
 
         logger.info(
             f"[Scanner2] Starting scan. TF={timeframe}, window={window}, range=[{min_vol}%..{max_vol}%], "
             f"min_density={minimum_density}%, last_candle={check_last_candle}, strict={strict_window}, "
+            f"anti_dump: pos>={min_range_position_pct}%, drift>={max_dump_pct}%, recent>={max_recent_dump_pct}%, "
             f"min_dayly_vol_usdt={min_dayly_vol_usdt}"
         )
 
@@ -189,7 +244,10 @@ class VolatilityScanner2:
                 max_vol=max_vol,
                 strict_window=strict_window,
                 minimum_density=minimum_density,
-                check_last_candle=check_last_candle
+                check_last_candle=check_last_candle,
+                min_range_position_pct=min_range_position_pct,
+                max_dump_pct=max_dump_pct,
+                max_recent_dump_pct=max_recent_dump_pct
             )
             for s in symbols
         ]
@@ -220,10 +278,11 @@ class VolatilityScanner2:
             json_symbols_multiline = json.dumps(symbols_list, indent=4, ensure_ascii=False)
             lines = [
                 "=" * 80,
-                "VOLATILITY SCANNER 2 (DENSITY & PERCENTILE) REPORT",
+                "VOLATILITY SCANNER 2 (DENSITY, PERCENTILE & GLOBAL ANTI-DUMP) REPORT",
                 f"Generated at: {now_str}",
-                f"Settings: TF={timeframe} | Window={window} candles | Target Range=[{min_vol:.1f}% .. {max_vol:.1f}%]",
+                f"Settings: TF={timeframe} | Window={window} candles | Target Vol Range=[{min_vol:.1f}% .. {max_vol:.1f}%]",
                 f"Criteria: Min Density={minimum_density:.1f}% | Last Candle in Range={check_last_candle} | Min 24h Vol=${min_dayly_vol_usdt or 0:,.0f}",
+                f"Anti-Dump: Min Range Pos={min_range_position_pct or 0:.1f}% | Max 12w Dump={max_dump_pct or 0:.1f}% | Max 3w Dump={max_recent_dump_pct or 0:.1f}%",
                 "=" * 80,
                 f"Found matching symbols: {len(matching_symbols)}",
                 "",
@@ -241,9 +300,9 @@ class VolatilityScanner2:
                 vol_str = f"${item.get('volume_24h_usdt', 0):,.0f}"
                 history_str = ", ".join(f"{v:.1f}%" for v in item["candle_vols"])
                 lines.append(
-                    f"#{rank:<2} {item['symbol']:<12} | Density: {item['density_pct']}% ({item['matching_candles']}/{item['total_candles']} candles) | "
-                    f"Last: {item['last_candle_vol']}% | Med(P50): {item['median_vol']}% | "
-                    f"Avg: {item['avg_vol']}% | [P25-P75]: [{item['p25_vol']}% - {item['p75_vol']}%] | 24h Vol: {vol_str}"
+                    f"#{rank:<2} {item['symbol']:<12} | Density: {item['density_pct']}% ({item['matching_candles']}/{item['total_candles']} w-candles) | "
+                    f"Pos: {item['range_pos_pct']}% | 12wDrift: {item['drift_pct']:+6.1f}% | 3wDrift: {item['recent_drift_pct']:+6.1f}% | "
+                    f"Last: {item['last_candle_vol']}% | Med(P50): {item['median_vol']}% | 24h Vol: {vol_str}"
                 )
                 lines.append(f"    History ({item['total_candles']} candles): [{history_str}]")
                 lines.append("-" * 80)

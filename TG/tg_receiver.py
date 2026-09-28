@@ -1698,12 +1698,15 @@ class TelegramReceiver:
             cfg = {
                 "timeframe": "1w",
                 "window": 12,
-                "min_volatility_pct": 25.0,
+                "min_volatility_pct": 20.0,
                 "max_volatility_pct": 40.0,
                 "strict_window": True,
                 "min_dayly_vol_usdt": 3000000.0,
-                "minimum_density": 50.0,
-                "last_candle": True
+                "minimum_density": 41.0,
+                "last_candle": True,
+                "min_range_position_pct": 20.0,
+                "max_dump_pct": -20.0,
+                "max_recent_dump_pct": -25.0
             }
             if config_path.exists():
                 try:
