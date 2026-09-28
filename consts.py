@@ -56,14 +56,6 @@ _api_parent = str(SHARED_API_DIR.parent)
 if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 
-_paper_bot_cfg = _paths_cfg["paper_bot_dir"]
-if _paper_bot_cfg:
-    _p = Path(_paper_bot_cfg)
-    if not _p.is_absolute():
-        _p = (BASE_DIR / _p).resolve()
-    PAPER_BOT_DIR = _p if _p.exists() else (PARENT_DIR / "cron3Papper").resolve()
-else:
-    PAPER_BOT_DIR = (PARENT_DIR / "cron3Papper").resolve()
 ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
 CACHE_DIR = BASE_DIR / "CACHE"
 

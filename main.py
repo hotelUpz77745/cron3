@@ -129,16 +129,30 @@ if __name__ == "__main__":
 
 
 
-    # "signal": {
-    #     "timeframe": "5m",
-    #     "smart_grace": {
-    #         "start_period_sec": 87,
-    #         "shift_interval_sec": 13,
-    #         "eval_window_sec": 300,
-    #         "increments_card": {
-    #             "<2": 0,
-    #             ">=2": 120,
-    #             ">4": 150
-    #         }
-    #     }
-    # },
+# "signal": {
+#     "timeframe": "5m",
+#     "smart_grace": {
+#         "start_period_sec": 87,
+#         "shift_interval_sec": 13,
+#         "eval_window_sec": 300,
+#         "increments_card": {
+#             "<2": 0,
+#             ">=2": 120,
+#             ">4": 150
+#         }
+#     }
+# },
+
+# "dynamic_selection": {
+#     "enabled": false,
+#     "max_coins_num": 2,
+#     "_desc_max_coins_num": "Максимальное число монет для выборки из бумажного бота (число или null).",
+#     "ranking_metric": "net_profit_usdt",
+#     "_desc_ranking_metric": "Критерий ранжирования: 'net_profit_usdt', 'winrate_pct', 'total_trades', 'recovery_factor', 'realized_pnl_net_usdt'.",
+#     "min_coin_profit_usdt": 5.0,
+#     "_desc_min_coin_profit_usdt": "Минимальный чистый PnL (USDT) для каждой отдельной монеты из среза.",
+#     "min_velocity_ratio": 0.6,
+#     "_desc_min_velocity_ratio": "Минимальный коэффициент активности рынка (Trade Velocity Ratio) из бумажного бота для допуска к торгам.",
+#     "poll_interval_sec": 30.0,
+#     "_desc_poll_interval_sec": "Интервал проверки бумажного бота при пустом списке монет."
+# },
