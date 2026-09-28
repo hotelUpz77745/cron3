@@ -8,7 +8,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, BufferedInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -1691,13 +1691,9 @@ class TelegramReceiver:
                 except:
                     pass
                     
-            dump_path = os.path.join("logs", "scanner_app.json")
-            os.makedirs("logs", exist_ok=True)
-            with open(dump_path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=4)
-                
+            json_bytes = json.dumps(cfg, indent=4, ensure_ascii=False).encode("utf-8")
             await callback.message.answer("<b>Текущие настройки Скринера 1:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
-            await callback.message.answer_document(FSInputFile(dump_path))
+            await callback.message.answer_document(BufferedInputFile(json_bytes, filename="scanner_config.json"))
             await state.set_state(TGStates.waiting_for_scanner_json)
 
         @self.dp.callback_query(F.data == "cb_edit_scanner2_config")
@@ -1732,11 +1728,7 @@ class TelegramReceiver:
                 except Exception:
                     pass
                     
-            dump_path = os.path.join("logs", "scanner2_app.json")
-            os.makedirs("logs", exist_ok=True)
-            with open(dump_path, "w", encoding="utf-8") as f:
-                json.dump(cfg, f, indent=4, ensure_ascii=False)
-                
+            json_bytes = json.dumps(cfg, indent=4, ensure_ascii=False).encode("utf-8")
             await callback.message.answer(
                 "<b>Текущие настройки Скринера 2 (Многослойная плотность и анти-дурная свеча):</b>\n"
                 "<i>Поддерживает слои (layers) с диапазонами [min, max] (где max может быть null) и задачами: min_density или max_density.</i>\n"
@@ -1744,7 +1736,7 @@ class TelegramReceiver:
                 reply_markup=self._get_back_keyboard(),
                 parse_mode="HTML"
             )
-            await callback.message.answer_document(FSInputFile(dump_path))
+            await callback.message.answer_document(BufferedInputFile(json_bytes, filename="scanner2_config.json"))
             await state.set_state(TGStates.waiting_for_scanner2_json)
 
         @self.dp.message(TGStates.waiting_for_scanner_json)
