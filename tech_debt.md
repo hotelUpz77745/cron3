@@ -91,32 +91,34 @@
   "volatility_scanner2": {
       "_comment_call": "Запуск в Telegram: /sonnik -> кнопка 'Run Scanner 2 (Density)' или команда /sonnik2",
       "_comment_constraints": "min_volatility_pct и max_volatility_pct обязаны принимать строго численные значения (float/int), null запрещен",
-      "timeframe": "1w",
-      "window": 12,
-      "min_volatility_pct": 20.0,
-      "max_volatility_pct": 40.0,
+      "timeframe": "1d",
+      "window": 30,
+      "min_volatility_pct": 5.0,
+      "max_volatility_pct": 16.0,
+      "max_candle_vol_pct": 25.0,
       "strict_window": true,
-      "min_dayly_vol_usdt": 3000000,
-      "minimum_density": 41.0,
+      "min_dayly_vol_usdt": 5000000,
+      "minimum_density": 70.0,
       "last_candle": true,
-      "min_range_position_pct": 20.0,
-      "max_dump_pct": -20.0,
-      "max_recent_dump_pct": -25.0
+      "max_last_delta_pct": -15.0,
+      "min_range_position_pct": 25.0,
+      "max_dump_pct": -15.0,
+      "max_recent_dump_pct": -18.0
   }
   ```
 * **Алгоритм плотности слоя (Density)**:
   * Для каждой свечи $i$ из окна $N$: $vol_i = ((High_i / Low_i) - 1) \times 100\%$.
   * Подсчет свечей $K$, где $min\_volatility\_pct \le vol_i \le max\_volatility\_pct$.
   * Плотность слоя: $Density = (K / N) \times 100\% \ge minimum\_density$.
+* **Запрет на большую свечу (Anti-Blow-off / Hard Ceiling)**:
+  * $max(vol_i) \le max\_candle\_vol\_pct$ (25.0%). Если хотя бы одна свеча в окне превысила порог (памп-дамп мемкоинов типа `USELESS` 385% или `MUBARAK` 164%), монета немедленно дисквалифицируется.
 * **Глобальный фильтр тренда и защита от слива (Anti-Dump Engine)**:
-  * **1. Anti-Waterfall (Защита от ножа)**: $Pos = \frac{Close_{last} - Low_{window}}{High_{window} - Low_{window}} \times 100\% \ge min\_range\_position\_pct$ (20%). Монета не может скрести локальное или историческое дно (у монет в безоткатном дампе $Pos < 5\%$).
-  * **2. Anti-Death-Spiral (Защита от скам-слива)**: $Drift_{12w} = \frac{Close_{last} - Close_{first}}{Close_{first}} \times 100\% \ge max\_dump\_pct$ (-20.0%). Отрезает монеты в перманентном даунтренде.
-  * **3. Anti-Flash-Dump (Защита от недавнего обвала)**: $Drift_{3w} = \frac{Close_{last} - Close_{-3}}{Close_{-3}} \times 100\% \ge max\_recent\_dump\_pct$ (-25.0%).
-* **Требование к последней свече (`last_candle`)**:
-  * Если `true`: последняя свеча $vol_{last}$ обязана лежать в $[min\_volatility\_pct, max\_volatility\_pct]$.
-* **Ранжирование и вывод**:
-  * Сортировка по плотности слоя (Density %, desc), затем по медиане волатильности (P50).
-  * Вывод списков монет в строгом JSON-формате `["SYMBOL1", "SYMBOL2"]` с двойными кавычками.
+  * **1. Anti-Waterfall (Защита от ножа)**: $Pos = \frac{Close_{last} - Low_{window}}{High_{window} - Low_{window}} \times 100\% \ge min\_range\_position\_pct$ (25%). Монета не может скрести локальное или историческое дно.
+  * **2. Anti-Death-Spiral (Защита от скам-слива)**: $Drift_{window} = \frac{Close_{last} - Close_{first}}{Close_{first}} \times 100\% \ge max\_dump\_pct$ (-15.0%).
+  * **3. Anti-Crash Delta (Контроль неслива между последними двумя свечами)**: $\Delta_{last} = \frac{Close_{last} - Close_{prev}}{Close_{prev}} \times 100\% \ge max\_last\_delta\_pct$ (-15.0%).
+  * **4. Anti-Flash-Dump (Защита от недавнего обвала за 3-4 свечи)**: $Drift_{recent} \ge max\_recent\_dump\_pct$ (-18.0%).
+* **Эталон стабильного осциллятора**:
+  * Монета `FARTCOINUSDT` признана идеальным паттерном: Median Vol = 9.3%, Max Vol = 22.2%, Density = 80.0% в [5..16%], 30d Drift = -3.7% (ровный боковик), суточный объем > $50M.
 * **Команды вызова**:
   * Telegram: `/sonnik` (инлайн-меню со Скринером 1 и Скринером 2) и `/sonnik2` (прямой запуск Скринера 2).
   * Консоль: `python -m CORE.ADVANCED.volatility_scanner2`.

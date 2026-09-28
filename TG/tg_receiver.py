@@ -1696,17 +1696,19 @@ class TelegramReceiver:
             
             config_path = DATA_DIR / "app.json"
             cfg = {
-                "timeframe": "1w",
-                "window": 12,
-                "min_volatility_pct": 20.0,
-                "max_volatility_pct": 40.0,
+                "timeframe": "1d",
+                "window": 30,
+                "min_volatility_pct": 5.0,
+                "max_volatility_pct": 16.0,
+                "max_candle_vol_pct": 25.0,
                 "strict_window": True,
-                "min_dayly_vol_usdt": 3000000.0,
-                "minimum_density": 41.0,
+                "min_dayly_vol_usdt": 5000000.0,
+                "minimum_density": 70.0,
                 "last_candle": True,
-                "min_range_position_pct": 20.0,
-                "max_dump_pct": -20.0,
-                "max_recent_dump_pct": -25.0
+                "max_last_delta_pct": -15.0,
+                "min_range_position_pct": 25.0,
+                "max_dump_pct": -15.0,
+                "max_recent_dump_pct": -18.0
             }
             if config_path.exists():
                 try:
