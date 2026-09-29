@@ -169,12 +169,12 @@ class LeaderboardEngine:
             end_rank = end_i
 
             header = (
-                "=" * 113 + "\n"
+                "=" * 127 + "\n"
                 f"STRATEGIES LEADERBOARD (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
                 f"Ranked strictly by Cumulative Net Profit USDT\n"
-                + "=" * 113 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<38} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Max DD':<11} {'Trades':<8} {'Rec.Fact':<8}\n"
-                + "-" * 113
+                + "=" * 127 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<38} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net':<12} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
+                + "-" * 127
             )
 
             rows = []
@@ -182,17 +182,18 @@ class LeaderboardEngine:
                 net_str = f"{item['net_profit_usdt']:+.2f} USDT"
                 realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
                 unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
+                peak_net_str = f"{item.get('peak_net_profit_usdt', 0.0):+.2f} $"
                 dd_str = f"{item['max_drawdown_usdt']:.2f} $"
                 rec_str = f"{item['recovery_factor']:.2f}"
                 uid_short = item['universe_id'][:37]
 
                 row = (
                     f"{idx:<3} {uid_short:<38} {net_str:<14} {realized_str:<13} "
-                    f"{unrealized_str:<12} {dd_str:<11} {item['total_trades']:<8} {rec_str:<8}"
+                    f"{unrealized_str:<12} {peak_net_str:<12} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
                 )
                 rows.append(row)
 
-            footer = "=" * 113
+            footer = "=" * 127
             chunks.append("\n".join([header] + rows + [footer]))
 
         return chunks
