@@ -182,23 +182,80 @@ class BotCore:
             self.price_stream = None
             self._price_task = None
 
-    async def add_symbol(self, symbol: str):
+    async def add_symbol(self, symbol: str, strategy_id: Optional[str] = None):
         symbol = symbol.upper()
         if symbol in self.symbols:
+            logger.warning(f"[{symbol}] Symbol is already active in BotCore.")
             return
             
         # 1. Update app.json
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path)
         active_strategies = app_data.get("active_strategies", {})
-        if active_strategies:
-            for sdata in active_strategies.values():
+        
+        # Enforce 1:1 Invariant: ensure symbol is not present in other strategies
+        for sid, sdata in active_strategies.items():
+            if "symbols" in sdata and symbol in sdata["symbols"]:
+                sdata["symbols"].remove(symbol)
+                
+        target_strat = strategy_id
+        if not target_strat:
+            for sid, sdata in active_strategies.items():
                 if sdata.get("enabled", False):
-                    if symbol not in sdata.get("symbols", []):
-                        sdata.setdefault("symbols", []).append(symbol)
-                        Utils.write_json_file(app_json_path, app_data)
-                        logger.info(f"[{symbol}] Added to active_strategies in app.json.")
+                    target_strat = sid
                     break
+
+        if target_strat:
+            if target_strat in active_strategies:
+                active_strategies[target_strat].setdefault("symbols", []).append(symbol)
+                active_strategies[target_strat]["enabled"] = True
+            else:
+                univ_path = DATA_DIR / "universes.json"
+                univ_data = Utils.read_json_file(univ_path) or {}
+                u_meta = univ_data.get(target_strat, {})
+                active_strategies[target_strat] = {
+                    "enabled": True,
+                    "symbols": [symbol],
+                    "super_grid": {
+                        "enabled": u_meta.get("super_grid_enabled", False),
+                        "timeframe": "1w",
+                        "window": 12,
+                        "multiplier": 2.0,
+                        "min_volatility_pct": 15.0,
+                        "max_volatility_pct": None,
+                        "update_interval_hours": 24
+                    },
+                    "analytics": {
+                        "start_balance_usdt": u_meta.get("start_balance_usdt", 50.0)
+                    },
+                    "notifications": {
+                        "enabled": True,
+                        "negative_threshold": -20.0,
+                        "positive_threshold": 20.0
+                    },
+                    "auto_closing": {
+                        "negative": {"threshold": None, "threshold_increment": None},
+                        "positive": {"threshold": 100, "threshold_increment": 100}
+                    }
+                }
+            Utils.write_json_file(app_json_path, app_data)
+            logger.info(f"[{symbol}] Added to active_strategy '{target_strat}' in app.json.")
+
+        # 1b. Reload StrategyRegistry
+        if hasattr(self, "strategy_registry") and self.strategy_registry:
+            try:
+                self.strategy_registry.reload(active_strategies)
+            except Exception as e:
+                logger.error(f"Error reloading StrategyRegistry: {e}")
+
+        # 1c. Build isolated runtime config using StrategyApplicator if needed
+        try:
+            from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+            if hasattr(self, "strategy_registry") and self.strategy_registry.is_symbol_active(symbol):
+                strat_cfg = self.strategy_registry.get_strategy_for_symbol(symbol)
+                StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
+        except Exception as e:
+            logger.warning(f"[{symbol}] StrategyApplicator build notice: {e}")
             
         # 2. Update bot lists and FSM states
         self.symbols.append(symbol)
@@ -265,6 +322,13 @@ class BotCore:
         if changed:
             Utils.write_json_file(app_json_path, app_data)
             logger.info(f"[{symbol}] Removed from app.json.")
+            
+        # 1b. Reload StrategyRegistry
+        if hasattr(self, "strategy_registry") and self.strategy_registry:
+            try:
+                self.strategy_registry.reload(active_strategies)
+            except Exception as e:
+                logger.error(f"Error reloading StrategyRegistry on delete: {e}")
             
         # 2. Update bot lists and FSM states
         self.symbols.remove(symbol)

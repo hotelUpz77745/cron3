@@ -260,3 +260,13 @@ class StrategyRegistry:
     def get_active_strategies(self) -> Dict[str, StrategyConfig]:
         """Возвращает словарь всех активных объектов StrategyConfig."""
         return dict(self.active_strategies)
+
+    def reload(self, active_strategies_cfg: Optional[Dict[str, Any]] = None) -> None:
+        """Перезагружает базу стратегий и пересобирает активные маппинги символов."""
+        self.universes_db = self._load_universes_db()
+        if active_strategies_cfg is not None:
+            self.active_cfg = active_strategies_cfg
+        else:
+            app_data = Utils.read_json_file(DATA_DIR / "app.json")
+            self.active_cfg = app_data.get("active_strategies", {})
+        self._resolve_and_validate()

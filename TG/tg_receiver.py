@@ -40,6 +40,11 @@ logger = UnifiedLogger("TGReceiver")
 
 class TGStates(StatesGroup):
     waiting_for_add_symbol = State()
+    waiting_for_add_strategy_choice = State()
+    waiting_for_add_custom_invest = State()
+    waiting_for_add_custom_lev = State()
+    waiting_for_reassign_strat = State()
+    waiting_for_strat_super_grid_json = State()
     waiting_for_del_symbol = State()
     waiting_for_edit_symbol = State()
     waiting_for_invest_size = State()
@@ -130,6 +135,42 @@ class TelegramReceiver:
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+    def _get_strategy_meta(self, strat_id: str) -> dict:
+        univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+        app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+        active_strats = app_data.get("active_strategies", {})
+        strat_app = active_strats.get(strat_id, {})
+        u_meta = univ_data.get(strat_id, {})
+        
+        name = u_meta.get("name", strat_id)
+        description = u_meta.get("description", "Пользовательская стратегия")
+        invest_size = u_meta.get("invest_size", 400.0)
+        leverage = u_meta.get("leverage", 20)
+        
+        sg_cfg = strat_app.get("super_grid") or u_meta.get("overrides", {}).get("super_grid", {})
+        sg_enabled = sg_cfg.get("enabled", u_meta.get("super_grid_enabled", False))
+        
+        tp_map = u_meta.get("overrides", {}).get("tp_map", {})
+        if tp_map:
+            indents = [str(v.get("indent", "?")) for v in tp_map.values() if isinstance(v, dict)]
+            if len(set(indents)) == 1:
+                tp_summary = f"Плоский {indents[0]}% (все уровни)"
+            else:
+                tp_summary = f"{', '.join(indents[:3])}%..."
+        else:
+            tp_summary = "Базовый 0.6%..2.5% (из _base.json)"
+            
+        return {
+            "strategy_id": strat_id,
+            "name": name,
+            "description": description,
+            "invest_size": invest_size,
+            "leverage": leverage,
+            "super_grid": sg_enabled,
+            "super_grid_cfg": sg_cfg,
+            "tp_summary": tp_summary
+        }
 
     def _get_confirm_start_keyboard(self):
         keyboard = [
@@ -1013,11 +1054,17 @@ class TelegramReceiver:
             await message.answer(help_text, parse_mode="HTML")
 
         # =========================================================
-        # ADD SYMBOL
+        # ADD SYMBOL WITH STRATEGY ASSIGNMENT
         # =========================================================
         @self.dp.message(F.text == "➕ Add")
         async def on_add_btn(message: Message, state: FSMContext):
-            await message.answer("Введите символ монеты для добавления (например: WIFUSDT):", reply_markup=self._get_back_keyboard())
+            await state.clear()
+            await message.answer(
+                "➕ <b>Добавление новой монеты</b>\n\n"
+                "Введите символ монеты для добавления (например: <code>WIFUSDT</code>, <code>DOGEUSDT</code>):",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
             await state.set_state(TGStates.waiting_for_add_symbol)
 
         @self.dp.message(TGStates.waiting_for_add_symbol)
@@ -1026,37 +1073,307 @@ class TelegramReceiver:
                 return await on_set_coins(message, state)
                 
             symbol = message.text.strip().upper()
-            if not symbol.endswith("USDT"):
-                await message.answer("Символ должен заканчиваться на USDT. Попробуйте еще раз:")
+            if not symbol.endswith("USDT") or len(symbol) < 5:
+                await message.answer("❌ Символ должен заканчиваться на USDT (например: <code>WIFUSDT</code>). Попробуйте еще раз:", parse_mode="HTML")
                 return
 
-            # Apply base template automatically and add to BotCore
-            base_data = self.template_manager.apply_tg_template(json.dumps({"symbol": symbol}))
-            # Wait, apply_tg_template parses JSON, but if we don't pass full JSON it might fail or reset.
-            # We need to manually construct the config or use a helper.
-            # Actually, `template_manager.generate_tg_template` gets base.
-            base_str = self.template_manager.generate_tg_template(symbol)
-            success, msg = self.template_manager.apply_tg_template(base_str)
-            
-            if success:
-                if symbol not in self.bot_core.symbols:
-                    await self.bot_core.add_symbol(symbol)
-                await message.answer(f"✅ Монета {symbol} успешно добавлена и запущена в работу на основе базового шаблона!", reply_markup=self._get_set_coins_keyboard())
+            if symbol in self.bot_core.symbols:
+                strat_registry = getattr(self.bot_core, "strategy_registry", None)
+                sid = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else "активна"
+                await message.answer(
+                    f"⚠️ Монета <b>{symbol}</b> уже запущена под стратегией <code>{sid}</code>!\n"
+                    f"Для изменения настроек используйте <b>Edit</b>.",
+                    reply_markup=self._get_set_coins_keyboard(),
+                    parse_mode="HTML"
+                )
                 await state.clear()
+                return
+
+            await state.update_data(pending_symbol=symbol)
+            await _ask_strategy_for_symbol(message, state, symbol)
+
+        async def _ask_strategy_for_symbol(msg_or_cb, state: FSMContext, symbol: str, edit_msg: bool = False):
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            active_strategies = app_data.get("active_strategies", {})
+
+            buttons = []
+            for sid, sdata in active_strategies.items():
+                if not sdata.get("enabled", False):
+                    continue
+                meta = self._get_strategy_meta(sid)
+                s_name = meta.get("name", sid)
+                buttons.append([InlineKeyboardButton(
+                    text=f"🎯 {s_name[:38]}",
+                    callback_data=f"add_pick_strat_{symbol}_{sid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="🌐 Выбрать другой универсум...", callback_data=f"add_catalog_{symbol}")])
+            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="add_cancel")])
+
+            text = (
+                f"🪙 Добавление монеты: <b>{symbol}</b>\n\n"
+                f"🎯 <b>Выберите стратегию, под которую назначить монету:</b>\n"
+                f"<i>Каждая монета торгуется по правилам и оверрайдам выбранной стратегии (сетка, тейк-профиты, плечо, Super Grid).</i>"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            if edit_msg and isinstance(msg_or_cb, CallbackQuery):
+                await msg_or_cb.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            elif isinstance(msg_or_cb, CallbackQuery):
+                await msg_or_cb.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
             else:
-                await message.answer(f"❌ Ошибка добавления: {msg}", reply_markup=self._get_set_coins_keyboard())
+                await msg_or_cb.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            await state.set_state(TGStates.waiting_for_add_strategy_choice)
+
+        @self.dp.callback_query(F.data.startswith("add_pick_strat_"))
+        async def process_add_pick_strat(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            parts = callback.data.split("_")
+            if len(parts) < 5:
+                return
+            symbol = parts[3]
+            strat_id = "_".join(parts[4:])
+
+            await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
+            meta = self._get_strategy_meta(strat_id)
+            sg_str = "✅ Включен" if meta.get("super_grid") else "❌ Выключен"
+
+            text = (
+                f"⚙️ <b>Параметры запуска {symbol}:</b>\n"
+                f"📌 Стратегия: <b>{meta.get('name', strat_id)}</b>\n"
+                f"ID: <code>{strat_id}</code>\n"
+                f"📝 <i>{meta.get('description', '')[:120]}...</i>\n\n"
+                f"• <b>Размер ордера (Invest):</b> <b>{meta.get('invest_size', 400.0)} USDT</b>\n"
+                f"• <b>Кредитное плечо (Leverage):</b> <b>{meta.get('leverage', 20)}x</b>\n"
+                f"• <b>Режим Take Profit:</b> <b>{meta.get('tp_summary')}</b>\n"
+                f"• <b>Super Grid (волатильность):</b> <b>{sg_str}</b>\n\n"
+                f"Запустить сразу с параметрами стратегии или настроить параметры кастомно?"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🚀 Запустить с параметрами стратегии", callback_data=f"add_run_{symbol}_{strat_id}")],
+                [InlineKeyboardButton(text="⚙️ Настроить параметры (Invest/Lev)", callback_data=f"add_cust_{symbol}_{strat_id}")],
+                [InlineKeyboardButton(text="🔙 Назад к стратегиям", callback_data=f"add_back_strats_{symbol}")]
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("add_run_"))
+        async def process_add_run(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            parts = callback.data.split("_")
+            if len(parts) < 4:
+                return
+            symbol = parts[2]
+            strat_id = "_".join(parts[3:])
+
+            await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
+            meta = self._get_strategy_meta(strat_id)
+
+            await callback.message.edit_text(
+                f"✅ <b>Монета {symbol} успешно добавлена и запущена!</b>\n\n"
+                f"🎯 Стратегия: <b>{meta.get('name', strat_id)}</b> (<code>{strat_id}</code>)\n"
+                f"💰 Депозит: <b>{meta.get('invest_size', 400.0)} USDT</b> (Плечо: {meta.get('leverage', 20)}x)\n"
+                f"🎯 Тейк-профит: <b>{meta.get('tp_summary')}</b>\n"
+                f"📁 Конфиг: <code>CFG/runtime/{strat_id}/{symbol.lower()}.json</code>",
+                parse_mode="HTML"
+            )
+            await callback.message.answer(
+                "Монета активна в торговом пуле.",
+                reply_markup=self._get_set_coins_keyboard()
+            )
+            await state.clear()
+
+        @self.dp.callback_query(F.data.startswith("add_back_strats_"))
+        async def process_add_back_strats(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("add_back_strats_", "")
+            await _ask_strategy_for_symbol(callback, state, symbol, edit_msg=True)
+
+        @self.dp.callback_query(F.data == "add_cancel")
+        async def process_add_cancel(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await callback.message.delete()
+            await state.clear()
+
+        @self.dp.callback_query(F.data.startswith("add_cust_"))
+        async def process_add_cust(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            parts = callback.data.split("_")
+            symbol = parts[2]
+            strat_id = "_".join(parts[3:])
+            await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
+            meta = self._get_strategy_meta(strat_id)
+            
+            await callback.message.answer(
+                f"⚙️ <b>Кастомная настройка {symbol} под {strat_id}</b>\n\n"
+                f"Текущий базовый Invest Size: <b>{meta.get('invest_size', 400.0)} USDT</b>.\n"
+                f"Введите желаемый размер инвестиции (USDT) для каждого направления (или отправьте 0 чтобы оставить {meta.get('invest_size', 400.0)}):",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await state.set_state(TGStates.waiting_for_add_custom_invest)
+
+        @self.dp.message(TGStates.waiting_for_add_custom_invest)
+        async def process_add_custom_invest_input(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
                 await state.clear()
+                return await on_set_coins(message, state)
+            try:
+                val = float(message.text.strip().replace(',', '.'))
+                data = await state.get_data()
+                symbol = data.get("pending_symbol")
+                strat_id = data.get("pending_strat")
+                meta = self._get_strategy_meta(strat_id)
+                invest = val if val > 0 else meta.get("invest_size", 400.0)
+                await state.update_data(custom_invest=invest)
+
+                await message.answer(
+                    f"✅ Invest Size: <b>{invest} USDT</b>.\n\n"
+                    f"Текущее плечо стратегии: <b>{meta.get('leverage', 20)}x</b>.\n"
+                    f"Введите кредитное плечо (Leverage от 1 до 50) или отправьте 0 чтобы оставить {meta.get('leverage', 20)}x:",
+                    reply_markup=self._get_back_keyboard(),
+                    parse_mode="HTML"
+                )
+                await state.set_state(TGStates.waiting_for_add_custom_lev)
+            except ValueError:
+                await message.answer("❌ Введите корректное число (например, <code>300</code>):", parse_mode="HTML")
+
+        @self.dp.message(TGStates.waiting_for_add_custom_lev)
+        async def process_add_custom_lev_input(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
+                await state.clear()
+                return await on_set_coins(message, state)
+            try:
+                val = int(message.text.strip())
+                data = await state.get_data()
+                symbol = data.get("pending_symbol")
+                strat_id = data.get("pending_strat")
+                meta = self._get_strategy_meta(strat_id)
+                lev = val if 1 <= val <= 50 else meta.get("leverage", 20)
+                invest = data.get("custom_invest", meta.get("invest_size", 400.0))
+
+                await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
+
+                rt_path = self.template_manager.get_runtime_path(symbol, strat_id)
+                if rt_path.exists():
+                    rt_data = Utils.read_json_file(rt_path) or {}
+                    for side in ("LONG", "SHORT"):
+                        if side in rt_data:
+                            rt_data[side]["invest_size"] = invest
+                            rt_data[side]["leverage"] = lev
+                    Utils.write_json_file(rt_path, rt_data)
+                    if symbol in self.bot_core.runtime_configs:
+                        for side in ("LONG", "SHORT"):
+                            if side in self.bot_core.runtime_configs[symbol]:
+                                self.bot_core.runtime_configs[symbol][side]["invest_size"] = invest
+                                self.bot_core.runtime_configs[symbol][side]["leverage"] = lev
+
+                await message.answer(
+                    f"✅ <b>Монета {symbol} успешно настроена и запущена!</b>\n\n"
+                    f"🎯 Стратегия: <b>{meta.get('name', strat_id)}</b> (<code>{strat_id}</code>)\n"
+                    f"💰 Кастомный Invest: <b>{invest} USDT</b>\n"
+                    f"⚡ Кастомное Плечо: <b>{lev}x</b>\n"
+                    f"🎯 Тейк-профит: <b>{meta.get('tp_summary')}</b>\n"
+                    f"📁 Конфиг: <code>CFG/runtime/{strat_id}/{symbol.lower()}.json</code>",
+                    reply_markup=self._get_set_coins_keyboard(),
+                    parse_mode="HTML"
+                )
+                await state.clear()
+            except ValueError:
+                await message.answer("❌ Введите корректное целое число (от 1 до 50):", parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("add_catalog_"))
+        async def process_add_catalog(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("add_catalog_", "")
+            univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+
+            buttons = []
+            for uid, udata in list(univ_data.items())[:12]:
+                u_name = udata.get("name", uid)
+                buttons.append([InlineKeyboardButton(
+                    text=f"🌐 {u_name[:35]}",
+                    callback_data=f"add_pick_strat_{symbol}_{uid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="🔙 Назад к активным", callback_data=f"add_back_strats_{symbol}")])
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text(
+                f"🌐 <b>Каталог стратегий (Universes) для {symbol}</b>\n\n"
+                f"Выберите любую стратегию из базы для активации и запуска:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
 
         # =========================================================
         # DEL SYMBOL
         # =========================================================
         @self.dp.message(F.text == "🗑️ Del")
         async def on_del_btn(message: Message, state: FSMContext):
-            active_coins = ", ".join(self.bot_core.symbols)
+            await state.clear()
+            active_coins = self.bot_core.symbols
             if not active_coins:
-                active_coins = "Нет активных монет"
-            await message.answer(f"Активные монеты: <b>{active_coins}</b>\n\nВведите символ монеты для УДАЛЕНИЯ (например: WIFUSDT):", parse_mode="HTML", reply_markup=self._get_back_keyboard())
+                await message.answer("Нет активных монет для удаления.", reply_markup=self._get_set_coins_keyboard())
+                return
+
+            strat_registry = getattr(self.bot_core, "strategy_registry", None)
+            buttons = []
+            row = []
+            for coin in sorted(active_coins):
+                sid = strat_registry.get_strategy_id_for_symbol(coin) if strat_registry else ""
+                short_sid = sid.replace("u0_base_classic_", "").replace("u9_omni_", "")[:7] if sid else ""
+                tag = f" ({short_sid})" if short_sid else ""
+                row.append(InlineKeyboardButton(text=f"🗑️ {coin}{tag}", callback_data=f"del_pick_{coin}"))
+                if len(row) == 2:
+                    buttons.append(row)
+                    row = []
+            if row:
+                buttons.append(row)
+            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="edit_side_cancel")])
+
+            active_str = ", ".join(active_coins)
+            await message.answer(
+                f"🗑️ <b>Удаление монеты</b>\n"
+                f"Активные монеты: <b>{active_str}</b>\n\n"
+                f"Нажмите на монету для удаления или введите символ сообщением:",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+                parse_mode="HTML"
+            )
             await state.set_state(TGStates.waiting_for_del_symbol)
+
+        @self.dp.callback_query(F.data.startswith("del_pick_"))
+        async def process_del_pick(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("del_pick_", "")
+            strat_registry = getattr(self.bot_core, "strategy_registry", None)
+            sid = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else "—"
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=f"🗑️ Да, удалить {symbol}", callback_data=f"del_confirm_{symbol}")],
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="del_cancel")]
+            ])
+            await callback.message.edit_text(
+                f"⚠️ <b>Подтверждение удаления</b>\n\n"
+                f"Вы действительно хотите удалить <b>{symbol}</b> из стратегии <code>{sid}</code>?\n"
+                f"<i>(Ордера и открытая позиция на бирже останутся без изменений)</i>",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+        @self.dp.callback_query(F.data.startswith("del_confirm_"))
+        async def process_del_confirm(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("del_confirm_", "")
+            await self.bot_core.delete_symbol(symbol)
+            await callback.message.edit_text(
+                f"✅ Монета <b>{symbol}</b> успешно удалена из всех систем бота.",
+                parse_mode="HTML"
+            )
+            await state.clear()
+
+        @self.dp.callback_query(F.data == "del_cancel")
+        async def process_del_cancel(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await callback.message.delete()
+            await state.clear()
 
         @self.dp.message(TGStates.waiting_for_del_symbol)
         async def process_del_symbol(message: Message, state: FSMContext):
@@ -1074,7 +1391,7 @@ class TelegramReceiver:
             await state.clear()
 
         # =========================================================
-        # EDIT SYMBOL
+        # EDIT SYMBOL WITH STRATEGY GROUPING & REASSIGNMENT
         # =========================================================
         @self.dp.message(F.text == "✏️ Edit")
         async def on_edit_btn(message: Message, state: FSMContext):
@@ -1095,36 +1412,157 @@ class TelegramReceiver:
                 else:
                     await message.answer(text)
                 return
-            
+
+            strat_registry = getattr(self.bot_core, "strategy_registry", None)
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            active_strategies = app_data.get("active_strategies", {})
+
+            coins_by_strat = {}
+            for coin in active_coins:
+                sid = strat_registry.get_strategy_id_for_symbol(coin) if strat_registry else None
+                if not sid:
+                    for s_name, s_cfg in active_strategies.items():
+                        if coin in s_cfg.get("symbols", []):
+                            sid = s_name
+                            break
+                sid = sid or "u0_base_classic"
+                coins_by_strat.setdefault(sid, []).append(coin)
+
+            text_lines = ["⚙️ <b>Активные монеты по стратегиям:</b>\n"]
             buttons = []
             row = []
-            for coin in sorted(active_coins):
-                row.append(InlineKeyboardButton(text=f"🪙 {coin}", callback_data=f"edit_coin_{coin}"))
-                if len(row) == 2:
-                    buttons.append(row)
-                    row = []
+
+            for sid, c_list in coins_by_strat.items():
+                meta = self._get_strategy_meta(sid)
+                s_title = meta.get("name", sid)
+                short_sid = sid.replace("u0_base_classic_", "").replace("u9_omni_", "")
+                text_lines.append(f"🎯 <b>{s_title}</b> (<code>{sid}</code>):")
+                for c in sorted(c_list):
+                    text_lines.append(f"  • <code>{c}</code>")
+                    btn_text = f"🪙 {c} [{short_sid[:7]}]"
+                    row.append(InlineKeyboardButton(text=btn_text, callback_data=f"edit_coin_{c}"))
+                    if len(row) == 2:
+                        buttons.append(row)
+                        row = []
+                text_lines.append("")
+
             if row:
                 buttons.append(row)
             buttons.append([InlineKeyboardButton(text="🔙 Close", callback_data="edit_side_cancel")])
-            
-            text = "Выберите монету для редактирования:"
+
+            text_lines.append("<i>Выберите монету для настройки параметров или смены стратегии:</i>")
+            text = "\n".join(text_lines)
+
             if edit:
-                await message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+                await message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
             else:
-                await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons))
+                await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
         @self.dp.callback_query(F.data.startswith("edit_coin_") & ~F.data.startswith("edit_coin_list"))
         async def process_edit_coin_select(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             symbol = callback.data.replace("edit_coin_", "")
+
+            strat_registry = getattr(self.bot_core, "strategy_registry", None)
+            strat_id = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else None
+            meta = self._get_strategy_meta(strat_id) if strat_id else {"name": "Не назначена"}
+            strat_name = meta.get("name", strat_id or "—")
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
                     InlineKeyboardButton(text="🟢 LONG", callback_data=f"edit_side_{symbol}_LONG"),
                     InlineKeyboardButton(text="🔴 SHORT", callback_data=f"edit_side_{symbol}_SHORT")
                 ],
+                [
+                    InlineKeyboardButton(text="🔄 Сменить стратегию", callback_data=f"reassign_strat_{symbol}")
+                ],
                 [InlineKeyboardButton(text="🔙 Back", callback_data="edit_coin_list")]
             ])
-            await callback.message.edit_text(f"⚙️ <b>{symbol}</b>\nВыберите направление для редактирования:", reply_markup=keyboard, parse_mode="HTML")
+            text = (
+                f"⚙️ <b>{symbol}</b>\n"
+                f"📌 Стратегия: <b>{strat_name}</b>\n"
+                f"ID: <code>{strat_id}</code>\n\n"
+                f"Выберите действие:"
+            )
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("reassign_strat_"))
+        async def process_reassign_strat(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            symbol = callback.data.replace("reassign_strat_", "")
+
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            active_strategies = app_data.get("active_strategies", {})
+            strat_registry = getattr(self.bot_core, "strategy_registry", None)
+            current_strat = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else None
+
+            buttons = []
+            for sid, sdata in active_strategies.items():
+                if sid == current_strat:
+                    continue
+                meta = self._get_strategy_meta(sid)
+                s_name = meta.get("name", sid)
+                buttons.append([InlineKeyboardButton(
+                    text=f"🎯 {s_name[:35]}",
+                    callback_data=f"do_reassign_{symbol}_{sid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="🔙 Назад к монете", callback_data=f"edit_coin_{symbol}")])
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text(
+                f"🔄 <b>Перевод {symbol} в другую стратегию</b>\n\n"
+                f"Текущая стратегия: <code>{current_strat}</code>\n"
+                f"Выберите новую стратегию для назначения:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+        @self.dp.callback_query(F.data.startswith("do_reassign_"))
+        async def process_do_reassign(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            parts = callback.data.split("_")
+            if len(parts) < 4:
+                return
+            symbol = parts[2]
+            new_strat_id = "_".join(parts[3:])
+
+            app_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_path) or {}
+            active_strategies = app_data.get("active_strategies", {})
+
+            for sid, sdata in active_strategies.items():
+                if "symbols" in sdata and symbol in sdata["symbols"]:
+                    sdata["symbols"].remove(symbol)
+
+            if new_strat_id in active_strategies:
+                active_strategies[new_strat_id].setdefault("symbols", []).append(symbol)
+                active_strategies[new_strat_id]["enabled"] = True
+                Utils.write_json_file(app_path, app_data)
+
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                self.bot_core.strategy_registry.reload(active_strategies)
+
+            try:
+                from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                strat_cfg = self.bot_core.strategy_registry.get_strategy_for_symbol(symbol)
+                StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
+            except Exception as e:
+                logger.warning(f"StrategyApplicator rebuild error: {e}")
+
+            self.bot_core.runtime_manager.load_initial_caches(self.bot_core.symbols)
+            self.bot_core.runtime_configs = self.bot_core.runtime_manager.caches
+            self.bot_core.runtime_manager.populate_fsm_from_cache(self.bot_core.fsm_states)
+
+            meta = self._get_strategy_meta(new_strat_id)
+            await callback.message.edit_text(
+                f"✅ Монета <b>{symbol}</b> успешно переведена в стратегию <b>{meta.get('name', new_strat_id)}</b> (<code>{new_strat_id}</code>)!\n"
+                f"Новые настройки сетки и тейков применены.",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="⚙️ К монете", callback_data=f"edit_coin_{symbol}")],
+                    [InlineKeyboardButton(text="📋 К списку монет", callback_data="edit_coin_list")]
+                ]),
+                parse_mode="HTML"
+            )
 
         @self.dp.callback_query(F.data == "edit_side_cancel")
         async def process_edit_side_cancel(callback: CallbackQuery, state: FSMContext):
@@ -1609,41 +2047,181 @@ class TelegramReceiver:
         # =========================================================
         # EDIT Super Grid
         # =========================================================
+        # =========================================================
+        # EDIT Super Grid (Per Strategy & Global)
+        # =========================================================
         @self.dp.message(F.text == "🔧 Super Grid")
         async def on_super_grid_btn(message: Message, state: FSMContext):
+            await state.clear()
             app_json_path = DATA_DIR / "app.json"
-            app_data = Utils.read_json_file(app_json_path)
-            
-            # Если нет секции Super Grid, создадим базовую
+            app_data = Utils.read_json_file(app_json_path) or {}
+            active_strategies = app_data.get("active_strategies", {})
+
+            buttons = []
+            for sid, sdata in active_strategies.items():
+                if not sdata.get("enabled", False):
+                    continue
+                meta = self._get_strategy_meta(sid)
+                sg_en = meta.get("super_grid", False)
+                sg_badge = "✅ ON" if sg_en else "❌ OFF"
+                s_name = meta.get("name", sid)
+                buttons.append([InlineKeyboardButton(
+                    text=f"🔧 {s_name[:30]} [{sg_badge}]",
+                    callback_data=f"sg_view_{sid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (_base)", callback_data="sg_global_edit")])
+            buttons.append([InlineKeyboardButton(text="🔙 Закрыть", callback_data="edit_side_cancel")])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await message.answer(
+                "🔧 <b>Управление Super Grid (динамическая волатильность)</b>\n\n"
+                "Выберите стратегию для детальной настройки параметров Super Grid:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+        @self.dp.callback_query(F.data.startswith("sg_view_"))
+        async def process_sg_view(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            sid = callback.data.replace("sg_view_", "")
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            strat_cfg = app_data.get("active_strategies", {}).get(sid, {})
+            sg_cfg = strat_cfg.get("super_grid", {})
+            en = sg_cfg.get("enabled", False)
+            tf = sg_cfg.get("timeframe", "1w")
+            win = sg_cfg.get("window", 12)
+            mult = sg_cfg.get("multiplier", 2.0)
+            min_v = sg_cfg.get("min_volatility_pct", 15.0)
+
+            toggle_text = "⏸ Отключить Super Grid" if en else "▶️ Включить Super Grid"
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=toggle_text, callback_data=f"sg_toggle_{sid}")],
+                [InlineKeyboardButton(text="✏️ Редактировать JSON", callback_data=f"sg_edit_json_{sid}")],
+                [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="sg_back_list")]
+            ])
+
+            syms = ", ".join(strat_cfg.get("symbols", [])) or "нет"
+            text = (
+                f"🔧 <b>Super Grid для стратегии:</b>\n"
+                f"ID: <code>{sid}</code>\n\n"
+                f"• Статус: <b>{'✅ Включен' if en else '❌ Отключен'}</b>\n"
+                f"• Timeframe: <b>{tf}</b>\n"
+                f"• Window: <b>{win} баров</b>\n"
+                f"• Multiplier: <b>x{mult}</b>\n"
+                f"• Min Volatility: <b>{min_v}%</b>\n\n"
+                f"Монеты под этой стратегией: <code>{syms}</code>"
+            )
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("sg_toggle_"))
+        async def process_sg_toggle(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            sid = callback.data.replace("sg_toggle_", "")
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            strat_cfg = app_data.get("active_strategies", {}).get(sid, {})
+            if "super_grid" not in strat_cfg:
+                strat_cfg["super_grid"] = {
+                    "enabled": True,
+                    "timeframe": "1w",
+                    "window": 12,
+                    "multiplier": 2.0,
+                    "min_volatility_pct": 15.0,
+                    "max_volatility_pct": None,
+                    "update_interval_hours": 24
+                }
+            current = strat_cfg["super_grid"].get("enabled", False)
+            strat_cfg["super_grid"]["enabled"] = not current
+            Utils.write_json_file(app_json_path, app_data)
+
+            if hasattr(self.bot_core, 'volatility_manager') and self.bot_core.volatility_manager.is_running:
+                asyncio.create_task(self.bot_core.volatility_manager.process_all())
+
+            callback.data = f"sg_view_{sid}"
+            await process_sg_view(callback, state)
+
+        @self.dp.callback_query(F.data == "sg_back_list")
+        async def process_sg_back_list(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            active_strategies = app_data.get("active_strategies", {})
+
+            buttons = []
+            for sid, sdata in active_strategies.items():
+                if not sdata.get("enabled", False):
+                    continue
+                meta = self._get_strategy_meta(sid)
+                sg_en = meta.get("super_grid", False)
+                sg_badge = "✅ ON" if sg_en else "❌ OFF"
+                s_name = meta.get("name", sid)
+                buttons.append([InlineKeyboardButton(
+                    text=f"🔧 {s_name[:30]} [{sg_badge}]",
+                    callback_data=f"sg_view_{sid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (_base)", callback_data="sg_global_edit")])
+            buttons.append([InlineKeyboardButton(text="🔙 Закрыть", callback_data="edit_side_cancel")])
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await callback.message.edit_text(
+                "🔧 <b>Управление Super Grid (динамическая волатильность)</b>\n\n"
+                "Выберите стратегию для детальной настройки параметров Super Grid:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+        @self.dp.callback_query(F.data == "sg_global_edit")
+        async def process_sg_global_edit(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
             if "super_grid" not in app_data:
                 app_data["super_grid"] = {
                     "enabled": True,
-                    "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                    "timeframe": "1d",
-                    "window": 14,
-                    "multiplier": 1.0,
-                    "min_volatility_pct": 5.0,
-                    "update_interval_hours": 12
+                    "timeframe": "1w",
+                    "window": 12,
+                    "multiplier": 2.0,
+                    "min_volatility_pct": 15.0,
+                    "max_volatility_pct": None,
+                    "update_interval_hours": 24
                 }
-            
             super_grid_str = json.dumps(app_data["super_grid"], indent=4)
             dump_path = os.path.join("logs", "Super Grid_edit.json")
             os.makedirs("logs", exist_ok=True)
             with open(dump_path, "w", encoding="utf-8") as f:
                 f.write(super_grid_str)
-                
-            await message.answer("<b>Текущие настройки Super Grid (Volatility):</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
-            await message.answer_document(FSInputFile(dump_path))
+            await callback.message.answer("<b>Глобальные настройки Super Grid:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
+            await callback.message.answer_document(FSInputFile(dump_path))
             await state.set_state(TGStates.waiting_for_super_grid_json)
 
-        @self.dp.message(TGStates.waiting_for_super_grid_json)
-        async def process_super_grid_json(message: Message, state: FSMContext):
+        @self.dp.callback_query(F.data.startswith("sg_edit_json_"))
+        async def process_sg_edit_json(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            sid = callback.data.replace("sg_edit_json_", "")
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            strat_cfg = app_data.get("active_strategies", {}).get(sid, {})
+            sg_cfg = strat_cfg.get("super_grid", {})
+            dump_path = os.path.join("logs", f"Super_Grid_{sid}.json")
+            os.makedirs("logs", exist_ok=True)
+            with open(dump_path, "w", encoding="utf-8") as f:
+                f.write(json.dumps(sg_cfg, indent=4))
+            await state.update_data(editing_sg_strat=sid)
+            await callback.message.answer(
+                f"<b>Настройки Super Grid для {sid}:</b>\nОтредактируйте файл и отправьте обратно документом или текстом.",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await callback.message.answer_document(FSInputFile(dump_path))
+            await state.set_state(TGStates.waiting_for_strat_super_grid_json)
+
+        @self.dp.message(TGStates.waiting_for_strat_super_grid_json)
+        async def process_strat_super_grid_json(message: Message, state: FSMContext):
             if message.text and message.text == "🔙 Back":
                 await state.clear()
-                status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
-                await message.answer(f"<b>Control Panel</b>\nCurrent Status: {status}", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
-                return
-                
+                return await on_super_grid_btn(message, state)
             json_str = ""
             if message.document:
                 file = await self.bot.get_file(message.document.file_id)
@@ -1653,25 +2231,23 @@ class TelegramReceiver:
             elif message.text:
                 json_str = message.text.strip()
             else:
-                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
+                await message.answer("❌ Отправьте текст или .json файл.")
                 return
-                
             try:
-                new_super_grid = json.loads(json_str)
-                app_json_path = DATA_DIR / "app.json"
-                app_data = Utils.read_json_file(app_json_path)
-                app_data["super_grid"] = new_super_grid
-                Utils.write_json_file(app_json_path, app_data)
-                
-                # Обновляем в памяти _CFG
-                _CFG["super_grid"] = new_super_grid
-                
-                # Заставляем пересчитаться
-                if hasattr(self.bot_core, 'volatility_manager') and self.bot_core.volatility_manager.is_running:
-                    asyncio.create_task(self.bot_core.volatility_manager.process_all())
-                    
-                await message.answer("✅ Настройки Super Grid успешно обновлены! Перерасчет запущен.", reply_markup=self._get_main_keyboard())
-                await state.clear()
+                new_sg = json.loads(json_str)
+                data = await state.get_data()
+                sid = data.get("editing_sg_strat")
+                app_path = DATA_DIR / "app.json"
+                app_data = Utils.read_json_file(app_path) or {}
+                if sid in app_data.get("active_strategies", {}):
+                    app_data["active_strategies"][sid]["super_grid"] = new_sg
+                    Utils.write_json_file(app_path, app_data)
+                    if hasattr(self.bot_core, 'volatility_manager') and self.bot_core.volatility_manager.is_running:
+                        asyncio.create_task(self.bot_core.volatility_manager.process_all())
+                    await message.answer(f"✅ Настройки Super Grid для {sid} успешно обновлены!", reply_markup=self._get_main_keyboard())
+                    await state.clear()
+                else:
+                    await message.answer(f"❌ Стратегия {sid} не найдена в active_strategies.")
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
 

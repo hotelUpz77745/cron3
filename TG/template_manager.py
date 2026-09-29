@@ -23,8 +23,12 @@ class TemplateManager:
         # Поля, которые мы разрешаем редактировать через TG
         self.visible_keys = {"enable", "invest_size", "leverage"}
 
-    def get_runtime_path(self, symbol: str) -> Path:
+    def get_runtime_path(self, symbol: str, strategy_id: Optional[str] = None) -> Path:
         sym_lower = symbol.lower()
+        if strategy_id:
+            strat_dir = self.runtime_dir / strategy_id
+            strat_dir.mkdir(parents=True, exist_ok=True)
+            return strat_dir / f"{sym_lower}.json"
         if self.bot_core and hasattr(self.bot_core, "runtime_manager"):
             return self.bot_core.runtime_manager.get_runtime_path(symbol)
         if self.runtime_dir.exists():
@@ -33,15 +37,40 @@ class TemplateManager:
                     return sub / f"{sym_lower}.json"
         return self.runtime_dir / f"{sym_lower}.json"
 
-    def generate_tg_template(self, symbol: str) -> str:
+    def generate_tg_template(self, symbol: str, strategy_id: Optional[str] = None) -> str:
         """Создает JSON шаблон для отправки в Telegram (чистые настройки)."""
         symbol = symbol.upper()
+        target_file = self.get_runtime_path(symbol, strategy_id)
+        if target_file.exists():
+            rt_data = Utils.read_json_file(target_file)
+            if rt_data:
+                resolved_strat = strategy_id
+                if not resolved_strat and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    resolved_strat = self.bot_core.strategy_registry.get_strategy_id_for_symbol(symbol)
+                tg_template = {
+                    "symbol": symbol,
+                    "strategy_id": resolved_strat or "",
+                    "_notes": "Full settings template. Edit the required parameters."
+                }
+                for side in ("LONG", "SHORT"):
+                    if side in rt_data:
+                        tg_template[side] = {
+                            k: v for k, v in rt_data[side].items()
+                            if k in ("enable", "invest_size", "leverage", "grid", "tp_map", "tp_purpose")
+                        }
+                return json.dumps(tg_template, indent=4)
+
         base_data = Utils.read_json_file(self.base_file)
         if not base_data:
             return json.dumps({"error": "Base template not found"})
 
+        resolved_strat = strategy_id
+        if not resolved_strat and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            resolved_strat = self.bot_core.strategy_registry.get_strategy_id_for_symbol(symbol)
+
         tg_template = {
             "symbol": symbol,
+            "strategy_id": resolved_strat or "",
             "_notes": "Full settings template. Edit the required parameters.",
         }
         for side in ("LONG", "SHORT"):
@@ -50,7 +79,7 @@ class TemplateManager:
 
         return json.dumps(tg_template, indent=4)
 
-    def apply_tg_template(self, user_json_str: str) -> tuple[bool, str]:
+    def apply_tg_template(self, user_json_str: str, strategy_id: Optional[str] = None) -> tuple[bool, str]:
         """Парсит полученный JSON, обновляет настройки (сохраняя рантайм-стейт) и сохраняет в runtime."""
         try:
             user_data = json.loads(user_json_str)
@@ -61,11 +90,13 @@ class TemplateManager:
         if not symbol or not symbol.endswith("USDT"):
             return False, "Неверный или отсутствующий символ. Должен заканчиваться на USDT."
 
+        strat_id = strategy_id or user_data.get("strategy_id")
+
         base_data = Utils.read_json_file(self.base_file)
         if not base_data:
             return False, "Базовый шаблон не найден."
 
-        target_file = self.get_runtime_path(symbol)
+        target_file = self.get_runtime_path(symbol, strat_id)
         if target_file.exists():
             final_data = Utils.read_json_file(target_file)
         else:
