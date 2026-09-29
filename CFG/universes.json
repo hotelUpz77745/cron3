@@ -13,7 +13,7 @@
         "name": "U0: Base Classic Benchmark (Super Grid)",
         "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
         "is_active": false,
-        "start_balance_usdt": 150.0,
+        "start_balance_usdt": 50.0,
         "invest_size": 400.0,
         "leverage": 20,
         "overrides": {
@@ -27,7 +27,7 @@
         "name": "U0: Base Classic Benchmark (Super Grid + Flat TP 0.75%)",
         "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, плоский TP 0.75% на всех уровнях (0..5), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
         "is_active": false,
-        "start_balance_usdt": 150.0,
+        "start_balance_usdt": 50.0,
         "invest_size": 400.0,
         "leverage": 20,
         "overrides": {
@@ -1862,7 +1862,7 @@
         "name": "👑 U9: Omni Zenith Apex (Dual-Regime Inverted Fibonacci Fortress)",
         "description": "Универсальная формула Вселенной нового поколения: асимметричный дуальный режим. При аптрендах и флэте выжимает максимум (Step 0 TP 1.80%..2.88% + Smart TP + Smart Size 1.20x). При тотальных просадках гарантирует максимальную защиту (8-уровневый Fibonacci Shock Grid до -58%, инвертированный Panic Damper TP до 0.50%, Knife Blocker >=2, деэскалация объемов 0.60x).",
         "is_active": false,
-        "start_balance_usdt": 150.0,
+        "start_balance_usdt": 50.0,
         "invest_size": 400.0,
         "leverage": 20,
         "overrides": {
@@ -1878,7 +1878,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 150.0,
+                "start_balance_usdt": 50.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {

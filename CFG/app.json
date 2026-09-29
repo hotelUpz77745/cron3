@@ -11,7 +11,7 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": false
+        "auto_start": true
     },
     "paths": {
         "shared_api_dir": "../API"
@@ -79,7 +79,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 150.0,
+                "start_balance_usdt": 50.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
@@ -114,7 +114,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 150.0,
+                "start_balance_usdt": 50.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
@@ -149,7 +149,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 150.0,
+                "start_balance_usdt": 50.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
