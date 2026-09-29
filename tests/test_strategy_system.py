@@ -131,23 +131,27 @@ class TestStrategySystem(unittest.TestCase):
             self.assertEqual(tp_map["1"]["fallback_indent"], 1.20)
 
     def test_default_active_strategies_load(self):
-        """Интеграционный тест: загрузка реального app.json и universes.json."""
+        """Интеграционный тест: загрузка 3 лидеров из app.json и universes.json."""
         registry = StrategyRegistry()
         active_strats = registry.get_active_strategies()
-        self.assertGreater(len(active_strats), 0)
+        self.assertEqual(len(active_strats), 3)
 
         active_symbols = registry.get_all_active_symbols()
-        self.assertIn("ARXUSDT", active_symbols)
-        self.assertIn("FARTCOINUSDT", active_symbols)
         self.assertIn("ZROUSDT", active_symbols)
+        self.assertIn("PENGUUSDT", active_symbols)
+        self.assertIn("SPXUSDT", active_symbols)
 
-        strat_arx = registry.get_strategy_for_symbol("ARXUSDT")
-        self.assertIsNotNone(strat_arx)
-        self.assertEqual(strat_arx.strategy_id, "u6_symbiosis_beta_scalper")
+        strat_zro = registry.get_strategy_for_symbol("ZROUSDT")
+        self.assertIsNotNone(strat_zro)
+        self.assertEqual(strat_zro.strategy_id, "u0_fat_swing123")
 
-        strat_fart = registry.get_strategy_for_symbol("FARTCOINUSDT")
-        self.assertIsNotNone(strat_fart)
-        self.assertEqual(strat_fart.strategy_id, "u0_fat_swing")
+        strat_pengu = registry.get_strategy_for_symbol("PENGUUSDT")
+        self.assertIsNotNone(strat_pengu)
+        self.assertEqual(strat_pengu.strategy_id, "u8_golden_macro_symbiosis")
+
+        strat_spx = registry.get_strategy_for_symbol("SPXUSDT")
+        self.assertIsNotNone(strat_spx)
+        self.assertEqual(strat_spx.strategy_id, "u6_symbiosis_gamma_fortress123")
 
     def test_runtime_builder_integration(self):
         """Интеграционный тест сборки рантаймов build_runtime_caches."""
@@ -157,7 +161,7 @@ class TestStrategySystem(unittest.TestCase):
         registry = StrategyRegistry()
         build_runtime_caches(registry=registry)
 
-        for sym in ["ARXUSDT", "FARTCOINUSDT", "ZROUSDT"]:
+        for sym in ["ZROUSDT", "PENGUUSDT", "SPXUSDT"]:
             cfg_path = RUNTIME_DIR / f"{sym.lower()}.json"
             self.assertTrue(cfg_path.exists(), f"Рантайм файл {cfg_path} должен существовать!")
             data = Utils.read_json_file(cfg_path)

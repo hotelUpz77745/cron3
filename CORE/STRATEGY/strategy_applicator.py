@@ -160,9 +160,10 @@ class StrategyApplicator:
             new_data[side] = new_side
 
         Utils.atomic_write_json(target_file, new_data, indent=4)
+        safe_name = strategy.name.encode("ascii", "ignore").decode("ascii").strip()
         logger.info(
             f"[StrategyApplicator] Built runtime config for {symbol} "
-            f"from strategy '{strategy.strategy_id}' ({strategy.name})."
+            f"from strategy '{strategy.strategy_id}' ({safe_name})."
         )
         return target_file
 

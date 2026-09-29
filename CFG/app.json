@@ -31,6 +31,26 @@
                 ">=2": 120,
                 ">4": 150
             }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "knife_blocker_enabled": false,
+            "knife_blocker": {
+                "enabled": false
+            },
+            "profiting_size_weights": {
+                "<2": 1.0,
+                ">=2": 1.0,
+                ">4": 1.0
+            }
+        },
+        "smart_tp": {
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                ">=2": 1.0,
+                ">4": 1.0
+            }
         }
     },
     "logging": {
@@ -43,34 +63,25 @@
         "log_to_file": true
     },
     "active_strategies": {
-        "u6_symbiosis_beta_scalper": {
-            "enabled": true,
-            "symbols": [
-                "ARXUSDT"
-            ]
-        },
-        "u0_fat_swing": {
-            "enabled": true,
-            "symbols": [
-                "FARTCOINUSDT"
-            ]
-        },
-        "u4_tp_inverted_damper": {
+        "u0_fat_swing123": {
             "enabled": true,
             "symbols": [
                 "ZROUSDT"
             ]
         },
         "u8_golden_macro_symbiosis": {
-            "enabled": false,
-            "symbols": []
+            "enabled": true,
+            "symbols": [
+                "PENGUUSDT"
+            ]
+        },
+        "u6_symbiosis_gamma_fortress123": {
+            "enabled": true,
+            "symbols": [
+                "SPXUSDT"
+            ]
         }
     },
-    "symbols": [
-        "ARXUSDT",
-        "FARTCOINUSDT",
-        "ZROUSDT"
-    ],
     "telegram": {
         "enabled": true,
         "allowed_users": [

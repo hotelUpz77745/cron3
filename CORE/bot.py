@@ -759,7 +759,7 @@ class BotCore:
         if False:
             raise Exception("Действие заблокировано: Эта нода сейчас в пассивном режиме (РЕЗЕРВ)!")
             
-        symbols = _CFG["symbols"]
+        symbols = self.symbols if hasattr(self, "symbols") and self.symbols else self.strategy_registry.get_all_active_symbols()
         
         # 1. Отмена лимитных ордеров
         for sym in symbols:

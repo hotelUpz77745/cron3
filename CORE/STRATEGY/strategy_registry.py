@@ -8,7 +8,15 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 
-from consts import DATA_DIR, _CFG, DEFAULT_SMART_GRACE, DEFAULT_TIMEFRAME, DEFAULT_SHIFT_INTERVAL_SEC
+from consts import (
+    DATA_DIR,
+    _CFG,
+    DEFAULT_SMART_GRACE,
+    DEFAULT_TIMEFRAME,
+    DEFAULT_SHIFT_INTERVAL_SEC,
+    DEFAULT_SMART_SIZE,
+    DEFAULT_SMART_TP,
+)
 from c_log import UnifiedLogger
 from c_utils import Utils
 
@@ -45,9 +53,16 @@ class StrategyConfig:
             base_smart_grace["shift_interval_sec"] = DEFAULT_SHIFT_INTERVAL_SEC
         self.smart_grace_cfg: Dict[str, Any] = base_smart_grace
 
-        # Конфигурации Smart Size и Smart TP
-        self.smart_size_cfg: Optional[Dict[str, Any]] = copy.deepcopy(self.overrides.get("smart_size"))
-        self.smart_tp_cfg: Optional[Dict[str, Any]] = copy.deepcopy(self.overrides.get("smart_tp"))
+        # Конфигурации Smart Size и Smart TP (наследование дефолтных механик + оверрайды)
+        base_smart_size = copy.deepcopy(DEFAULT_SMART_SIZE)
+        if "smart_size" in self.overrides and isinstance(self.overrides["smart_size"], dict):
+            base_smart_size.update(self.overrides["smart_size"])
+        self.smart_size_cfg: Dict[str, Any] = base_smart_size
+
+        base_smart_tp = copy.deepcopy(DEFAULT_SMART_TP)
+        if "smart_tp" in self.overrides and isinstance(self.overrides["smart_tp"], dict):
+            base_smart_tp.update(self.overrides["smart_tp"])
+        self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
 
         # Персональный таймфрейм вселенной (по умолчанию 5m)
         self.timeframe: str = str(self.overrides.get("timeframe", DEFAULT_TIMEFRAME))

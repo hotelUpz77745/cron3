@@ -91,9 +91,7 @@ def _resolve_active_symbols() -> list[str]:
     for strat_id, sdata in ACTIVE_STRATEGIES.items():
         if sdata.get("enabled", False):
             active_syms.extend(sdata.get("symbols", []))
-    if active_syms:
-        return list(dict.fromkeys(active_syms))
-    return _CFG["symbols"]
+    return list(dict.fromkeys(active_syms))
 
 ACTIVE_SYMBOLS: list[str] = _resolve_active_symbols()
 _num_symbols: int = len(ACTIVE_SYMBOLS)
@@ -115,12 +113,14 @@ STREAMER_PORT: int = int(_CFG["streamer"]["port"])
 STREAMER_LOCK_NAME: str = str(_CFG["streamer"]["lock_name"])
 
 # ============================================================
-# SIGNAL & SMART GRACE DECLARATIONS
+# SIGNAL, SMART GRACE, SMART SIZE & SMART TP DECLARATIONS
 # ============================================================
 DEFAULT_TIMEFRAME: str = str(_CFG["signal"]["timeframe"])
 DEFAULT_SMART_GRACE: Dict[str, Any] = _CFG["signal"]["smart_grace"]
 DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE["start_period_sec"])
 DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE["shift_interval_sec"])
+DEFAULT_SMART_SIZE: Dict[str, Any] = _CFG["signal"]["smart_size"]
+DEFAULT_SMART_TP: Dict[str, Any] = _CFG["signal"]["smart_tp"]
 
 # ============================================================
 # LOGGING
