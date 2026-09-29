@@ -225,7 +225,7 @@ class TelegramReceiver:
                 await message.answer("⚠️ Trading is already running!", reply_markup=self._get_main_keyboard())
                 return
                 
-            symbols = _CFG["symbols"]
+            symbols = self.bot_core.symbols if hasattr(self, 'bot_core') and self.bot_core.symbols else _CFG["symbols"]
             
             for sym in symbols:
                 sym_lower = sym.lower()

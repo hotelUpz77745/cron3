@@ -143,8 +143,8 @@ class StrategyRegistry:
 
         self.all_active_symbols = resolved_symbols
         logger.info(
-            f"[StrategyRegistry] Успешно инициализировано {len(self.active_strategies)} активных стратегий. "
-            f"Всего монет в торговом пуле: {len(self.all_active_symbols)} {self.all_active_symbols}."
+            f"[StrategyRegistry] Loaded {len(self.active_strategies)} active strategies. "
+            f"Active trading pool: {len(self.all_active_symbols)} symbols {self.all_active_symbols}."
         )
 
     def get_strategy_for_symbol(self, symbol: str) -> StrategyConfig:

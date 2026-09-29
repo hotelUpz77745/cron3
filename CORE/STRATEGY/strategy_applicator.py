@@ -161,8 +161,8 @@ class StrategyApplicator:
 
         Utils.atomic_write_json(target_file, new_data, indent=4)
         logger.info(
-            f"[StrategyApplicator] Сгенерирован рантайм-конфиг для {symbol} "
-            f"по шаблону стратегии '{strategy.strategy_id}' ({strategy.name})."
+            f"[StrategyApplicator] Built runtime config for {symbol} "
+            f"from strategy '{strategy.strategy_id}' ({strategy.name})."
         )
         return target_file
 
