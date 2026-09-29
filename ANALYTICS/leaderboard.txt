@@ -1,10 +1,8 @@
 =================================================================================================================
-STRATEGIES LEADERBOARD (Active: 3 | Coins: 3)
+STRATEGIES LEADERBOARD (Active: 1 | Coins: 1)
 Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)
 =================================================================================================================
 #   Strategy / Universe ID                 Net Profit     Realized      Floating     Max DD      Trades   Rec.Fact
 -----------------------------------------------------------------------------------------------------------------
-1   u0_fat_swing123                        +0.31 USDT     +0.31 $       +0.00 $      0.00 $      3        0.31    
-2   u8_golden_macro_symbiosis              +0.00 USDT     +0.00 $       +0.00 $      0.00 $      0        0.00    
-3   u6_symbiosis_gamma_fortress123         +0.00 USDT     +0.00 $       +0.00 $      0.00 $      0        0.00    
+1   u8_golden_macro_symbiosis              +0.00 USDT     +0.00 $       +0.00 $      0.00 $      0        0.00    
 =================================================================================================================

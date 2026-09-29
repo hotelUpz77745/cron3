@@ -23,6 +23,46 @@
         },
         "super_grid_enabled": true
     },
+    "u0_base_classic_supergrid_075": {
+        "name": "U0: Base Classic Benchmark (Super Grid + Flat TP 0.75%)",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, плоский TP 0.75% на всех уровнях (0..5), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "is_active": false,
+        "start_balance_usdt": 150.0,
+        "invest_size": 400.0,
+        "leverage": 20,
+        "overrides": {
+            "super_grid": {
+                "enabled": true
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "1": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "2": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "4": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "5": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                }
+            }
+        },
+        "super_grid_enabled": true
+    },
     "u0_tight_scalper": {
         "name": "U0: Tight Scalper Benchmark",
         "description": "Быстрый скальпер малых тейков (0.45%..1.5%) для максимальной частоты оборота капитала во флэте",
