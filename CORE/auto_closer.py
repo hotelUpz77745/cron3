@@ -25,9 +25,9 @@ class AutoCloser:
         if not analytics_data:
             return
             
-        # RISK SYSTEM CHECK
-        risk_cfg = app_data["stop_bot_rirk_system"]
-        if risk_cfg["enabled"]:
+        # RISK SYSTEM CHECK (если задана)
+        risk_cfg = app_data.get("stop_bot_rirk_system")
+        if risk_cfg and risk_cfg.get("enabled"):
             roi_pct = analytics_data.get("roi_pct", 0.0)
             
             try:

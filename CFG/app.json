@@ -194,9 +194,5 @@
         "enabled": true,
         "debounce_sec": 10,
         "max_interval_sec": 300
-    },
-    "stop_bot_rirk_system": {
-        "enabled": false,
-        "roi_critical_level_pct": null
     }
 }

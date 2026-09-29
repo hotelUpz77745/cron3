@@ -2026,9 +2026,9 @@ class TelegramReceiver:
         async def on_risk_system(message: Message, state: FSMContext):
             await state.clear()
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            risk_cfg = app_data["stop_bot_rirk_system"]
-            enabled = risk_cfg["enabled"]
-            roi = risk_cfg["roi_critical_level_pct"]
+            risk_cfg = app_data.get("stop_bot_rirk_system", {"enabled": False, "roi_critical_level_pct": None})
+            enabled = risk_cfg.get("enabled", False)
+            roi = risk_cfg.get("roi_critical_level_pct")
             
             status = "✅ Включена" if enabled else "❌ Выключена"
             text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."
