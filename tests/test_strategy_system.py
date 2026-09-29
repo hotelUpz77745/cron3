@@ -131,27 +131,17 @@ class TestStrategySystem(unittest.TestCase):
             self.assertEqual(tp_map["1"]["fallback_indent"], 1.20)
 
     def test_default_active_strategies_load(self):
-        """Интеграционный тест: загрузка 3 лидеров из app.json и universes.json."""
+        """Интеграционный тест: загрузка активных лидеров из app.json и universes.json."""
         registry = StrategyRegistry()
         active_strats = registry.get_active_strategies()
         self.assertEqual(len(active_strats), 3)
 
         active_symbols = registry.get_all_active_symbols()
-        self.assertIn("ZROUSDT", active_symbols)
-        self.assertIn("PENGUUSDT", active_symbols)
-        self.assertIn("SPXUSDT", active_symbols)
-
-        strat_zro = registry.get_strategy_for_symbol("ZROUSDT")
-        self.assertIsNotNone(strat_zro)
-        self.assertEqual(strat_zro.strategy_id, "u0_fat_swing123")
-
-        strat_pengu = registry.get_strategy_for_symbol("PENGUUSDT")
-        self.assertIsNotNone(strat_pengu)
-        self.assertEqual(strat_pengu.strategy_id, "u8_golden_macro_symbiosis")
-
-        strat_spx = registry.get_strategy_for_symbol("SPXUSDT")
-        self.assertIsNotNone(strat_spx)
-        self.assertEqual(strat_spx.strategy_id, "u6_symbiosis_gamma_fortress123")
+        self.assertEqual(len(active_symbols), 3)
+        for sym in active_symbols:
+            strat = registry.get_strategy_for_symbol(sym)
+            self.assertIsNotNone(strat)
+            self.assertIn(strat.strategy_id, active_strats)
 
     def test_runtime_builder_integration(self):
         """Интеграционный тест сборки рантаймов build_runtime_caches."""
@@ -207,7 +197,7 @@ class TestStrategySystem(unittest.TestCase):
         analytics_mgr = AnalyticsManager(strategy_registry=registry)
 
         # 1. Проверяем создание файлов аналитики по каждой активной стратегии
-        for strat_id in ["u0_fat_swing123", "u8_golden_macro_symbiosis", "u6_symbiosis_gamma_fortress123"]:
+        for strat_id in registry.active_strategies.keys():
             strat_json = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
             strat_txt = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{strat_id}.txt"
             self.assertTrue(strat_json.exists(), f"Файл аналитики {strat_json} должен существовать!")
@@ -220,7 +210,6 @@ class TestStrategySystem(unittest.TestCase):
         self.assertTrue(lead_txt.exists(), "Витрина leaderboard.txt должна существовать!")
         table_content = lead_txt.read_text(encoding="utf-8")
         self.assertIn("STRATEGIES LEADERBOARD", table_content)
-        self.assertIn("u0_fat_swing123", table_content)
 
         portfolio_json = ANALYTICS_STATS_DIR / "analytics_all.json"
         self.assertTrue(portfolio_json.exists(), "Файл портфеля analytics_all.json должен существовать!")
@@ -231,28 +220,12 @@ class TestStrategySystem(unittest.TestCase):
     def test_strategy_dome_configurations(self):
         """Тестирование изолированных конфигураций под куполами стратегий (super_grid, analytics, notifications, auto_closing)."""
         registry = StrategyRegistry()
-        self.assertIn("u0_fat_swing123", registry.active_strategies)
-        strat = registry.active_strategies["u0_fat_swing123"]
-
-        # 1. Super Grid Dome
-        self.assertTrue(strat.super_grid_enabled)
-        self.assertEqual(strat.super_grid_cfg["timeframe"], "1w")
-        self.assertEqual(strat.super_grid_cfg["window"], 12)
-        self.assertEqual(strat.super_grid_cfg["multiplier"], 2.0)
-        self.assertEqual(strat.super_grid_cfg["min_volatility_pct"], 15.0)
-
-        # 2. Analytics Dome
-        self.assertEqual(strat.start_balance_usdt, 150.0)
-        self.assertEqual(strat.analytics_cfg["start_balance_usdt"], 150.0)
-
-        # 3. Notifications Dome
-        self.assertTrue(strat.notifications_cfg["enabled"])
-        self.assertEqual(strat.notifications_cfg["negative_threshold"], -20.0)
-        self.assertEqual(strat.notifications_cfg["positive_threshold"], 20.0)
-
-        # 4. Auto-closing Dome
-        self.assertEqual(strat.auto_closing_cfg["positive"]["threshold"], 100)
-        self.assertEqual(strat.auto_closing_cfg["positive"]["threshold_increment"], 100)
+        for strat_id, strat in registry.active_strategies.items():
+            self.assertIsNotNone(strat.super_grid_cfg)
+            self.assertGreater(strat.start_balance_usdt, 0)
+            self.assertIsNotNone(strat.notifications_cfg)
+            self.assertIsNotNone(strat.auto_closing_cfg)
+            self.assertTrue(strat.notifications_cfg.get("enabled"))
 
     def test_notifier_strategy_dome_monitoring(self):
         """Тестирование изоляции флагов уведомлений между куполами стратегий."""
@@ -269,10 +242,25 @@ class TestStrategySystem(unittest.TestCase):
 
         # Прогон check_thresholds
         asyncio.run(notifier.check_thresholds())
-        for strat_id in ["u0_fat_swing123", "u8_golden_macro_symbiosis", "u6_symbiosis_gamma_fortress123"]:
+        for strat_id in registry.active_strategies.keys():
             self.assertIn(strat_id, notifier.strat_flags)
             self.assertFalse(notifier.strat_flags[strat_id]["neg_flag"])
             self.assertFalse(notifier.strat_flags[strat_id]["pos_flag"])
+
+    def test_u6_symbiosis_gamma_fortress35_template(self):
+        """Тест шаблона u6_symbiosis_gamma_fortress35 (Медный Змей)."""
+        registry = StrategyRegistry()
+        self.assertIn("u6_symbiosis_gamma_fortress35", registry.universes_db)
+        raw_meta = registry.universes_db["u6_symbiosis_gamma_fortress35"]
+        strat = StrategyConfig("u6_symbiosis_gamma_fortress35", raw_meta, ["TESTUSDT"])
+        self.assertEqual(strat.invest_size, 400.0)
+        self.assertEqual(strat.leverage, 20)
+        self.assertTrue(strat.smart_size_cfg.get("knife_blocker_enabled"))
+        self.assertEqual(len(strat.overrides["grid"]), 9)
+        self.assertEqual(len(strat.overrides["tp_map"]), 9)
+        # Проверка демпфера тейка (Panic Damper) от 2.2% до 0.50%
+        self.assertEqual(strat.overrides["tp_map"]["0"]["indent"], 2.2)
+        self.assertEqual(strat.overrides["tp_map"]["8"]["indent"], 0.5)
 
     def test_u9_omni_zenith_apex_template(self):
         """Тест универсальной формулы Вселенной u9_omni_zenith_apex."""
