@@ -53,28 +53,28 @@
         },
         "tp_map": {
             "0": {
-                "indent": 0.9,
-                "fallback_indent": 1.5
+                "indent": 0.6,
+                "fallback_indent": 1.0
             },
             "1": {
-                "indent": 1.1,
-                "fallback_indent": 1.8
+                "indent": 0.7,
+                "fallback_indent": 1.6
             },
             "2": {
-                "indent": 1.4,
-                "fallback_indent": 2.2
+                "indent": 1.0,
+                "fallback_indent": 2.3
             },
             "3": {
-                "indent": 1.8,
-                "fallback_indent": 2.8
+                "indent": 1.4,
+                "fallback_indent": 3.0
             },
             "4": {
-                "indent": 2.3,
-                "fallback_indent": 3.5
+                "indent": 1.9,
+                "fallback_indent": 3.6
             },
             "5": {
-                "indent": 3.0,
-                "fallback_indent": 4.2
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
@@ -131,28 +131,28 @@
         },
         "tp_map": {
             "0": {
-                "indent": 0.9,
-                "fallback_indent": 1.5
+                "indent": 0.6,
+                "fallback_indent": 1.0
             },
             "1": {
-                "indent": 1.1,
-                "fallback_indent": 1.8
+                "indent": 0.7,
+                "fallback_indent": 1.6
             },
             "2": {
-                "indent": 1.4,
-                "fallback_indent": 2.2
+                "indent": 1.0,
+                "fallback_indent": 2.3
             },
             "3": {
-                "indent": 1.8,
-                "fallback_indent": 2.8
+                "indent": 1.4,
+                "fallback_indent": 3.0
             },
             "4": {
-                "indent": 2.3,
-                "fallback_indent": 3.5
+                "indent": 1.9,
+                "fallback_indent": 3.6
             },
             "5": {
-                "indent": 3.0,
-                "fallback_indent": 4.2
+                "indent": 2.5,
+                "fallback_indent": 4.0
             }
         }
     },
