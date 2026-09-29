@@ -274,6 +274,51 @@ class TestStrategySystem(unittest.TestCase):
             self.assertFalse(notifier.strat_flags[strat_id]["neg_flag"])
             self.assertFalse(notifier.strat_flags[strat_id]["pos_flag"])
 
+    def test_u9_omni_zenith_apex_template(self):
+        """Тест универсальной формулы Вселенной u9_omni_zenith_apex."""
+        registry = StrategyRegistry()
+        self.assertIn("u9_omni_zenith_apex", registry.universes_db)
+
+        raw_meta = registry.universes_db["u9_omni_zenith_apex"]
+        strat = StrategyConfig("u9_omni_zenith_apex", raw_meta, ["TESTUSDT"])
+
+        # Проверка ключевых параметров асимметричного дуального режима
+        self.assertFalse(strat.super_grid_enabled)
+        self.assertEqual(strat.timeframe, "5m")
+        self.assertEqual(strat.smart_grace_cfg["start_period_sec"], 57)
+        self.assertEqual(strat.smart_grace_cfg["shift_interval_sec"], 13)
+
+        # Knife Blocker & Smart Size
+        self.assertTrue(strat.smart_size_cfg["knife_blocker_enabled"])
+        self.assertEqual(strat.smart_size_cfg["knife_blocker_threshold"], 2)
+        self.assertEqual(strat.smart_size_cfg["profiting_size_weights"][">=4"], 0.6)
+        self.assertEqual(strat.smart_size_cfg["profiting_size_weights"]["==2"], 1.2)
+
+        # Smart TP
+        self.assertEqual(strat.smart_tp_cfg["increments_tp"][">=2"], 1.3)
+        self.assertEqual(strat.smart_tp_cfg["increments_tp"][">4"], 1.6)
+
+        # Сборка рантайм конфигурации и валидация Правила 11
+        applicator = StrategyApplicator()
+        side_cfgs = applicator.build_side_configs(strat)
+        for side in ("LONG", "SHORT"):
+            grid = side_cfgs[side]["grid"]
+            tp_map = side_cfgs[side]["tp_map"]
+            self.assertEqual(len(grid), 8)
+            self.assertEqual(len(tp_map), 8)
+            self.assertEqual(grid["7"]["indent"], -58.0)
+            self.assertEqual(tp_map["0"]["indent"], 1.8)
+            self.assertEqual(tp_map["7"]["indent"], 0.5)
+
+            # Строгое соблюдение Правила 11
+            for tp_step in tp_map.values():
+                self.assertGreaterEqual(float(tp_step["indent"]), MIN_TAKE_PROFIT_PCT)
+                self.assertGreaterEqual(float(tp_step["fallback_indent"]), MIN_TAKE_PROFIT_PCT)
+
+            # Проверка суммы объемов сетки (не более 85% депозита)
+            total_vol = sum(float(lvl["volume"]) for lvl in grid.values())
+            self.assertLessEqual(total_vol, 85.0)
+
 
 if __name__ == "__main__":
     unittest.main()

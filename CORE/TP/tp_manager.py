@@ -12,6 +12,8 @@ from CORE._utils import TradeMath
 from CORE._utils import RiskCalculatingUtils
 from c_utils import Utils
 import asyncio
+import time
+from CORE.STRATEGY.momentum_engine import MomentumEngine
 logger = UnifiedLogger("TakeProfitManager")
 
 class TakeProfitManager:
@@ -50,6 +52,31 @@ class TakeProfitManager:
                 state.tp_map[active_level_str] = {}
             state.tp_map[active_level_str]["is_active"] = True
             return True
+
+        # Динамический Smart TP множитель для импульсного рынка (если стратегия задает smart_tp)
+        if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
+            try:
+                strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                if strat and getattr(strat, "smart_tp_cfg", None):
+                    now = time.time()
+                    eval_w = float(strat.smart_tp_cfg.get("eval_window_sec", 300))
+                    recent = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
+                    closed_cnt = len(recent)
+                    if closed_cnt > 0:
+                        tp_mult = MomentumEngine.calculate_smart_tp_multiplier(closed_cnt, strat.smart_tp_cfg)
+                        if tp_mult > 1.0:
+                            orig_tp = tp_indent
+                            tp_indent = round(float(tp_indent) * tp_mult, 4)
+                            logger.info(
+                                f"[{symbol}][{strat.strategy_id}] {side} Smart TP x{tp_mult:.2f} applied: "
+                                f"{orig_tp}% -> {tp_indent}% (recent closes: {closed_cnt})"
+                            )
+            except Exception as e:
+                logger.debug(f"[{symbol}] Smart TP calculation error: {e}")
+
+        # Строгое соблюдение Правила 11: минимальный тейк не менее 0.50%
+        tp_indent = max(0.50, float(tp_indent))
+
         # Расчет цены TP (строго от средней цены входа, а не от плавающего тикера)
         base_price = state.avg_entry_price if state.avg_entry_price > 0 else current_price
         tp_price = TradeMath.calculate_take_profit_price(base_price, tp_indent, side, spec_data, symbol)
