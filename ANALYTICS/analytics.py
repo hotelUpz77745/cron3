@@ -340,8 +340,12 @@ class AnalyticsManager:
                 start_ts = data["first_trade_ts"]
                     
             if not start_ts:
-                logger.warning("No first_trade_ts in analytics.json, skipping deep sync.")
-                return
+                # Авто-восстановление: если first_trade_ts не задан, берем точку отсчета 2 часа назад
+                start_ts = int(time.time() * 1000) - 7200000
+                logger.warning(f"No first_trade_ts in analytics.json, auto-fallback to {start_ts}.")
+                async with self._lock:
+                    data["first_trade_ts"] = start_ts
+                    self._write_data(data)
             
             try:
                 
@@ -1044,9 +1048,9 @@ class AnalyticsManager:
 
             s_unreal = sum(float(c.get("current_drawdown", 0.0)) for c in strat_per_coin.values())
             s_real = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in strat_per_coin.values())
-            s_wins = sum(int(c.get("win_count", 0)) for c in strat_per_coin.values())
-            s_losses = sum(int(c.get("loss_count", 0)) for c in strat_per_coin.values())
-            s_trades = s_wins + s_losses
+            s_trades = sum(int(c.get("total_trades", c.get("trades", 0))) for c in strat_per_coin.values())
+            s_wins = sum(int(c.get("winning_trades", c.get("win_count", 0))) for c in strat_per_coin.values())
+            s_losses = max(0, s_trades - s_wins)
 
             strat_data["unrealized_pnl_usdt"] = round(s_unreal, 4)
             strat_data["realized_pnl_usdt"] = round(s_real, 4)

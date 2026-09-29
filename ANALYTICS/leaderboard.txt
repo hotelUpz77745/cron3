@@ -4,7 +4,7 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
 =================================================================================================================
 #   Strategy / Universe ID                 Net Profit     Realized      Floating     Max DD      Trades   Rec.Fact
 -----------------------------------------------------------------------------------------------------------------
-1   u9_omni_zenith_apex                    +0.00 USDT     +0.00 $       +0.00 $      0.00 $      0        0.00    
-2   u0_base_classic_supergrid              -0.01 USDT     +0.00 $       -0.01 $      -0.01 $     0        -1.00   
-3   u0_base_classic_supergrid_075          -0.28 USDT     +0.00 $       -0.28 $      -0.28 $     0        -1.00   
+1   u0_base_classic_supergrid_075          +1.14 USDT     +1.02 $       +0.13 $      -0.67 $     3        1.72    
+2   u9_omni_zenith_apex                    -0.02 USDT     +0.46 $       -0.48 $      -0.48 $     1        -0.04   
+3   u0_base_classic_supergrid              -1.71 USDT     +0.77 $       -2.48 $      -2.84 $     3        -0.60   
 =================================================================================================================
