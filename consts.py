@@ -133,6 +133,7 @@ def _resolve_analytics_start_balance() -> float:
     return total if total > 0 else 150.0
 
 ANALYTICS_START_BALANCE_USDT: float = _resolve_analytics_start_balance()
+WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])
 WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodelete_sec"])
