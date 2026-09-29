@@ -132,18 +132,31 @@
 * **Пул торгуемых символов ядра**: `self.symbols = [s for s in registry.get_all_active_symbols()]`.
 * **Стример котировок (`price_stream`)**: подписывается на объединение всех активных символов + BNBUSDT.
 
-### 2.4. План имплементации (Implementation Plan)
-* **Шаг 1**: Документирование ADR и инвариантов в `tech_debt.md`, коммит в ветку `uni`.
-* **Шаг 2**: Создание пакета `CORE/STRATEGY`:
+### 2.4. План имплементации и статус выполнения (Implementation Report)
+* **[x] Шаг 1**: Документирование ADR и инвариантов в `tech_debt.md`, коммит в ветку `uni`.
+* **[x] Шаг 2**: Создание пакета `CORE/STRATEGY`:
   - `CORE/STRATEGY/strategy_registry.py`: класс `StrategyRegistry` (валидация `universes.json`, разрешение активных стратегий, проверка уникальности символов, маппинг `symbol -> StrategyConfig`).
-  - `CORE/STRATEGY/strategy_applicator.py`: класс `StrategyApplicator` (слияние базового `_base.json` с `overrides` конкретной стратегии и генерация изолированных рантайм-файлов в `CFG/runtime/<symbol>.json`).
-* **Шаг 3**: Перенос и адаптация поддерживающих механик из полигона:
-  - Smart Grace Engine: поддержка динамического сдвига интервала и карточки `increments_card` на уровне FSM/ядра.
-  - Smart Size & Knife Blocker: расчет множителей объема и блокировка усреднений «падающих ножей» при резких импульсах.
-  - Smart TP / Dynamic TP: поддержка расширения тейка для макро-стратегий.
-* **Шаг 4**: Интеграция в `BotCore` (`CORE/bot.py`):
-  - Замена чтения плоского `symbols` на вызов `StrategyRegistry`.
-  - Связывание runtime-менеджера и FSM-стейтов со стратегиями монет.
-* **Шаг 5**: Обновление конфигурации `CFG/app.json`.
-* **Шаг 6**: Автономное Unit-тестирование (проверка разрешения стратегий, бесконфликтности символов, генерации рантаймов, валидации инвариантов).
-* **Шаг 7**: Комплексный смоук-тест старта `BotCore` и коммит в ветку `uni`.
+  - `CORE/STRATEGY/strategy_applicator.py`: класс `StrategyApplicator` (слияние базового `_base.json` с `overrides` конкретной стратегии и генерация изолированных рантайм-файлов в `CFG/runtime/<symbol>.json` с защитой открытых FSM-позиций).
+* **[x] Шаг 3**: Перенос и адаптация поддерживающих механик из полигона:
+  - `CORE/STRATEGY/momentum_engine.py`: чистый математический движок для Smart Grace, Smart Size, Knife Blocker и Smart TP.
+  - Smart Grace Engine: поддержка индивидуальных карточек `increments_card` и `start_period_sec` для каждой монеты.
+  - Smart Size & Knife Blocker: расчет множителей объема и блокировка входов страдающей стороне при `opposite_closed_count >= threshold`.
+  - Smart TP / Dynamic TP: поддержка расширения тейка с гарантией Правила 11 (min TP >= 0.50%).
+* **[x] Шаг 4**: Интеграция в `BotCore` (`CORE/bot.py`) и `runtime_builder.py`:
+  - Замена плоского списка `symbols` на динамический пул из `self.strategy_registry.get_all_active_symbols()`.
+  - Связывание runtime-менеджера и генератора рантаймов с шаблонами активных стратегий.
+  - Интеграция проверок `MomentumEngine.is_knife_blocked` и `MomentumEngine.calculate_smart_grace` в `_on_tick`.
+  - Интеграция `MomentumEngine.calculate_smart_size_multiplier` в `_process_signal`.
+* **[x] Шаг 5**: Обновление конфигурации `CFG/app.json` и `consts.py` (добавлен блок `active_strategies` с флагами `enabled` и списками `symbols`).
+* **[x] Шаг 6**: Автономное Unit- и Integration-тестирование (`tests/test_strategy_system.py` — 8 тестов успешно, 100% pass rate).
+* **[x] Шаг 7**: Комплексный смоук-тест старта `BotCore` (успешная инициализация, кластер IPC, обнаружение стримов) и фиксация в ветке `uni`.
+
+### 2.5. Результаты верификации (Verification Summary)
+| Тестовый сценарий / Компонент | Статус | Детали проверки |
+| :--- | :---: | :--- |
+| `MomentumEngine` (Правила, Smart Grace, Knife Blocker, TP) | **PASSED** | Строгое соответствие математике полигона universum |
+| `StrategyRegistry` (Инвариант 1: 1:1 symbol uniqueness) | **PASSED** | Коллизия тикеров выбрасывает `ValueError` Fail-Fast |
+| `StrategyApplicator` (Инвариант 4: Rule 11 min TP >= 0.50%) | **PASSED** | Все ступени TP подтягиваются строго `>= 0.50%` |
+| `runtime_builder` (Генерация рантаймов по стратегиям) | **PASSED** | Корректная генерация `CFG/runtime/<sym>.json` |
+| Сохранение FSM стейта при ребилде рантайма | **PASSED** | Открытые позиции, средние цены и объемы не затираются |
+| `BotCore` Инициализация и торговый пул | **PASSED** | Успешный старт ядра с 3 активными стратегиями |
