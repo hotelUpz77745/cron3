@@ -84,6 +84,11 @@ class MomentumEngine:
         return 1.00
 
     @classmethod
+    def calculate_smart_size_multiplier(cls, closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> float:
+        """Алиас для calculate_smart_size_weight для полной совместимости с bot.py."""
+        return cls.calculate_smart_size_weight(closed_count, smart_size_cfg)
+
+    @classmethod
     def is_knife_blocked(cls, opposite_closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> bool:
         """
         Проверяет правило Knife Blocker (Cross-Side Awareness).
