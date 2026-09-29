@@ -119,8 +119,20 @@ REST_FAILSAFE_SEC: float = float(_CFG["app"]["rest_failsafe_sec"])
 INCOME_PAGINATION_DELAY_SEC: float = float(_CFG["app"]["income_pagination_delay_sec"])
 POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounce_sec"])
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
-ANALYTICS_START_BALANCE_USDT: float = float(_CFG["analytics"]["start_balance_usdt"])
-WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
+
+def _resolve_analytics_start_balance() -> float:
+    if "analytics" in _CFG and "start_balance_usdt" in _CFG["analytics"]:
+        return float(_CFG["analytics"]["start_balance_usdt"])
+    total = 0.0
+    for strat_id, sdata in _CFG.get("active_strategies", {}).items():
+        if isinstance(sdata, dict) and sdata.get("enabled"):
+            if "analytics" in sdata and "start_balance_usdt" in sdata["analytics"]:
+                total += float(sdata["analytics"]["start_balance_usdt"])
+            elif "start_balance_usdt" in sdata:
+                total += float(sdata["start_balance_usdt"])
+    return total if total > 0 else 150.0
+
+ANALYTICS_START_BALANCE_USDT: float = _resolve_analytics_start_balance()
 WATCHDOG_CHECK_INTERVAL_SEC: int = int(_CFG["watchdog"]["check_interval_sec"])
 WATCHDOG_HEARTBEAT_INTERVAL_SEC: int = int(_CFG["watchdog"]["heartbeat_interval_sec"])
 WATCHDOG_HEARTBEAT_AUTODELETE_SEC: int = int(_CFG["watchdog"]["heartbeat_autodelete_sec"])

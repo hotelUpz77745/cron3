@@ -228,6 +228,52 @@ class TestStrategySystem(unittest.TestCase):
         self.assertIn("leaderboard", portfolio_data)
         self.assertEqual(portfolio_data["total_universes_active"], 3)
 
+    def test_strategy_dome_configurations(self):
+        """Тестирование изолированных конфигураций под куполами стратегий (super_grid, analytics, notifications, auto_closing)."""
+        registry = StrategyRegistry()
+        self.assertIn("u0_fat_swing123", registry.active_strategies)
+        strat = registry.active_strategies["u0_fat_swing123"]
+
+        # 1. Super Grid Dome
+        self.assertTrue(strat.super_grid_enabled)
+        self.assertEqual(strat.super_grid_cfg["timeframe"], "1w")
+        self.assertEqual(strat.super_grid_cfg["window"], 12)
+        self.assertEqual(strat.super_grid_cfg["multiplier"], 2.0)
+        self.assertEqual(strat.super_grid_cfg["min_volatility_pct"], 15.0)
+
+        # 2. Analytics Dome
+        self.assertEqual(strat.start_balance_usdt, 150.0)
+        self.assertEqual(strat.analytics_cfg["start_balance_usdt"], 150.0)
+
+        # 3. Notifications Dome
+        self.assertTrue(strat.notifications_cfg["enabled"])
+        self.assertEqual(strat.notifications_cfg["negative_threshold"], -20.0)
+        self.assertEqual(strat.notifications_cfg["positive_threshold"], 20.0)
+
+        # 4. Auto-closing Dome
+        self.assertEqual(strat.auto_closing_cfg["positive"]["threshold"], 100)
+        self.assertEqual(strat.auto_closing_cfg["positive"]["threshold_increment"], 100)
+
+    def test_notifier_strategy_dome_monitoring(self):
+        """Тестирование изоляции флагов уведомлений между куполами стратегий."""
+        import asyncio
+        from CORE.notifier import NotifierManager
+
+        class DummyBot:
+            def __init__(self, reg):
+                self.strategy_registry = reg
+
+        registry = StrategyRegistry()
+        bot = DummyBot(registry)
+        notifier = NotifierManager(bot_core=bot)
+
+        # Прогон check_thresholds
+        asyncio.run(notifier.check_thresholds())
+        for strat_id in ["u0_fat_swing123", "u8_golden_macro_symbiosis", "u6_symbiosis_gamma_fortress123"]:
+            self.assertIn(strat_id, notifier.strat_flags)
+            self.assertFalse(notifier.strat_flags[strat_id]["neg_flag"])
+            self.assertFalse(notifier.strat_flags[strat_id]["pos_flag"])
+
 
 if __name__ == "__main__":
     unittest.main()

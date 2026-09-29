@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import time
 from consts import DATA_DIR, ANALYTICS_DIR
 from c_log import UnifiedLogger
@@ -70,22 +71,128 @@ class AutoCloser:
                         self._is_closing = False
                     
                     return # Exit check early
-        
+             # 1. СТРАТЕГИЧЕСКИЕ КУПОЛА (PER-STRATEGY AUTO-CLOSING)
+        active_strats = {}
+        if hasattr(self.bot_core, "strategy_registry"):
+            active_strats = self.bot_core.strategy_registry.active_strategies
+
+        for strat_id, strat_cfg in active_strats.items():
+            strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
+            strat_auto_cfg = strat_app_cfg.get("auto_closing") or strat_cfg.auto_closing_cfg
+            if not strat_auto_cfg:
+                continue
+
+            strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strat_id}.json"
+            if strat_stats_path.exists():
+                strat_analytics = Utils.read_json_file(strat_stats_path) or {}
+            else:
+                strat_analytics = analytics_data
+
+            strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
+            pos_cfg = strat_auto_cfg.get("positive", {})
+            neg_cfg = strat_auto_cfg.get("negative", {})
+
+            strat_triggered = False
+            strat_msg = ""
+
+            # Check Positive for Strategy Dome
+            th_pos = pos_cfg.get("threshold")
+            if th_pos == 0 or th_pos == 0.0:
+                th_pos = None
+
+            if th_pos is not None and strat_net >= th_pos:
+                strat_triggered = True
+                logger.info(f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) >= {th_pos}. Auto-closing strategy dome!")
+                inc = pos_cfg.get("threshold_increment")
+                if inc:
+                    new_th = th_pos + inc
+                    while new_th <= strat_net:
+                        new_th += inc
+                    new_th = round(new_th, 4)
+                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                        app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = new_th
+                    strat_msg = (
+                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                        f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
+                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                        f"Новый порог купола: <b>{new_th} USDT</b>."
+                    )
+                else:
+                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                        app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = None
+                    strat_msg = (
+                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                        f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
+                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                        f"Порог купола снят (null)."
+                    )
+
+            # Check Negative for Strategy Dome
+            th_neg = neg_cfg.get("threshold")
+            if th_neg == 0 or th_neg == 0.0:
+                th_neg = None
+
+            if not strat_triggered and th_neg is not None and strat_net <= th_neg:
+                strat_triggered = True
+                logger.info(f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) <= {th_neg}. Auto-closing strategy dome!")
+                inc = neg_cfg.get("threshold_increment")
+                if inc:
+                    inc = abs(inc)
+                    new_th = th_neg - inc
+                    while new_th >= strat_net:
+                        new_th -= inc
+                    new_th = round(new_th, 4)
+                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                        app_data["active_strategies"][strat_id]["auto_closing"]["negative"]["threshold"] = new_th
+                    strat_msg = (
+                        f"🔴 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                        f"Профит стратегии опустился до <b>{strat_net} USDT</b> (Порог: {th_neg}).\n"
+                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                        f"Новый порог купола: <b>{new_th} USDT</b>."
+                    )
+                else:
+                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                        app_data["active_strategies"][strat_id]["auto_closing"]["negative"]["threshold"] = None
+                    strat_msg = (
+                        f"🔴 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                        f"Профит стратегии опустился до <b>{strat_net} USDT</b> (Порог: {th_neg}).\n"
+                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                        f"Порог купола снят (null)."
+                    )
+
+            if strat_triggered:
+                try:
+                    self._is_closing = True
+                    await self.bot_core.close_strategy_positions(strat_id)
+                    Utils.write_json_file(app_json_path, app_data)
+                    if strat_msg and getattr(self.bot_core, 'notifier', None):
+                        await self.bot_core.notifier.send_alert(strat_msg)
+                except Exception as e:
+                    logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")
+                finally:
+                    self._is_closing = False
+
+        # 2. ГЛОБАЛЬНЫЙ ПОРТФЕЛЬНЫЙ AUTO-CLOSING (если задан на верхнем уровне)
         auto_cfg = app_data.get("auto_closing")
         if not auto_cfg:
             return
-            
 
-            
         net_usdt = analytics_data.get("net_profit_usdt", 0.0)
-        
-        pos_cfg = auto_cfg["positive"]
-        neg_cfg = auto_cfg["negative"]
+        pos_cfg = auto_cfg.get("positive", {})
+        neg_cfg = auto_cfg.get("negative", {})
         
         triggered = False
         action_msg = ""
         
-        # Check Positive
+        # Check Positive Portfolio
         th_pos = pos_cfg.get("threshold")
         if th_pos == 0 or th_pos == 0.0:
             th_pos = None
@@ -93,7 +200,7 @@ class AutoCloser:
         if th_pos is not None and net_usdt >= th_pos:
             self._is_closing = True
             triggered = True
-            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) >= {th_pos}. Auto-closing!")
+            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) >= {th_pos}. Auto-closing portfolio!")
             
             inc = pos_cfg.get("threshold_increment")
             if inc:
@@ -102,15 +209,13 @@ class AutoCloser:
                     new_th += inc
                 new_th = round(new_th, 4)
                 app_data["auto_closing"]["positive"]["threshold"] = new_th
-                action_msg = f"🟢 <b>AUTO-CLOSE (POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. New threshold: <b>{new_th}</b>."
+                action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. New threshold: <b>{new_th}</b>."
                 logger.info(f"[AUTO_CLOSER] Increased positive threshold to {new_th}.")
             else:
-                # If no increment, we must turn it off (set to null) to prevent infinite loops
                 app_data["auto_closing"]["positive"]["threshold"] = None
-                action_msg = f"🟢 <b>AUTO-CLOSE (POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. Threshold removed."
-                logger.warning("[AUTO_CLOSER] No positive threshold_increment found. Threshold set to null to prevent loop.")
+                action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. Threshold removed."
                 
-        # Check Negative (only if positive didn't trigger)
+        # Check Negative Portfolio
         th_neg = neg_cfg.get("threshold")
         if th_neg == 0 or th_neg == 0.0:
             th_neg = None
@@ -118,35 +223,29 @@ class AutoCloser:
         if not triggered and th_neg is not None and net_usdt <= th_neg:
             self._is_closing = True
             triggered = True
-            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) <= {th_neg}. Auto-closing!")
+            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) <= {th_neg}. Auto-closing portfolio!")
             
             inc = neg_cfg.get("threshold_increment")
             if inc:
-                inc = abs(inc) # Ensure it's a positive subtraction step
+                inc = abs(inc)
                 new_th = th_neg - inc
                 while new_th >= net_usdt:
                     new_th -= inc
                 new_th = round(new_th, 4)
                 app_data["auto_closing"]["negative"]["threshold"] = new_th
-                action_msg = f"🔴 <b>AUTO-CLOSE (NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. New threshold: <b>{new_th}</b>."
+                action_msg = f"🔴 <b>AUTO-CLOSE (PORTFOLIO NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. New threshold: <b>{new_th}</b>."
                 logger.info(f"[AUTO_CLOSER] Decreased negative threshold to {new_th}.")
             else:
                 app_data["auto_closing"]["negative"]["threshold"] = None
-                action_msg = f"🔴 <b>AUTO-CLOSE (NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. Threshold removed."
-                logger.warning("[AUTO_CLOSER] No negative threshold_increment found. Threshold set to null to prevent loop.")
+                action_msg = f"🔴 <b>AUTO-CLOSE (PORTFOLIO NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. Threshold removed."
 
         if triggered:
             try:
-                # 1. Close positions
                 await self.bot_core.close_all_positions()
-                
-                # 2. Update config file
                 Utils.write_json_file(app_json_path, app_data)
-                
-                # 3. Notify
                 if action_msg and getattr(self.bot_core, 'notifier', None):
                     await self.bot_core.notifier.send_alert(action_msg)
             except Exception as e:
-                logger.error(f"[AUTO_CLOSER] Error during auto-close sequence: {e}")
+                logger.error(f"[AUTO_CLOSER] Error during portfolio auto-close: {e}")
             finally:
                 self._is_closing = False

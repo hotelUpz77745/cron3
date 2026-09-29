@@ -256,7 +256,8 @@ class TelegramReceiver:
                                     super_indents.append(str(si) if si is not None else "-")
                                 lines.append(f"    ├ Grid: [{', '.join(indents)}]")
                                 
-                                if _CFG["super_grid"]["enabled"] and any(si != "-" for si in super_indents):
+                                is_sg = any(scfg.super_grid_enabled for scfg in self.bot_core.strategy_registry.active_strategies.values()) if hasattr(self.bot_core, "strategy_registry") else bool(_CFG.get("super_grid", {}).get("enabled", False))
+                                if is_sg and any(si != "-" for si in super_indents):
                                     lines.append(f"    ├ Super: [{', '.join(super_indents)}]")
                                     
                                 
@@ -330,7 +331,7 @@ class TelegramReceiver:
             
             node_status = ""
                     
-            super_grid_enabled = _CFG["super_grid"]["enabled"]
+            super_grid_enabled = any(scfg.super_grid_enabled for scfg in self.bot_core.strategy_registry.active_strategies.values()) if hasattr(self.bot_core, "strategy_registry") else bool(_CFG.get("super_grid", {}).get("enabled", False))
             super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"
             text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}\nSuper Grid (Volatility): {super_grid_status}"
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
@@ -1817,28 +1818,39 @@ class TelegramReceiver:
         async def on_notifications_menu(message: Message, state: FSMContext):
             await state.clear()
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            notif_cfg = app_cfg["notifications"]
-            enabled = notif_cfg["enabled"]
-            neg_th = notif_cfg["negative_threshold"]
-            pos_th = notif_cfg["positive_threshold"]
-            
-            neg_flag = self.bot_core.notifier.neg_flag if hasattr(self.bot_core, "notifier") else False
-            pos_flag = self.bot_core.notifier.pos_flag if hasattr(self.bot_core, "notifier") else False
-            
-            status_emoji = "✅ Вкл" if enabled else "❌ Выкл"
-            text = (
-                f"<b>Управление уведомлениями (Просадка/Профицит):</b>\n"
-                f"Статус: {status_emoji}\n"
-                f"Отрицательный порог: <b>{neg_th} USDT</b> (Сработал: {neg_flag})\n"
-                f"Положительный порог: <b>{pos_th} USDT</b> (Сработал: {pos_flag})"
-            )
-            
+            notif_cfg = app_cfg.get("notifications")
+            if notif_cfg:
+                enabled = notif_cfg["enabled"]
+                neg_th = notif_cfg["negative_threshold"]
+                pos_th = notif_cfg["positive_threshold"]
+                neg_flag = self.bot_core.notifier.neg_flag if hasattr(self.bot_core, "notifier") else False
+                pos_flag = self.bot_core.notifier.pos_flag if hasattr(self.bot_core, "notifier") else False
+                status_emoji = "✅ Вкл" if enabled else "❌ Выкл"
+                text = (
+                    f"<b>Управление уведомлениями (Портфель):</b>\n"
+                    f"Статус: {status_emoji}\n"
+                    f"Отрицательный порог: <b>{neg_th} USDT</b> (Сработал: {neg_flag})\n"
+                    f"Положительный порог: <b>{pos_th} USDT</b> (Сработал: {pos_flag})\n"
+                )
+            else:
+                text = "<b>🔔 Уведомления по куполам стратегий:</b>\n\n"
+                strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
+                for sid, scfg in strats.items():
+                    sn_cfg = scfg.notifications_cfg
+                    en_str = "✅" if sn_cfg.get("enabled", True) else "❌"
+                    neg_th = sn_cfg.get("negative_threshold", -20.0)
+                    pos_th = sn_cfg.get("positive_threshold", 20.0)
+                    sflags = self.bot_core.notifier.strat_flags.get(sid, {}) if hasattr(self.bot_core, "notifier") else {}
+                    n_flg = "🔔" if sflags.get("neg_flag") else "ок"
+                    p_flg = "🎉" if sflags.get("pos_flag") else "ок"
+                    text += (
+                        f"• <b>{scfg.name}</b> ({sid}) {en_str}\n"
+                        f"  ├ Просадка: <b>{neg_th} USDT</b> [{n_flg}]\n"
+                        f"  └ Профицит: <b>{pos_th} USDT</b> [{p_flg}]\n"
+                    )
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔕 Сбросить флаги", callback_data="notif_reset_flags")],
-                [
-                    InlineKeyboardButton(text="📉 Изменить Neg порог", callback_data="notif_edit_neg"),
-                    InlineKeyboardButton(text="📈 Изменить Pos порог", callback_data="notif_edit_pos")
-                ]
+                [InlineKeyboardButton(text="🔕 Сбросить флаги всех куполов", callback_data="notif_reset_flags")]
             ])
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -1907,39 +1919,50 @@ class TelegramReceiver:
         async def on_auto_closing_menu(message: Message, state: FSMContext):
             await state.clear()
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            auto_cfg = app_cfg["auto_closing"]
-            
-            pos = auto_cfg["positive"]
-            neg = auto_cfg["negative"]
-            
-            pos_th = pos["threshold"]
-            pos_inc = pos["threshold_increment"]
-            neg_th = neg["threshold"]
-            neg_inc = neg["threshold_increment"]
-            
+            auto_cfg = app_cfg.get("auto_closing")
             def fmt(v): return "Выкл (0/null)" if (v is None or v == 0) else str(v)
-            
-            text = (
-                f"<b>Управление Авто-Закрытием:</b>\n\n"
-                f"🟢 <b>Positive (Тейк Профит):</b>\n"
-                f"├ Порог: <b>{fmt(pos_th)}</b>\n"
-                f"└ Шаг инкремента: <b>{fmt(pos_inc)}</b>\n\n"
-                f"🔴 <b>Negative (Стоп Лосс):</b>\n"
-                f"├ Порог: <b>{fmt(neg_th)}</b>\n"
-                f"└ Шаг инкремента: <b>{fmt(neg_inc)}</b>\n\n"
-                f"<i>Примечание: отправьте 0 чтобы отключить (null).</i>"
-            )
-            
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="🟢 Изменить POS порог", callback_data="autoclose_edit_pos_th"),
-                    InlineKeyboardButton(text="🟢 Изменить POS шаг", callback_data="autoclose_edit_pos_inc")
-                ],
-                [
-                    InlineKeyboardButton(text="🔴 Изменить NEG порог", callback_data="autoclose_edit_neg_th"),
-                    InlineKeyboardButton(text="🔴 Изменить NEG шаг", callback_data="autoclose_edit_neg_inc")
-                ]
-            ])
+
+            if auto_cfg:
+                pos = auto_cfg.get("positive", {})
+                neg = auto_cfg.get("negative", {})
+                pos_th = pos.get("threshold")
+                pos_inc = pos.get("threshold_increment")
+                neg_th = neg.get("threshold")
+                neg_inc = neg.get("threshold_increment")
+                text = (
+                    f"<b>Управление Авто-Закрытием (Портфель):</b>\n\n"
+                    f"🟢 <b>Positive (Тейк Профит):</b>\n"
+                    f"├ Порог: <b>{fmt(pos_th)}</b>\n"
+                    f"└ Шаг инкремента: <b>{fmt(pos_inc)}</b>\n\n"
+                    f"🔴 <b>Negative (Стоп Лосс):</b>\n"
+                    f"├ Порог: <b>{fmt(neg_th)}</b>\n"
+                    f"└ Шаг инкремента: <b>{fmt(neg_inc)}</b>\n\n"
+                    f"<i>Примечание: отправьте 0 чтобы отключить (null).</i>"
+                )
+                keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="🟢 Изменить POS порог", callback_data="autoclose_edit_pos_th"),
+                        InlineKeyboardButton(text="🟢 Изменить POS шаг", callback_data="autoclose_edit_pos_inc")
+                    ],
+                    [
+                        InlineKeyboardButton(text="🔴 Изменить NEG порог", callback_data="autoclose_edit_neg_th"),
+                        InlineKeyboardButton(text="🔴 Изменить NEG шаг", callback_data="autoclose_edit_neg_inc")
+                    ]
+                ])
+            else:
+                text = "<b>🛑 Авто-Закрытие по куполам стратегий:</b>\n\n"
+                strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
+                for sid, scfg in strats.items():
+                    sac = scfg.auto_closing_cfg
+                    pos_th = sac.get("positive", {}).get("threshold")
+                    neg_th = sac.get("negative", {}).get("threshold")
+                    text += (
+                        f"• <b>{scfg.name}</b> ({sid}):\n"
+                        f"  ├ 🟢 Take-Profit: <b>{fmt(pos_th)} USDT</b>\n"
+                        f"  └ 🔴 Stop-Loss: <b>{fmt(neg_th)} USDT</b>\n"
+                    )
+                keyboard = self._get_back_keyboard()
+
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
         async def edit_autoclose_field(callback: CallbackQuery, state: FSMContext, state_val: State, msg: str):

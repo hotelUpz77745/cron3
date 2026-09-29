@@ -48,8 +48,17 @@ class AverageManager:
             elif level_data.get("price") is None:
                 indent_pct = level_data["indent"]
                 
-                app_adv = _CFG["super_grid"]
-                if app_adv["enabled"] and level_data.get("super_indent") is not None:
+                is_sg_enabled = False
+                if getattr(runtime_manager, "strategy_registry", None):
+                    try:
+                        strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                        is_sg_enabled = strat.super_grid_enabled
+                    except Exception:
+                        is_sg_enabled = False
+                elif "super_grid" in _CFG:
+                    is_sg_enabled = bool(_CFG["super_grid"].get("enabled", False))
+
+                if is_sg_enabled and level_data.get("super_indent") is not None:
                     indent_pct = level_data["super_indent"]
                     
                 price = TradeMath.calculate_grid_price(initial_price, indent_pct, side, spec_data, symbol)

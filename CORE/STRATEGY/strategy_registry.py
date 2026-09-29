@@ -24,26 +24,96 @@ logger = UnifiedLogger("StrategyRegistry")
 
 
 class StrategyConfig:
-    """Инкапсулирует конфигурацию и параметры переопределения одной торговой стратегии."""
+    """Инкапсулирует конфигурацию и параметры переопределения одной торговой стратегии (купола)."""
 
-    def __init__(self, strategy_id: str, raw_meta: Dict[str, Any], symbols: List[str]):
+    def __init__(
+        self,
+        strategy_id: str,
+        raw_meta: Dict[str, Any],
+        symbols: List[str],
+        active_settings: Optional[Dict[str, Any]] = None
+    ):
         self.strategy_id: str = strategy_id
         self.name: str = raw_meta["name"]
         self.description: str = raw_meta.get("description", "")
         self.invest_size: float = float(raw_meta["invest_size"])
         self.leverage: int = int(raw_meta["leverage"])
-        self.start_balance_usdt: float = float(raw_meta.get("start_balance_usdt", 3000.0))
         self.overrides: Dict[str, Any] = copy.deepcopy(raw_meta.get("overrides") or {})
         self.symbols: List[str] = [s.upper().strip() for s in symbols]
+        self.active_settings: Dict[str, Any] = copy.deepcopy(active_settings or {})
 
-        # Разрешение режима Super Grid
-        sg_override = self.overrides.get("super_grid")
+        # 1. Купол Аналитики (Analytics Dome)
+        strat_analytics = self.active_settings.get("analytics") or self.overrides.get("analytics")
+        if strat_analytics and isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
+            self.start_balance_usdt: float = float(strat_analytics["start_balance_usdt"])
+        elif "start_balance_usdt" in self.active_settings:
+            self.start_balance_usdt: float = float(self.active_settings["start_balance_usdt"])
+        elif "start_balance_usdt" in raw_meta:
+            self.start_balance_usdt: float = float(raw_meta["start_balance_usdt"])
+        else:
+            self.start_balance_usdt: float = 150.0
+        self.analytics_cfg: Dict[str, Any] = {"start_balance_usdt": self.start_balance_usdt}
+
+        # 2. Купол Super Grid (Volatility Grid Dome)
+        sg_override = (
+            self.active_settings.get("super_grid")
+            or self.overrides.get("super_grid")
+            or raw_meta.get("super_grid")
+        )
         if sg_override is not None and isinstance(sg_override, dict):
+            self.super_grid_cfg: Dict[str, Any] = copy.deepcopy(sg_override)
             self.super_grid_enabled: bool = bool(sg_override.get("enabled", True))
         elif "super_grid_enabled" in raw_meta:
             self.super_grid_enabled: bool = bool(raw_meta["super_grid_enabled"])
+            self.super_grid_cfg = {
+                "enabled": self.super_grid_enabled,
+                "timeframe": "1w",
+                "window": 12,
+                "multiplier": 2.0,
+                "min_volatility_pct": 15.0,
+                "max_volatility_pct": None,
+                "update_interval_hours": 24
+            }
         else:
             self.super_grid_enabled: bool = False
+            self.super_grid_cfg = {
+                "enabled": False,
+                "timeframe": "1w",
+                "window": 12,
+                "multiplier": 2.0,
+                "min_volatility_pct": 15.0,
+                "max_volatility_pct": None,
+                "update_interval_hours": 24
+            }
+
+        # 3. Купол Уведомлений (Notifications Dome)
+        notif_cfg = (
+            self.active_settings.get("notifications")
+            or self.overrides.get("notifications")
+            or raw_meta.get("notifications")
+        )
+        if notif_cfg and isinstance(notif_cfg, dict):
+            self.notifications_cfg: Dict[str, Any] = copy.deepcopy(notif_cfg)
+        else:
+            self.notifications_cfg: Dict[str, Any] = {
+                "enabled": True,
+                "negative_threshold": -20.0,
+                "positive_threshold": 20.0
+            }
+
+        # 4. Купол Авто-закрытия (Auto-closing Dome)
+        ac_cfg = (
+            self.active_settings.get("auto_closing")
+            or self.overrides.get("auto_closing")
+            or raw_meta.get("auto_closing")
+        )
+        if ac_cfg and isinstance(ac_cfg, dict):
+            self.auto_closing_cfg: Dict[str, Any] = copy.deepcopy(ac_cfg)
+        else:
+            self.auto_closing_cfg: Dict[str, Any] = {
+                "negative": {"threshold": None, "threshold_increment": None},
+                "positive": {"threshold": 100, "threshold_increment": 100}
+            }
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
@@ -140,7 +210,8 @@ class StrategyRegistry:
             strat_config = StrategyConfig(
                 strategy_id=strat_id,
                 raw_meta=raw_meta,
-                symbols=strat_symbols
+                symbols=strat_symbols,
+                active_settings=strat_settings
             )
             self.active_strategies[strat_id] = strat_config
 

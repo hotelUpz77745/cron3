@@ -71,7 +71,7 @@ class BotCore:
         
 
             
-        self.notifier = NotifierManager()
+        self.notifier = NotifierManager(bot_core=self)
         
         self.runtime_configs = self.runtime_manager.caches # Кеш рантаймов
         
@@ -815,6 +815,47 @@ class BotCore:
             logger.warning(f"Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
         except Exception as e:
             logger.error(f"Error while calculating block_until_timestamp: {e}")
+
+    async def close_strategy_positions(self, strategy_id: str):
+        """Экстренное закрытие позиций и отмена ордеров строго для монет одной конкретной стратегии."""
+        if not hasattr(self, "strategy_registry"):
+            return
+        strat = self.strategy_registry.active_strategies.get(strategy_id)
+        if not strat or not strat.symbols:
+            return
+
+        symbols = strat.symbols
+        logger.warning(f"[{strategy_id}] Emergency closing positions for strategy symbols: {symbols}")
+
+        # 1. Отмена ордеров только для монет этой стратегии
+        for sym in symbols:
+            try:
+                await self.client.cancel_all_orders(sym)
+                logger.info(f"[{strategy_id}][{sym}] Canceled limit orders.")
+            except Exception as e:
+                logger.error(f"[{strategy_id}][{sym}] Failed to cancel orders: {e}")
+
+        # 2. Закрытие открытых позиций
+        try:
+            positions = await self.client.fetch_positions()
+            for p in positions:
+                sym = p.get("symbol")
+                if sym not in symbols:
+                    continue
+                amt = float(p.get("positionAmt", 0.0))
+                if abs(amt) > 0:
+                    pos_side = p.get("positionSide")
+                    side = "SELL" if pos_side == "LONG" else "BUY"
+                    logger.warning(f"[{strategy_id}][{sym}] Emergency closing {pos_side} pos. Qty: {abs(amt)}")
+                    await self.client.make_order(
+                        symbol=sym,
+                        qty=abs(amt),
+                        side=side,
+                        position_side=pos_side,
+                        market_type="MARKET"
+                    )
+        except Exception as e:
+            logger.error(f"[{strategy_id}] Error closing positions: {e}")
 
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""

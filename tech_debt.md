@@ -159,4 +159,27 @@
 | `StrategyApplicator` (Инвариант 4: Rule 11 min TP >= 0.50%) | **PASSED** | Все ступени TP подтягиваются строго `>= 0.50%` |
 | `runtime_builder` (Генерация рантаймов по стратегиям) | **PASSED** | Корректная генерация `CFG/runtime/<sym>.json` |
 | Сохранение FSM стейта при ребилде рантайма | **PASSED** | Открытые позиции, средние цены и объемы не затираются |
-| `BotCore` Инициализация и торговый пул | **PASSED** | Успешный старт ядра с 3 активными стратегиями |
+| `BotCore` Инициализация и торговый пул | **PASSED** | Успешный старт ядра с 3 активными стратегиями |
+
+### ADR-2026-09-29: Перенос подсистем Super Grid, Analytics, Notifications и Auto Closing под купола стратегий
+* **Контекст**:
+  - Ранее блоки `super_grid`, `analytics`, `notifications` и `auto_closing` находились в корне `CFG/app.json` как глобальные настройки, применимые ко всем монетам без дифференциации.
+  - По требованию главного Тим Лида («все должно быть под куполами стратегий») произведена полная изоляция и инкапсуляция всех 4 подсистем внутри каждого купола стратегии (`active_strategies`).
+* **Архитектурные решения**:
+  1. **Купол Аналитики (Analytics Dome)**:
+     - Каждая активная стратегия обладает собственным `start_balance_usdt` (по умолчанию 150.0 USDT).
+     - Балансы и ROI рассчитываются индивидуально в `ANALYTICS/STATS/analytics_<strategy_id>.json`.
+     - Портфельный стартовый баланс `ANALYTICS_START_BALANCE_USDT` суммируется по всем активным куполам (450.0 USDT для 3 стратегий).
+  2. **Купол Super Grid (Volatility Manager Dome)**:
+     - Параметры адаптивной сетки (`timeframe`, `window`, `multiplier`, `min_volatility_pct`, `max_volatility_pct`, `update_interval_hours`) читаются из персонального купола каждой монеты.
+     - `VolatilityManager` модифицирует рантаймы строго по путям куполов `CFG/runtime/<strategy_id>/<symbol>.json`.
+     - `avg_manager.py` проверяет активность `super_grid` через купол конкретной стратегии.
+  3. **Купол Уведомлений (Notifications Dome)**:
+     - `NotifierManager` отслеживает просадки и профициты независимо для каждого купола стратегии по персональным порогам `negative_threshold` и `positive_threshold`.
+     - Флаги алертов изолированы в `self.strat_flags[strat_id]`, тексты сообщений маркируются именем и тикерами купола.
+  4. **Купол Авто-закрытия (Auto-Closing Dome)**:
+     - `AutoCloser` проверяет PnL по каждому куполу отдельно (`ANALYTICS/STATS/analytics_<strat_id>.json`).
+     - При достижении порога вызывается `close_strategy_positions(strat_id)`, который закрывает позиции и отменяет ордера **строго для монет сработавшего купола**, не затрагивая остальные стратегии бота.
+     - Инкременты порогов сохраняются индивидуально в `app_data["active_strategies"][strat_id]["auto_closing"]`.
+* **Верификация**:
+  - 12 unit- и integration-тестов в `tests/test_strategy_system.py` выполнены со 100% успехом.

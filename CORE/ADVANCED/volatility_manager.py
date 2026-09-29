@@ -44,44 +44,59 @@ class VolatilityManager:
             except Exception as e:
                 logger.error(f"[VolatilityManager] Error in loop: {e}")
             
-            # Wait for next update interval
+            # Wait for next update interval from strategy domes
+            hours_list = []
+            if hasattr(self.bot_core, "strategy_registry"):
+                for scfg in self.bot_core.strategy_registry.active_strategies.values():
+                    if scfg.super_grid_enabled:
+                        hours_list.append(scfg.super_grid_cfg.get("update_interval_hours", 24))
             app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            app_cfg = app_data["super_grid"]
-            interval_hours = app_cfg["update_interval_hours"]
-            wait_sec = interval_hours * 3600
-            if wait_sec <= 0:
-                wait_sec = 3600 # default 1 hour fallback
-                
+            if "super_grid" in app_data:
+                hours_list.append(app_data["super_grid"].get("update_interval_hours", 24))
+            interval_hours = min(hours_list) if hours_list else 24
+            wait_sec = max(3600, interval_hours * 3600)
             await asyncio.sleep(wait_sec)
 
     async def process_all(self):
         app_data = Utils.read_json_file(DATA_DIR / "app.json")
-        app_cfg = app_data["super_grid"]
-        
-        is_enabled = app_cfg["enabled"]
-
         symbols = list(self.bot_core.symbols)
         if not symbols:
             return
-
-        timeframe = app_cfg["timeframe"]
-        window = app_cfg["window"]
-        multiplier = app_cfg["multiplier"]
-        min_volatility_pct = app_cfg["min_volatility_pct"]
-        max_volatility_pct = app_cfg["max_volatility_pct"]
-
-        if is_enabled:
-            logger.info(f"[VolatilityManager] Processing {len(symbols)} symbols. TF={timeframe}, window={window}, min_vol={min_volatility_pct}%, max_vol={max_volatility_pct}%")
-        else:
-            logger.info(f"[VolatilityManager] Super Grid is disabled. Resetting any active super_indents for {len(symbols)} symbols.")
 
         stats_output = {}
 
         for symbol in symbols:
             if not self.is_running:
                 break
-                
-            is_advanced = is_enabled
+
+            # Resolve super_grid config for this coin's strategy dome
+            strat = None
+            if hasattr(self.bot_core, "strategy_registry"):
+                try:
+                    strat = self.bot_core.strategy_registry.get_strategy_for_symbol(symbol)
+                except Exception:
+                    strat = None
+
+            if strat:
+                sg_cfg = strat.super_grid_cfg
+                is_advanced = strat.super_grid_enabled
+            elif "super_grid" in app_data:
+                sg_cfg = app_data["super_grid"]
+                is_advanced = bool(sg_cfg.get("enabled", False))
+            else:
+                is_advanced = False
+                sg_cfg = {}
+
+            timeframe = sg_cfg.get("timeframe", "1w")
+            window = int(sg_cfg.get("window", 12))
+            multiplier = float(sg_cfg.get("multiplier", 2.0))
+            min_volatility_pct = sg_cfg.get("min_volatility_pct")
+            if min_volatility_pct is not None:
+                min_volatility_pct = float(min_volatility_pct)
+            max_volatility_pct = sg_cfg.get("max_volatility_pct")
+            if max_volatility_pct is not None:
+                max_volatility_pct = float(max_volatility_pct)
+
             adjusted_vol = 0.0
             count = 0
             
@@ -95,7 +110,6 @@ class VolatilityManager:
                 except Exception as e:
                     logger.error(f"[VolatilityManager] [{symbol}] API error fetching klines: {e}")
                     continue
-                    
                     
                 # Calculate average volatility
                 total_vol = 0.0
@@ -123,10 +137,17 @@ class VolatilityManager:
                 elif max_volatility_pct is not None and adjusted_vol >= max_volatility_pct:
                     logger.info(f"[VolatilityManager] [{symbol}] Игнор: Расчитанная волатильность {adjusted_vol:.2f}% выше или равна максимуму {max_volatility_pct}%. Возвращаемся к использованию стандартных настроек индента.")
                     is_advanced = False
-                # We will still process the file to erase super_indent
-                
-            # Need to update runtime configuration
-            runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
+
+            # Resolve runtime path under strategy dome
+            if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "get_runtime_path"):
+                runtime_path = self.bot_core.runtime_manager.get_runtime_path(symbol)
+            elif strat:
+                runtime_path = DATA_DIR / "runtime" / strat.strategy_id / f"{symbol.lower()}.json"
+                if not runtime_path.exists():
+                    runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
+            else:
+                runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
+
             if not runtime_path.exists():
                 continue
                 

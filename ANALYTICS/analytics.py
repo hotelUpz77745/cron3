@@ -156,20 +156,20 @@ class AnalyticsManager:
                 return
 
         current_ms = int(time.time() * 1000)
-        initial_balance = float(ANALYTICS_START_BALANCE_USDT)
         for strat_id, strat_cfg in self.strategy_registry.active_strategies.items():
+            strat_init_bal = float(strat_cfg.analytics_cfg.get("start_balance_usdt", strat_cfg.start_balance_usdt))
             strat_json = self.stats_dir / f"analytics_{strat_id}.json"
             if not strat_json.exists():
                 strat_data = {
                     "universe_id": strat_id,
                     "name": strat_cfg.name,
-                    "start_balance_usdt": initial_balance,
-                    "_rebased_start_balance_usdt": initial_balance,
+                    "start_balance_usdt": strat_init_bal,
+                    "_rebased_start_balance_usdt": strat_init_bal,
                     "first_trade_ts": current_ms,
-                    "cur_balance_usdt": initial_balance,
-                    "peak_balance_usdt": initial_balance,
-                    "min_balance_usdt": initial_balance,
-                    "_current_trough_usdt": initial_balance,
+                    "cur_balance_usdt": strat_init_bal,
+                    "peak_balance_usdt": strat_init_bal,
+                    "min_balance_usdt": strat_init_bal,
+                    "_current_trough_usdt": strat_init_bal,
                     "total_trades": 0,
                     "winning_trades": 0,
                     "winrate_pct": 0.0,
@@ -1014,17 +1014,18 @@ class AnalyticsManager:
                     strat_data = json.loads(strat_file.read_text(encoding="utf-8"))
                 except Exception:
                     strat_data = {}
+            strat_init_bal = float(strat_cfg.analytics_cfg.get("start_balance_usdt", strat_cfg.start_balance_usdt))
             if not strat_data:
                 strat_data = {
                     "universe_id": strat_id,
                     "name": strat_cfg.name,
-                    "start_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
-                    "_rebased_start_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "start_balance_usdt": strat_init_bal,
+                    "_rebased_start_balance_usdt": strat_init_bal,
                     "first_trade_ts": now_ms,
-                    "cur_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
-                    "peak_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
-                    "min_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
-                    "_current_trough_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "cur_balance_usdt": strat_init_bal,
+                    "peak_balance_usdt": strat_init_bal,
+                    "min_balance_usdt": strat_init_bal,
+                    "_current_trough_usdt": strat_init_bal,
                     "total_trades": 0,
                     "winning_trades": 0,
                     "winrate_pct": 0.0,
