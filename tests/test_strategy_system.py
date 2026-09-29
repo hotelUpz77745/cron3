@@ -176,6 +176,58 @@ class TestStrategySystem(unittest.TestCase):
                     if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
                         self.assertGreaterEqual(float(tp_step["fallback_indent"]), MIN_TAKE_PROFIT_PCT)
 
+    def test_runtime_under_strategy_domes(self):
+        """Тест изоляции файлов рантайма под куполами стратегий (вселенных)."""
+        from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
+        from RUNTIME_FSM.runtime_builder import build_runtime_caches, RUNTIME_DIR
+
+        registry = StrategyRegistry()
+        build_runtime_caches(registry=registry)
+        mgr = RuntimeFsmManager(strategy_registry=registry)
+
+        expected_domes = {
+            "ZROUSDT": ("u0_fat_swing123", "zrousdt.json"),
+            "PENGUUSDT": ("u8_golden_macro_symbiosis", "penguusdt.json"),
+            "SPXUSDT": ("u6_symbiosis_gamma_fortress123", "spxusdt.json"),
+        }
+
+        for sym, (strat_id, fname) in expected_domes.items():
+            dome_path = RUNTIME_DIR / strat_id / fname
+            self.assertTrue(dome_path.exists(), f"Файл рантайма под куполом {strat_id} должен существовать: {dome_path}")
+            resolved = mgr.get_runtime_path(sym)
+            self.assertEqual(resolved, dome_path)
+
+    def test_structured_analytics_and_leaderboard(self):
+        """Тест структурированной аналитики в STATS/, LEDGERS/, и витрины leaderboard."""
+        from ANALYTICS.analytics import AnalyticsManager
+        from consts import ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR, ANALYTICS_DIR
+        import json
+
+        registry = StrategyRegistry()
+        analytics_mgr = AnalyticsManager(strategy_registry=registry)
+
+        # 1. Проверяем создание файлов аналитики по каждой активной стратегии
+        for strat_id in ["u0_fat_swing123", "u8_golden_macro_symbiosis", "u6_symbiosis_gamma_fortress123"]:
+            strat_json = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
+            strat_txt = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{strat_id}.txt"
+            self.assertTrue(strat_json.exists(), f"Файл аналитики {strat_json} должен существовать!")
+            self.assertTrue(strat_txt.exists(), f"Леджер {strat_txt} должен существовать!")
+
+        # 2. Обновляем статистику и проверяем leaderboard
+        analytics_mgr._update_strategies_stats(analytics_mgr._read_data())
+
+        lead_txt = ANALYTICS_DIR / "leaderboard.txt"
+        self.assertTrue(lead_txt.exists(), "Витрина leaderboard.txt должна существовать!")
+        table_content = lead_txt.read_text(encoding="utf-8")
+        self.assertIn("STRATEGIES LEADERBOARD", table_content)
+        self.assertIn("u0_fat_swing123", table_content)
+
+        portfolio_json = ANALYTICS_STATS_DIR / "analytics_all.json"
+        self.assertTrue(portfolio_json.exists(), "Файл портфеля analytics_all.json должен существовать!")
+        portfolio_data = json.loads(portfolio_json.read_text(encoding="utf-8"))
+        self.assertIn("leaderboard", portfolio_data)
+        self.assertEqual(portfolio_data["total_universes_active"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()

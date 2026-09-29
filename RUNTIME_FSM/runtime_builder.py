@@ -39,11 +39,7 @@ def build_runtime_caches(
             registry = None
 
     if symbols is None:
-        if registry and registry.get_all_active_symbols():
-            symbols = registry.get_all_active_symbols()
-        else:
-            cfg = Utils.read_json_file(DATA_DIR / "app.json")
-            symbols = cfg["symbols"] if cfg else _CFG["symbols"]
+        symbols = registry.get_all_active_symbols() if registry else []
 
     applicator = StrategyApplicator()
 
@@ -62,52 +58,55 @@ def build_runtime_caches(
 
     for symbol in symbols:
         sym_lower = symbol.lower()
-        target_file = RUNTIME_DIR / f"{sym_lower}.json"
         strat = registry.get_strategy_for_symbol(symbol) if registry else None
 
         if strat:
+            target_dir = RUNTIME_DIR / strat.strategy_id
+            target_file = target_dir / f"{sym_lower}.json"
             was_existing = target_file.exists()
-            applicator.build_runtime_for_symbol(symbol, strat)
+            applicator.build_runtime_for_symbol(symbol, strat, target_dir=target_dir)
             if not was_existing and target_file.exists():
                 created_new = True
-        elif not target_file.exists():
-            # Create from base template and add is_active / price
-            new_data = json.loads(json.dumps(base_data))  # deep copy
-            
-            for side in ("LONG", "SHORT"):
-                if side in new_data:
-                    new_data[side].update({
-                        "total_volume": 0.0,
-                        "avg_entry_price": 0.0,
-                        "pre_avg_price": 0.0,
-                        "initial_entry_price": 0.0,
-                        "open_time": 0,
-                        "next_avg_price": None,
-                        "fallback_price": None,
-                        "in_position": False,
-                        "in_position_papper": False,
-                        "is_finished": False,
-                        "pending_avg": False,
-                        "pending_rolling_tp": False
-                    })
-                    if "grid" in new_data[side]:
-                        for grid_id, grid_cfg in new_data[side]["grid"].items():
-                            grid_cfg["is_active"] = False
-                            grid_cfg["price"] = None
-                            grid_cfg["activated_at"] = None
-                            grid_cfg["timestamp"] = None
-                    else:
-                        logger.error(f"[CRITICAL] Секция 'grid' ОТСУТСТВУЕТ для {side} в _base.json!")
-                    
-                    if "tp_map" in new_data[side]:
-                        for tp_id, tp_cfg in new_data[side]["tp_map"].items():
-                            tp_cfg["is_active"] = False
-                    else:
-                        logger.error(f"[CRITICAL] Секция 'tp_map' ОТСУТСТВУЕТ для {side} в _base.json!")
+        else:
+            target_file = RUNTIME_DIR / f"{sym_lower}.json"
+            if not target_file.exists():
+                # Create from base template and add is_active / price
+                new_data = json.loads(json.dumps(base_data))  # deep copy
+                
+                for side in ("LONG", "SHORT"):
+                    if side in new_data:
+                        new_data[side].update({
+                            "total_volume": 0.0,
+                            "avg_entry_price": 0.0,
+                            "pre_avg_price": 0.0,
+                            "initial_entry_price": 0.0,
+                            "open_time": 0,
+                            "next_avg_price": None,
+                            "fallback_price": None,
+                            "in_position": False,
+                            "in_position_papper": False,
+                            "is_finished": False,
+                            "pending_avg": False,
+                            "pending_rolling_tp": False
+                        })
+                        if "grid" in new_data[side]:
+                            for grid_id, grid_cfg in new_data[side]["grid"].items():
+                                grid_cfg["is_active"] = False
+                                grid_cfg["price"] = None
+                                grid_cfg["activated_at"] = None
+                                grid_cfg["timestamp"] = None
+                        else:
+                            logger.error(f"[CRITICAL] Секция 'grid' ОТСУТСТВУЕТ для {side} в _base.json!")
+                        
+                        if "tp_map" in new_data[side]:
+                            for tp_id, tp_cfg in new_data[side]["tp_map"].items():
+                                tp_cfg["is_active"] = False
+                        else:
+                            logger.error(f"[CRITICAL] Секция 'tp_map' ОТСУТСТВУЕТ для {side} в _base.json!")
 
-            Utils.write_json_file(target_file, new_data)
-            logger.info(f"Created runtime cache for {symbol} at {target_file.name}")
-            created_new = True
+                Utils.write_json_file(target_file, new_data)
+                logger.info(f"Created runtime cache for {symbol} at {target_file.name}")
+                created_new = True
 
     return created_new
 

@@ -15,7 +15,7 @@ import aiohttp
 from c_log import UnifiedLogger
 
 from consts import TG_ALLOWED_USERS
-from consts import DATA_DIR, ANALYTICS_DIR
+from consts import DATA_DIR, ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR
 import datetime
 import pytz
 logger = UnifiedLogger("RuntimeBackup")
@@ -81,18 +81,21 @@ class RuntimeBackupManager:
             # 1. Создаем ZIP в оперативной памяти (BytesIO)
             memory_file = io.BytesIO()
             with zipfile.ZipFile(memory_file, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-                # Пакуем только json файлы из CFG/runtime/
-                for file_path in runtime_dir.glob("*.json"):
-                    zf.write(file_path, arcname=file_path.name)
+                # Пакуем все json файлы из CFG/runtime/ (включая купола стратегий)
+                for file_path in runtime_dir.rglob("*.json"):
+                    rel_name = file_path.relative_to(runtime_dir)
+                    zf.write(file_path, arcname=f"runtime/{rel_name}")
                 
-                # Пакуем файлы аналитики
-                analytics_json = ANALYTICS_DIR / "analytics.json"
-                if analytics_json.exists():
-                    zf.write(analytics_json, arcname=f"ANALYTICS/{analytics_json.name}")
-                    
-                trades_ledger = ANALYTICS_DIR / "trades_ledger.txt"
-                if trades_ledger.exists():
-                    zf.write(trades_ledger, arcname=f"ANALYTICS/{trades_ledger.name}")
+                # Пакуем файлы аналитики (STATS и LEDGERS)
+                if ANALYTICS_STATS_DIR.exists():
+                    for stats_file in ANALYTICS_STATS_DIR.glob("*.json"):
+                        zf.write(stats_file, arcname=f"ANALYTICS/STATS/{stats_file.name}")
+                if ANALYTICS_LEDGERS_DIR.exists():
+                    for ledger_file in ANALYTICS_LEDGERS_DIR.glob("*.txt"):
+                        zf.write(ledger_file, arcname=f"ANALYTICS/LEDGERS/{ledger_file.name}")
+                leaderboard_txt = ANALYTICS_DIR / "leaderboard.txt"
+                if leaderboard_txt.exists():
+                    zf.write(leaderboard_txt, arcname=f"ANALYTICS/{leaderboard_txt.name}")
                     
             file_bytes = memory_file.getvalue()
             

@@ -171,6 +171,13 @@ class StrategyRegistry:
             )
         return self.symbol_to_strategy[sym_clean]
 
+    def get_strategy_id_for_symbol(self, symbol: str) -> Optional[str]:
+        """Возвращает идентификатор стратегии для указанного символа или None."""
+        sym_clean = symbol.upper().strip()
+        if sym_clean in self.symbol_to_strategy:
+            return self.symbol_to_strategy[sym_clean].strategy_id
+        return None
+
     def is_symbol_active(self, symbol: str) -> bool:
         """Проверяет, привязан ли символ к какой-либо активной стратегии."""
         return symbol.upper().strip() in self.symbol_to_strategy

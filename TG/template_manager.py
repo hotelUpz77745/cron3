@@ -15,12 +15,23 @@ from RUNTIME_FSM.runtime_builder import build_runtime_caches
 logger = UnifiedLogger("TemplateManager")
 
 class TemplateManager:
-    def __init__(self):
+    def __init__(self, bot_core: Any = None):
+        self.bot_core = bot_core
         self.runtime_dir = DATA_DIR / "runtime"
         self.base_file = DATA_DIR / "_base.json"
         
         # Поля, которые мы разрешаем редактировать через TG
         self.visible_keys = {"enable", "invest_size", "leverage"}
+
+    def get_runtime_path(self, symbol: str) -> Path:
+        sym_lower = symbol.lower()
+        if self.bot_core and hasattr(self.bot_core, "runtime_manager"):
+            return self.bot_core.runtime_manager.get_runtime_path(symbol)
+        if self.runtime_dir.exists():
+            for sub in self.runtime_dir.iterdir():
+                if sub.is_dir() and (sub / f"{sym_lower}.json").exists():
+                    return sub / f"{sym_lower}.json"
+        return self.runtime_dir / f"{sym_lower}.json"
 
     def generate_tg_template(self, symbol: str) -> str:
         """Создает JSON шаблон для отправки в Telegram (чистые настройки)."""
@@ -54,7 +65,7 @@ class TemplateManager:
         if not base_data:
             return False, "Базовый шаблон не найден."
 
-        target_file = self.runtime_dir / f"{symbol.lower()}.json"
+        target_file = self.get_runtime_path(symbol)
         if target_file.exists():
             final_data = Utils.read_json_file(target_file)
         else:
@@ -111,6 +122,11 @@ class TemplateManager:
                     return False, f"ОШИБКА ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)})."
 
         Utils.write_json_file(target_file, final_data)
-        logger.info(f"Updated runtime config for {symbol} via TG.")
+        root_legacy = self.runtime_dir / f"{symbol.lower()}.json"
+        try:
+            Utils.write_json_file(root_legacy, final_data)
+        except Exception:
+            pass
+        logger.info(f"Updated runtime config for {symbol} via TG at {target_file}.")
         
         return True, f"Настройки для {symbol} успешно применены!"

@@ -91,16 +91,23 @@ class StrategyApplicator:
         force: bool = False
     ) -> Path:
         """
-        Генерирует рантайм-файл CFG/runtime/<symbol>.json на основе стратегии.
+        Генерирует рантайм-файл CFG/runtime/<strategy_id>/<symbol>.json на основе стратегии.
         Если файл уже существует и force=False, проверяет совпадение strategy_id.
         """
-        runtime_dir = target_dir or (DATA_DIR / "runtime")
+        runtime_dir = target_dir or (DATA_DIR / "runtime" / strategy.strategy_id)
         runtime_dir.mkdir(parents=True, exist_ok=True)
         target_file = runtime_dir / f"{symbol.lower()}.json"
 
         side_configs = self.build_side_configs(strategy)
 
-        existing = Utils.read_json_file(target_file) if target_file.exists() else {}
+        existing = {}
+        if target_file.exists():
+            existing = Utils.read_json_file(target_file)
+        else:
+            legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+            if legacy_file.exists():
+                existing = Utils.read_json_file(legacy_file)
+
         if existing and not force:
             existing_strat = existing.get("LONG", {}).get("strategy_id")
             if existing_strat == strategy.strategy_id:
@@ -160,10 +167,17 @@ class StrategyApplicator:
             new_data[side] = new_side
 
         Utils.atomic_write_json(target_file, new_data, indent=4)
+        # Mirror to root runtime folder for backwards compatibility
+        root_legacy = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+        try:
+            Utils.atomic_write_json(root_legacy, new_data, indent=4)
+        except Exception:
+            pass
+
         safe_name = strategy.name.encode("ascii", "ignore").decode("ascii").strip()
         logger.info(
             f"[StrategyApplicator] Built runtime config for {symbol} "
-            f"from strategy '{strategy.strategy_id}' ({safe_name})."
+            f"under dome '{strategy.strategy_id}' ({safe_name}) at {target_file}."
         )
         return target_file
 

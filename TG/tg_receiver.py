@@ -17,7 +17,7 @@ from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import ErrorEvent
 
 from c_log import UnifiedLogger
-from consts import TG_TOKEN, ANALYTICS_DIR, TG_ALLOWED_USERS
+from consts import TG_TOKEN, ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR, TG_ALLOWED_USERS, ACTIVE_SYMBOLS
 from TG.template_manager import TemplateManager
 
 try:
@@ -64,7 +64,7 @@ class TelegramReceiver:
         self.bot_core = bot_core
         self.bot = Bot(token=TG_TOKEN)
         self.dp = Dispatcher(storage=MemoryStorage())
-        self.template_manager = TemplateManager()
+        self.template_manager = TemplateManager(bot_core=self.bot_core)
         self._lock = asyncio.Lock()
         
         # Регистрация простого middleware для проверки прав доступа
@@ -97,18 +97,19 @@ class TelegramReceiver:
                 KeyboardButton(text="⏸️ Stop")
             ],
             [
+                KeyboardButton(text="🏆 Leaderboard"),
                 KeyboardButton(text="📊 Analytics"),
-                KeyboardButton(text="📜 Logs"),
-                KeyboardButton(text="⚙️ Set Coins")
+                KeyboardButton(text="📜 Logs")
             ],
             [
+                KeyboardButton(text="⚙️ Set Coins"),
                 KeyboardButton(text="🔔 Notifications"),
-                KeyboardButton(text="🔧 Super Grid"),
-                KeyboardButton(text="🚨 Close All")
+                KeyboardButton(text="🔧 Super Grid")
             ],
             [
                 KeyboardButton(text="🛑 Auto Closing"),
-                KeyboardButton(text="🛡️ Risk System")
+                KeyboardButton(text="🛡️ Risk System"),
+                KeyboardButton(text="🚨 Close All")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -225,11 +226,10 @@ class TelegramReceiver:
                 await message.answer("⚠️ Trading is already running!", reply_markup=self._get_main_keyboard())
                 return
                 
-            symbols = self.bot_core.symbols if hasattr(self, 'bot_core') and self.bot_core.symbols else _CFG["symbols"]
+            symbols = self.bot_core.symbols if hasattr(self, 'bot_core') and self.bot_core.symbols else ACTIVE_SYMBOLS
             
             for sym in symbols:
-                sym_lower = sym.lower()
-                runtime_path = self.template_manager.runtime_dir / f"{sym_lower}.json"
+                runtime_path = self.template_manager.get_runtime_path(sym)
                 if runtime_path.exists():
                     try:
                         with open(runtime_path, 'r', encoding='utf-8') as f:
@@ -452,6 +452,8 @@ class TelegramReceiver:
                 logger.error(f"Failed to sync lightweight unrealized pnl: {e}")
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🏆 Leaderboard Стратегий", callback_data="analytics_leaderboard")],
+                [InlineKeyboardButton(text="🌌 Стратегии (Вселенные)", callback_data="analytics_strats_menu")],
                 [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
                 [InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data="analytics_coin_menu")],
                 [InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking")],
@@ -462,6 +464,132 @@ class TelegramReceiver:
                  InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset")]
             ])
             await message.answer("Выберите раздел аналитики:", reply_markup=keyboard)
+
+        @self.dp.message(Command("leaderboard"))
+        @self.dp.message(F.text == "🏆 Leaderboard")
+        async def cmd_leaderboard(message: Message):
+            try:
+                engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
+                if not engine:
+                    await message.answer("⚠️ LeaderboardEngine не инициализирован.")
+                    return
+                data = self.bot_core.analytics._read_data()
+                self.bot_core.analytics._update_strategies_stats(data)
+                
+                universes_meta = {
+                    sid: {"name": scfg.name, "enabled": True}
+                    for sid, scfg in self.bot_core.strategy_registry.active_strategies.items()
+                }
+                entries = engine.generate_leaderboard(universes_meta)
+                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
+                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=20)
+                total_chunks = len(chunks)
+
+                for i, chunk in enumerate(chunks, 1):
+                    part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
+                    response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
+                    await message.answer(response, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"Error in cmd_leaderboard: {e}")
+                await message.answer(f"❌ Ошибка формирования лидерборда: {e}")
+
+        @self.dp.callback_query(F.data == "analytics_leaderboard")
+        async def cb_analytics_leaderboard(callback: CallbackQuery):
+            await callback.answer()
+            try:
+                engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
+                if not engine:
+                    await callback.message.answer("⚠️ LeaderboardEngine не инициализирован.")
+                    return
+                data = self.bot_core.analytics._read_data()
+                self.bot_core.analytics._update_strategies_stats(data)
+                
+                universes_meta = {
+                    sid: {"name": scfg.name, "enabled": True}
+                    for sid, scfg in self.bot_core.strategy_registry.active_strategies.items()
+                }
+                entries = engine.generate_leaderboard(universes_meta)
+                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
+                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=20)
+                total_chunks = len(chunks)
+
+                for i, chunk in enumerate(chunks, 1):
+                    part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
+                    response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
+                    await callback.message.answer(response, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"Error in cb_analytics_leaderboard: {e}")
+                await callback.message.answer(f"❌ Ошибка формирования лидерборда: {e}")
+
+        @self.dp.callback_query(F.data == "analytics_strats_menu")
+        async def cb_analytics_strats_menu(callback: CallbackQuery):
+            await callback.answer()
+            strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
+            if not strats:
+                await callback.message.answer("Нет активных стратегий.")
+                return
+            buttons = []
+            for sid, scfg in strats.items():
+                safe_name = scfg.name.encode("ascii", "ignore").decode("ascii").strip() or sid
+                buttons.append([InlineKeyboardButton(text=f"🌌 {safe_name}"[:40], callback_data=f"strat_analytics:{sid}")])
+            buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_global")])
+            await callback.message.answer("🌌 <b>Выберите стратегию (вселенную):</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("strat_analytics:"))
+        async def cb_strat_analytics(callback: CallbackQuery):
+            await callback.answer()
+            strat_id = callback.data.split("strat_analytics:")[1]
+            strat_file = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
+            if not strat_file.exists():
+                await callback.message.answer(f"Файл аналитики для стратегии {strat_id} не найден.")
+                return
+            try:
+                data = json.loads(strat_file.read_text(encoding="utf-8"))
+                name = data.get("name", strat_id)
+                net = data.get("net_profit_usdt", 0.0)
+                real = data.get("realized_pnl_usdt", 0.0)
+                unreal = data.get("unrealized_pnl_usdt", 0.0)
+                dd = data.get("max_drawdown_usdt", 0.0)
+                rf = data.get("recovery_factor", 0.0)
+                trades = data.get("total_trades", 0)
+                wins = data.get("winning_trades", 0)
+                wr = data.get("winrate_pct", 0.0)
+                cur_bal = data.get("cur_balance_usdt", 0.0)
+                start_bal = data.get("start_balance_usdt", 0.0)
+
+                coins_list = list(data.get("per_coin", {}).keys())
+                coins_str = ", ".join(coins_list) if coins_list else "—"
+
+                text = (
+                    f"🌌 <b>СТРАТЕГИЯ: {name}</b>\n"
+                    f"ID: <code>{strat_id}</code>\n"
+                    f"🪙 Монеты: <b>{coins_str}</b>\n\n"
+                    f"💰 Баланс: <b>{cur_bal:+.2f} $</b> (Старт: {start_bal:.2f} $)\n"
+                    f"📈 Net Profit: <b>{net:+.2f} USDT</b>\n"
+                    f"├ Realized: <b>{real:+.2f} $</b>\n"
+                    f"└ Floating: <b>{unreal:+.2f} $</b>\n\n"
+                    f"📉 Max Drawdown: <b>{dd:.2f} $</b>\n"
+                    f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
+                    f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"
+                )
+                kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="📝 Леджер стратегии (TXT)", callback_data=f"strat_ledger:{strat_id}")],
+                    [InlineKeyboardButton(text="🔙 К списку стратегий", callback_data="analytics_strats_menu")]
+                ])
+                await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"Error viewing strategy analytics: {e}")
+                await callback.message.answer(f"Ошибка загрузки аналитики стратегии: {e}")
+
+        @self.dp.callback_query(F.data.startswith("strat_ledger:"))
+        async def cb_strat_ledger(callback: CallbackQuery):
+            await callback.answer()
+            strat_id = callback.data.split("strat_ledger:")[1]
+            strat_txt = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{strat_id}.txt"
+            if strat_txt.exists():
+                await callback.message.answer_document(FSInputFile(str(strat_txt)))
+            else:
+                await callback.message.answer(f"Леджер для {strat_id} пока пуст.")
 
         @self.dp.callback_query(F.data == "analytics_cheat_sheet")
         async def process_analytics_cheat_sheet(callback: CallbackQuery, state: FSMContext):
@@ -1011,7 +1139,7 @@ class TelegramReceiver:
             symbol = data_parts[2]
             side = data_parts[3]
 
-            runtime_path = self.template_manager.runtime_dir / f"{symbol.lower()}.json"
+            runtime_path = self.template_manager.get_runtime_path(symbol)
             if not runtime_path.exists():
                 await callback.message.answer(f"❌ Конфиг {symbol} не найден.")
                 return

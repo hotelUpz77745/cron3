@@ -9,7 +9,7 @@
 import json
 import asyncio
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from consts import DATA_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -20,22 +20,55 @@ RUNTIME_DIR = DATA_DIR / "runtime"
 
 class RuntimeFsmManager:
     """
-    Менеджер для управления рантайм-кешами.
+    Менеджер для управления рантайм-кешами под куполами стратегий (вселенных).
     """
-    def __init__(self):
+    def __init__(self, strategy_registry: Optional[Any] = None):
         self.caches: Dict[str, Dict[str, Any]] = {}
         self.locks: Dict[str, asyncio.Lock] = {}
         self.runtime_dir = RUNTIME_DIR
         self.backup_manager = None
+        self.strategy_registry = strategy_registry
+
+    def get_runtime_path(self, symbol: str) -> Path:
+        """
+        Возвращает путь к рантайм-файлу позиции под куполом назначенной стратегии.
+        Пример: CFG/runtime/u0_fat_swing123/zrousdt.json
+        """
+        sym_lower = symbol.lower()
+        if self.strategy_registry:
+            strat_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
+            if strat_id:
+                strat_path = self.runtime_dir / strat_id / f"{sym_lower}.json"
+                if strat_path.exists():
+                    return strat_path
+                # Проверка legacy корня для плавной миграции
+                legacy_path = self.runtime_dir / f"{sym_lower}.json"
+                if legacy_path.exists():
+                    strat_path.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        Utils.write_json_file(strat_path, Utils.read_json_file(legacy_path))
+                        return strat_path
+                    except Exception:
+                        pass
+                return strat_path
+
+        # Поиск по подпапкам стратегий
+        if self.runtime_dir.exists():
+            for sub in self.runtime_dir.iterdir():
+                if sub.is_dir():
+                    candidate = sub / f"{sym_lower}.json"
+                    if candidate.exists():
+                        return candidate
+
+        return self.runtime_dir / f"{sym_lower}.json"
 
     def load_initial_caches(self, symbols: List[str]):
         """
-        Изначально грузим и фиксируем кеш рантайма "как есть" (as is).
+        Изначально грузим и фиксируем кеш рантайма из папки стратегии.
         Здесь же проводим базовую валидацию конфигурации.
         """
         for sym in symbols:
-            sym_lower = sym.lower()
-            path = RUNTIME_DIR / f"{sym_lower}.json"
+            path = self.get_runtime_path(sym)
             if path.exists():
                 data = Utils.read_json_file(path)
                 
@@ -152,16 +185,21 @@ class RuntimeFsmManager:
         logger.debug(f"[{symbol}] {side} FSM state reset to default (kept custom config).")
 
     async def save_cache(self, symbol: str):
-        """Конкурентно-безопасное сохранение in-memory кеша на диск."""
+        """Конкурентно-безопасное сохранение in-memory кеша на диск под куполом стратегии."""
         if symbol not in self.locks:
             self.locks[symbol] = asyncio.Lock()
             
         async with self.locks[symbol]:
             if symbol in self.caches:
-                sym_lower = symbol.lower()
-                path = RUNTIME_DIR / f"{sym_lower}.json"
-                # Используем Utils для записи
+                path = self.get_runtime_path(symbol)
+                path.parent.mkdir(parents=True, exist_ok=True)
                 Utils.write_json_file(path, self.caches[symbol])
+                # Зеркалирование в корень runtime для обратной совместимости
+                root_legacy = self.runtime_dir / f"{symbol.lower()}.json"
+                try:
+                    Utils.write_json_file(root_legacy, self.caches[symbol])
+                except Exception:
+                    pass
                 if self.backup_manager:
                     self.backup_manager.mark_changed()
 

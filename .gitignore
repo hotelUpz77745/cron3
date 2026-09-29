@@ -11,5 +11,9 @@ scratch/
 API/
 ANALYTICS/analytics.json
 ANALYTICS/trades_ledger.txt
+ANALYTICS/STATS/*.json
+!ANALYTICS/STATS/.gitkeep
+ANALYTICS/LEDGERS/*.txt
+!ANALYTICS/LEDGERS/.gitkeep
 CFG/runtime/
 CFG/volatile_symbols*

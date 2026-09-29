@@ -9,7 +9,17 @@ import re
 import time as _time_module
 from datetime import datetime, timezone
 from pathlib import Path
-from consts import ANALYTICS_DIR, DATA_DIR, INCOME_PAGINATION_DELAY_SEC, POST_CLOSE_SYNC_DEBOUNCE_SEC, BG_UNREALIZED_POLL_FREQ_SEC, ANALYTICS_START_BALANCE_USDT
+from consts import (
+    ANALYTICS_DIR,
+    ANALYTICS_STATS_DIR,
+    ANALYTICS_LEDGERS_DIR,
+    DATA_DIR,
+    INCOME_PAGINATION_DELAY_SEC,
+    POST_CLOSE_SYNC_DEBOUNCE_SEC,
+    BG_UNREALIZED_POLL_FREQ_SEC,
+    ANALYTICS_START_BALANCE_USDT
+)
+from ANALYTICS.leaderboard import LeaderboardEngine
 from c_log import UnifiedLogger
 from c_utils import Utils
 
@@ -59,11 +69,15 @@ async def _wait_ban_lifted() -> bool:
 
 class AnalyticsManager:
     """
-    Ведет журнал сделок и статистику закрытых позиций.
+    Ведет журнал сделок и статистику закрытых позиций под куполами стратегий (вселенных).
     """
-    def __init__(self):
-        self.log_file = ANALYTICS_DIR / "analytics.json"
-        self.txt_file = ANALYTICS_DIR / "trades_ledger.txt"
+    def __init__(self, strategy_registry=None):
+        self.strategy_registry = strategy_registry
+        self.stats_dir = ANALYTICS_STATS_DIR
+        self.ledgers_dir = ANALYTICS_LEDGERS_DIR
+        self.log_file = ANALYTICS_STATS_DIR / "analytics.json"
+        self.txt_file = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+        self.leaderboard_engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=ANALYTICS_STATS_DIR)
         self._lock = asyncio.Lock()
         self._csv_lock = asyncio.Lock()
         self._background_tasks = set()
@@ -81,30 +95,99 @@ class AnalyticsManager:
                 self.rebase_start_balance(config_start)
 
     def _ensure_files(self):
+        self.stats_dir.mkdir(parents=True, exist_ok=True)
+        self.ledgers_dir.mkdir(parents=True, exist_ok=True)
+
+        if not self.log_file.exists():
+            root_json = ANALYTICS_DIR / "analytics.json"
+            if root_json.exists():
+                try:
+                    self.log_file.write_text(root_json.read_text(encoding="utf-8"), encoding="utf-8")
+                except Exception:
+                    pass
+
         if not self.log_file.exists():
             current_ms = int(time.time() * 1000)
+            initial_balance = float(ANALYTICS_START_BALANCE_USDT)
             default_data = {
-                "start_balance_usdt": 0.0,
-                "_rebased_start_balance_usdt": 0.0,
+                "start_balance_usdt": initial_balance,
+                "_rebased_start_balance_usdt": initial_balance,
                 "first_trade_ts": current_ms,
-                "cur_balance_usdt": 0.0,
-                "peak_balance_usdt": 0.0,
-                "min_balance_usdt": 0.0,
-                "_current_trough_usdt": 0.0,
+                "cur_balance_usdt": initial_balance,
+                "peak_balance_usdt": initial_balance,
+                "min_balance_usdt": initial_balance,
+                "_current_trough_usdt": initial_balance,
                 "total_trades": 0,
                 "winning_trades": 0,
                 "winrate_pct": 0.0,
                 "realized_pnl_usdt": 0.0,
                 "net_profit_usdt": 0.0,
                 "unrealized_pnl_usdt": 0.0,
+                "max_drawdown_usdt": 0.0,
+                "max_drawdown_pct": 0.0,
+                "recovery_factor": 0.0,
                 "per_coin": {}
             }
             self.log_file.write_text(json.dumps(default_data, indent=4), encoding="utf-8")
+            (ANALYTICS_DIR / "analytics.json").write_text(json.dumps(default_data, indent=4), encoding="utf-8")
         
+        if not self.txt_file.exists():
+            root_txt = ANALYTICS_DIR / "trades_ledger.txt"
+            if root_txt.exists():
+                try:
+                    self.txt_file.write_text(root_txt.read_text(encoding="utf-8"), encoding="utf-8")
+                except Exception:
+                    pass
+
         if not self.txt_file.exists():
             with open(self.txt_file, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=';')
-                writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
+
+        self._ensure_strategy_files()
+
+    def _ensure_strategy_files(self):
+        """Гарантирует наличие изолированных файлов аналитики и леджеров по каждой стратегии."""
+        if not self.strategy_registry:
+            try:
+                from CORE.STRATEGY.strategy_registry import StrategyRegistry
+                self.strategy_registry = StrategyRegistry()
+            except Exception:
+                return
+
+        current_ms = int(time.time() * 1000)
+        initial_balance = float(ANALYTICS_START_BALANCE_USDT)
+        for strat_id, strat_cfg in self.strategy_registry.active_strategies.items():
+            strat_json = self.stats_dir / f"analytics_{strat_id}.json"
+            if not strat_json.exists():
+                strat_data = {
+                    "universe_id": strat_id,
+                    "name": strat_cfg.name,
+                    "start_balance_usdt": initial_balance,
+                    "_rebased_start_balance_usdt": initial_balance,
+                    "first_trade_ts": current_ms,
+                    "cur_balance_usdt": initial_balance,
+                    "peak_balance_usdt": initial_balance,
+                    "min_balance_usdt": initial_balance,
+                    "_current_trough_usdt": initial_balance,
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "winrate_pct": 0.0,
+                    "realized_pnl_usdt": 0.0,
+                    "net_profit_usdt": 0.0,
+                    "unrealized_pnl_usdt": 0.0,
+                    "max_drawdown_usdt": 0.0,
+                    "max_drawdown_pct": 0.0,
+                    "recovery_factor": 0.0,
+                    "per_coin": {}
+                }
+                Utils.atomic_write_json(strat_json, strat_data, indent=4)
+
+            strat_txt = self.ledgers_dir / f"trades_ledger_{strat_id}.txt"
+            if not strat_txt.exists():
+                with open(strat_txt, mode="w", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f, delimiter=';')
+                    writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
 
     def _read_data(self) -> dict:
         if not self.log_file.exists():
@@ -116,12 +199,15 @@ class AnalyticsManager:
             logger.error(f"Error reading analytics file: {e}")
             return {}
 
-
     def _write_data(self, data: dict, mark_backup: bool = True):
         try:
             AnalyticsMathEngine.calculate(data)
             json_str = json.dumps(data, indent=4, ensure_ascii=False)
             Utils.atomic_write_text(self.log_file, json_str)
+            # Зеркалирование в корень ANALYTICS для обратной совместимости
+            root_legacy = ANALYTICS_DIR / "analytics.json"
+            if root_legacy != self.log_file:
+                Utils.atomic_write_text(root_legacy, json_str)
             
             if mark_backup and getattr(self, 'backup_manager', None):
                 self.backup_manager.mark_changed()
@@ -140,18 +226,34 @@ class AnalyticsManager:
                 open_str = ts_to_str(open_time)
                 close_str = ts_to_str(close_time)
 
-                # Check if we need to write header
-                file_exists = self.txt_file.exists()
-                if not file_exists:
-                    with open(self.txt_file, mode="w", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f, delimiter=';')
-                        writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
+                # Запись в общий леджер
+                for target_txt in [self.txt_file, ANALYTICS_DIR / "trades_ledger.txt"]:
+                    if not target_txt.exists():
+                        target_txt.parent.mkdir(parents=True, exist_ok=True)
+                        with open(target_txt, mode="w", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f, delimiter=';')
+                            writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
 
-                # Append the new row
-                with open(self.txt_file, mode="a", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f, delimiter=';')
-                    writer.writerow([symbol, side, open_str, close_str, round(pnl, 4), round(balance, 4)])
-                    
+                    with open(target_txt, mode="a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=';')
+                        writer.writerow([symbol, side, open_str, close_str, round(pnl, 4), round(balance, 4)])
+
+                # Запись в изолированный леджер стратегии
+                strat_id = None
+                if self.strategy_registry:
+                    strat_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
+                if strat_id:
+                    strat_txt = self.ledgers_dir / f"trades_ledger_{strat_id}.txt"
+                    if not strat_txt.exists():
+                        strat_txt.parent.mkdir(parents=True, exist_ok=True)
+                        with open(strat_txt, mode="w", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f, delimiter=';')
+                            writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
+
+                    with open(strat_txt, mode="a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=';')
+                        writer.writerow([symbol, side, open_str, close_str, round(pnl, 4), round(balance, 4)])
+
             except Exception as e:
                 logger.error(f"Error appending to CSV: {e}")
 
@@ -159,17 +261,24 @@ class AnalyticsManager:
         """Полный сброс аналитики (удаление файлов) с соблюдением блокировок."""
         async with self._lock:
             async with self._csv_lock:
-                if self.log_file.exists():
-                    try:
-                        os.remove(self.log_file)
-                    except Exception as e:
-                        logger.error(f"Error removing {self.log_file}: {e}")
-                
-                if self.txt_file.exists():
-                    try:
-                        os.remove(self.txt_file)
-                    except Exception as e:
-                        logger.error(f"Error removing {self.txt_file}: {e}")
+                for f in [self.log_file, self.txt_file, ANALYTICS_DIR / "analytics.json", ANALYTICS_DIR / "trades_ledger.txt"]:
+                    if f.exists():
+                        try:
+                            os.remove(f)
+                        except Exception as e:
+                            logger.error(f"Error removing {f}: {e}")
+                if self.stats_dir.exists():
+                    for f in self.stats_dir.glob("analytics_*.json"):
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                if self.ledgers_dir.exists():
+                    for f in self.ledgers_dir.glob("trades_ledger_*.txt"):
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
 
     def rebase_start_balance(self, new_balance: float) -> dict:
         """
@@ -236,12 +345,18 @@ class AnalyticsManager:
             
             try:
                 
-                # Fetch all symbols we care about
                 try:
                     with open("CFG/app.json", "r", encoding="utf-8") as f:
                         app_cfg = json.load(f)
-                        syms = app_cfg["symbols"]
-                        active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
+                        active_strategies = app_cfg.get("active_strategies", {})
+                        if active_strategies:
+                            active_symbols = []
+                            for sdata in active_strategies.values():
+                                if sdata.get("enabled", False):
+                                    active_symbols.extend(sdata.get("symbols", []))
+                        else:
+                            syms = app_cfg.get("symbols", [])
+                            active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
                 except Exception:
                     active_symbols = []
                 
@@ -566,8 +681,15 @@ class AnalyticsManager:
             try:
                 with open("CFG/app.json", "r", encoding="utf-8") as _f:
                     _app = json.load(_f)
-                    _syms = _app.get("symbols", {})
-                    config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
+                    _active_strats = _app.get("active_strategies", {})
+                    if _active_strats:
+                        config_symbols = []
+                        for _sdata in _active_strats.values():
+                            if _sdata.get("enabled", False):
+                                config_symbols.extend(_sdata.get("symbols", []))
+                    else:
+                        _syms = _app.get("symbols", {})
+                        config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
             except Exception:
                 config_symbols = []
                 
@@ -863,11 +985,118 @@ class AnalyticsManager:
             else:
                 data["recovery_factor"] = 0.0
                 
+            # Обновление изолированной аналитики стратегий и лидерборда
+            self._update_strategies_stats(data)
+
             return True
                     
         except Exception as e:
             logger.error(f"[ANALYTICS] Error updating drawdowns: {e}\n{traceback.format_exc()}")
             return False
+
+    def _update_strategies_stats(self, global_data: dict):
+        """Рассчитывает и сохраняет изолированную аналитику по стратегиям и лидерборд."""
+        if not self.strategy_registry:
+            try:
+                from CORE.STRATEGY.strategy_registry import StrategyRegistry
+                self.strategy_registry = StrategyRegistry()
+            except Exception:
+                return
+
+        now_ms = int(time.time() * 1000)
+        per_coin_global = global_data.get("per_coin", {})
+
+        for strat_id, strat_cfg in self.strategy_registry.active_strategies.items():
+            strat_file = self.stats_dir / f"analytics_{strat_id}.json"
+            strat_data = {}
+            if strat_file.exists():
+                try:
+                    strat_data = json.loads(strat_file.read_text(encoding="utf-8"))
+                except Exception:
+                    strat_data = {}
+            if not strat_data:
+                strat_data = {
+                    "universe_id": strat_id,
+                    "name": strat_cfg.name,
+                    "start_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "_rebased_start_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "first_trade_ts": now_ms,
+                    "cur_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "peak_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "min_balance_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "_current_trough_usdt": float(ANALYTICS_START_BALANCE_USDT),
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "winrate_pct": 0.0,
+                    "realized_pnl_usdt": 0.0,
+                    "net_profit_usdt": 0.0,
+                    "unrealized_pnl_usdt": 0.0,
+                    "max_drawdown_usdt": 0.0,
+                    "max_drawdown_pct": 0.0,
+                    "recovery_factor": 0.0,
+                    "per_coin": {}
+                }
+
+            strat_symbols = strat_cfg.symbols
+            strat_per_coin = {sym: per_coin_global[sym] for sym in strat_symbols if sym in per_coin_global}
+            strat_data["per_coin"] = strat_per_coin
+
+            s_unreal = sum(float(c.get("current_drawdown", 0.0)) for c in strat_per_coin.values())
+            s_real = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in strat_per_coin.values())
+            s_wins = sum(int(c.get("win_count", 0)) for c in strat_per_coin.values())
+            s_losses = sum(int(c.get("loss_count", 0)) for c in strat_per_coin.values())
+            s_trades = s_wins + s_losses
+
+            strat_data["unrealized_pnl_usdt"] = round(s_unreal, 4)
+            strat_data["realized_pnl_usdt"] = round(s_real, 4)
+            strat_data["net_profit_usdt"] = round(s_real + s_unreal, 4)
+            if s_trades > 0:
+                strat_data["total_trades"] = s_trades
+                strat_data["winning_trades"] = s_wins
+                strat_data["winrate_pct"] = round(s_wins / s_trades * 100.0, 2)
+
+            s_init = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
+            s_cur = round(s_init + strat_data["net_profit_usdt"], 4)
+            strat_data["cur_balance_usdt"] = s_cur
+
+            s_peak = float(strat_data.get("peak_balance_usdt", s_init))
+            s_trough = float(strat_data.get("_current_trough_usdt", s_init))
+            s_min = float(strat_data.get("min_balance_usdt", s_init))
+
+            if s_cur > s_peak:
+                s_peak = s_cur
+                s_trough = s_cur
+            if s_cur < s_trough:
+                s_trough = s_cur
+            if s_cur < s_min:
+                s_min = s_cur
+
+            strat_data["peak_balance_usdt"] = round(s_peak, 4)
+            strat_data["_current_trough_usdt"] = round(s_trough, 4)
+            strat_data["min_balance_usdt"] = round(s_min, 4)
+
+            s_dd = s_trough - s_peak
+            strat_data["max_drawdown_usdt"] = round(min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd), 4)
+            if s_init > 0:
+                strat_data["max_drawdown_pct"] = round(abs(strat_data["max_drawdown_usdt"]) / s_init * 100.0, 2)
+            if strat_data["max_drawdown_usdt"] < 0:
+                strat_data["recovery_factor"] = round(strat_data["net_profit_usdt"] / abs(strat_data["max_drawdown_usdt"]), 2)
+            else:
+                strat_data["recovery_factor"] = round(strat_data["net_profit_usdt"] / 1.0, 2) if strat_data["net_profit_usdt"] > 0 else 0.0
+
+            Utils.atomic_write_json(strat_file, strat_data, indent=4)
+
+        # Update Leaderboard & portfolio analytics_all.json
+        try:
+            universes_meta = {
+                sid: {"name": scfg.name, "enabled": True}
+                for sid, scfg in self.strategy_registry.active_strategies.items()
+            }
+            entries = self.leaderboard_engine.generate_leaderboard(universes_meta)
+            evaluated_coins = len(self.strategy_registry.get_all_active_symbols())
+            self.leaderboard_engine.save_portfolio(entries, evaluated_coins_count=evaluated_coins)
+        except Exception as e:
+            logger.error(f"[ANALYTICS] Error saving leaderboard portfolio: {e}")
 
     async def _get_bnb_usdt_rate(self, client, cached_prices: dict = None) -> float:
         if cached_prices:

@@ -57,11 +57,17 @@ if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 
 ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
+ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"
+ANALYTICS_LEDGERS_DIR = ANALYTICS_DIR / "LEDGERS"
 CACHE_DIR = BASE_DIR / "CACHE"
+RUNTIME_DIR = DATA_DIR / "runtime"
 
 # Создаем директории если их нет
 ANALYTICS_DIR.mkdir(parents=True, exist_ok=True)
+ANALYTICS_STATS_DIR.mkdir(parents=True, exist_ok=True)
+ANALYTICS_LEDGERS_DIR.mkdir(parents=True, exist_ok=True)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
+RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
 # ============================================================
 # SECRETS (.env only)
@@ -88,10 +94,22 @@ ACTIVE_STRATEGIES: Dict[str, Any] = _CFG["active_strategies"]
 
 def _resolve_active_symbols() -> list[str]:
     active_syms: list[str] = []
+    seen: Dict[str, str] = {}
     for strat_id, sdata in ACTIVE_STRATEGIES.items():
         if sdata.get("enabled", False):
-            active_syms.extend(sdata.get("symbols", []))
-    return list(dict.fromkeys(active_syms))
+            for sym in sdata.get("symbols", []):
+                sym_clean = str(sym).upper().strip()
+                if not sym_clean:
+                    continue
+                if sym_clean in seen:
+                    raise ValueError(
+                        f"[FATAL CONFIG ERROR] КОНФЛИКТ ИНВАРИАНТА 1:1: Монета '{sym_clean}' "
+                        f"одновременно закреплена за двумя активными стратегиями: '{seen[sym_clean]}' и '{strat_id}'. "
+                        f"Между активными вселенными НЕ МОЖЕТ быть одинаковых монет! Запуск бота аварийно остановлен."
+                    )
+                seen[sym_clean] = strat_id
+                active_syms.append(sym_clean)
+    return active_syms
 
 ACTIVE_SYMBOLS: list[str] = _resolve_active_symbols()
 _num_symbols: int = len(ACTIVE_SYMBOLS)

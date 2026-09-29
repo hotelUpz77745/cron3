@@ -65,9 +65,9 @@ class BotCore:
         # Инициализация реестра стратегий и мультивселенных
         self.strategy_registry = StrategyRegistry()
         active_syms = self.strategy_registry.get_all_active_symbols()
-        self.symbols = active_syms if active_syms else _CFG["symbols"]
+        self.symbols = active_syms
         self.prices = {}   # Структура для хранения цен
-        self.runtime_manager = RuntimeFsmManager()
+        self.runtime_manager = RuntimeFsmManager(strategy_registry=self.strategy_registry)
         
 
             
@@ -95,7 +95,7 @@ class BotCore:
         
         self.spec_manager = SpecManager(self)
         
-        self.analytics = AnalyticsManager()
+        self.analytics = AnalyticsManager(strategy_registry=self.strategy_registry)
         
         if BACKUP_ENABLED:
             self.backup_manager = RuntimeBackupManager(
@@ -190,12 +190,15 @@ class BotCore:
         # 1. Update app.json
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path)
-        if symbol not in app_data.get("symbols", []):
-            if "symbols" not in app_data:
-                app_data["symbols"] = []
-            app_data["symbols"].append(symbol)
-            Utils.write_json_file(app_json_path, app_data)
-            logger.info(f"[{symbol}] Added to app.json.")
+        active_strategies = app_data.get("active_strategies", {})
+        if active_strategies:
+            for sdata in active_strategies.values():
+                if sdata.get("enabled", False):
+                    if symbol not in sdata.get("symbols", []):
+                        sdata.setdefault("symbols", []).append(symbol)
+                        Utils.write_json_file(app_json_path, app_data)
+                        logger.info(f"[{symbol}] Added to active_strategies in app.json.")
+                    break
             
         # 2. Update bot lists and FSM states
         self.symbols.append(symbol)
@@ -249,8 +252,17 @@ class BotCore:
         # 1. Remove from app.json
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path)
+        active_strategies = app_data.get("active_strategies", {})
+        changed = False
+        if active_strategies:
+            for sdata in active_strategies.values():
+                if "symbols" in sdata and symbol in sdata["symbols"]:
+                    sdata["symbols"].remove(symbol)
+                    changed = True
         if symbol in app_data.get("symbols", []):
             app_data["symbols"].remove(symbol)
+            changed = True
+        if changed:
             Utils.write_json_file(app_json_path, app_data)
             logger.info(f"[{symbol}] Removed from app.json.")
             
@@ -275,13 +287,19 @@ class BotCore:
             self.pos_monitor.target_symbols = [s for s in self.pos_monitor.target_symbols if s != symbol]
             
         # 4. Delete the runtime JSON cache
-        runtime_path = self.runtime_manager.runtime_dir / f"{symbol.lower()}.json"
+        runtime_path = self.runtime_manager.get_runtime_path(symbol)
         if runtime_path.exists():
             try:
                 runtime_path.unlink()
-                logger.info(f"[{symbol}] Deleted runtime cache file.")
+                logger.info(f"[{symbol}] Deleted runtime cache file: {runtime_path}.")
             except Exception as e:
                 logger.error(f"[{symbol}] Failed to delete runtime cache: {e}")
+        root_path = self.runtime_manager.runtime_dir / f"{symbol.lower()}.json"
+        if root_path.exists():
+            try:
+                root_path.unlink()
+            except Exception:
+                pass
                 
         # 5. Restart price stream
         logger.info(f"Restarting price stream to exclude deleted symbol: {symbol}")
@@ -531,10 +549,6 @@ class BotCore:
             active_syms = self.strategy_registry.get_all_active_symbols()
             if active_syms:
                 self.symbols = active_syms
-            else:
-                app_cfg = Utils.read_json_file(DATA_DIR / "app.json")
-                if app_cfg and "symbols" in app_cfg:
-                    self.symbols = app_cfg["symbols"]
 
         if not self.is_running:
             return
