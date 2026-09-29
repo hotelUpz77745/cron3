@@ -9,6 +9,20 @@
         "overrides": {},
         "super_grid_enabled": false
     },
+    "u0_base_classic_supergrid": {
+        "name": "U0: Base Classic Benchmark (Super Grid)",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "is_active": false,
+        "start_balance_usdt": 150.0,
+        "invest_size": 400.0,
+        "leverage": 20,
+        "overrides": {
+            "super_grid": {
+                "enabled": true
+            }
+        },
+        "super_grid_enabled": true
+    },
     "u0_tight_scalper": {
         "name": "U0: Tight Scalper Benchmark",
         "description": "Быстрый скальпер малых тейков (0.45%..1.5%) для максимальной частоты оборота капитала во флэте",
