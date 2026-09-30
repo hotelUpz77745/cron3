@@ -79,6 +79,12 @@ class StrategyApplicator:
                     if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
                         tp_step["fallback_indent"] = max(MIN_TAKE_PROFIT_PCT, float(tp_step["fallback_indent"]))
 
+            # Применение tp_purpose из overrides (например, "self" для изолированного TP сторон)
+            if "tp_purpose" in strategy.overrides:
+                side_data["tp_purpose"] = strategy.overrides["tp_purpose"]
+            elif side in strategy.overrides and isinstance(strategy.overrides[side], dict) and "tp_purpose" in strategy.overrides[side]:
+                side_data["tp_purpose"] = strategy.overrides[side]["tp_purpose"]
+
             side_cfgs[side] = side_data
 
         return side_cfgs

@@ -195,7 +195,8 @@
                     "indent": 0.5,
                     "fallback_indent": 0.95
                 }
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": false
     },
@@ -1058,7 +1059,8 @@
                     "indent": 0.5,
                     "fallback_indent": 1.0
                 }
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": false
     },
@@ -1117,7 +1119,8 @@
                     "indent": 0.5,
                     "fallback_indent": 1.0
                 }
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": false
     },
@@ -1179,7 +1182,8 @@
             },
             "super_grid": {
                 "enabled": true
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": true
     },
@@ -1297,7 +1301,8 @@
                     "indent": 0.5,
                     "fallback_indent": 1.0
                 }
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": false
     },
@@ -1444,7 +1449,8 @@
                     "indent": 0.5,
                     "fallback_indent": 0.9
                 }
-            }
+            },
+            "tp_purpose": "self"
         },
         "super_grid_enabled": false
     },
@@ -1866,6 +1872,7 @@
         "invest_size": 400.0,
         "leverage": 20,
         "overrides": {
+            "tp_purpose": "self",
             "timeframe": "5m",
             "super_grid": {
                 "enabled": false,

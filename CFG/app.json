@@ -141,8 +141,9 @@
             "_comment_cons": "Сложная синергия параметров; требует непрерывного мониторинга порогов Knife Blocker.",
             "enabled": true,
             "symbols": [
-                "PUMPUSDT",
-                "0GUSDT"
+                "GRASSUSDT",
+                "ARXUSDT",
+                "ZROUSDT"
             ],
             "super_grid": {
                 "enabled": false,
@@ -155,7 +156,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 82.0,
+                "start_balance_usdt": 162.29,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
@@ -178,11 +179,8 @@
             "_comment_alias": "Медный Змей (Gamma Fortress 35)",
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
-            "enabled": true,
-            "symbols": [
-                "JUPUSDT",
-                "PYTHUSDT"
-            ],
+            "enabled": false,
+            "symbols": [],
             "super_grid": {
                 "enabled": false,
                 "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",

@@ -150,10 +150,16 @@ class TestStrategySystem(unittest.TestCase):
         from c_utils import Utils
 
         registry = StrategyRegistry()
-        build_runtime_caches(registry=registry)
+        test_syms = registry.get_all_active_symbols()
+        build_runtime_caches(symbols=test_syms, registry=registry)
 
-        for sym in ["ZROUSDT", "PENGUUSDT", "SPXUSDT"]:
-            cfg_path = RUNTIME_DIR / f"{sym.lower()}.json"
+        for sym in test_syms:
+            # Символ может лежать либо в корне runtime/ (legacy fallback), либо под куполом стратегии
+            strat = registry.get_strategy_for_symbol(sym)
+            if strat:
+                cfg_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
+            else:
+                cfg_path = RUNTIME_DIR / f"{sym.lower()}.json"
             self.assertTrue(cfg_path.exists(), f"Рантайм файл {cfg_path} должен существовать!")
             data = Utils.read_json_file(cfg_path)
             for side in ("LONG", "SHORT"):
@@ -173,20 +179,20 @@ class TestStrategySystem(unittest.TestCase):
         from RUNTIME_FSM.runtime_builder import build_runtime_caches, RUNTIME_DIR
 
         registry = StrategyRegistry()
-        build_runtime_caches(registry=registry)
         mgr = RuntimeFsmManager(strategy_registry=registry)
 
-        expected_domes = {
-            "ZROUSDT": ("u0_fat_swing123", "zrousdt.json"),
-            "PENGUUSDT": ("u8_golden_macro_symbiosis", "penguusdt.json"),
-            "SPXUSDT": ("u6_symbiosis_gamma_fortress123", "spxusdt.json"),
-        }
+        # Проверяем для текущих активных символов в registry
+        active_syms = registry.get_all_active_symbols()
+        self.assertGreaterEqual(len(active_syms), 1)
+        build_runtime_caches(symbols=active_syms, registry=registry)
 
-        for sym, (strat_id, fname) in expected_domes.items():
-            dome_path = RUNTIME_DIR / strat_id / fname
-            self.assertTrue(dome_path.exists(), f"Файл рантайма под куполом {strat_id} должен существовать: {dome_path}")
-            resolved = mgr.get_runtime_path(sym)
-            self.assertEqual(resolved, dome_path)
+        for sym in active_syms:
+            strat = registry.get_strategy_for_symbol(sym)
+            if strat:
+                dome_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
+                self.assertTrue(dome_path.exists(), f"Файл рантайма под куполом {strat.strategy_id} должен существовать: {dome_path}")
+                resolved = mgr.get_runtime_path(sym)
+                self.assertEqual(resolved, dome_path)
 
     def test_structured_analytics_and_leaderboard(self):
         """Тест структурированной аналитики в STATS/, LEDGERS/, и витрины leaderboard."""

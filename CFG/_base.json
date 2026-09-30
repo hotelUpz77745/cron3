@@ -4,7 +4,7 @@
         "invest_size": 400,
         "leverage": 20,
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
-        "_comment_tp_purpose": "self, opposite, both",
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
         "tp_purpose": "both",
         "margin_type": "CROSSED",
         "grid": {
@@ -84,6 +84,7 @@
         "leverage": 20,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
         "tp_purpose": "both",
         "grid": {
             "0": {
