@@ -340,9 +340,9 @@ class AnalyticsManager:
                 start_ts = data["first_trade_ts"]
                     
             if not start_ts:
-                # Авто-восстановление: если first_trade_ts не задан, берем точку отсчета 2 часа назад
-                start_ts = int(time.time() * 1000) - 7200000
-                logger.warning(f"No first_trade_ts in analytics.json, auto-fallback to {start_ts}.")
+                # Точка отсчета: текущее время (не подтягивать старые закрытые трейды предыдущей сессии)
+                start_ts = int(time.time() * 1000)
+                logger.info(f"[ANALYTICS] Initialized fresh first_trade_ts: {start_ts}")
                 async with self._lock:
                     data["first_trade_ts"] = start_ts
                     self._write_data(data)
