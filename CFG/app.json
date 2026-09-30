@@ -155,7 +155,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 75.0,
+                "start_balance_usdt": 82.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
@@ -194,7 +194,7 @@
                 "update_interval_hours": 24
             },
             "analytics": {
-                "start_balance_usdt": 75.0,
+                "start_balance_usdt": 82.0,
                 "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
             },
             "notifications": {
