@@ -1899,8 +1899,8 @@
                     "threshold_increment": null
                 },
                 "positive": {
-                    "threshold": 100,
-                    "threshold_increment": 100
+                    "threshold": 21.0,
+                    "threshold_increment": 21.0
                 }
             },
             "smart_grace": {
