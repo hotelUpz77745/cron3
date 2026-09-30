@@ -278,7 +278,7 @@
         "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%) и начальным ордером ~50$ при множителе 1.1x",
         "is_active": true,
         "start_balance_usdt": 150.0,
-        "invest_size": 600,
+        "invest_size": 600.0,
         "leverage": 20,
         "overrides": {
             "grid": {
@@ -403,7 +403,7 @@
         "description": "Широкий свинг-тейк с модифицированной статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, до 89% просадки при множителе 1.1x",
         "is_active": true,
         "start_balance_usdt": 150.0,
-        "invest_size": 800.0,
+        "invest_size": 600.0,
         "leverage": 20,
         "overrides": {
             "grid": {
