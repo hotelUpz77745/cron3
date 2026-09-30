@@ -302,20 +302,22 @@ class TestStrategySystem(unittest.TestCase):
         for side in ("LONG", "SHORT"):
             grid = side_cfgs[side]["grid"]
             tp_map = side_cfgs[side]["tp_map"]
-            self.assertEqual(len(grid), 8)
-            self.assertEqual(len(tp_map), 8)
+            self.assertEqual(len(grid), 9)
+            self.assertEqual(len(tp_map), 9)
             self.assertEqual(grid["7"]["indent"], -58.0)
+            self.assertEqual(grid["8"]["indent"], -89.0)
             self.assertEqual(tp_map["0"]["indent"], 1.8)
             self.assertEqual(tp_map["7"]["indent"], 0.5)
+            self.assertEqual(tp_map["8"]["indent"], 0.5)
 
             # Строгое соблюдение Правила 11
             for tp_step in tp_map.values():
                 self.assertGreaterEqual(float(tp_step["indent"]), MIN_TAKE_PROFIT_PCT)
                 self.assertGreaterEqual(float(tp_step["fallback_indent"]), MIN_TAKE_PROFIT_PCT)
 
-            # Проверка суммы объемов сетки (не более 85% депозита)
+            # Проверка суммы объемов сетки (ровно 100.00%)
             total_vol = sum(float(lvl["volume"]) for lvl in grid.values())
-            self.assertLessEqual(total_vol, 85.0)
+            self.assertEqual(round(total_vol, 2), 100.0)
 
 
 if __name__ == "__main__":
