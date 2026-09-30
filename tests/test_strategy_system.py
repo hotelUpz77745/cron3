@@ -256,8 +256,9 @@ class TestStrategySystem(unittest.TestCase):
         self.assertIn("u6_symbiosis_gamma_fortress35", registry.universes_db)
         raw_meta = registry.universes_db["u6_symbiosis_gamma_fortress35"]
         strat = StrategyConfig("u6_symbiosis_gamma_fortress35", raw_meta, ["TESTUSDT"])
-        self.assertEqual(strat.invest_size, 400.0)
+        self.assertEqual(strat.invest_size, 600.0)
         self.assertEqual(strat.leverage, 20)
+
         self.assertTrue(strat.smart_size_cfg.get("knife_blocker_enabled"))
         self.assertEqual(len(strat.overrides["grid"]), 9)
         self.assertEqual(len(strat.overrides["tp_map"]), 9)

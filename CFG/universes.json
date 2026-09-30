@@ -68,7 +68,7 @@
         "description": "Флагман и чемпион полигона: Крепость со статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, Panic Damper TP (2.2% -> 0.50%), Knife Blocker >=1 и деэскалация сайза",
         "is_active": false,
         "start_balance_usdt": 50.0,
-        "invest_size": 400.0,
+        "invest_size": 600.0,
         "leverage": 20,
         "overrides": {
             "smart_grace": {
