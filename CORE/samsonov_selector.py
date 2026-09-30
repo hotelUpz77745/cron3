@@ -1,0 +1,207 @@
+# ============================================================
+# FILE: CORE/samsonov_selector.py
+# ROLE: Multi-factor quant coin selector (Samsonov Score & Exhaustion Alpha bridge)
+# ============================================================
+
+from __future__ import annotations
+
+import json
+import math
+import sys
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from consts import BASE_DIR, DATA_DIR, PARENT_DIR, _CFG
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("SamsonovSelector")
+
+
+
+class SamsonovSelector:
+    """
+    Квантовый селектор монет Тим Лида Самсонова Николая.
+    Связующий мост («Штурман») между исследовательской Фабрикой Звёзд (cron3PapperUniverses)
+    и боевым торговым ядром (cron3).
+    
+    Реализует две фундаментальные теории:
+    1. Теория 2: Квантовый Скор Самсонова (Resilience^w_r * Realized^w_m * Velocity^w_v).
+    2. Теория 1: Exhaustion Alpha (Индекс истощения продавцов на донных просадках).
+    """
+
+    def __init__(self, radar_stats_dir: Optional[Path] = None):
+        if radar_stats_dir:
+            self.radar_stats_dir = Path(radar_stats_dir)
+        else:
+            # Читаем из app.json -> paths -> radar_dir или берем дефолтный соседний каталог
+            paths_cfg = _CFG.get("paths", {})
+            radar_cfg = paths_cfg.get("radar_dir")
+            if radar_cfg:
+                p = Path(radar_cfg)
+                if not p.is_absolute():
+                    p = (BASE_DIR / p).resolve()
+                self.radar_stats_dir = p / "ANALYTICS" / "STATS"
+            else:
+                self.radar_stats_dir = PARENT_DIR / "cron3PapperUniverses" / "ANALYTICS" / "STATS"
+
+    def is_radar_available(self) -> bool:
+        return self.radar_stats_dir.exists() and self.radar_stats_dir.is_dir()
+
+    def load_universe_data(self, universe_id: str) -> Optional[Dict[str, Any]]:
+        if not self.is_radar_available():
+            logger.warning(f"Radar directory not found: {self.radar_stats_dir}")
+            return None
+        
+        file_path = self.radar_stats_dir / f"analytics_{universe_id}.json"
+        if not file_path.exists():
+            logger.warning(f"Universe stats file not found: {file_path}")
+            return None
+        
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to read universe stats {file_path}: {e}")
+            return None
+
+    def calculate_coin_metrics(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        w_resilience: float = 1.0,
+        w_realized: float = 1.0,
+        w_velocity: float = 1.0,
+        w_pain_ratio: float = 1.0,
+        w_pain_usdt: float = 1.0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Производит расчет Скора Самсонова и Индекса Истощения (Exhaustion Alpha)
+        по всем монетам указанного универсума.
+        """
+        data = self.load_universe_data(universe_id)
+        if not data or "per_coin" not in data:
+            return []
+
+        per_coin: Dict[str, Dict[str, Any]] = data["per_coin"]
+        total_coins = max(len(per_coin), 1)
+        total_trades = sum(s.get("trades", 0) for s in per_coin.values())
+        avg_trades = total_trades / total_coins if total_coins > 0 else 1.0
+
+        records: List[Dict[str, Any]] = []
+
+        for sym, stats in per_coin.items():
+            realized_net = float(stats.get("realized_pnl_net_usdt", stats.get("realized_pnl_usdt", 0.0)))
+            net_profit = float(stats.get("net_profit_usdt", 0.0))
+            peak_net = float(stats.get("peak_net_profit_usdt", stats.get("max_net_profit", 0.0)))
+            max_dd = abs(float(stats.get("max_drawdown_net_usdt", stats.get("max_drawdown", 0.0))))
+            floating = float(stats.get("current_drawdown", 0.0))
+            trades = int(stats.get("trades", 0))
+
+            # 1. Множитель асимметрии риска (Historical Resilience)
+            dd_denom = max(max_dd, 0.5)
+            peak_clamped = max(peak_net, 0.0)
+            resilience = peak_clamped / dd_denom
+
+            # 2. Множитель монетизации
+            realized_pos = max(realized_net, 0.0)
+
+            # 3. Множитель частоты оборота (Trade Velocity Ratio)
+            velocity_ratio = trades / avg_trades if avg_trades > 0 else 1.0
+
+            # --- СКОР САМСОНОВА ---
+            # Full (с весами и Velocity)
+            samsonov_full = (resilience ** w_resilience) * (realized_pos ** w_realized) * (velocity_ratio ** w_velocity)
+            # Base (без Velocity)
+            samsonov_base = (resilience ** w_resilience) * (realized_pos ** w_realized)
+
+            # --- EXHAUSTION ALPHA (ТЕОРИЯ 1) ---
+            pain_usdt = abs(floating) if floating < 0 else 0.0
+            pain_ratio = pain_usdt / dd_denom
+
+            # Exhaustion Index (по умолчанию веса 1.0)
+            exhaustion_index = (pain_ratio ** w_pain_ratio) * ((pain_usdt / 10.0) ** w_pain_usdt) * (velocity_ratio ** 0.5)
+
+            records.append({
+                "symbol": sym,
+                "net_profit": round(net_profit, 2),
+                "realized_net": round(realized_net, 2),
+                "peak_net": round(peak_net, 2),
+                "max_dd": round(max_dd, 2),
+                "floating": round(floating, 2),
+                "resilience": round(resilience, 2),
+                "trades": trades,
+                "velocity_ratio": round(velocity_ratio, 2),
+                "samsonov_score": round(samsonov_full, 2),
+                "samsonov_base": round(samsonov_base, 2),
+                "pain_usdt": round(pain_usdt, 2),
+                "pain_ratio": round(pain_ratio, 2),
+                "exhaustion_index": round(exhaustion_index, 2),
+            })
+
+        return records
+
+    def get_samsonov_top(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        top_n: int = 20,
+        w_resilience: float = 1.0,
+        w_realized: float = 1.0,
+        w_velocity: float = 1.0,
+    ) -> List[Dict[str, Any]]:
+        records = self.calculate_coin_metrics(
+            universe_id=universe_id,
+            w_resilience=w_resilience,
+            w_realized=w_realized,
+            w_velocity=w_velocity,
+        )
+        records.sort(key=lambda x: x["samsonov_score"], reverse=True)
+        return records[:top_n]
+
+    def get_exhaustion_top(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        top_n: int = 10,
+    ) -> List[Dict[str, Any]]:
+        records = self.calculate_coin_metrics(universe_id=universe_id)
+        records.sort(key=lambda x: x["pain_usdt"], reverse=True)
+        return records[:top_n]
+
+
+def print_cli_summary(universe_id: str = "u0_fat_swing123"):
+    selector = SamsonovSelector()
+    if not selector.is_radar_available():
+        print(f"Error: Radar directory not found at {selector.radar_stats_dir}")
+        return
+
+    print("=" * 110)
+    print(f"КВАНТОВЫЙ СЕЛЕКТОР САМСОНОВА — РЕЗУЛЬТАТЫ СРЕЗА [Вселенная: {universe_id}]")
+    print("=" * 110)
+
+    # 1. TOP-10 Samsonov Score Baseline (1.0, 1.0, 1.0)
+    top_base = selector.get_samsonov_top(universe_id, top_n=10, w_resilience=1.0, w_realized=1.0, w_velocity=1.0)
+    print("\n--- ТОП-10 МОНЕТ ПО СКОРУ САМСОНОВА (Baseline: 1.0, 1.0, 1.0) ---")
+    print(f"{'#':<3} {'Символ':<12} {'Скор':<10} {'Resilience':<12} {'Realized':<10} {'NetProfit':<10} {'MaxDD':<8} {'Сделок':<7} {'VelRatio'}")
+    for i, r in enumerate(top_base, 1):
+        print(f"{i:<3} {r['symbol']:<12} {r['samsonov_score']:<10.2f} {r['resilience']:<12.2f} {r['realized_net']:<10.2f} {r['net_profit']:<10.2f} {r['max_dd']:<8.2f} {r['trades']:<7} {r['velocity_ratio']}")
+
+    # 2. TOP-10 Samsonov Score Quant Shield (1.3, 0.7, 0.6)
+    top_shield = selector.get_samsonov_top(universe_id, top_n=10, w_resilience=1.3, w_realized=0.7, w_velocity=0.6)
+    print("\n--- ТОП-10 МОНЕТ ПО СКОРУ САМСОНОВА (Quant Shield: 1.3, 0.7, 0.6) ---")
+    print(f"{'#':<3} {'Символ':<12} {'Скор':<10} {'Resilience':<12} {'Realized':<10} {'NetProfit':<10} {'MaxDD':<8} {'Сделок'}")
+    for i, r in enumerate(top_shield, 1):
+        print(f"{i:<3} {r['symbol']:<12} {r['samsonov_score']:<10.2f} {r['resilience']:<12.2f} {r['realized_net']:<10.2f} {r['net_profit']:<10.2f} {r['max_dd']:<8.2f} {r['trades']}")
+
+    # 3. TOP-10 Exhaustion Alpha
+    top_ex = selector.get_exhaustion_top(universe_id, top_n=10)
+    print("\n--- ТОП-10 МОНЕТ ПО EXHAUSTION ALPHA (Максимальная плавающая боль в Радаре) ---")
+    print(f"{'#':<3} {'Символ':<12} {'Боль USDT':<12} {'MaxDD':<8} {'Pain/DD':<10} {'Realized':<10} {'NetProfit':<10} {'Сделок'}")
+    for i, r in enumerate(top_ex, 1):
+        print(f"{i:<3} {r['symbol']:<12} {r['pain_usdt']:<12.2f} {r['max_dd']:<8.2f} {r['pain_ratio']:<10.2f} {r['realized_net']:<10.2f} {r['net_profit']:<10.2f} {r['trades']}")
+
+
+if __name__ == "__main__":
+    u = sys.argv[1] if len(sys.argv) > 1 else "u0_fat_swing123"
+    print_cli_summary(u)
