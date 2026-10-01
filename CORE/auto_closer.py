@@ -41,22 +41,26 @@ class AutoCloser:
         cls,
         analytics_dict: dict,
         pos_cfg: dict
-    ) -> tuple[Optional[float], bool, str]:
+    ) -> tuple[Optional[float], bool, str, float]:
         """
         Вычисляет динамический целевой порог по карте стагнации (stagnation_card).
-        Возвращает (effective_threshold, is_stagnation_active, stag_info).
+        Возвращает (effective_threshold, is_stagnation_active, stag_info, reference_top_target).
         """
         base_th = pos_cfg.get("threshold")
         if base_th == 0 or base_th == 0.0:
             base_th = None
 
-        stag_cfg = pos_cfg.get("stagnation", {})
+        stag_cfg = pos_cfg.get("stagnation")
+        if stag_cfg is None:
+            # Поддержка плоской структуры: stagnation_card прямо внутри pos_cfg
+            stag_cfg = pos_cfg if ("stagnation_card" in pos_cfg or "card" in pos_cfg) else {}
+
         if not stag_cfg or not stag_cfg.get("enabled", True):
-            return base_th, False, ""
+            return base_th, False, "", (base_th or 0.0)
 
         card = stag_cfg.get("stagnation_card") or stag_cfg.get("card", {})
         if not card:
-            return base_th, False, ""
+            return base_th, False, "", (base_th or 0.0)
 
         min_floor = float(stag_cfg.get("min_floor", 7.0))
         mode = stag_cfg.get("mode", "auto")
@@ -79,16 +83,19 @@ class AutoCloser:
 
         eval_val = velocity if mode == "velocity" else peak_age_h
 
+        top_target = max(float(v) for v in card.values()) if card else (base_th or 21.0)
+        reference_top = base_th if base_th is not None else top_target
+
         for rule, target_val in card.items():
             if cls.match_rule_float(rule, eval_val):
                 target = float(target_val)
                 effective_target = max(target, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
                 info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{rule}' -> target {effective_target} USDT]"
-                is_stag = base_th is not None and effective_target < base_th
-                return effective_target, is_stag, info
+                is_stag = effective_target < reference_top
+                return effective_target, is_stag, info, reference_top
 
-        return base_th, False, ""
+        return base_th, False, "", reference_top
 
     async def check(self):
         if self._is_closing:
@@ -174,7 +181,7 @@ class AutoCloser:
             strat_msg = ""
 
             # Check Positive for Strategy Dome (с поддержкой карты стагнации)
-            th_pos, is_stagnation, stag_info = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
+            th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
 
             if th_pos is not None and strat_net >= th_pos:
                 strat_triggered = True
@@ -189,7 +196,7 @@ class AutoCloser:
                         f"Сработал затухающий порог {stag_info}.\n"
                         f"Чистый Net Profit: <b>{strat_net} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
                         f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Базовый порог на следующий цикл сохранен: <b>{pos_cfg.get('threshold')} USDT</b>."
+                        f"Базовый порог на следующий цикл сохранен: <b>{ref_top} USDT</b>."
                     )
                 else:
                     inc = pos_cfg.get("threshold_increment")
@@ -282,7 +289,7 @@ class AutoCloser:
         action_msg = ""
         
         # Check Positive Portfolio (с поддержкой карты стагнации)
-        th_pos, is_stagnation, stag_info = self.evaluate_stagnation_target(analytics_data, pos_cfg)
+        th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(analytics_data, pos_cfg)
         
         if th_pos is not None and net_usdt >= th_pos:
             self._is_closing = True
@@ -296,7 +303,7 @@ class AutoCloser:
                     f"🟢 <b>AUTO-CLOSE (PORTFOLIO STAGNATION RATCHET)</b>\n"
                     f"Сработал затухающий порог {stag_info}.\n"
                     f"Net Profit reached <b>{net_usdt} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
-                    f"Positions closed. Base threshold preserved: <b>{pos_cfg.get('threshold')} USDT</b>."
+                    f"Positions closed. Base threshold preserved: <b>{ref_top} USDT</b>."
                 )
             else:
                 inc = pos_cfg.get("threshold_increment")

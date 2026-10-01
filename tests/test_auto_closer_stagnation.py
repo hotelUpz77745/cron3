@@ -33,20 +33,20 @@ class TestAutoCloserStagnation(unittest.TestCase):
 
         # High velocity: should keep standard target 21.0
         analytics_high = {"net_velocity": 1.5, "peak_age_hours": 0.5}
-        target, is_stag, info = AutoCloser.evaluate_stagnation_target(analytics_high, pos_cfg)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target(analytics_high, pos_cfg)
         self.assertEqual(target, 21.0)
         self.assertFalse(is_stag)
 
         # Medium velocity: should drop to 12.0
         analytics_med = {"net_velocity": 0.7, "peak_age_hours": 2.5}
-        target, is_stag, info = AutoCloser.evaluate_stagnation_target(analytics_med, pos_cfg)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target(analytics_med, pos_cfg)
         self.assertEqual(target, 12.0)
         self.assertTrue(is_stag)
         self.assertIn("12.0", info)
 
         # Low velocity (stagnation): should drop to 8.0
         analytics_low = {"net_velocity": 0.2, "peak_age_hours": 5.0}
-        target, is_stag, info = AutoCloser.evaluate_stagnation_target(analytics_low, pos_cfg)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target(analytics_low, pos_cfg)
         self.assertEqual(target, 8.0)
         self.assertTrue(is_stag)
         self.assertIn("8.0", info)
@@ -64,22 +64,32 @@ class TestAutoCloserStagnation(unittest.TestCase):
             }
         }
         analytics = {"net_velocity": 0.05}
-        target, is_stag, info = AutoCloser.evaluate_stagnation_target(analytics, pos_cfg)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target(analytics, pos_cfg)
         # Should be clamped to min_floor = 7.0
         self.assertEqual(target, 7.0)
 
-    def test_stagnation_disabled(self):
+    def test_flat_stagnation_card_without_outer_threshold(self):
+        # Clean config with NO redundant outer threshold / threshold_increment
         pos_cfg = {
-            "threshold": 21.0,
-            "stagnation": {
-                "enabled": False,
-                "stagnation_card": {"<=0.4": 8.0}
+            "min_floor": 7.0,
+            "mode": "velocity",
+            "stagnation_card": {
+                ">1.0": 21.0,
+                ">0.4": 12.0,
+                "<=0.4": 8.0
             }
         }
-        analytics = {"net_velocity": 0.1}
-        target, is_stag, info = AutoCloser.evaluate_stagnation_target(analytics, pos_cfg)
+        # High velocity
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"net_velocity": 1.2}, pos_cfg)
         self.assertEqual(target, 21.0)
         self.assertFalse(is_stag)
+        self.assertEqual(ref_top, 21.0)
+
+        # Low velocity (stagnation)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"net_velocity": 0.2}, pos_cfg)
+        self.assertEqual(target, 8.0)
+        self.assertTrue(is_stag)
+        self.assertEqual(ref_top, 21.0)
 
 if __name__ == "__main__":
     unittest.main()
