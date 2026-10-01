@@ -63,83 +63,6 @@
         "log_to_file": true
     },
     "active_strategies": {
-        "u0_base_classic_supergrid": {
-            "_comment_alias": "Моцарт 060 (СуперГрид)",
-            "_comment_pros": "Высокий валовый доход на закрытиях нижних усреднений при отскоке. Динамический SuperGrid адаптирует шаг сетки под волатильность.",
-            "_comment_cons": "Тяжелая классическая просадка (-16$ на боевом счете) и отсутствие Knife Blocker на безоткатных ножах.",
-            "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": true,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 162.29,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null
-                },
-                "positive": {
-                    "enabled": true,
-                    "min_floor": 7.0,
-                    "mode": "velocity",
-                    "stagnation_card": {
-                        ">1.0": { "target": 21.0, "enabled": true },
-                        ">0.4": { "target": 12.0, "enabled": true },
-                        "<=0.4": { "target": 8.0, "enabled": true }
-                    }
-                }
-            }
-        },
-        "u0_base_classic_supergrid_075": {
-            "_comment_alias": "Моцарт 075 (СуперГрид)",
-            "_comment_pros": "Эталон минимального риска и моментального освобождения маржи. Плоский быстрый тейк 0.75%. Рекордный Recovery Factor > 2.5, Max DD всего -0.67$.",
-            "_comment_cons": "Обрезает потенциал мощных трендовых выносов, забирая скромный профит 0.75%.",
-            "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": true,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 50.0,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
-        },
         "u9_omni_zenith_apex": {
             "_comment_alias": "Омен-9 (Omni Zenith Apex) - Новый Чемпион",
             "_comment_pros": "Асимметричный дуальный режим: на аптренде выжимает максимум (Smart TP до 2.88% + Smart Size 1.20x), а на дампе включает 8-уровневую Фибоначчи-броню до -58%, инвертированный Panic Damper до 0.50%, Knife Blocker >=2 и деэскалацию 0.60x. Мизерная просадка.",
@@ -149,180 +72,28 @@
                 "GRASSUSDT",
                 "ARXUSDT",
                 "ZROUSDT"
-            ],
-            "super_grid": {
-                "enabled": false,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 1.5,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 162.29,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
+            ]
+        },
+        "u0_base_classic_supergrid": {
+            "_comment_alias": "Моцарт 060 (СуперГрид)",
+            "_comment_pros": "Высокий валовый доход на закрытиях нижних усреднений при отскоке. Динамический SuperGrid адаптирует шаг сетки под волатильность.",
+            "_comment_cons": "Тяжелая классическая просадка (-16$ на боевом счете) и отсутствие Knife Blocker на безоткатных ножах.",
+            "enabled": false,
+            "symbols": []
         },
         "u6_symbiosis_gamma_fortress35": {
             "_comment_alias": "Медный Змей (Gamma Fortress 35)",
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
             "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": false,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 82.0,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
-        },
-        "u8_golden_macro_symbiosis": {
-            "_comment_alias": "Золотое Руно (Golden Macro Symbiosis)",
-            "_comment_pros": "Уникальный 10m макро-фильтр сигналов (окно 600с) срезает до 50% рыночного шума и ложных входов. Smart TP расширяет тейк до 2.1x на тренде. Рекордно низкая загрузка маржи (30.95%) и просадка ниже, чем у Медного Змея.",
-            "_comment_cons": "В базовой сборке Knife Blocker отключен и нет деэскалации сайза (перспективная площадка для R&D модернизации).",
-            "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": true,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 50.0,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
-        },
-        "u0_fat_swing35": {
-            "_comment_alias": "Жирный Свин 35 (Fat Swing 35)",
-            "_comment_pros": "Тяжелый крейсер валовой выручки (+$954 Realized, 873 сделки). Выдержка до -3.5% экономит $350 маржи по сравнению со Свином 123, просадка на 17.5% ниже (-316$), а сетка до -89% защищает от краха.",
-            "_comment_cons": "Уступает Свину 123 по валовой выручке на умеренных боковых колебаниях, пропуская ранние микро-откаты.",
-            "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": false,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 50.0,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
+            "symbols": []
         },
         "u0_fat_swing123": {
             "_comment_alias": "Жирный Свин 123 (Fat Swing 123)",
             "_comment_pros": "Абсолютный ледокол валовой выручки (+$1170 Realized, Peak Net +170$). 10-уровневая сетка до -89% переваривает глубочайшие дампы. Вход на -1.6% забирает все умеренные откаты.",
             "_comment_cons": "Колоссальное потребление маржи (до 53% депозита) из-за раннего набора объемов на -1.6% и -3.4%.",
             "enabled": false,
-            "symbols": [],
-            "super_grid": {
-                "enabled": false,
-                "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-                "timeframe": "1w",
-                "window": 12,
-                "multiplier": 2.0,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": null,
-                "update_interval_hours": 24
-            },
-            "analytics": {
-                "start_balance_usdt": 50.0,
-                "_desc_start_balance_usdt": "Начальный баланс аналитики в USDT для расчета ROI и баланса."
-            },
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
-            },
-            "auto_closing": {
-                "negative": {
-                    "threshold": null,
-                    "threshold_increment": null
-                },
-                "positive": {
-                    "threshold": 21.0,
-                    "threshold_increment": 21.0
-                }
-            }
+            "symbols": []
         }
     },
     "telegram": {

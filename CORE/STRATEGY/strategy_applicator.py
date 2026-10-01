@@ -45,7 +45,8 @@ class StrategyApplicator:
     def build_side_configs(self, strategy: StrategyConfig) -> Dict[str, Dict[str, Any]]:
         """
         Создает стороны LONG и SHORT для символа путем наложения переопределений стратегии
-        на базовый шаблон _base.json с жестким соблюдением правила TP >= 0.50%.
+        на базовый шаблон _base.json с жестким соблюдением правила TP >= 0.50%
+        и поддержкой асимметричных настроек per-side (LONG / SHORT).
         """
         side_cfgs = {}
         for side in ("LONG", "SHORT"):
@@ -53,23 +54,55 @@ class StrategyApplicator:
                 continue
 
             side_data = copy.deepcopy(self.base_cfg[side])
-            side_data["invest_size"] = strategy.invest_size
-            side_data["leverage"] = strategy.leverage
+
+            # Извлекаем оверрайды для конкретной стороны (если есть)
+            side_overrides = {}
+            if hasattr(strategy, "overrides") and isinstance(strategy.overrides, dict):
+                if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
+                    side_overrides = copy.deepcopy(strategy.overrides[side])
+            if hasattr(strategy, "raw_meta") and isinstance(strategy.raw_meta, dict):
+                if side in strategy.raw_meta and isinstance(strategy.raw_meta[side], dict):
+                    merged = copy.deepcopy(strategy.raw_meta[side])
+                    merged.update(side_overrides)
+                    side_overrides = merged
+
+            # 1. Invest Size (приоритет: side_overrides -> strategy.invest_size[side] -> strategy.invest_size)
+            if "invest_size" in side_overrides:
+                side_data["invest_size"] = float(side_overrides["invest_size"])
+            elif isinstance(strategy.invest_size, dict) and side in strategy.invest_size:
+                side_data["invest_size"] = float(strategy.invest_size[side])
+            elif isinstance(strategy.invest_size, (int, float)):
+                side_data["invest_size"] = float(strategy.invest_size)
+
+            # 2. Leverage (приоритет: side_overrides -> strategy.leverage[side] -> strategy.leverage)
+            if "leverage" in side_overrides:
+                side_data["leverage"] = int(side_overrides["leverage"])
+            elif isinstance(strategy.leverage, dict) and side in strategy.leverage:
+                side_data["leverage"] = int(strategy.leverage[side])
+            elif isinstance(strategy.leverage, (int, float)):
+                side_data["leverage"] = int(strategy.leverage)
+
+            # 3. Enable флаг стороны
+            if "enable" in side_overrides:
+                side_data["enable"] = bool(side_overrides["enable"])
+
             side_data["strategy_id"] = strategy.strategy_id
             side_data["strategy_name"] = strategy.name
 
-            # 1. Применение сетки (grid) из overrides
-            if "grid" in strategy.overrides and strategy.overrides["grid"]:
-                side_data["grid"] = copy.deepcopy(strategy.overrides["grid"])
+            # 4. Применение сетки (grid) из overrides (side-specific или общей)
+            grid_override = side_overrides.get("grid") or strategy.overrides.get("grid")
+            if grid_override:
+                side_data["grid"] = copy.deepcopy(grid_override)
 
-            # 2. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
+            # 5. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
             if not strategy.super_grid_enabled and "grid" in side_data:
                 for lvl_data in side_data["grid"].values():
                     lvl_data["super_indent"] = None
 
-            # 3. Применение TP-карты из overrides с валидацией Инварианта 4 (Rule 11)
-            if "tp_map" in strategy.overrides and strategy.overrides["tp_map"]:
-                side_data["tp_map"] = copy.deepcopy(strategy.overrides["tp_map"])
+            # 6. Применение TP-карты из overrides (side-specific или общей) с валидацией Инварианта 4 (Rule 11)
+            tp_map_override = side_overrides.get("tp_map") or strategy.overrides.get("tp_map")
+            if tp_map_override:
+                side_data["tp_map"] = copy.deepcopy(tp_map_override)
 
             # Принудительное ограничение TP снизу: строго не менее 0.50%
             if "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
@@ -79,11 +112,16 @@ class StrategyApplicator:
                     if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
                         tp_step["fallback_indent"] = max(MIN_TAKE_PROFIT_PCT, float(tp_step["fallback_indent"]))
 
-            # Применение tp_purpose из overrides (например, "self" для изолированного TP сторон)
-            if "tp_purpose" in strategy.overrides:
+            # 7. Применение tp_purpose и margin_type
+            if "tp_purpose" in side_overrides:
+                side_data["tp_purpose"] = side_overrides["tp_purpose"]
+            elif "tp_purpose" in strategy.overrides:
                 side_data["tp_purpose"] = strategy.overrides["tp_purpose"]
-            elif side in strategy.overrides and isinstance(strategy.overrides[side], dict) and "tp_purpose" in strategy.overrides[side]:
-                side_data["tp_purpose"] = strategy.overrides[side]["tp_purpose"]
+
+            if "margin_type" in side_overrides:
+                side_data["margin_type"] = side_overrides["margin_type"]
+            elif "margin_type" in strategy.overrides:
+                side_data["margin_type"] = strategy.overrides["margin_type"]
 
             side_cfgs[side] = side_data
 
@@ -98,7 +136,8 @@ class StrategyApplicator:
     ) -> Path:
         """
         Генерирует рантайм-файл CFG/runtime/<strategy_id>/<symbol>.json на основе стратегии.
-        Если файл уже существует и force=False, проверяет совпадение strategy_id.
+        Обновляет статические параметры (invest_size, leverage, grid, tp_map)
+        и безопасно сохраняет состояние FSM для активных позиций.
         """
         runtime_dir = target_dir or (DATA_DIR / "runtime" / strategy.strategy_id)
         runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -113,12 +152,6 @@ class StrategyApplicator:
             legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
             if legacy_file.exists():
                 existing = Utils.read_json_file(legacy_file)
-
-        if existing and not force:
-            existing_strat = existing.get("LONG", {}).get("strategy_id")
-            if existing_strat == strategy.strategy_id:
-                # Конфигурация уже соответствует назначенной стратегии
-                return target_file
 
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():

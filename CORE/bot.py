@@ -630,6 +630,13 @@ class BotCore:
                 logger.error(f"Error during initial VolatilityManager process_all: {e}")
             self.volatility_manager.start()
         
+        if hasattr(self, 'strategy_registry') and self.strategy_registry:
+            try:
+                from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                StrategyApplicator().build_all_runtimes(self.strategy_registry)
+            except Exception as e:
+                logger.warning(f"[BotCore] Startup StrategyApplicator sync warning: {e}")
+
         self.runtime_manager.load_initial_caches(self.symbols)
         self.runtime_configs = self.runtime_manager.caches
 

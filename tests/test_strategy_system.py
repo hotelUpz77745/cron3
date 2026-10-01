@@ -65,15 +65,15 @@ class TestStrategySystem(unittest.TestCase):
     def test_strategy_registry_resolution_and_invariants(self):
         """Тестирование разрешения стратегий и Инварианта 1 (1:1)."""
         sample_active = {
-            "u6_symbiosis_beta_scalper": {
+            "u6_symbiosis_gamma_fortress35": {
                 "enabled": True,
                 "symbols": ["ARXUSDT", "LAUSDT"]
             },
-            "u0_fat_swing": {
+            "u0_fat_swing123": {
                 "enabled": True,
                 "symbols": ["FARTCOINUSDT"]
             },
-            "u0_tight_scalper": {
+            "u0_base_classic_supergrid": {
                 "enabled": False,
                 "symbols": ["BTCUSDT"]  # Отключена
             }
@@ -88,16 +88,16 @@ class TestStrategySystem(unittest.TestCase):
 
         strat_arx = registry.get_strategy_for_symbol("ARXUSDT")
         self.assertIsNotNone(strat_arx)
-        self.assertEqual(strat_arx.strategy_id, "u6_symbiosis_beta_scalper")
-        self.assertEqual(strat_arx.invest_size, 400.0)
+        self.assertEqual(strat_arx.strategy_id, "u6_symbiosis_gamma_fortress35")
+        self.assertEqual(strat_arx.invest_size, 600.0)
 
         # Проверка Инварианта 1: Коллизия тикеров обязана выбрасывать ValueError!
         conflict_active = {
-            "u6_symbiosis_beta_scalper": {
+            "u6_symbiosis_gamma_fortress35": {
                 "enabled": True,
                 "symbols": ["ARXUSDT"]
             },
-            "u0_fat_swing": {
+            "u0_fat_swing123": {
                 "enabled": True,
                 "symbols": ["ARXUSDT"]  # Дубликат!
             }
@@ -319,6 +319,44 @@ class TestStrategySystem(unittest.TestCase):
             total_vol = sum(float(lvl["volume"]) for lvl in grid.values())
             self.assertEqual(round(total_vol, 2), 100.0)
 
+    def test_asymmetric_per_side_overrides(self):
+        """Тест поддержки асимметричных настроек (LONG vs SHORT) для бычьей/медвежьей фазы."""
+        asymm_meta = {
+            "name": "Bull Fortress Asymmetric",
+            "invest_size": 500.0,
+            "leverage": 20,
+            "overrides": {
+                "LONG": {
+                    "invest_size": 600.0,
+                    "leverage": 25,
+                    "tp_map": {
+                        "0": {"indent": 2.5, "fallback_indent": 3.0}
+                    }
+                },
+                "SHORT": {
+                    "invest_size": 300.0,
+                    "leverage": 10,
+                    "tp_map": {
+                        "0": {"indent": 0.8, "fallback_indent": 1.0}
+                    }
+                }
+            }
+        }
+        strat = StrategyConfig("u_asymm_test", asymm_meta, ["ASYMMUSDT"])
+        applicator = StrategyApplicator()
+        side_cfgs = applicator.build_side_configs(strat)
+
+        # LONG side checks
+        self.assertEqual(side_cfgs["LONG"]["invest_size"], 600.0)
+        self.assertEqual(side_cfgs["LONG"]["leverage"], 25)
+        self.assertEqual(side_cfgs["LONG"]["tp_map"]["0"]["indent"], 2.5)
+
+        # SHORT side checks
+        self.assertEqual(side_cfgs["SHORT"]["invest_size"], 300.0)
+        self.assertEqual(side_cfgs["SHORT"]["leverage"], 10)
+        self.assertEqual(side_cfgs["SHORT"]["tp_map"]["0"]["indent"], 0.8)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -80,6 +80,9 @@ class AutoCloser:
         if base_th == 0 or base_th == 0.0:
             base_th = None
 
+        if pos_cfg.get("stagnation_enabled") is False:
+            return base_th, False, "", (base_th or 0.0)
+
         stag_cfg = pos_cfg.get("stagnation")
         if stag_cfg is None:
             # Поддержка плоской структуры: stagnation_card прямо внутри pos_cfg

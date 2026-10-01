@@ -36,11 +36,42 @@ class StrategyConfig:
         self.strategy_id: str = strategy_id
         self.name: str = raw_meta["name"]
         self.description: str = raw_meta.get("description", "")
-        self.invest_size: float = float(raw_meta["invest_size"])
-        self.leverage: int = int(raw_meta["leverage"])
+        self.raw_meta: Dict[str, Any] = copy.deepcopy(raw_meta)
+
+        raw_inv = raw_meta.get("invest_size", 400.0)
+        if isinstance(raw_inv, dict):
+            self.invest_size = {k.upper(): float(v) for k, v in raw_inv.items()}
+        else:
+            self.invest_size = float(raw_inv)
+
+        raw_lev = raw_meta.get("leverage", 20)
+        if isinstance(raw_lev, dict):
+            self.leverage = {k.upper(): int(v) for k, v in raw_lev.items()}
+        else:
+            self.leverage = int(raw_lev)
+
         self.overrides: Dict[str, Any] = copy.deepcopy(raw_meta.get("overrides") or {})
         self.symbols: List[str] = [s.upper().strip() for s in symbols]
         self.active_settings: Dict[str, Any] = copy.deepcopy(active_settings or {})
+
+        if self.active_settings:
+            if "invest_size" in self.active_settings:
+                act_inv = self.active_settings["invest_size"]
+                if isinstance(act_inv, dict):
+                    self.invest_size = {k.upper(): float(v) for k, v in act_inv.items()}
+                else:
+                    self.invest_size = float(act_inv)
+            if "leverage" in self.active_settings:
+                act_lev = self.active_settings["leverage"]
+                if isinstance(act_lev, dict):
+                    self.leverage = {k.upper(): int(v) for k, v in act_lev.items()}
+                else:
+                    self.leverage = int(act_lev)
+            for side_k in ("LONG", "SHORT"):
+                if side_k in self.active_settings and isinstance(self.active_settings[side_k], dict):
+                    if side_k not in self.overrides:
+                        self.overrides[side_k] = {}
+                    self.overrides[side_k].update(self.active_settings[side_k])
 
         # 1. Купол Аналитики (Analytics Dome)
         strat_analytics = self.active_settings.get("analytics") or self.overrides.get("analytics")
