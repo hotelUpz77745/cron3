@@ -36,6 +36,33 @@ class AutoCloser:
             logger.warning(f"[AUTO_CLOSER] Invalid rule format: '{rule}'")
             return False
 
+    @staticmethod
+    def parse_card_target(raw_target: Any) -> tuple[Optional[float], bool]:
+        """
+        Разбирает значение правила в stagnation_card.
+        Возвращает (target_float, is_enabled).
+        Поддерживает:
+          - Число: 21.0 -> (21.0, True)
+          - null / None / False: -> (None, False)
+          - Словарь: {"target": 21.0, "enabled": True} -> (21.0, True)
+          - Словарь: {"target": 21.0, "enabled": False} -> (None, False)
+        """
+        if raw_target is None or raw_target is False:
+            return None, False
+        if isinstance(raw_target, (int, float)):
+            return float(raw_target), True
+        if isinstance(raw_target, dict):
+            if not raw_target.get("enabled", True):
+                return None, False
+            val = None
+            for k in ("target", "threshold", "val", "value"):
+                if k in raw_target:
+                    val = raw_target[k]
+                    break
+            if val is not None:
+                return float(val), True
+        return None, False
+
     @classmethod
     def evaluate_stagnation_target(
         cls,
@@ -46,6 +73,9 @@ class AutoCloser:
         Вычисляет динамический целевой порог по карте стагнации (stagnation_card).
         Возвращает (effective_threshold, is_stagnation_active, stag_info, reference_top_target).
         """
+        if not pos_cfg.get("enabled", True):
+            return None, False, "", 0.0
+
         base_th = pos_cfg.get("threshold")
         if base_th == 0 or base_th == 0.0:
             base_th = None
@@ -83,19 +113,34 @@ class AutoCloser:
 
         eval_val = velocity if mode == "velocity" else peak_age_h
 
-        top_target = max(float(v) for v in card.values()) if card else (base_th or 21.0)
+        # Собираем активные цели карты для определения reference_top
+        active_targets = []
+        for rule, raw_target in card.items():
+            target_float, is_en = cls.parse_card_target(raw_target)
+            if is_en and target_float is not None:
+                active_targets.append(target_float)
+
+        if not active_targets:
+            # Все уровни карты отключены
+            return base_th, False, "", (base_th or 0.0)
+
+        top_target = max(active_targets)
         reference_top = base_th if base_th is not None else top_target
 
-        for rule, target_val in card.items():
+        for rule, raw_target in card.items():
+            target_float, is_en = cls.parse_card_target(raw_target)
+            if not is_en or target_float is None:
+                continue
+
             if cls.match_rule_float(rule, eval_val):
-                target = float(target_val)
-                effective_target = max(target, min_floor)
+                effective_target = max(target_float, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
                 info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{rule}' -> target {effective_target} USDT]"
                 is_stag = effective_target < reference_top
                 return effective_target, is_stag, info, reference_top
 
-        return base_th, False, "", reference_top
+        fallback_target = base_th if base_th is not None else reference_top
+        return fallback_target, False, "", reference_top
 
     async def check(self):
         if self._is_closing:
