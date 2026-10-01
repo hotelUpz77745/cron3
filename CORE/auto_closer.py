@@ -138,7 +138,9 @@ class AutoCloser:
             if cls.match_rule_float(rule, eval_val):
                 effective_target = max(target_float, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
-                info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{rule}' -> target {effective_target} USDT]"
+                # HTML-экранируем rule: '<=' -> '&lt;=' чтобы Telegram HTML-парсер не падал
+                safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' -> target {effective_target} USDT]"
                 is_stag = effective_target < reference_top
                 return effective_target, is_stag, info, reference_top
 
