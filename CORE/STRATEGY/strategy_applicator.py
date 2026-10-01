@@ -25,21 +25,38 @@ class StrategyApplicator:
     и генерирует изолированные рантайм-конфигурации в CFG/runtime/<symbol>.json.
     """
 
+    DEFAULT_FALLBACK_BASE: Dict[str, Any] = {
+        "LONG": {
+            "enable": True,
+            "invest_size": 400.0,
+            "leverage": 20,
+            "tp_purpose": "self",
+            "margin_type": "CROSSED",
+            "grid": {},
+            "tp_map": {}
+        },
+        "SHORT": {
+            "enable": True,
+            "invest_size": 400.0,
+            "leverage": 20,
+            "tp_purpose": "self",
+            "margin_type": "CROSSED",
+            "grid": {},
+            "tp_map": {}
+        }
+    }
+
     def __init__(self, base_cfg_path: Optional[Path] = None):
         self.base_cfg_path: Path = base_cfg_path or (DATA_DIR / "_base.json")
         self.base_cfg: Dict[str, Any] = self._load_base_cfg()
 
     def _load_base_cfg(self) -> Dict[str, Any]:
-        """Загружает базовый шаблон торговли."""
+        """Загружает базовый шаблон торговли или возвращает безопасный дефолт, если _base.json отсутствует."""
         if not self.base_cfg_path.exists():
-            raise FileNotFoundError(
-                f"[StrategyApplicator] Базовый шаблон не найден по пути: {self.base_cfg_path}"
-            )
+            return copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
         data = Utils.read_json_file(self.base_cfg_path)
         if not data or not isinstance(data, dict):
-            raise ValueError(
-                f"[StrategyApplicator] Базовый шаблон {self.base_cfg_path.name} пуст или некорректен!"
-            )
+            return copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
         return data
 
     def build_side_configs(self, strategy: StrategyConfig) -> Dict[str, Dict[str, Any]]:
