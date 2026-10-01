@@ -356,6 +356,28 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(side_cfgs["SHORT"]["leverage"], 10)
         self.assertEqual(side_cfgs["SHORT"]["tp_map"]["0"]["indent"], 0.8)
 
+    def test_no_duplicate_sources_of_truth_in_universes(self):
+        """Проверка отсутствия раздвоения источников истины (invest_size, super_grid_enabled)."""
+        registry = StrategyRegistry()
+        for uid, u_meta in registry.universes_db.items():
+            # 1. Отсутствие устаревших/дублирующих ключей на верхнем уровне
+            self.assertNotIn("invest_size", u_meta, f"Strategy {uid} must not have root invest_size")
+            self.assertNotIn("super_grid_enabled", u_meta, f"Strategy {uid} must not have root super_grid_enabled")
+
+            # 2. Наличие единого источника истины для сайзинга в overrides
+            overrides = u_meta.get("overrides", {})
+            self.assertIn("LONG", overrides, f"Strategy {uid} must have overrides.LONG")
+            self.assertIn("SHORT", overrides, f"Strategy {uid} must have overrides.SHORT")
+            self.assertIn("invest_size", overrides["LONG"], f"Strategy {uid} must have overrides.LONG.invest_size")
+            self.assertIn("invest_size", overrides["SHORT"], f"Strategy {uid} must have overrides.SHORT.invest_size")
+            self.assertGreater(float(overrides["LONG"]["invest_size"]), 0)
+            self.assertGreater(float(overrides["SHORT"]["invest_size"]), 0)
+
+            # 3. Наличие единого источника истины для super_grid в overrides
+            self.assertIn("super_grid", overrides, f"Strategy {uid} must have overrides.super_grid")
+            self.assertIn("enabled", overrides["super_grid"], f"Strategy {uid} must have overrides.super_grid.enabled")
+            self.assertIsInstance(overrides["super_grid"]["enabled"], bool)
+
 
 if __name__ == "__main__":
     unittest.main()

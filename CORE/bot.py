@@ -217,7 +217,7 @@ class BotCore:
                     "enabled": True,
                     "symbols": [symbol],
                     "super_grid": {
-                        "enabled": u_meta.get("super_grid_enabled", False),
+                        "enabled": bool((u_meta.get("overrides", {}).get("super_grid") or u_meta.get("super_grid") or {}).get("enabled", False)),
                         "timeframe": "1w",
                         "window": 12,
                         "multiplier": 2.0,

@@ -197,8 +197,7 @@
                     "fallback_indent": 0.8
                 }
             }
-        },
-        "super_grid_enabled": false
+        }
     },
     "u0_base_classic_supergrid": {
         "name": "U0: Base Classic Benchmark (Super Grid)",
@@ -314,8 +313,7 @@
             "SHORT": {
                 "invest_size": 400.0
             }
-        },
-        "super_grid_enabled": true
+        }
     },
     "u6_symbiosis_gamma_fortress35": {
         "name": "U6: Gamma Fortress Shield 35 (Медный Змей - 9-Level Static Fibonacci Grid 3.5%..89%)",
@@ -324,6 +322,9 @@
         "start_balance_usdt": 50.0,
         "leverage": 20,
         "overrides": {
+            "super_grid": {
+                "enabled": false
+            },
             "smart_grace": {
                 "start_period_sec": 57,
                 "shift_interval_sec": 13,
@@ -483,8 +484,7 @@
             "SHORT": {
                 "invest_size": 600.0
             }
-        },
-        "super_grid_enabled": false
+        }
     },
     "u0_fat_swing123": {
         "name": "U0: Fat Swing 123 (10-Level Fibonacci Grid)",
@@ -493,6 +493,9 @@
         "start_balance_usdt": 150.0,
         "leverage": 20,
         "overrides": {
+            "super_grid": {
+                "enabled": false
+            },
             "grid": {
                 "0": {
                     "indent": 0.0,
@@ -640,7 +643,6 @@
             "SHORT": {
                 "invest_size": 600.0
             }
-        },
-        "super_grid_enabled": false
+        }
     }
 }
