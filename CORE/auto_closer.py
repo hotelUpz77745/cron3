@@ -1,8 +1,10 @@
 import asyncio
 import copy
+import json
 import time
+from datetime import datetime, timezone
 from typing import Any, Optional, Dict
-from consts import DATA_DIR, ANALYTICS_DIR
+from consts import DATA_DIR, ANALYTICS_DIR, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 
@@ -317,6 +319,27 @@ class AutoCloser:
                     if strat_stats_path:
                         Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
 
+                    # Синхронизируем прогресс итерации в CACHE/iteration_state.json
+                    try:
+                        c_file = CACHE_DIR / "iteration_state.json"
+                        c_dict = {}
+                        if c_file.exists():
+                            try:
+                                c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                            except Exception:
+                                c_dict = {}
+                        c_dict[strat_id] = {
+                            "iteration_index": next_iter_idx,
+                            "iteration_start_net_profit_usdt": new_iter_start_net,
+                            "iteration_start_ts": now_ms,
+                            "iteration_peak_net_profit_usdt": 0.0,
+                            "iteration_peak_ts": now_ms,
+                            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                        }
+                        Utils.atomic_write_json(c_file, c_dict, indent=4)
+                    except Exception as ce:
+                        logger.error(f"[AUTO_CLOSER][{strat_id}] Error saving iteration cache: {ce}")
+
                     # 3. Сбрасываем recent_closes у монет стратегии, чтобы Knife Blocker не блокировал входы в новом цикле
                     if hasattr(self.bot_core, "fsm_states"):
                         for sym in strat_cfg.symbols:
@@ -418,6 +441,26 @@ class AutoCloser:
                 analytics_data["iteration_peak_age_hours"] = 0.0
                 analytics_data["iteration_net_velocity"] = 0.0
                 Utils.atomic_write_json(ANALYTICS_DIR / "analytics.json", analytics_data, indent=4)
+
+                try:
+                    c_file = CACHE_DIR / "iteration_state.json"
+                    c_dict = {}
+                    if c_file.exists():
+                        try:
+                            c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                        except Exception:
+                            c_dict = {}
+                    c_dict["__global__"] = {
+                        "iteration_index": next_iter_idx_g,
+                        "iteration_start_net_profit_usdt": new_iter_start_net_g,
+                        "iteration_start_ts": now_ms,
+                        "iteration_peak_net_profit_usdt": 0.0,
+                        "iteration_peak_ts": now_ms,
+                        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    }
+                    Utils.atomic_write_json(c_file, c_dict, indent=4)
+                except Exception as ce:
+                    logger.error(f"[AUTO_CLOSER] Error saving global iteration cache: {ce}")
 
                 if hasattr(self.bot_core, "fsm_states"):
                     for sym, sides in self.bot_core.fsm_states.items():

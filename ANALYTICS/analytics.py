@@ -13,6 +13,7 @@ from consts import (
     ANALYTICS_DIR,
     ANALYTICS_STATS_DIR,
     ANALYTICS_LEDGERS_DIR,
+    CACHE_DIR,
     DATA_DIR,
     INCOME_PAGINATION_DELAY_SEC,
     POST_CLOSE_SYNC_DEBOUNCE_SEC,
@@ -126,6 +127,14 @@ class AnalyticsManager:
                 "max_drawdown_usdt": 0.0,
                 "max_drawdown_pct": 0.0,
                 "recovery_factor": 0.0,
+                "iteration_index": 1,
+                "iteration_start_net_profit_usdt": 0.0,
+                "iteration_net_profit_usdt": 0.0,
+                "iteration_start_ts": current_ms,
+                "iteration_peak_net_profit_usdt": 0.0,
+                "iteration_peak_ts": current_ms,
+                "iteration_peak_age_hours": 0.0,
+                "iteration_net_velocity": 0.0,
                 "per_coin": {}
             }
             self.log_file.write_text(json.dumps(default_data, indent=4), encoding="utf-8")
@@ -179,6 +188,14 @@ class AnalyticsManager:
                     "max_drawdown_usdt": 0.0,
                     "max_drawdown_pct": 0.0,
                     "recovery_factor": 0.0,
+                    "iteration_index": 1,
+                    "iteration_start_net_profit_usdt": 0.0,
+                    "iteration_net_profit_usdt": 0.0,
+                    "iteration_start_ts": current_ms,
+                    "iteration_peak_net_profit_usdt": 0.0,
+                    "iteration_peak_ts": current_ms,
+                    "iteration_peak_age_hours": 0.0,
+                    "iteration_net_velocity": 0.0,
                     "per_coin": {}
                 }
                 Utils.atomic_write_json(strat_json, strat_data, indent=4)
@@ -214,6 +231,30 @@ class AnalyticsManager:
 
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
+
+    def _get_iteration_cache(self, strat_id: str) -> dict:
+        try:
+            cache_file = CACHE_DIR / "iteration_state.json"
+            if cache_file.exists():
+                data = json.loads(cache_file.read_text(encoding="utf-8"))
+                return data.get(strat_id, {})
+        except Exception:
+            pass
+        return {}
+
+    def _save_iteration_cache(self, strat_id: str, state: dict):
+        try:
+            cache_file = CACHE_DIR / "iteration_state.json"
+            data = {}
+            if cache_file.exists():
+                try:
+                    data = json.loads(cache_file.read_text(encoding="utf-8"))
+                except Exception:
+                    data = {}
+            data[strat_id] = state
+            Utils.atomic_write_json(cache_file, data, indent=4)
+        except Exception as e:
+            logger.error(f"[ANALYTICS] Error saving iteration cache for {strat_id}: {e}")
 
     async def _append_to_csv(self, symbol: str, side: str, open_time: int, close_time: int, pnl: float, balance: float):
         async with self._csv_lock:
@@ -1073,6 +1114,14 @@ class AnalyticsManager:
                     "max_drawdown_usdt": 0.0,
                     "max_drawdown_pct": 0.0,
                     "recovery_factor": 0.0,
+                    "iteration_index": 1,
+                    "iteration_start_net_profit_usdt": 0.0,
+                    "iteration_net_profit_usdt": 0.0,
+                    "iteration_start_ts": now_ms,
+                    "iteration_peak_net_profit_usdt": 0.0,
+                    "iteration_peak_ts": now_ms,
+                    "iteration_peak_age_hours": 0.0,
+                    "iteration_net_velocity": 0.0,
                     "per_coin": {}
                 }
 
@@ -1126,15 +1175,23 @@ class AnalyticsManager:
             active_h_s = max(0.1, (now_ms - first_ts_s) / 3600000.0)
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
-            # Strategy Iteration Telemetry (учет конкретной итерации / цикла купола)
+            # Strategy Iteration Telemetry (учет конкретной итерации / цикла купола с персистентным кешем)
+            iter_cache = self._get_iteration_cache(strat_id)
             s_net = float(strat_data.get("net_profit_usdt", 0.0))
-            iter_idx = int(strat_data.get("iteration_index", 1))
-            iter_start_net = float(strat_data.get("iteration_start_net_profit_usdt", 0.0))
-            iter_net = round(s_net - iter_start_net, 4)
-            iter_start_ts = strat_data.get("iteration_start_ts", first_ts_s)
+            iter_idx = int(strat_data.get("iteration_index") or iter_cache.get("iteration_index") or 1)
+            
+            if "iteration_start_net_profit_usdt" in strat_data:
+                iter_start_net = float(strat_data["iteration_start_net_profit_usdt"])
+            elif "iteration_start_net_profit_usdt" in iter_cache:
+                iter_start_net = float(iter_cache["iteration_start_net_profit_usdt"])
+            else:
+                iter_start_net = 0.0
 
-            iter_peak_net = float(strat_data.get("iteration_peak_net_profit_usdt", iter_net))
-            iter_peak_ts = strat_data.get("iteration_peak_ts", iter_start_ts)
+            iter_net = round(s_net - iter_start_net, 4)
+            iter_start_ts = strat_data.get("iteration_start_ts") or iter_cache.get("iteration_start_ts") or first_ts_s
+
+            iter_peak_net = float(strat_data.get("iteration_peak_net_profit_usdt") if strat_data.get("iteration_peak_net_profit_usdt") is not None else iter_cache.get("iteration_peak_net_profit_usdt", iter_net))
+            iter_peak_ts = strat_data.get("iteration_peak_ts") or iter_cache.get("iteration_peak_ts") or iter_start_ts
             if iter_net > iter_peak_net:
                 iter_peak_net = iter_net
                 iter_peak_ts = now_ms
@@ -1149,6 +1206,16 @@ class AnalyticsManager:
 
             iter_active_h = max(0.05, (now_ms - iter_start_ts) / 3600000.0)
             strat_data["iteration_net_velocity"] = round(iter_net / iter_active_h, 2)
+
+            # Сохраняем состояние итерации в отдельный изолированный кеш
+            self._save_iteration_cache(strat_id, {
+                "iteration_index": iter_idx,
+                "iteration_start_net_profit_usdt": round(iter_start_net, 4),
+                "iteration_start_ts": iter_start_ts,
+                "iteration_peak_net_profit_usdt": round(iter_peak_net, 4),
+                "iteration_peak_ts": iter_peak_ts,
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            })
 
             s_dd = s_trough - s_peak
             strat_data["max_drawdown_usdt"] = round(min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd), 4)
