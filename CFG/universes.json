@@ -2,7 +2,6 @@
     "u9_omni_zenith_apex": {
         "name": "👑 U9: Omni Zenith Apex (Dual-Regime Inverted Fibonacci Fortress)",
         "description": "Универсальная формула Вселенной нового поколения: асимметричный дуальный режим. При аптрендах и флэте выжимает максимум (Step 0 TP 1.80%..2.88% + Smart TP + Smart Size 1.20x). При тотальных просадках гарантирует максимальную защиту (9-уровневый Fibonacci Shock Grid до -89%, инвертированный Panic Damper TP до 0.50%, Knife Blocker >=2, деэскалация объемов 0.60x).",
-        "is_active": true,
         "start_balance_usdt": 162.29,
         "leverage": 20,
         "overrides": {
@@ -202,7 +201,6 @@
     "u0_base_classic_supergrid": {
         "name": "U0: Base Classic Benchmark (Super Grid)",
         "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
-        "is_active": false,
         "start_balance_usdt": 50.0,
         "leverage": 20,
         "overrides": {
@@ -318,7 +316,6 @@
     "u6_symbiosis_gamma_fortress35": {
         "name": "U6: Gamma Fortress Shield 35 (Медный Змей - 9-Level Static Fibonacci Grid 3.5%..89%)",
         "description": "Флагман и чемпион полигона: Крепость со статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, Panic Damper TP (2.2% -> 0.50%), Knife Blocker >=1 и деэскалация сайза",
-        "is_active": false,
         "start_balance_usdt": 50.0,
         "leverage": 20,
         "overrides": {
@@ -489,7 +486,6 @@
     "u0_fat_swing123": {
         "name": "U0: Fat Swing 123 (10-Level Fibonacci Grid)",
         "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%) и начальным ордером ~50$ при множителе 1.1x",
-        "is_active": false,
         "start_balance_usdt": 150.0,
         "leverage": 20,
         "overrides": {

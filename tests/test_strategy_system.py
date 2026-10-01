@@ -363,6 +363,7 @@ class TestStrategySystem(unittest.TestCase):
             # 1. Отсутствие устаревших/дублирующих ключей на верхнем уровне
             self.assertNotIn("invest_size", u_meta, f"Strategy {uid} must not have root invest_size")
             self.assertNotIn("super_grid_enabled", u_meta, f"Strategy {uid} must not have root super_grid_enabled")
+            self.assertNotIn("is_active", u_meta, f"Strategy {uid} must not have is_active in universes.json (controlled strictly in app.json)")
 
             # 2. Наличие единого источника истины для сайзинга в overrides
             overrides = u_meta.get("overrides", {})
