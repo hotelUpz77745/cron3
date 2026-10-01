@@ -161,16 +161,23 @@ def audit_repository_universes() -> Dict[str, Dict]:
             for u_id, u_data in data.items():
                 if not isinstance(u_data, dict):
                     continue
-                grid = u_data.get("overrides", {}).get("grid") or u_data.get("grid")
-                if not grid or not isinstance(grid, dict):
-                    continue
-                audited_count += 1
-                tot_vol = sum(float(v.get("volume", 0.0)) for v in grid.values())
-                diff = 100.0 - tot_vol
-                status = "✅ OK" if abs(diff) < 0.05 else "❌ ХВОСТ!"
-                print(f"{u_id:<40} | {len(grid):<8} | {tot_vol:>10.2f} %   | {diff:>+8.2f} %   | {status}")
-                if abs(diff) >= 0.05:
-                    discrepancies.append((label, u_id, len(grid), tot_vol, diff))
+                grids_to_check = []
+                for side in ["LONG", "SHORT"]:
+                    if side in u_data and isinstance(u_data[side], dict) and "grid" in u_data[side]:
+                        grids_to_check.append((f"{u_id} ({side})", u_data[side]["grid"]))
+                if not grids_to_check:
+                    fallback_grid = u_data.get("overrides", {}).get("grid") or u_data.get("grid")
+                    if fallback_grid and isinstance(fallback_grid, dict):
+                        grids_to_check.append((u_id, fallback_grid))
+
+                for grid_label, grid in grids_to_check:
+                    audited_count += 1
+                    tot_vol = sum(float(v.get("volume", 0.0)) for v in grid.values())
+                    diff = 100.0 - tot_vol
+                    status = "✅ OK" if abs(diff) < 0.05 else "❌ ХВОСТ!"
+                    print(f"{grid_label:<40} | {len(grid):<8} | {tot_vol:>10.2f} %   | {diff:>+8.2f} %   | {status}")
+                    if abs(diff) >= 0.05:
+                        discrepancies.append((label, grid_label, len(grid), tot_vol, diff))
 
     print("=" * 95)
     print(f"📊 Всего проверено конфигураций сеток: {audited_count}")

@@ -145,13 +145,22 @@ class TelegramReceiver:
         
         name = u_meta.get("name", strat_id)
         description = u_meta.get("description", "Пользовательская стратегия")
-        invest_size = u_meta.get("invest_size", 400.0)
+        invest_size = (
+            (u_meta.get("LONG") or {}).get("invest_size")
+            or (u_meta.get("SHORT") or {}).get("invest_size")
+            or u_meta.get("invest_size", 400.0)
+        )
         leverage = u_meta.get("leverage", 20)
         
-        sg_cfg = strat_app.get("super_grid") or u_meta.get("overrides", {}).get("super_grid", {})
+        sg_cfg = strat_app.get("super_grid") or u_meta.get("super_grid") or u_meta.get("overrides", {}).get("super_grid", {})
         sg_enabled = sg_cfg.get("enabled", u_meta.get("super_grid_enabled", False))
         
-        tp_map = u_meta.get("overrides", {}).get("tp_map", {})
+        tp_map = (
+            (u_meta.get("LONG") or {}).get("tp_map")
+            or (u_meta.get("SHORT") or {}).get("tp_map")
+            or u_meta.get("tp_map")
+            or u_meta.get("overrides", {}).get("tp_map", {})
+        )
         if tp_map:
             indents = [str(v.get("indent", "?")) for v in tp_map.values() if isinstance(v, dict)]
             if len(set(indents)) == 1:

@@ -38,8 +38,9 @@ class StrategyConfig:
         self.description: str = raw_meta.get("description", "")
         self.raw_meta: Dict[str, Any] = copy.deepcopy(raw_meta)
 
-        long_inv = (raw_meta.get("overrides") or {}).get("LONG", {}).get("invest_size")
-        short_inv = (raw_meta.get("overrides") or {}).get("SHORT", {}).get("invest_size")
+        meta_overrides = raw_meta.get("overrides") or {}
+        long_inv = (raw_meta.get("LONG") or meta_overrides.get("LONG") or {}).get("invest_size")
+        short_inv = (raw_meta.get("SHORT") or meta_overrides.get("SHORT") or {}).get("invest_size")
 
         if long_inv is not None and short_inv is not None:
             if float(long_inv) == float(short_inv):
@@ -65,7 +66,20 @@ class StrategyConfig:
         else:
             self.leverage = int(raw_lev)
 
-        self.overrides: Dict[str, Any] = copy.deepcopy(raw_meta.get("overrides") or {})
+        # Сохраняем self.overrides для обратной совместимости, но наполняем его напрямую из raw_meta
+        self.overrides: Dict[str, Any] = copy.deepcopy(meta_overrides)
+        for k, v in raw_meta.items():
+            if k != "overrides" and k not in self.overrides:
+                self.overrides[k] = copy.deepcopy(v)
+        if "grid" not in self.overrides:
+            grid_cand = (raw_meta.get("LONG") or {}).get("grid") or (raw_meta.get("SHORT") or {}).get("grid")
+            if grid_cand:
+                self.overrides["grid"] = copy.deepcopy(grid_cand)
+        if "tp_map" not in self.overrides:
+            tp_cand = (raw_meta.get("LONG") or {}).get("tp_map") or (raw_meta.get("SHORT") or {}).get("tp_map")
+            if tp_cand:
+                self.overrides["tp_map"] = copy.deepcopy(tp_cand)
+
         self.symbols: List[str] = [s.upper().strip() for s in symbols]
         self.active_settings: Dict[str, Any] = copy.deepcopy(active_settings or {})
 
@@ -89,7 +103,11 @@ class StrategyConfig:
                     self.overrides[side_k].update(self.active_settings[side_k])
 
         # 1. Купол Аналитики (Analytics Dome)
-        strat_analytics = self.active_settings.get("analytics") or self.overrides.get("analytics")
+        strat_analytics = (
+            self.active_settings.get("analytics")
+            or raw_meta.get("analytics")
+            or self.overrides.get("analytics")
+        )
         if strat_analytics and isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
             self.start_balance_usdt: float = float(strat_analytics["start_balance_usdt"])
         elif "start_balance_usdt" in self.active_settings:
@@ -103,8 +121,8 @@ class StrategyConfig:
         # 2. Купол Super Grid (Volatility Grid Dome)
         sg_override = (
             self.active_settings.get("super_grid")
-            or self.overrides.get("super_grid")
             or raw_meta.get("super_grid")
+            or self.overrides.get("super_grid")
         )
         if sg_override is not None and isinstance(sg_override, dict):
             self.super_grid_cfg: Dict[str, Any] = copy.deepcopy(sg_override)
@@ -135,8 +153,8 @@ class StrategyConfig:
         # 3. Купол Уведомлений (Notifications Dome)
         notif_cfg = (
             self.active_settings.get("notifications")
-            or self.overrides.get("notifications")
             or raw_meta.get("notifications")
+            or self.overrides.get("notifications")
         )
         if notif_cfg and isinstance(notif_cfg, dict):
             self.notifications_cfg: Dict[str, Any] = copy.deepcopy(notif_cfg)
@@ -150,8 +168,8 @@ class StrategyConfig:
         # 4. Купол Авто-закрытия (Auto-closing Dome)
         ac_cfg = (
             self.active_settings.get("auto_closing")
-            or self.overrides.get("auto_closing")
             or raw_meta.get("auto_closing")
+            or self.overrides.get("auto_closing")
         )
         if ac_cfg and isinstance(ac_cfg, dict):
             self.auto_closing_cfg: Dict[str, Any] = copy.deepcopy(ac_cfg)
@@ -163,25 +181,36 @@ class StrategyConfig:
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
-        if "smart_grace" in self.overrides and isinstance(self.overrides["smart_grace"], dict):
-            base_smart_grace.update(self.overrides["smart_grace"])
+        sg_cfg = raw_meta.get("smart_grace") or self.overrides.get("smart_grace")
+        if sg_cfg and isinstance(sg_cfg, dict):
+            base_smart_grace.update(sg_cfg)
         if "shift_interval_sec" not in base_smart_grace:
             base_smart_grace["shift_interval_sec"] = DEFAULT_SHIFT_INTERVAL_SEC
         self.smart_grace_cfg: Dict[str, Any] = base_smart_grace
 
-        # Конфигурации Smart Size и Smart TP (наследование дефолтных механик + оверрайды)
+        # Конфигурации Smart Size и Smart TP
         base_smart_size = copy.deepcopy(DEFAULT_SMART_SIZE)
-        if "smart_size" in self.overrides and isinstance(self.overrides["smart_size"], dict):
-            base_smart_size.update(self.overrides["smart_size"])
+        ss_cfg = raw_meta.get("smart_size") or self.overrides.get("smart_size")
+        if ss_cfg and isinstance(ss_cfg, dict):
+            base_smart_size.update(ss_cfg)
         self.smart_size_cfg: Dict[str, Any] = base_smart_size
 
         base_smart_tp = copy.deepcopy(DEFAULT_SMART_TP)
-        if "smart_tp" in self.overrides and isinstance(self.overrides["smart_tp"], dict):
-            base_smart_tp.update(self.overrides["smart_tp"])
+        st_cfg = raw_meta.get("smart_tp") or self.overrides.get("smart_tp")
+        if st_cfg and isinstance(st_cfg, dict):
+            base_smart_tp.update(st_cfg)
         self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
 
         # Персональный таймфрейм вселенной (по умолчанию 5m)
-        self.timeframe: str = str(self.overrides.get("timeframe", DEFAULT_TIMEFRAME))
+        self.timeframe: str = str(raw_meta.get("timeframe") or self.overrides.get("timeframe", DEFAULT_TIMEFRAME))
+
+    @property
+    def grid(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("LONG") or {}).get("grid") or (self.raw_meta.get("SHORT") or {}).get("grid") or self.overrides.get("grid", {})
+
+    @property
+    def tp_map(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("LONG") or {}).get("tp_map") or (self.raw_meta.get("SHORT") or {}).get("tp_map") or self.overrides.get("tp_map", {})
 
     def __repr__(self) -> str:
         return f"<StrategyConfig id='{self.strategy_id}' name='{self.name}' symbols={self.symbols}>"

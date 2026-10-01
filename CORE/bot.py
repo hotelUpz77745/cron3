@@ -13,7 +13,10 @@ import os
 import time
 from pathlib import Path
 
-from consts import _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME
+from consts import (
+    _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME,
+    DEFAULT_TIMEFRAME, DEFAULT_SMART_GRACE
+)
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.price_stream import HotPriceTick
 from API.IPC.streamer_hub import CrossProcessHotPriceStream
@@ -79,9 +82,11 @@ class BotCore:
         self.pos_stream_synced = asyncio.Event()
         self.price_stream_synced = asyncio.Event()
         
-        # Получаем таймфрейм из конфига app.json (секция signal)
-        signal_cfg = _CFG["signal"]
-        timeframe = signal_cfg["timeframe"]
+        # Получаем таймфрейм из стратегий или дефолтный 5m
+        timeframe = DEFAULT_TIMEFRAME
+        if hasattr(self, "strategy_registry") and self.strategy_registry and self.strategy_registry.active_strategies:
+            first_strat = next(iter(self.strategy_registry.active_strategies.values()))
+            timeframe = getattr(first_strat, "timeframe", DEFAULT_TIMEFRAME)
         self.time_control = TimeControl(interval=timeframe)
         
         # 2. Менеджеры
@@ -556,7 +561,7 @@ class BotCore:
             if not state.in_position and not state.in_position_papper:
                 # Получаем стратегию для символа
                 strat = self.strategy_registry.get_strategy_for_symbol(symbol)
-                smart_grace_cfg = strat.smart_grace_cfg if strat else _CFG["signal"]["smart_grace"]
+                smart_grace_cfg = strat.smart_grace_cfg if strat else DEFAULT_SMART_GRACE
                 smart_size_cfg = strat.smart_size_cfg if strat else None
                 eval_window = smart_grace_cfg["eval_window_sec"]
 

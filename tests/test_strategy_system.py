@@ -266,11 +266,14 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(strat.leverage, 20)
 
         self.assertTrue(strat.smart_size_cfg.get("knife_blocker_enabled"))
-        self.assertEqual(len(strat.overrides["grid"]), 9)
-        self.assertEqual(len(strat.overrides["tp_map"]), 9)
+        self.assertEqual(len(raw_meta["LONG"]["grid"]), 9)
+        self.assertEqual(len(raw_meta["SHORT"]["grid"]), 9)
+        self.assertEqual(len(raw_meta["LONG"]["tp_map"]), 9)
+        self.assertEqual(len(strat.grid), 9)
+        self.assertEqual(len(strat.tp_map), 9)
         # Проверка демпфера тейка (Panic Damper) от 2.2% до 0.50%
-        self.assertEqual(strat.overrides["tp_map"]["0"]["indent"], 2.2)
-        self.assertEqual(strat.overrides["tp_map"]["8"]["indent"], 0.5)
+        self.assertEqual(raw_meta["LONG"]["tp_map"]["0"]["indent"], 2.2)
+        self.assertEqual(raw_meta["LONG"]["tp_map"]["8"]["indent"], 0.5)
 
     def test_u9_omni_zenith_apex_template(self):
         """Тест универсальной формулы Вселенной u9_omni_zenith_apex."""
@@ -323,22 +326,19 @@ class TestStrategySystem(unittest.TestCase):
         """Тест поддержки асимметричных настроек (LONG vs SHORT) для бычьей/медвежьей фазы."""
         asymm_meta = {
             "name": "Bull Fortress Asymmetric",
-            "invest_size": 500.0,
             "leverage": 20,
-            "overrides": {
-                "LONG": {
-                    "invest_size": 600.0,
-                    "leverage": 25,
-                    "tp_map": {
-                        "0": {"indent": 2.5, "fallback_indent": 3.0}
-                    }
-                },
-                "SHORT": {
-                    "invest_size": 300.0,
-                    "leverage": 10,
-                    "tp_map": {
-                        "0": {"indent": 0.8, "fallback_indent": 1.0}
-                    }
+            "LONG": {
+                "invest_size": 600.0,
+                "leverage": 25,
+                "tp_map": {
+                    "0": {"indent": 2.5, "fallback_indent": 3.0}
+                }
+            },
+            "SHORT": {
+                "invest_size": 300.0,
+                "leverage": 10,
+                "tp_map": {
+                    "0": {"indent": 0.8, "fallback_indent": 1.0}
                 }
             }
         }
@@ -357,27 +357,35 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(side_cfgs["SHORT"]["tp_map"]["0"]["indent"], 0.8)
 
     def test_no_duplicate_sources_of_truth_in_universes(self):
-        """Проверка отсутствия раздвоения источников истины (invest_size, super_grid_enabled)."""
+        """Проверка отсутствия раздвоения источников истины (invest_size, super_grid_enabled) и отсутствия overrides."""
         registry = StrategyRegistry()
         for uid, u_meta in registry.universes_db.items():
             # 1. Отсутствие устаревших/дублирующих ключей на верхнем уровне
             self.assertNotIn("invest_size", u_meta, f"Strategy {uid} must not have root invest_size")
             self.assertNotIn("super_grid_enabled", u_meta, f"Strategy {uid} must not have root super_grid_enabled")
             self.assertNotIn("is_active", u_meta, f"Strategy {uid} must not have is_active in universes.json (controlled strictly in app.json)")
+            self.assertNotIn("overrides", u_meta, f"Strategy {uid} must not have legacy overrides wrapper")
 
-            # 2. Наличие единого источника истины для сайзинга в overrides
-            overrides = u_meta.get("overrides", {})
-            self.assertIn("LONG", overrides, f"Strategy {uid} must have overrides.LONG")
-            self.assertIn("SHORT", overrides, f"Strategy {uid} must have overrides.SHORT")
-            self.assertIn("invest_size", overrides["LONG"], f"Strategy {uid} must have overrides.LONG.invest_size")
-            self.assertIn("invest_size", overrides["SHORT"], f"Strategy {uid} must have overrides.SHORT.invest_size")
-            self.assertGreater(float(overrides["LONG"]["invest_size"]), 0)
-            self.assertGreater(float(overrides["SHORT"]["invest_size"]), 0)
+            # 2. Наличие единого источника истины для сайзинга под куполами LONG и SHORT
+            self.assertIn("LONG", u_meta, f"Strategy {uid} must have LONG dome")
+            self.assertIn("SHORT", u_meta, f"Strategy {uid} must have SHORT dome")
+            self.assertIn("invest_size", u_meta["LONG"], f"Strategy {uid} must have LONG.invest_size")
+            self.assertIn("invest_size", u_meta["SHORT"], f"Strategy {uid} must have SHORT.invest_size")
+            self.assertGreater(float(u_meta["LONG"]["invest_size"]), 0)
+            self.assertGreater(float(u_meta["SHORT"]["invest_size"]), 0)
 
-            # 3. Наличие единого источника истины для super_grid в overrides
-            self.assertIn("super_grid", overrides, f"Strategy {uid} must have overrides.super_grid")
-            self.assertIn("enabled", overrides["super_grid"], f"Strategy {uid} must have overrides.super_grid.enabled")
-            self.assertIsInstance(overrides["super_grid"]["enabled"], bool)
+            # 3. Сетка и TP-карта строго под куполом стороны (LONG / SHORT)
+            self.assertIn("grid", u_meta["LONG"], f"Strategy {uid} must have LONG.grid")
+            self.assertIn("grid", u_meta["SHORT"], f"Strategy {uid} must have SHORT.grid")
+            self.assertIn("tp_map", u_meta["LONG"], f"Strategy {uid} must have LONG.tp_map")
+            self.assertIn("tp_map", u_meta["SHORT"], f"Strategy {uid} must have SHORT.tp_map")
+            self.assertGreater(len(u_meta["LONG"]["grid"]), 0)
+            self.assertGreater(len(u_meta["SHORT"]["grid"]), 0)
+
+            # 4. Наличие super_grid на уровне стратегии
+            self.assertIn("super_grid", u_meta, f"Strategy {uid} must have super_grid")
+            self.assertIn("enabled", u_meta["super_grid"], f"Strategy {uid} must have super_grid.enabled")
+            self.assertIsInstance(u_meta["super_grid"]["enabled"], bool)
 
 
 if __name__ == "__main__":

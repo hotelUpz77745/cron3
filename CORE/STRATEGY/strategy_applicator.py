@@ -72,42 +72,46 @@ class StrategyApplicator:
 
             side_data = copy.deepcopy(self.base_cfg[side])
 
-            # Извлекаем оверрайды для конкретной стороны (если есть)
-            side_overrides = {}
-            if hasattr(strategy, "overrides") and isinstance(strategy.overrides, dict):
-                if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
-                    side_overrides = copy.deepcopy(strategy.overrides[side])
+            # Извлекаем конфигурацию для стороны (из raw_meta[side] или legacy overrides[side])
+            side_dict = {}
             if hasattr(strategy, "raw_meta") and isinstance(strategy.raw_meta, dict):
                 if side in strategy.raw_meta and isinstance(strategy.raw_meta[side], dict):
-                    merged = copy.deepcopy(strategy.raw_meta[side])
-                    merged.update(side_overrides)
-                    side_overrides = merged
+                    side_dict = copy.deepcopy(strategy.raw_meta[side])
+            if hasattr(strategy, "overrides") and isinstance(strategy.overrides, dict):
+                if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
+                    merged = copy.deepcopy(strategy.overrides[side])
+                    merged.update(side_dict)
+                    side_dict = merged
 
-            # 1. Invest Size (приоритет: side_overrides -> strategy.invest_size[side] -> strategy.invest_size)
-            if "invest_size" in side_overrides:
-                side_data["invest_size"] = float(side_overrides["invest_size"])
+            # 1. Invest Size (приоритет: side_dict -> strategy.invest_size[side] -> strategy.invest_size)
+            if "invest_size" in side_dict:
+                side_data["invest_size"] = float(side_dict["invest_size"])
             elif isinstance(strategy.invest_size, dict) and side in strategy.invest_size:
                 side_data["invest_size"] = float(strategy.invest_size[side])
             elif isinstance(strategy.invest_size, (int, float)):
                 side_data["invest_size"] = float(strategy.invest_size)
 
-            # 2. Leverage (приоритет: side_overrides -> strategy.leverage[side] -> strategy.leverage)
-            if "leverage" in side_overrides:
-                side_data["leverage"] = int(side_overrides["leverage"])
+            # 2. Leverage (приоритет: side_dict -> strategy.leverage[side] -> strategy.leverage)
+            if "leverage" in side_dict:
+                side_data["leverage"] = int(side_dict["leverage"])
             elif isinstance(strategy.leverage, dict) and side in strategy.leverage:
                 side_data["leverage"] = int(strategy.leverage[side])
             elif isinstance(strategy.leverage, (int, float)):
                 side_data["leverage"] = int(strategy.leverage)
 
             # 3. Enable флаг стороны
-            if "enable" in side_overrides:
-                side_data["enable"] = bool(side_overrides["enable"])
+            if "enable" in side_dict:
+                side_data["enable"] = bool(side_dict["enable"])
 
             side_data["strategy_id"] = strategy.strategy_id
             side_data["strategy_name"] = strategy.name
 
-            # 4. Применение сетки (grid) из overrides (side-specific или общей)
-            grid_override = side_overrides.get("grid") or strategy.overrides.get("grid")
+            # 4. Применение сетки (grid): строго из стороны side_dict["grid"], либо общей
+            grid_override = (
+                side_dict.get("grid")
+                or (getattr(strategy, "raw_meta", {}) or {}).get("grid")
+                or (getattr(strategy, "overrides", {}) or {}).get("grid")
+            )
             if grid_override:
                 side_data["grid"] = copy.deepcopy(grid_override)
 
@@ -116,8 +120,12 @@ class StrategyApplicator:
                 for lvl_data in side_data["grid"].values():
                     lvl_data["super_indent"] = None
 
-            # 6. Применение TP-карты из overrides (side-specific или общей) с валидацией Инварианта 4 (Rule 11)
-            tp_map_override = side_overrides.get("tp_map") or strategy.overrides.get("tp_map")
+            # 6. Применение TP-карты: строго из стороны side_dict["tp_map"], либо общей
+            tp_map_override = (
+                side_dict.get("tp_map")
+                or (getattr(strategy, "raw_meta", {}) or {}).get("tp_map")
+                or (getattr(strategy, "overrides", {}) or {}).get("tp_map")
+            )
             if tp_map_override:
                 side_data["tp_map"] = copy.deepcopy(tp_map_override)
 
@@ -130,13 +138,17 @@ class StrategyApplicator:
                         tp_step["fallback_indent"] = max(MIN_TAKE_PROFIT_PCT, float(tp_step["fallback_indent"]))
 
             # 7. Применение tp_purpose и margin_type
-            if "tp_purpose" in side_overrides:
-                side_data["tp_purpose"] = side_overrides["tp_purpose"]
+            if "tp_purpose" in side_dict:
+                side_data["tp_purpose"] = side_dict["tp_purpose"]
+            elif hasattr(strategy, "raw_meta") and "tp_purpose" in strategy.raw_meta:
+                side_data["tp_purpose"] = strategy.raw_meta["tp_purpose"]
             elif "tp_purpose" in strategy.overrides:
                 side_data["tp_purpose"] = strategy.overrides["tp_purpose"]
 
-            if "margin_type" in side_overrides:
-                side_data["margin_type"] = side_overrides["margin_type"]
+            if "margin_type" in side_dict:
+                side_data["margin_type"] = side_dict["margin_type"]
+            elif hasattr(strategy, "raw_meta") and "margin_type" in strategy.raw_meta:
+                side_data["margin_type"] = strategy.raw_meta["margin_type"]
             elif "margin_type" in strategy.overrides:
                 side_data["margin_type"] = strategy.overrides["margin_type"]
 

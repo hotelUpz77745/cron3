@@ -144,14 +144,32 @@ STREAMER_PORT: int = int(_CFG["streamer"]["port"])
 STREAMER_LOCK_NAME: str = str(_CFG["streamer"]["lock_name"])
 
 # ============================================================
-# SIGNAL, SMART GRACE, SMART SIZE & SMART TP DECLARATIONS
+# SIGNAL, SMART GRACE, SMART SIZE & SMART TP FALLBACK DECLARATIONS
 # ============================================================
-DEFAULT_TIMEFRAME: str = str(_CFG["signal"]["timeframe"])
-DEFAULT_SMART_GRACE: Dict[str, Any] = _CFG["signal"]["smart_grace"]
-DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE["start_period_sec"])
-DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE["shift_interval_sec"])
-DEFAULT_SMART_SIZE: Dict[str, Any] = _CFG["signal"]["smart_size"]
-DEFAULT_SMART_TP: Dict[str, Any] = _CFG["signal"]["smart_tp"]
+_SIG_CFG: Dict[str, Any] = _CFG.get("signal") or {}
+DEFAULT_TIMEFRAME: str = str(_SIG_CFG.get("timeframe", "5m"))
+DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
+    "start_period_sec": 57,
+    "shift_interval_sec": 13,
+    "eval_window_sec": 300,
+    "increments_card": {
+        "<2": 0,
+        ">=2": 120,
+        ">4": 150
+    }
+}
+DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_sec", 57.0))
+DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE.get("shift_interval_sec", 13))
+DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
+    "eval_window_sec": 300,
+    "knife_blocker_enabled": False,
+    "knife_blocker": {"enabled": False, "threshold": 2},
+    "profiting_size_weights": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
+}
+DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
+    "eval_window_sec": 300,
+    "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
+}
 
 # ============================================================
 # LOGGING
