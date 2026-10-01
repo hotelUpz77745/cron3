@@ -115,39 +115,49 @@ class PositionStream:
 
     async def _create_session(self) -> aiohttp.ClientSession:
         timeout = aiohttp.ClientTimeout(total=None)
-        # logger.info("[MASTER WS] direct connection - creating session with specific headers")
+        connector = aiohttp.TCPConnector(
+            enable_cleanup_closed=True,
+            keepalive_timeout=30.0,
+            force_close=False,
+        )
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
             "Accept": "application/json",
             "Accept-Encoding": "gzip, deflate, br",
             "Connection": "keep-alive"
         }
-        return aiohttp.ClientSession(timeout=timeout, trust_env=False, headers=headers)
+        return aiohttp.ClientSession(connector=connector, timeout=timeout, trust_env=False, headers=headers)
 
     async def _connect(self) -> bool:
-        try:
-            # logger.info(f"[MASTER WS] connecting to {self.ws_url}...")
-            self.websocket = await self.session.ws_connect(
-                self.ws_url,
-                autoping=True,
-                max_msg_size=0,
-                timeout=15,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                    "Origin": "https://fapi.binance.com",
-                    "Host": "fstream.binance.com",
-                    "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
-                }
-            )
-            self.is_connected = True
-            # logger.info(f"[MASTER WS] connected successfully. Status: {self.websocket.closed}")
-            return True
-        except aiohttp.WSServerHandshakeError as e:
-            logger.error(f"[MASTER WS] handshake failed: status={e.status}, message={e.message}, headers={e.headers}")
-            return False
-        except Exception as e:
-            logger.error(f"[MASTER WS] connect failed: {type(e).__name__} - {e}", exc_info=True)
-            return False
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                self.websocket = await self.session.ws_connect(
+                    self.ws_url,
+                    autoping=True,
+                    max_msg_size=0,
+                    timeout=20.0,
+                    headers={
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                        "Origin": "https://fapi.binance.com",
+                        "Host": "fstream.binance.com",
+                        "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
+                    }
+                )
+                self.is_connected = True
+                return True
+            except aiohttp.WSServerHandshakeError as e:
+                logger.error(f"[MASTER WS] handshake failed: status={e.status}, message={e.message}")
+                if attempt < max_attempts:
+                    await asyncio.sleep(2.0 * attempt)
+            except Exception as e:
+                if attempt < max_attempts:
+                    logger.warning(f"[MASTER WS] connect attempt {attempt}/{max_attempts} failed ({type(e).__name__}: {e}). Retrying in {2 * attempt}s...")
+                    await asyncio.sleep(2.0 * attempt)
+                else:
+                    logger.error(f"[MASTER WS] connect failed after {max_attempts} attempts: {type(e).__name__} - {e}")
+                    return False
+        return False
 
     async def _disconnect(self):
         self.is_connected = False
