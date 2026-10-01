@@ -963,9 +963,13 @@ class AnalyticsManager:
                     f"but bot_unrealized is 0.0. Blocking peak balance update."
                 )
 
+            now_ms = int(time.time() * 1000)
             if bot_cur_balance > peak and can_update_peak:
                 peak = bot_cur_balance
                 trough = bot_cur_balance
+                data["peak_net_ts"] = now_ms
+            elif "peak_net_ts" not in data:
+                data["peak_net_ts"] = data.get("first_trade_ts", now_ms)
                 
             if bot_cur_balance < trough:
                 trough = bot_cur_balance
@@ -982,8 +986,15 @@ class AnalyticsManager:
             
             max_perf = peak - initial
             data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)
-            
+
+            # Telemetry: Peak Age & Net Velocity
+            peak_ts_g = data.get("peak_net_ts", now_ms)
+            data["peak_age_hours"] = round(max(0.0, (now_ms - peak_ts_g) / 3600000.0), 2)
+            first_ts_g = data.get("first_trade_ts", now_ms)
+            active_h_g = max(0.1, (now_ms - first_ts_g) / 3600000.0)
             net_profit_usdt = float(data.get("net_profit_usdt", 0.0))
+            data["net_velocity"] = round(net_profit_usdt / active_h_g, 2)
+            
             if data["max_drawdown_usdt"] < 0:
                 data["recovery_factor"] = round(net_profit_usdt / abs(data["max_drawdown_usdt"]), 2)
             else:
@@ -1071,6 +1082,10 @@ class AnalyticsManager:
             if s_cur > s_peak:
                 s_peak = s_cur
                 s_trough = s_cur
+                strat_data["peak_net_ts"] = now_ms
+            elif "peak_net_ts" not in strat_data:
+                strat_data["peak_net_ts"] = strat_data.get("first_trade_ts", now_ms)
+                
             if s_cur < s_trough:
                 s_trough = s_cur
             if s_cur < s_min:
@@ -1080,6 +1095,13 @@ class AnalyticsManager:
             strat_data["peak_net_profit_usdt"] = round(s_peak - s_init, 4)
             strat_data["_current_trough_usdt"] = round(s_trough, 4)
             strat_data["min_balance_usdt"] = round(s_min, 4)
+
+            # Telemetry: Peak Age & Net Velocity
+            peak_ts_s = strat_data.get("peak_net_ts", now_ms)
+            strat_data["peak_age_hours"] = round(max(0.0, (now_ms - peak_ts_s) / 3600000.0), 2)
+            first_ts_s = strat_data.get("first_trade_ts", now_ms)
+            active_h_s = max(0.1, (now_ms - first_ts_s) / 3600000.0)
+            strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
             s_dd = s_trough - s_peak
             strat_data["max_drawdown_usdt"] = round(min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd), 4)

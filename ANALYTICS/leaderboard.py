@@ -67,6 +67,9 @@ class LeaderboardEngine:
         saved_peak_net = float(data.get("peak_net_profit_usdt", 0.0))
         peak_net_profit = max(net_profit, round(peak_bal - start_bal, 2), round(perf_usdt, 2), saved_peak_net)
 
+        peak_age_h = float(data.get("peak_age_hours", 0.0))
+        net_vel = float(data.get("net_velocity", 0.0))
+
         winrate_pct = round((winning_trades / total_trades * 100.0), 2) if total_trades > 0 else 0.0
         roi_pct = round(((cur_bal - start_bal) / start_bal * 100.0), 2) if start_bal > 0 else 0.0
 
@@ -85,6 +88,8 @@ class LeaderboardEngine:
             "cur_balance_usdt": round(cur_bal, 2),
             "net_profit_usdt": round(net_profit, 2),
             "peak_net_profit_usdt": round(peak_net_profit, 2),
+            "peak_age_hours": round(peak_age_h, 1),
+            "net_velocity": round(net_vel, 2),
             "realized_pnl_usdt": round(realized_pnl, 2),
             "unrealized_pnl_usdt": round(unrealized_pnl, 2),
             "max_drawdown_usdt": round(max_dd_usdt, 2),
@@ -117,12 +122,12 @@ class LeaderboardEngine:
         """Форматирует ASCII таблицу Leaderboard по чистому кумулятивному Net Profit."""
         active_count = len(entries)
         header = (
-            "=" * 127 + "\n"
+            "=" * 132 + "\n"
             f"STRATEGIES LEADERBOARD (Active: {active_count} | Coins: {evaluated_coins_count})\n"
             f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-            + "=" * 127 + "\n"
-            f"{'#':<3} {'Strategy / Universe ID':<38} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net':<12} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
-            + "-" * 127
+            + "=" * 132 + "\n"
+            f"{'#':<3} {'Strategy / Universe ID':<37} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net (Age)':<17} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
+            + "-" * 132
         )
 
         rows = []
@@ -130,18 +135,20 @@ class LeaderboardEngine:
             net_str = f"{item['net_profit_usdt']:+.2f} USDT"
             realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
             unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
-            peak_net_str = f"{item.get('peak_net_profit_usdt', 0.0):+.2f} $"
+            peak_val = item.get('peak_net_profit_usdt', 0.0)
+            peak_age = item.get('peak_age_hours', 0.0)
+            peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
             dd_str = f"{item['max_drawdown_usdt']:.2f} $"
             rec_str = f"{item['recovery_factor']:.2f}"
-            uid_short = item['universe_id'][:37]
+            uid_short = item['universe_id'][:36]
 
             row = (
-                f"{idx:<3} {uid_short:<38} {net_str:<14} {realized_str:<13} "
-                f"{unrealized_str:<12} {peak_net_str:<12} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
+                f"{idx:<3} {uid_short:<37} {net_str:<14} {realized_str:<13} "
+                f"{unrealized_str:<12} {peak_net_str:<17} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
             )
             rows.append(row)
 
-        footer = "=" * 127
+        footer = "=" * 132
         return "\n".join([header] + rows + [footer])
 
     def format_table_chunks(
@@ -169,12 +176,12 @@ class LeaderboardEngine:
             end_rank = end_i
 
             header = (
-                "=" * 127 + "\n"
+                "=" * 132 + "\n"
                 f"STRATEGIES LEADERBOARD (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
                 f"Ranked strictly by Cumulative Net Profit USDT\n"
-                + "=" * 127 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<38} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net':<12} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
-                + "-" * 127
+                + "=" * 132 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<37} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net (Age)':<17} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
+                + "-" * 132
             )
 
             rows = []
@@ -182,18 +189,20 @@ class LeaderboardEngine:
                 net_str = f"{item['net_profit_usdt']:+.2f} USDT"
                 realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
                 unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
-                peak_net_str = f"{item.get('peak_net_profit_usdt', 0.0):+.2f} $"
+                peak_val = item.get('peak_net_profit_usdt', 0.0)
+                peak_age = item.get('peak_age_hours', 0.0)
+                peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
                 dd_str = f"{item['max_drawdown_usdt']:.2f} $"
                 rec_str = f"{item['recovery_factor']:.2f}"
-                uid_short = item['universe_id'][:37]
+                uid_short = item['universe_id'][:36]
 
                 row = (
-                    f"{idx:<3} {uid_short:<38} {net_str:<14} {realized_str:<13} "
-                    f"{unrealized_str:<12} {peak_net_str:<12} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
+                    f"{idx:<3} {uid_short:<37} {net_str:<14} {realized_str:<13} "
+                    f"{unrealized_str:<12} {peak_net_str:<17} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
                 )
                 rows.append(row)
 
-            footer = "=" * 127
+            footer = "=" * 132
             chunks.append("\n".join([header] + rows + [footer]))
 
         return chunks

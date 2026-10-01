@@ -1900,7 +1900,17 @@
                 },
                 "positive": {
                     "threshold": 21.0,
-                    "threshold_increment": 21.0
+                    "threshold_increment": 21.0,
+                    "stagnation": {
+                        "enabled": true,
+                        "min_floor": 7.0,
+                        "mode": "velocity",
+                        "stagnation_card": {
+                            ">1.0": 21.0,
+                            ">0.4": 12.0,
+                            "<=0.4": 8.0
+                        }
+                    }
                 }
             },
             "smart_grace": {

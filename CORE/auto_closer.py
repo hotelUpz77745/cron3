@@ -12,6 +12,84 @@ class AutoCloser:
         self.bot_core = bot_core
         self._is_closing = False
 
+    @staticmethod
+    def match_rule_float(rule: str, val: float) -> bool:
+        """
+        Проверяет соответствие вещественного значения (скорости или часов) правилу строки.
+        Поддерживает операторы: '<=', '>=', '==', '<', '>'.
+        """
+        rule = rule.strip()
+        try:
+            if rule.startswith("<="):
+                return val <= float(rule[2:])
+            elif rule.startswith(">="):
+                return val >= float(rule[2:])
+            elif rule.startswith("=="):
+                return abs(val - float(rule[2:])) < 1e-4
+            elif rule.startswith("<"):
+                return val < float(rule[1:])
+            elif rule.startswith(">"):
+                return val > float(rule[1:])
+            else:
+                return abs(val - float(rule)) < 1e-4
+        except ValueError:
+            logger.warning(f"[AUTO_CLOSER] Invalid rule format: '{rule}'")
+            return False
+
+    @classmethod
+    def evaluate_stagnation_target(
+        cls,
+        analytics_dict: dict,
+        pos_cfg: dict
+    ) -> tuple[Optional[float], bool, str]:
+        """
+        Вычисляет динамический целевой порог по карте стагнации (stagnation_card).
+        Возвращает (effective_threshold, is_stagnation_active, stag_info).
+        """
+        base_th = pos_cfg.get("threshold")
+        if base_th == 0 or base_th == 0.0:
+            base_th = None
+
+        stag_cfg = pos_cfg.get("stagnation", {})
+        if not stag_cfg or not stag_cfg.get("enabled", True):
+            return base_th, False, ""
+
+        card = stag_cfg.get("stagnation_card") or stag_cfg.get("card", {})
+        if not card:
+            return base_th, False, ""
+
+        min_floor = float(stag_cfg.get("min_floor", 7.0))
+        mode = stag_cfg.get("mode", "auto")
+
+        now_ms = int(time.time() * 1000)
+        peak_age_h = float(analytics_dict.get("peak_age_hours", 0.0))
+        
+        velocity = float(analytics_dict.get("net_velocity", 0.0))
+        if "net_velocity" not in analytics_dict:
+            first_ts = analytics_dict.get("first_trade_ts", now_ms)
+            active_h = max(0.1, (now_ms - first_ts) / 3600000.0)
+            velocity = round(float(analytics_dict.get("net_profit_usdt", 0.0)) / active_h, 2)
+
+        if mode == "auto":
+            first_key = next(iter(card.keys()), "")
+            if "<" in first_key and any(c.isdigit() and int(c) >= 3 for c in first_key):
+                mode = "time"
+            else:
+                mode = "velocity"
+
+        eval_val = velocity if mode == "velocity" else peak_age_h
+
+        for rule, target_val in card.items():
+            if cls.match_rule_float(rule, eval_val):
+                target = float(target_val)
+                effective_target = max(target, min_floor)
+                unit = "$/h" if mode == "velocity" else "h"
+                info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{rule}' -> target {effective_target} USDT]"
+                is_stag = base_th is not None and effective_target < base_th
+                return effective_target, is_stag, info
+
+        return base_th, False, ""
+
     async def check(self):
         if self._is_closing:
             return
@@ -95,41 +173,52 @@ class AutoCloser:
             strat_triggered = False
             strat_msg = ""
 
-            # Check Positive for Strategy Dome
-            th_pos = pos_cfg.get("threshold")
-            if th_pos == 0 or th_pos == 0.0:
-                th_pos = None
+            # Check Positive for Strategy Dome (с поддержкой карты стагнации)
+            th_pos, is_stagnation, stag_info = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
 
             if th_pos is not None and strat_net >= th_pos:
                 strat_triggered = True
-                logger.info(f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) >= {th_pos}. Auto-closing strategy dome!")
-                inc = pos_cfg.get("threshold_increment")
-                if inc:
-                    new_th = th_pos + inc
-                    while new_th <= strat_net:
-                        new_th += inc
-                    new_th = round(new_th, 4)
-                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                        app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = new_th
+                logger.info(
+                    f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) >= {th_pos} "
+                    f"({'STAGNATION ' + stag_info if is_stagnation else 'TARGET'}). Auto-closing strategy dome!"
+                )
+                if is_stagnation:
+                    # При закрытии по стагнации базовый порог в конфиге не меняем (он остается для свежего цикла)
                     strat_msg = (
-                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                        f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
+                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}] (STAGNATION RATCHET)</b>\n"
+                        f"Сработал затухающий порог {stag_info}.\n"
+                        f"Чистый Net Profit: <b>{strat_net} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
                         f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Новый порог купола: <b>{new_th} USDT</b>."
+                        f"Базовый порог на следующий цикл сохранен: <b>{pos_cfg.get('threshold')} USDT</b>."
                     )
                 else:
-                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                        app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = None
-                    strat_msg = (
-                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                        f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
-                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Порог купола снят (null)."
-                    )
+                    inc = pos_cfg.get("threshold_increment")
+                    if inc:
+                        new_th = th_pos + inc
+                        while new_th <= strat_net:
+                            new_th += inc
+                        new_th = round(new_th, 4)
+                        if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                            if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                                app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                            app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = new_th
+                        strat_msg = (
+                            f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                            f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
+                            f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                            f"Новый порог купола: <b>{new_th} USDT</b>."
+                        )
+                    else:
+                        if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
+                            if "auto_closing" not in app_data["active_strategies"][strat_id]:
+                                app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
+                            app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = None
+                        strat_msg = (
+                            f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
+                            f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
+                            f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                            f"Порог купола снят (null)."
+                        )
 
             # Check Negative for Strategy Dome
             th_neg = neg_cfg.get("threshold")
@@ -192,28 +281,36 @@ class AutoCloser:
         triggered = False
         action_msg = ""
         
-        # Check Positive Portfolio
-        th_pos = pos_cfg.get("threshold")
-        if th_pos == 0 or th_pos == 0.0:
-            th_pos = None
-            
+        # Check Positive Portfolio (с поддержкой карты стагнации)
+        th_pos, is_stagnation, stag_info = self.evaluate_stagnation_target(analytics_data, pos_cfg)
+        
         if th_pos is not None and net_usdt >= th_pos:
             self._is_closing = True
             triggered = True
-            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) >= {th_pos}. Auto-closing portfolio!")
-            
-            inc = pos_cfg.get("threshold_increment")
-            if inc:
-                new_th = th_pos + inc
-                while new_th <= net_usdt:
-                    new_th += inc
-                new_th = round(new_th, 4)
-                app_data["auto_closing"]["positive"]["threshold"] = new_th
-                action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. New threshold: <b>{new_th}</b>."
-                logger.info(f"[AUTO_CLOSER] Increased positive threshold to {new_th}.")
+            logger.info(
+                f"[AUTO_CLOSER] Net Profit ({net_usdt}) >= {th_pos} "
+                f"({'STAGNATION ' + stag_info if is_stagnation else 'TARGET'}). Auto-closing portfolio!"
+            )
+            if is_stagnation:
+                action_msg = (
+                    f"🟢 <b>AUTO-CLOSE (PORTFOLIO STAGNATION RATCHET)</b>\n"
+                    f"Сработал затухающий порог {stag_info}.\n"
+                    f"Net Profit reached <b>{net_usdt} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
+                    f"Positions closed. Base threshold preserved: <b>{pos_cfg.get('threshold')} USDT</b>."
+                )
             else:
-                app_data["auto_closing"]["positive"]["threshold"] = None
-                action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. Threshold removed."
+                inc = pos_cfg.get("threshold_increment")
+                if inc:
+                    new_th = th_pos + inc
+                    while new_th <= net_usdt:
+                        new_th += inc
+                    new_th = round(new_th, 4)
+                    app_data["auto_closing"]["positive"]["threshold"] = new_th
+                    action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. New threshold: <b>{new_th}</b>."
+                    logger.info(f"[AUTO_CLOSER] Increased positive threshold to {new_th}.")
+                else:
+                    app_data["auto_closing"]["positive"]["threshold"] = None
+                    action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. Threshold removed."
                 
         # Check Negative Portfolio
         th_neg = neg_cfg.get("threshold")
