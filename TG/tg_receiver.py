@@ -611,14 +611,27 @@ class TelegramReceiver:
                 coins_list = list(data.get("per_coin", {}).keys())
                 coins_str = ", ".join(coins_list) if coins_list else "—"
 
+                iter_idx = int(data.get("iteration_index", 1))
+                iter_net = float(data.get("iteration_net_profit_usdt", net))
+                iter_start_net = float(data.get("iteration_start_net_profit_usdt", 0.0))
+                iter_real = float(data.get("iteration_realized_pnl_usdt", real))
+                iter_vel = float(data.get("iteration_net_velocity", 0.0))
+                peak_net = float(data.get("peak_net_profit_usdt", max(0.0, cur_bal - start_bal)))
+                peak_age = float(data.get("peak_age_hours", 0.0))
+
                 text = (
                     f"🌌 <b>СТРАТЕГИЯ: {name}</b>\n"
                     f"ID: <code>{strat_id}</code>\n"
                     f"🪙 Монеты: <b>{coins_str}</b>\n\n"
+                    f"🔄 <b>Текущий Цикл: #{iter_idx}</b>\n"
+                    f"├ Net цикла: <b>{iter_net:+.2f} USDT</b> (База: {iter_start_net:+.2f} $)\n"
+                    f"├ Realized цикла: <b>{iter_real:+.2f} $</b>\n"
+                    f"└ Скорость цикла: <b>{iter_vel:.2f} $/ч</b>\n\n"
                     f"💰 Баланс: <b>{cur_bal:+.2f} $</b> (Старт: {start_bal:.2f} $)\n"
-                    f"📈 Net Profit: <b>{net:+.2f} USDT</b>\n"
-                    f"├ Realized: <b>{real:+.2f} $</b>\n"
+                    f"📈 Кумулятивный Net: <b>{net:+.2f} USDT</b>\n"
+                    f"├ Realized (сумм): <b>{real:+.2f} $</b>\n"
                     f"└ Floating: <b>{unreal:+.2f} $</b>\n\n"
+                    f"🏔️ Peak Net: <b>+{peak_net:.2f} $</b> ({peak_age:.1f}h)\n"
                     f"📉 Max Drawdown: <b>{dd:.2f} $</b>\n"
                     f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
                     f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"

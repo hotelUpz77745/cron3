@@ -1143,6 +1143,19 @@ class AnalyticsManager:
                 strat_data["winning_trades"] = s_wins
                 strat_data["winrate_pct"] = round(s_wins / s_trades * 100.0, 2)
 
+            # Rebase Guard for Strategy
+            initial = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
+            last_rebase = float(strat_data.get("_rebased_start_balance_usdt", initial))
+            if abs(initial - last_rebase) > 0.0001:
+                delta = initial - last_rebase
+                peak_cur = float(strat_data["peak_balance_usdt"]) if strat_data.get("peak_balance_usdt") is not None else initial
+                strat_data["peak_balance_usdt"] = round(peak_cur + delta, 4)
+                trough_cur = float(strat_data["_current_trough_usdt"]) if strat_data.get("_current_trough_usdt") is not None else initial
+                strat_data["_current_trough_usdt"] = round(trough_cur + delta, 4)
+                min_cur = float(strat_data["min_balance_usdt"]) if strat_data.get("min_balance_usdt") is not None else initial
+                strat_data["min_balance_usdt"] = round(min_cur + delta, 4)
+                strat_data["_rebased_start_balance_usdt"] = initial
+
             s_init = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
             s_cur = round(s_init + strat_data["net_profit_usdt"], 4)
             strat_data["cur_balance_usdt"] = s_cur
@@ -1168,6 +1181,20 @@ class AnalyticsManager:
             strat_data["_current_trough_usdt"] = round(s_trough, 4)
             strat_data["min_balance_usdt"] = round(s_min, 4)
 
+            # Strategy Iteration Telemetry & Historical Records (учет конкретной итерации купола с персистентным кешем)
+            iter_cache = self._get_iteration_cache(strat_id)
+            hist_peak = float(iter_cache.get("historical_peak_net_profit_usdt", 0.0))
+            hist_peak_ts = iter_cache.get("historical_peak_net_ts")
+            hist_max_dd = float(iter_cache.get("historical_max_drawdown_usdt", 0.0))
+
+            cur_peak_net = float(strat_data.get("peak_net_profit_usdt", 0.0))
+            if hist_peak > cur_peak_net:
+                strat_data["peak_net_profit_usdt"] = hist_peak
+                s_peak = s_init + hist_peak
+                strat_data["peak_balance_usdt"] = round(s_peak, 4)
+                if hist_peak_ts:
+                    strat_data["peak_net_ts"] = hist_peak_ts
+
             # Telemetry: Peak Age & Net Velocity
             peak_ts_s = strat_data.get("peak_net_ts", now_ms)
             strat_data["peak_age_hours"] = round(max(0.0, (now_ms - peak_ts_s) / 3600000.0), 2)
@@ -1175,8 +1202,6 @@ class AnalyticsManager:
             active_h_s = max(0.1, (now_ms - first_ts_s) / 3600000.0)
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
-            # Strategy Iteration Telemetry (учет конкретной итерации / цикла купола с персистентным кешем)
-            iter_cache = self._get_iteration_cache(strat_id)
             s_net = float(strat_data.get("net_profit_usdt", 0.0))
             iter_idx = int(strat_data.get("iteration_index") or iter_cache.get("iteration_index") or 1)
             
@@ -1207,18 +1232,45 @@ class AnalyticsManager:
             iter_active_h = max(0.05, (now_ms - iter_start_ts) / 3600000.0)
             strat_data["iteration_net_velocity"] = round(iter_net / iter_active_h, 2)
 
-            # Сохраняем состояние итерации в отдельный изолированный кеш
+            # Iteration Realized PnL (реализованный PnL конкретно в текущей итерации)
+            if "iteration_start_realized_pnl_usdt" in strat_data:
+                iter_start_real = float(strat_data["iteration_start_realized_pnl_usdt"])
+            elif "iteration_start_realized_pnl_usdt" in iter_cache:
+                iter_start_real = float(iter_cache["iteration_start_realized_pnl_usdt"])
+            else:
+                iter_start_real = iter_start_net
+
+            iter_real = round(s_real - iter_start_real, 4)
+            strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
+            strat_data["iteration_realized_pnl_usdt"] = iter_real
+
+            if strat_data["peak_net_profit_usdt"] > hist_peak:
+                hist_peak = strat_data["peak_net_profit_usdt"]
+                hist_peak_ts = strat_data.get("peak_net_ts", now_ms)
+            if strat_data["max_drawdown_usdt"] < hist_max_dd:
+                hist_max_dd = strat_data["max_drawdown_usdt"]
+
+            # Сохраняем состояние итерации и исторические рекорды в кеш
             self._save_iteration_cache(strat_id, {
                 "iteration_index": iter_idx,
                 "iteration_start_net_profit_usdt": round(iter_start_net, 4),
+                "iteration_start_realized_pnl_usdt": round(iter_start_real, 4),
+                "iteration_realized_pnl_usdt": iter_real,
                 "iteration_start_ts": iter_start_ts,
                 "iteration_peak_net_profit_usdt": round(iter_peak_net, 4),
                 "iteration_peak_ts": iter_peak_ts,
+                "historical_peak_net_profit_usdt": hist_peak,
+                "historical_peak_net_ts": hist_peak_ts,
+                "historical_max_drawdown_usdt": hist_max_dd,
                 "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             })
 
             s_dd = s_trough - s_peak
-            strat_data["max_drawdown_usdt"] = round(min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd), 4)
+            calc_dd = min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd)
+            if hist_max_dd < 0:
+                calc_dd = min(calc_dd, hist_max_dd)
+            strat_data["max_drawdown_usdt"] = round(calc_dd, 4)
+
             if s_init > 0:
                 strat_data["max_drawdown_pct"] = round(abs(strat_data["max_drawdown_usdt"]) / s_init * 100.0, 2)
             if strat_data["max_drawdown_usdt"] < 0:

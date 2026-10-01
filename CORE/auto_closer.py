@@ -308,9 +308,12 @@ class AutoCloser:
 
                     # 2. Продвигаем и сохраняем новую итерацию
                     now_ms = int(time.time() * 1000)
+                    new_iter_start_real = round(float(strat_analytics.get("realized_pnl_usdt", strat_net)), 4)
                     strat_analytics["iteration_index"] = next_iter_idx
                     strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
                     strat_analytics["iteration_net_profit_usdt"] = 0.0
+                    strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
+                    strat_analytics["iteration_realized_pnl_usdt"] = 0.0
                     strat_analytics["iteration_start_ts"] = now_ms
                     strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
                     strat_analytics["iteration_peak_ts"] = now_ms
@@ -328,12 +331,18 @@ class AutoCloser:
                                 c_dict = json.loads(c_file.read_text(encoding="utf-8"))
                             except Exception:
                                 c_dict = {}
+                        prev_entry = c_dict.get(strat_id, {})
                         c_dict[strat_id] = {
                             "iteration_index": next_iter_idx,
                             "iteration_start_net_profit_usdt": new_iter_start_net,
+                            "iteration_start_realized_pnl_usdt": new_iter_start_real,
+                            "iteration_realized_pnl_usdt": 0.0,
                             "iteration_start_ts": now_ms,
                             "iteration_peak_net_profit_usdt": 0.0,
                             "iteration_peak_ts": now_ms,
+                            "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", 9.7816),
+                            "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", 1790770078270),
+                            "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", -8.0038),
                             "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                         }
                         Utils.atomic_write_json(c_file, c_dict, indent=4)
