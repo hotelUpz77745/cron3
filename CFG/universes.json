@@ -2,7 +2,7 @@
     "u9_omni_zenith_apex": {
         "name": "👑 U9: Omni Zenith Apex (Dual-Regime Inverted Fibonacci Fortress)",
         "description": "Универсальная формула Вселенной нового поколения: асимметричный дуальный режим. При аптрендах и флэте выжимает максимум (Step 0 TP 1.80%..2.88% + Smart TP + Smart Size 1.20x). При тотальных просадках гарантирует максимальную защиту (9-уровневый Fibonacci Shock Grid до -89%, инвертированный Panic Damper TP до 0.50%, Knife Blocker >=2, деэскалация объемов 0.60x).",
-        "is_active": false,
+        "is_active": true,
         "start_balance_usdt": 162.29,
         "leverage": 20,
         "overrides": {
@@ -51,11 +51,11 @@
                         },
                         ">0.4": {
                             "target": 12.0,
-                            "enabled": true
+                            "enabled": false
                         },
                         "<=0.4": {
                             "target": 8.0,
-                            "enabled": true
+                            "enabled": false
                         }
                     }
                 }
@@ -489,7 +489,7 @@
     "u0_fat_swing123": {
         "name": "U0: Fat Swing 123 (10-Level Fibonacci Grid)",
         "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%) и начальным ордером ~50$ при множителе 1.1x",
-        "is_active": true,
+        "is_active": false,
         "start_balance_usdt": 150.0,
         "leverage": 20,
         "overrides": {
