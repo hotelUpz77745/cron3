@@ -39,7 +39,10 @@
                 "GRASSUSDT",
                 "ARXUSDT",
                 "ZROUSDT"
-            ]
+            ],
+            "analytics": {
+                "start_balance_usdt": 162.29
+            }
         },
         "u0_base_classic_supergrid": {
             "_comment_alias": "Моцарт 060 (СуперГрид)",
