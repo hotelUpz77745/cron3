@@ -2,9 +2,14 @@
     "u9_omni_zenith_apex": {
         "iteration_index": 2,
         "iteration_start_net_profit_usdt": 8.0163,
+        "iteration_start_realized_pnl_usdt": 8.0163,
+        "iteration_realized_pnl_usdt": 1.6426,
         "iteration_start_ts": 1790876679230,
         "iteration_peak_net_profit_usdt": 0.0,
         "iteration_peak_ts": 1790876679230,
-        "updated_at": "2026-10-01 18:05:40 UTC"
+        "historical_peak_net_profit_usdt": 9.7816,
+        "historical_peak_net_ts": 1790770078270,
+        "historical_max_drawdown_usdt": -8.0038,
+        "updated_at": "2026-10-01 18:27:55 UTC"
     }
 }
