@@ -180,10 +180,10 @@ class StrategyApplicator:
                     "total_volume", "avg_entry_price", "pre_avg_price",
                     "initial_entry_price", "open_time", "next_avg_price",
                     "fallback_price", "in_position", "in_position_papper",
-                    "is_finished", "pending_avg", "pending_rolling_tp"
+                    "is_finished", "pending_avg", "pending_rolling_tp", "recent_closes"
                 ]:
                     if state_key in exist_side:
-                        new_side[state_key] = exist_side[state_key]
+                        new_side[state_key] = copy.deepcopy(exist_side[state_key])
                 if "grid" in exist_side and "grid" in new_side:
                     for g_idx, g_val in exist_side["grid"].items():
                         if g_idx in new_side["grid"] and isinstance(g_val, dict):
@@ -208,7 +208,8 @@ class StrategyApplicator:
                     "in_position_papper": False,
                     "is_finished": False,
                     "pending_avg": False,
-                    "pending_rolling_tp": False
+                    "pending_rolling_tp": False,
+                    "recent_closes": copy.deepcopy(exist_side.get("recent_closes", []))
                 })
                 if "grid" in new_side:
                     for grid_cfg in new_side["grid"].values():

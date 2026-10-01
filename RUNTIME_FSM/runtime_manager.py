@@ -117,10 +117,11 @@ class RuntimeFsmManager:
                 state.pending_avg = side_cache.get("pending_avg", False)
                 state.pending_rolling_tp = side_cache.get("pending_rolling_tp", False)
                 
-                # Копируем словари
+                # Копируем словари и списки
                 state.grid = copy.deepcopy(side_cache.get("grid", {}))
                 state.tp_map = copy.deepcopy(side_cache.get("tp_map", {}))
                 state.tp_purpose = side_cache.get("tp_purpose", "self")
+                state.recent_closes = copy.deepcopy(side_cache.get("recent_closes", []))
                 
     # =========================================================================
     # СИНХРОНИЗАЦИЯ ПОСЛЕ ЗАПУСКА СТРИМА И СНЕПШОТОВ
