@@ -38,11 +38,26 @@ class StrategyConfig:
         self.description: str = raw_meta.get("description", "")
         self.raw_meta: Dict[str, Any] = copy.deepcopy(raw_meta)
 
-        raw_inv = raw_meta.get("invest_size", 400.0)
-        if isinstance(raw_inv, dict):
-            self.invest_size = {k.upper(): float(v) for k, v in raw_inv.items()}
+        long_inv = (raw_meta.get("overrides") or {}).get("LONG", {}).get("invest_size")
+        short_inv = (raw_meta.get("overrides") or {}).get("SHORT", {}).get("invest_size")
+
+        if long_inv is not None and short_inv is not None:
+            if float(long_inv) == float(short_inv):
+                self.invest_size = float(long_inv)
+            else:
+                self.invest_size = {"LONG": float(long_inv), "SHORT": float(short_inv)}
+        elif "invest_size" in raw_meta:
+            raw_inv = raw_meta["invest_size"]
+            if isinstance(raw_inv, dict):
+                self.invest_size = {k.upper(): float(v) for k, v in raw_inv.items()}
+            else:
+                self.invest_size = float(raw_inv)
+        elif long_inv is not None:
+            self.invest_size = float(long_inv)
+        elif short_inv is not None:
+            self.invest_size = float(short_inv)
         else:
-            self.invest_size = float(raw_inv)
+            self.invest_size = 400.0
 
         raw_lev = raw_meta.get("leverage", 20)
         if isinstance(raw_lev, dict):
