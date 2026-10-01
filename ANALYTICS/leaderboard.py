@@ -79,6 +79,9 @@ class LeaderboardEngine:
         else:
             rec_factor = round(net_profit / 1.0, 2) if net_profit > 0 else 0.0
 
+        iteration_index = int(data.get("iteration_index", 1))
+        iteration_net = round(float(data.get("iteration_net_profit_usdt", net_profit)), 2)
+
         return {
             "universe_id": universe_id,
             "name": meta.get("name", universe_id),
@@ -87,6 +90,8 @@ class LeaderboardEngine:
             "start_balance_usdt": round(start_bal, 2),
             "cur_balance_usdt": round(cur_bal, 2),
             "net_profit_usdt": round(net_profit, 2),
+            "iteration_index": iteration_index,
+            "iteration_net_profit_usdt": iteration_net,
             "peak_net_profit_usdt": round(peak_net_profit, 2),
             "peak_age_hours": round(peak_age_h, 1),
             "net_velocity": round(net_vel, 2),
@@ -122,17 +127,20 @@ class LeaderboardEngine:
         """Форматирует ASCII таблицу Leaderboard по чистому кумулятивному Net Profit."""
         active_count = len(entries)
         header = (
-            "=" * 132 + "\n"
+            "=" * 136 + "\n"
             f"STRATEGIES LEADERBOARD (Active: {active_count} | Coins: {evaluated_coins_count})\n"
             f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-            + "=" * 132 + "\n"
-            f"{'#':<3} {'Strategy / Universe ID':<37} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net (Age)':<17} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
-            + "-" * 132
+            + "=" * 136 + "\n"
+            f"{'#':<3} {'Strategy / Universe ID':<35} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
+            + "-" * 136
         )
 
         rows = []
         for idx, item in enumerate(entries, start=start_rank):
             net_str = f"{item['net_profit_usdt']:+.2f} USDT"
+            iter_idx = item.get('iteration_index', 1)
+            iter_val = item.get('iteration_net_profit_usdt', item['net_profit_usdt'])
+            iter_str = f"{iter_val:+.2f} $ (#{iter_idx})"
             realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
             unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
             peak_val = item.get('peak_net_profit_usdt', 0.0)
@@ -140,15 +148,15 @@ class LeaderboardEngine:
             peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
             dd_str = f"{item['max_drawdown_usdt']:.2f} $"
             rec_str = f"{item['recovery_factor']:.2f}"
-            uid_short = item['universe_id'][:36]
+            uid_short = item['universe_id'][:34]
 
             row = (
-                f"{idx:<3} {uid_short:<37} {net_str:<14} {realized_str:<13} "
-                f"{unrealized_str:<12} {peak_net_str:<17} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
+                f"{idx:<3} {uid_short:<35} {net_str:<13} {iter_str:<14} {realized_str:<12} "
+                f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
             )
             rows.append(row)
 
-        footer = "=" * 132
+        footer = "=" * 136
         return "\n".join([header] + rows + [footer])
 
     def format_table_chunks(
@@ -176,17 +184,20 @@ class LeaderboardEngine:
             end_rank = end_i
 
             header = (
-                "=" * 132 + "\n"
+                "=" * 136 + "\n"
                 f"STRATEGIES LEADERBOARD (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
                 f"Ranked strictly by Cumulative Net Profit USDT\n"
-                + "=" * 132 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<37} {'Net Profit':<14} {'Realized':<13} {'Floating':<12} {'Peak Net (Age)':<17} {'Max DD':<12} {'Trades':<8} {'Rec.Fact':<8}\n"
-                + "-" * 132
+                + "=" * 136 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<35} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
+                + "-" * 136
             )
 
             rows = []
             for idx, item in enumerate(chunk_entries, start=start_rank):
                 net_str = f"{item['net_profit_usdt']:+.2f} USDT"
+                iter_idx = item.get('iteration_index', 1)
+                iter_val = item.get('iteration_net_profit_usdt', item['net_profit_usdt'])
+                iter_str = f"{iter_val:+.2f} $ (#{iter_idx})"
                 realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
                 unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
                 peak_val = item.get('peak_net_profit_usdt', 0.0)
@@ -194,15 +205,15 @@ class LeaderboardEngine:
                 peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
                 dd_str = f"{item['max_drawdown_usdt']:.2f} $"
                 rec_str = f"{item['recovery_factor']:.2f}"
-                uid_short = item['universe_id'][:36]
+                uid_short = item['universe_id'][:34]
 
                 row = (
-                    f"{idx:<3} {uid_short:<37} {net_str:<14} {realized_str:<13} "
-                    f"{unrealized_str:<12} {peak_net_str:<17} {dd_str:<12} {item['total_trades']:<8} {rec_str:<8}"
+                    f"{idx:<3} {uid_short:<35} {net_str:<13} {iter_str:<14} {realized_str:<12} "
+                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
                 )
                 rows.append(row)
 
-            footer = "=" * 132
+            footer = "=" * 136
             chunks.append("\n".join([header] + rows + [footer]))
 
         return chunks

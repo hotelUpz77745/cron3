@@ -933,6 +933,17 @@ class BotCore:
         except Exception as e:
             logger.error(f"[{strategy_id}] Error closing positions: {e}")
 
+        # 3. Блокируем новые входы до начала следующей свечи (идемпотентность как при Close All)
+        try:
+            now = time.time()
+            tf = getattr(strat, "timeframe", "5m") if strat else "5m"
+            interval = self.time_control.interval_to_seconds(tf)
+            next_candle = ((now // interval) + 1) * interval
+            self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), next_candle)
+            logger.warning(f"[{strategy_id}] Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
+        except Exception as e:
+            logger.error(f"[{strategy_id}] Error while calculating block_until_timestamp: {e}")
+
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""
         logger.info("Executing graceful BotCore shutdown...")

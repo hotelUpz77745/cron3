@@ -994,6 +994,29 @@ class AnalyticsManager:
             active_h_g = max(0.1, (now_ms - first_ts_g) / 3600000.0)
             net_profit_usdt = float(data.get("net_profit_usdt", 0.0))
             data["net_velocity"] = round(net_profit_usdt / active_h_g, 2)
+
+            # Global Iteration Telemetry (учет конкретной итерации / цикла портфеля)
+            iter_idx_g = int(data.get("iteration_index", 1))
+            iter_start_net_g = float(data.get("iteration_start_net_profit_usdt", 0.0))
+            iter_net_g = round(net_profit_usdt - iter_start_net_g, 4)
+            iter_start_ts_g = data.get("iteration_start_ts", first_ts_g)
+
+            iter_peak_net_g = float(data.get("iteration_peak_net_profit_usdt", iter_net_g))
+            iter_peak_ts_g = data.get("iteration_peak_ts", iter_start_ts_g)
+            if iter_net_g > iter_peak_net_g:
+                iter_peak_net_g = iter_net_g
+                iter_peak_ts_g = now_ms
+
+            data["iteration_index"] = iter_idx_g
+            data["iteration_start_net_profit_usdt"] = round(iter_start_net_g, 4)
+            data["iteration_net_profit_usdt"] = iter_net_g
+            data["iteration_start_ts"] = iter_start_ts_g
+            data["iteration_peak_net_profit_usdt"] = round(iter_peak_net_g, 4)
+            data["iteration_peak_ts"] = iter_peak_ts_g
+            data["iteration_peak_age_hours"] = round(max(0.0, (now_ms - iter_peak_ts_g) / 3600000.0), 2)
+
+            iter_active_h_g = max(0.05, (now_ms - iter_start_ts_g) / 3600000.0)
+            data["iteration_net_velocity"] = round(iter_net_g / iter_active_h_g, 2)
             
             if data["max_drawdown_usdt"] < 0:
                 data["recovery_factor"] = round(net_profit_usdt / abs(data["max_drawdown_usdt"]), 2)
@@ -1102,6 +1125,30 @@ class AnalyticsManager:
             first_ts_s = strat_data.get("first_trade_ts", now_ms)
             active_h_s = max(0.1, (now_ms - first_ts_s) / 3600000.0)
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
+
+            # Strategy Iteration Telemetry (учет конкретной итерации / цикла купола)
+            s_net = float(strat_data.get("net_profit_usdt", 0.0))
+            iter_idx = int(strat_data.get("iteration_index", 1))
+            iter_start_net = float(strat_data.get("iteration_start_net_profit_usdt", 0.0))
+            iter_net = round(s_net - iter_start_net, 4)
+            iter_start_ts = strat_data.get("iteration_start_ts", first_ts_s)
+
+            iter_peak_net = float(strat_data.get("iteration_peak_net_profit_usdt", iter_net))
+            iter_peak_ts = strat_data.get("iteration_peak_ts", iter_start_ts)
+            if iter_net > iter_peak_net:
+                iter_peak_net = iter_net
+                iter_peak_ts = now_ms
+
+            strat_data["iteration_index"] = iter_idx
+            strat_data["iteration_start_net_profit_usdt"] = round(iter_start_net, 4)
+            strat_data["iteration_net_profit_usdt"] = iter_net
+            strat_data["iteration_start_ts"] = iter_start_ts
+            strat_data["iteration_peak_net_profit_usdt"] = round(iter_peak_net, 4)
+            strat_data["iteration_peak_ts"] = iter_peak_ts
+            strat_data["iteration_peak_age_hours"] = round(max(0.0, (now_ms - iter_peak_ts) / 3600000.0), 2)
+
+            iter_active_h = max(0.05, (now_ms - iter_start_ts) / 3600000.0)
+            strat_data["iteration_net_velocity"] = round(iter_net / iter_active_h, 2)
 
             s_dd = s_trough - s_peak
             strat_data["max_drawdown_usdt"] = round(min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd), 4)

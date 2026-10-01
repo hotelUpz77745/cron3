@@ -154,5 +154,27 @@ class TestAutoCloserStagnation(unittest.TestCase):
         target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"net_velocity": 0.2}, pos_cfg_all_off)
         self.assertIsNone(target)
 
+    def test_iteration_telemetry_priority(self):
+        # When iteration_net_velocity is provided, it must take precedence over lifetime net_velocity
+        pos_cfg = {
+            "min_floor": 7.0,
+            "mode": "velocity",
+            "stagnation_card": {
+                ">1.0": 21.0,
+                ">0.4": 12.0,
+                "<=0.4": 8.0
+            }
+        }
+        # Lifetime net_velocity is low (0.2), but current iteration velocity is high (1.5)
+        analytics = {
+            "net_velocity": 0.2,
+            "iteration_net_velocity": 1.5,
+            "iteration_net_profit_usdt": 5.0,
+            "iteration_peak_age_hours": 0.2
+        }
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target(analytics, pos_cfg)
+        self.assertEqual(target, 21.0)
+        self.assertFalse(is_stag)
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,6 +1,7 @@
 import asyncio
 import copy
 import time
+from typing import Any, Optional, Dict
 from consts import DATA_DIR, ANALYTICS_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -11,6 +12,7 @@ class AutoCloser:
     def __init__(self, bot_core):
         self.bot_core = bot_core
         self._is_closing = False
+        self._last_close_ts: dict[str, float] = {}
 
     @staticmethod
     def match_rule_float(rule: str, val: float) -> bool:
@@ -99,13 +101,14 @@ class AutoCloser:
         mode = stag_cfg.get("mode", "auto")
 
         now_ms = int(time.time() * 1000)
-        peak_age_h = float(analytics_dict.get("peak_age_hours", 0.0))
+        peak_age_h = float(analytics_dict.get("iteration_peak_age_hours", analytics_dict.get("peak_age_hours", 0.0)))
         
-        velocity = float(analytics_dict.get("net_velocity", 0.0))
-        if "net_velocity" not in analytics_dict:
-            first_ts = analytics_dict.get("first_trade_ts", now_ms)
-            active_h = max(0.1, (now_ms - first_ts) / 3600000.0)
-            velocity = round(float(analytics_dict.get("net_profit_usdt", 0.0)) / active_h, 2)
+        velocity = float(analytics_dict.get("iteration_net_velocity", analytics_dict.get("net_velocity", 0.0)))
+        if "iteration_net_velocity" not in analytics_dict and "net_velocity" not in analytics_dict:
+            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
+            active_h = max(0.05, (now_ms - first_ts) / 3600000.0)
+            iter_profit = float(analytics_dict.get("iteration_net_profit_usdt", analytics_dict.get("net_profit_usdt", 0.0)))
+            velocity = round(iter_profit / active_h, 2)
 
         if mode == "auto":
             first_key = next(iter(card.keys()), "")
@@ -206,12 +209,19 @@ class AutoCloser:
                         self._is_closing = False
                     
                     return # Exit check early
-             # 1. СТРАТЕГИЧЕСКИЕ КУПОЛА (PER-STRATEGY AUTO-CLOSING)
+
+        CLOSE_COOLDOWN_SEC = 45.0
+        now_sec = time.time()
+
+        # 1. СТРАТЕГИЧЕСКИЕ КУПОЛА (PER-STRATEGY AUTO-CLOSING)
         active_strats = {}
         if hasattr(self.bot_core, "strategy_registry"):
             active_strats = self.bot_core.strategy_registry.active_strategies
 
         for strat_id, strat_cfg in active_strats.items():
+            if now_sec - self._last_close_ts.get(strat_id, 0.0) < CLOSE_COOLDOWN_SEC:
+                continue
+
             strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
             strat_auto_cfg = strat_app_cfg.get("auto_closing") or strat_cfg.auto_closing_cfg
             if not strat_auto_cfg:
@@ -224,100 +234,97 @@ class AutoCloser:
                 strat_analytics = analytics_data
 
             strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
+            iter_idx = int(strat_analytics.get("iteration_index", 1))
+            iter_start_net = float(strat_analytics.get("iteration_start_net_profit_usdt", 0.0))
+            iter_net = float(strat_analytics.get("iteration_net_profit_usdt", round(strat_net - iter_start_net, 4)))
+
             pos_cfg = strat_auto_cfg.get("positive", {})
             neg_cfg = strat_auto_cfg.get("negative", {})
 
             strat_triggered = False
             strat_msg = ""
+            next_iter_idx = iter_idx + 1
+            new_iter_start_net = round(strat_net, 4)
 
-            # Check Positive for Strategy Dome (с поддержкой карты стагнации)
+            # Check Positive for Strategy Dome (ориентируемся строго на Net текущей итерации)
             th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
 
-            if th_pos is not None and strat_net >= th_pos:
+            if th_pos is not None and iter_net >= th_pos:
                 strat_triggered = True
                 logger.info(
-                    f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) >= {th_pos} "
+                    f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} Net ({iter_net:+.2f}) >= {th_pos} "
+                    f"(Global Net: {strat_net:+.2f}) "
                     f"({'STAGNATION ' + stag_info if is_stagnation else 'TARGET'}). Auto-closing strategy dome!"
                 )
                 if is_stagnation:
-                    # При закрытии по стагнации базовый порог в конфиге не меняем (он остается для свежего цикла)
                     strat_msg = (
                         f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}] (STAGNATION RATCHET)</b>\n"
+                        f"Завершен <b>Цикл #{iter_idx}</b>!\n"
+                        f"Прибыль цикла: <b>+{iter_net:.2f} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
+                        f"Глобальный Net Profit: <b>{strat_net:+.2f} USDT</b>.\n"
                         f"Сработал затухающий порог {stag_info}.\n"
-                        f"Чистый Net Profit: <b>{strat_net} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
                         f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Базовый порог на следующий цикл сохранен: <b>{ref_top} USDT</b>."
+                        f"Старт <b>Цикла #{next_iter_idx}</b> (базовая точка Net: <b>{new_iter_start_net:+.2f} USDT</b>)."
                     )
                 else:
-                    inc = pos_cfg.get("threshold_increment")
-                    if inc:
-                        new_th = th_pos + inc
-                        while new_th <= strat_net:
-                            new_th += inc
-                        new_th = round(new_th, 4)
-                        if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                            if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                                app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                            app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = new_th
-                        strat_msg = (
-                            f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                            f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
-                            f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                            f"Новый порог купола: <b>{new_th} USDT</b>."
-                        )
-                    else:
-                        if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                            if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                                app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                            app_data["active_strategies"][strat_id]["auto_closing"]["positive"]["threshold"] = None
-                        strat_msg = (
-                            f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                            f"Профит стратегии достиг <b>{strat_net} USDT</b> (Порог: {th_pos}).\n"
-                            f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                            f"Порог купола снят (null)."
-                        )
+                    strat_msg = (
+                        f"🟢 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}] (TARGET REACHED)</b>\n"
+                        f"Завершен <b>Цикл #{iter_idx}</b>!\n"
+                        f"Прибыль цикла: <b>+{iter_net:.2f} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
+                        f"Глобальный Net Profit: <b>{strat_net:+.2f} USDT</b>.\n"
+                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                        f"Старт <b>Цикла #{next_iter_idx}</b> (базовая точка Net: <b>{new_iter_start_net:+.2f} USDT</b>)."
+                    )
 
             # Check Negative for Strategy Dome
             th_neg = neg_cfg.get("threshold")
             if th_neg == 0 or th_neg == 0.0:
                 th_neg = None
 
-            if not strat_triggered and th_neg is not None and strat_net <= th_neg:
+            if not strat_triggered and th_neg is not None and iter_net <= th_neg:
                 strat_triggered = True
-                logger.info(f"[AUTO_CLOSER][{strat_id}] Net Profit ({strat_net}) <= {th_neg}. Auto-closing strategy dome!")
-                inc = neg_cfg.get("threshold_increment")
-                if inc:
-                    inc = abs(inc)
-                    new_th = th_neg - inc
-                    while new_th >= strat_net:
-                        new_th -= inc
-                    new_th = round(new_th, 4)
-                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                        app_data["active_strategies"][strat_id]["auto_closing"]["negative"]["threshold"] = new_th
-                    strat_msg = (
-                        f"🔴 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                        f"Профит стратегии опустился до <b>{strat_net} USDT</b> (Порог: {th_neg}).\n"
-                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Новый порог купола: <b>{new_th} USDT</b>."
-                    )
-                else:
-                    if "active_strategies" in app_data and strat_id in app_data["active_strategies"]:
-                        if "auto_closing" not in app_data["active_strategies"][strat_id]:
-                            app_data["active_strategies"][strat_id]["auto_closing"] = copy.deepcopy(strat_auto_cfg)
-                        app_data["active_strategies"][strat_id]["auto_closing"]["negative"]["threshold"] = None
-                    strat_msg = (
-                        f"🔴 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}]</b>\n"
-                        f"Профит стратегии опустился до <b>{strat_net} USDT</b> (Порог: {th_neg}).\n"
-                        f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
-                        f"Порог купола снят (null)."
-                    )
+                logger.info(
+                    f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} Net ({iter_net:+.2f}) <= {th_neg} "
+                    f"(Global Net: {strat_net:+.2f}). Auto-closing strategy dome!"
+                )
+                strat_msg = (
+                    f"🔴 <b>AUTO-CLOSE КУПОЛА [{strat_cfg.name}] (NEGATIVE STOP)</b>\n"
+                    f"Завершен <b>Цикл #{iter_idx}</b> по защитному стопу!\n"
+                    f"Просадка цикла: <b>{iter_net:.2f} USDT</b> (Порог: <b>{th_neg} USDT</b>).\n"
+                    f"Глобальный Net Profit: <b>{strat_net:+.2f} USDT</b>.\n"
+                    f"Закрыты позиции монет: {strat_cfg.symbols}.\n"
+                    f"Старт <b>Цикла #{next_iter_idx}</b> (базовая точка Net: <b>{new_iter_start_net:+.2f} USDT</b>)."
+                )
 
             if strat_triggered:
                 try:
                     self._is_closing = True
+                    self._last_close_ts[strat_id] = time.time()
+
+                    # 1. Закрываем позиции и отменяем ордера (в bot.py также блокируется вход до следующей свечи)
                     await self.bot_core.close_strategy_positions(strat_id)
+
+                    # 2. Продвигаем и сохраняем новую итерацию
+                    now_ms = int(time.time() * 1000)
+                    strat_analytics["iteration_index"] = next_iter_idx
+                    strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
+                    strat_analytics["iteration_net_profit_usdt"] = 0.0
+                    strat_analytics["iteration_start_ts"] = now_ms
+                    strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
+                    strat_analytics["iteration_peak_ts"] = now_ms
+                    strat_analytics["iteration_peak_age_hours"] = 0.0
+                    strat_analytics["iteration_net_velocity"] = 0.0
+                    if strat_stats_path:
+                        Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
+
+                    # 3. Сбрасываем recent_closes у монет стратегии, чтобы Knife Blocker не блокировал входы в новом цикле
+                    if hasattr(self.bot_core, "fsm_states"):
+                        for sym in strat_cfg.symbols:
+                            if sym in self.bot_core.fsm_states:
+                                for s_side in ("LONG", "SHORT"):
+                                    if s_side in self.bot_core.fsm_states[sym]:
+                                        self.bot_core.fsm_states[sym][s_side].recent_closes = []
+
                     Utils.write_json_file(app_json_path, app_data)
                     if strat_msg and getattr(self.bot_core, 'notifier', None):
                         await self.bot_core.notifier.send_alert(strat_msg)
@@ -331,71 +338,93 @@ class AutoCloser:
         if not auto_cfg:
             return
 
-        net_usdt = analytics_data.get("net_profit_usdt", 0.0)
+        if now_sec - self._last_close_ts.get("__global__", 0.0) < CLOSE_COOLDOWN_SEC:
+            return
+
+        net_usdt = float(analytics_data.get("net_profit_usdt", 0.0))
+        iter_idx_g = int(analytics_data.get("iteration_index", 1))
+        iter_start_net_g = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
+        iter_net_g = float(analytics_data.get("iteration_net_profit_usdt", round(net_usdt - iter_start_net_g, 4)))
+
         pos_cfg = auto_cfg.get("positive", {})
         neg_cfg = auto_cfg.get("negative", {})
         
         triggered = False
         action_msg = ""
+        next_iter_idx_g = iter_idx_g + 1
+        new_iter_start_net_g = round(net_usdt, 4)
         
-        # Check Positive Portfolio (с поддержкой карты стагнации)
+        # Check Positive Portfolio (с поддержкой карты стагнации по Net итерации)
         th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(analytics_data, pos_cfg)
         
-        if th_pos is not None and net_usdt >= th_pos:
+        if th_pos is not None and iter_net_g >= th_pos:
             self._is_closing = True
             triggered = True
             logger.info(
-                f"[AUTO_CLOSER] Net Profit ({net_usdt}) >= {th_pos} "
+                f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} Net ({iter_net_g:+.2f}) >= {th_pos} "
+                f"(Global Net: {net_usdt:+.2f}) "
                 f"({'STAGNATION ' + stag_info if is_stagnation else 'TARGET'}). Auto-closing portfolio!"
             )
             if is_stagnation:
                 action_msg = (
                     f"🟢 <b>AUTO-CLOSE (PORTFOLIO STAGNATION RATCHET)</b>\n"
+                    f"Завершен <b>Цикл #{iter_idx_g}</b> портфеля!\n"
+                    f"Прибыль цикла: <b>+{iter_net_g:.2f} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
+                    f"Глобальный Net Profit: <b>{net_usdt:+.2f} USDT</b>.\n"
                     f"Сработал затухающий порог {stag_info}.\n"
-                    f"Net Profit reached <b>{net_usdt} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
-                    f"Positions closed. Base threshold preserved: <b>{ref_top} USDT</b>."
+                    f"Старт <b>Цикла #{next_iter_idx_g}</b> (базовая точка Net: <b>{new_iter_start_net_g:+.2f} USDT</b>)."
                 )
             else:
-                inc = pos_cfg.get("threshold_increment")
-                if inc:
-                    new_th = th_pos + inc
-                    while new_th <= net_usdt:
-                        new_th += inc
-                    new_th = round(new_th, 4)
-                    app_data["auto_closing"]["positive"]["threshold"] = new_th
-                    action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. New threshold: <b>{new_th}</b>."
-                    logger.info(f"[AUTO_CLOSER] Increased positive threshold to {new_th}.")
-                else:
-                    app_data["auto_closing"]["positive"]["threshold"] = None
-                    action_msg = f"🟢 <b>AUTO-CLOSE (PORTFOLIO POSITIVE)</b>\nNet Profit reached <b>{net_usdt} USDT</b> (Threshold: {th_pos}).\nPositions closed. Threshold removed."
+                action_msg = (
+                    f"🟢 <b>AUTO-CLOSE (PORTFOLIO TARGET REACHED)</b>\n"
+                    f"Завершен <b>Цикл #{iter_idx_g}</b> портфеля!\n"
+                    f"Прибыль цикла: <b>+{iter_net_g:.2f} USDT</b> (Порог: <b>{th_pos} USDT</b>).\n"
+                    f"Глобальный Net Profit: <b>{net_usdt:+.2f} USDT</b>.\n"
+                    f"Старт <b>Цикла #{next_iter_idx_g}</b> (базовая точка Net: <b>{new_iter_start_net_g:+.2f} USDT</b>)."
+                )
                 
         # Check Negative Portfolio
         th_neg = neg_cfg.get("threshold")
         if th_neg == 0 or th_neg == 0.0:
             th_neg = None
             
-        if not triggered and th_neg is not None and net_usdt <= th_neg:
+        if not triggered and th_neg is not None and iter_net_g <= th_neg:
             self._is_closing = True
             triggered = True
-            logger.info(f"[AUTO_CLOSER] Net Profit ({net_usdt}) <= {th_neg}. Auto-closing portfolio!")
-            
-            inc = neg_cfg.get("threshold_increment")
-            if inc:
-                inc = abs(inc)
-                new_th = th_neg - inc
-                while new_th >= net_usdt:
-                    new_th -= inc
-                new_th = round(new_th, 4)
-                app_data["auto_closing"]["negative"]["threshold"] = new_th
-                action_msg = f"🔴 <b>AUTO-CLOSE (PORTFOLIO NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. New threshold: <b>{new_th}</b>."
-                logger.info(f"[AUTO_CLOSER] Decreased negative threshold to {new_th}.")
-            else:
-                app_data["auto_closing"]["negative"]["threshold"] = None
-                action_msg = f"🔴 <b>AUTO-CLOSE (PORTFOLIO NEGATIVE)</b>\nNet Profit dropped to <b>{net_usdt} USDT</b> (Threshold: {th_neg}).\nPositions closed. Threshold removed."
+            logger.info(
+                f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} Net ({iter_net_g:+.2f}) <= {th_neg} "
+                f"(Global Net: {net_usdt:+.2f}). Auto-closing portfolio!"
+            )
+            action_msg = (
+                f"🔴 <b>AUTO-CLOSE (PORTFOLIO NEGATIVE STOP)</b>\n"
+                f"Завершен <b>Цикл #{iter_idx_g}</b> портфеля по стопу!\n"
+                f"Просадка цикла: <b>{iter_net_g:.2f} USDT</b> (Порог: <b>{th_neg} USDT</b>).\n"
+                f"Глобальный Net Profit: <b>{net_usdt:+.2f} USDT</b>.\n"
+                f"Старт <b>Цикла #{next_iter_idx_g}</b> (базовая точка Net: <b>{new_iter_start_net_g:+.2f} USDT</b>)."
+            )
 
         if triggered:
             try:
+                self._last_close_ts["__global__"] = time.time()
                 await self.bot_core.close_all_positions()
+
+                now_ms = int(time.time() * 1000)
+                analytics_data["iteration_index"] = next_iter_idx_g
+                analytics_data["iteration_start_net_profit_usdt"] = new_iter_start_net_g
+                analytics_data["iteration_net_profit_usdt"] = 0.0
+                analytics_data["iteration_start_ts"] = now_ms
+                analytics_data["iteration_peak_net_profit_usdt"] = 0.0
+                analytics_data["iteration_peak_ts"] = now_ms
+                analytics_data["iteration_peak_age_hours"] = 0.0
+                analytics_data["iteration_net_velocity"] = 0.0
+                Utils.atomic_write_json(ANALYTICS_DIR / "analytics.json", analytics_data, indent=4)
+
+                if hasattr(self.bot_core, "fsm_states"):
+                    for sym, sides in self.bot_core.fsm_states.items():
+                        for s_side, s_obj in sides.items():
+                            if hasattr(s_obj, "recent_closes"):
+                                s_obj.recent_closes = []
+
                 Utils.write_json_file(app_json_path, app_data)
                 if action_msg and getattr(self.bot_core, 'notifier', None):
                     await self.bot_core.notifier.send_alert(action_msg)
