@@ -26,7 +26,9 @@ cron3/
 │
 ├── CORE/
 │   ├── bot.py                       # BotCore: _on_tick, _process_signal — главный оркестратор
-│   ├── auto_closer.py               # авто-закрытие по PnL куполов
+│   ├── auto_closer.py               # авто-закрытие по PnL куполов и карте стагнации
+│   ├── radar_navigator.py           # Штурман ротации: синергия с Радаром полигона
+│   ├── radar_journal.py             # Журналирование и аудит ротаций монет
 │   ├── notifier.py                  # уведомления по куполам
 │   ├── coin_selectors.py            # Селекторы монет (AgentMarketSelector + SamsonovFunnelSelector)
 │   ├── runtime_backup.py            # дебаунс-бэкап рантаймов
@@ -67,18 +69,19 @@ cron3/
 │   ├── leaderboard.py / .txt        # лидерборд стратегий
 │   ├── plotter.py                   # графики
 │   ├── STATS/                       # analytics_<strat_id>.json — по куполу
-│   ├── LEDGERS/                     # журналы сделок
+│   ├── LEDGERS/                     # журналы сделок, rotations_ledger.txt
 │   └── BACKUP_SESSIONS/             # бэкапы рантаймов
 │
 ├── CFG/
-│   ├── app.json                     # главный конфиг (active_strategies, telegram, watchdog...)
+│   ├── app.json                     # главный конфиг (active_strategies, radar_synergy, telegram, watchdog...)
 │   ├── universes.json               # библиотека шаблонов стратегий
 │   └── runtime/<strat_id>/<sym>.json  # живые рантаймы (генерирует StrategyApplicator)
 │
 ├── CACHE/
 │   ├── specifications.json          # спецификации инструментов Binance (~2.5MB)
 │   ├── leverage_cache.json          # текущие плечи по символам
-│   └── iteration_state.json         # состояние итерации авто-закрытия
+│   ├── iteration_state.json         # состояние итерации авто-закрытия
+│   └── rotations_log.json           # структурированный кэш истории ротаций монет
 │
 ├── tools/
 │   ├── audit_and_cleanup_orders.py  # аудит ордеров
@@ -86,7 +89,8 @@ cron3/
 │
 └── tests/
     ├── test_strategy_system.py      # 12 тестов multi-universe (100% pass)
-    └── test_auto_closer_stagnation.py
+    ├── test_auto_closer_stagnation.py # 8 тестов карты стагнации (100% pass)
+    └── test_radar_synergy.py        # 30 тестов синергии Радара и авторотации (100% pass)
 ```
 
 ---
@@ -99,7 +103,7 @@ cron3/
 | **I2** | Конфиги читать `['key']`, не `.get(key, default)` |
 | **I3** | Дефолт = `None`. Нуль (`0`) — только с согласования оператора |
 | **I4** | Любой TP строго `≥ 0.50%`. `tp_indent = max(0.50, val)` — вшито в `StrategyApplicator` |
-| **I5** | Суффиксы: `_pct` = % от 100 | `_ratio`/`_rate` = доля от 1. Никакой нормализации в коде |
+| **I5** | Суффиксы: `_pct` = % от 100 \| `_ratio`/`_rate` = доля от 1. Никакой нормализации в коде |
 | **I6** | Шапка каждого файла: `# Path: ...` + `# Role: ...` |
 | **I7** | `git push` — ЗАПРЕЩЁН без явной команды оператора |
 
@@ -110,16 +114,20 @@ cron3/
 ```
 Ветка:      uni
 Активные стратегии:
-  u9_omni_zenith_apex   → 3 монеты (enabled: true)
+  u9_omni_zenith_apex   → 4 монеты: GRASSUSDT, ARXUSDT, ZROUSDT, XPLUSDT (enabled: true, target_coins_count: 4)
   Остальные             → enabled: false (спящий резерв)
 
 Лидерборд (leaderboard.txt):
-  u9_omni_zenith_apex: +8.53 USDT net | Rec.Factor 1.07 | 62 сделки
+  u9_omni_zenith_apex: 121+ сделок | Winrate 85.95% | Gross Realized +54.63 USDT
 
 Ключевые ADR (последние):
-  - Купольная изоляция: Analytics / AutoCloser / Notifications / SuperGrid — по стратегии
-  - iteration_state.json: персистентность iter PnL и guards авто-закрытия
-  - universes.json: per-side overrides, убраны is_active флаги
+  - Radar Synergy & 1:1 Auto-Rotation: интеграция RadarNavigator с Радаром полигона, воронка Самсонова,
+    атомарная ротация 1-к-1 при храповике стагнации с гистерезисом +35%, защита победителей (>5.0%),
+    аудит-журнал (rotations_log.json / rotations_ledger.txt) и сохранение инварианта обоймы.
+  - Radar Trade Velocity Sync: чтение pre-calculated velocity из аналитики в изолированном TG-процессе Радара.
+  - Купольная изоляция: Analytics / AutoCloser / Notifications / SuperGrid — по стратегии.
+  - iteration_state.json: персистентность iter PnL и guards авто-закрытия.
+  - universes.json: per-side overrides, убраны is_active флаги.
 ```
 
 ---
