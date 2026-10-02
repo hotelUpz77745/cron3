@@ -79,7 +79,6 @@
         "_desc_strict_window": "Строгий учет длины истории: отбрасывать молодые листинги, у которых свечей меньше окна.",
         "min_dayly_vol_usdt": 3000000,
         "_desc_min_dayly_vol_usdt": "Базовый фильтр ликвидности: минимальный суточный (24h) объем торгов в USDT.",
-
         "atr_volatility_filter": {
             "enabled": true,
             "_desc_enabled": "Фильтр долгосрочной свечной волатильности (ATR-диапазон).",
@@ -92,7 +91,6 @@
             "max_volatility_pct": 40.0,
             "_desc_max_volatility_pct": "Максимальная средняя волатильность свечей в %."
         },
-
         "rsi_filter": {
             "enabled": true,
             "_desc_enabled": "Фильтр перекупленности/перепроданности RSI (отсев экстремальных пампов и дампов).",
@@ -105,7 +103,6 @@
             "max_rsi": 65.0,
             "_desc_max_rsi": "Верхняя допустимая граница RSI (защита от хаев/пампов)."
         },
-
         "bollinger_width_filter": {
             "enabled": true,
             "_desc_enabled": "Фильтр ширины канала Боллинджера (оценка чистой волатильности относительно нижней границы).",
@@ -121,11 +118,10 @@
             "_desc_min_width_pct": "Минимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
             "max_width_pct": 13.0,
             "_desc_max_width_pct": "Максимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
-
             "center_proximity_filter": {
                 "enabled": true,
                 "_desc_enabled": "Подфильтр близости к средней линии: гарантирует старт из сбалансированной зоны.",
-                "max_deviation_from_center_pct": 75.0,
+                "max_deviation_from_center_pct": 40.0,
                 "_desc_max_deviation_from_center_pct": "Максимальное отклонение цены от middleBB в % от ширины канала (|Price - middleBB| / (Upper - Lower) * 100).",
                 "_comment": "50% = цена на границе канала, 75% = цена не дальше 1.5x полуширины от центра."
             }
