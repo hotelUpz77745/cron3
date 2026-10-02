@@ -265,13 +265,25 @@ class TelegramReceiver:
                 await callback.message.answer("⚠️ Запрос на ротацию устарел (таймаут истек) или уже выполнен.")
                 return
             nav.cancel_timeout_task(req_id)
-            rot = nav.pending_rotations.pop(req_id)
-            nav.symbols_pending_rotation.discard(rot["old_symbol"])
+            rot_data = nav.pending_rotations.pop(req_id)
+            strat_id = rot_data["strat_id"]
+            rotations = rot_data.get("rotations")
+            if not rotations and "old_symbol" in rot_data:
+                rotations = [rot_data]
+
+            for r in rotations:
+                nav.symbols_pending_rotation.discard(r["old_symbol"])
+
             try:
-                await nav.apply_rotation(rot["strat_id"], rot["old_symbol"], rot["new_symbol"])
+                applied_lines = []
+                for r in rotations:
+                    await nav.apply_rotation(strat_id, r["old_symbol"], r["new_symbol"])
+                    applied_lines.append(f"• <b>{r['old_symbol']}</b> ➔ <b>{r['new_symbol']}</b> (+{r['lead_pct']:.1f}%)")
+
+                msg_applied = "\n".join(applied_lines)
                 await callback.message.edit_text(
-                    f"✅ <b>Ротация выполнена!</b>\n"
-                    f"Монета <b>{rot['old_symbol']}</b> заменена на <b>{rot['new_symbol']}</b> (+{rot['lead_pct']:.1f}% скора).\n"
+                    f"✅ <b>Ротация выполнена!</b> (Замен: {len(rotations)})\n"
+                    f"{msg_applied}\n"
                     f"Новый цикл стартует на обновленном составе!",
                     parse_mode="HTML"
                 )
@@ -286,11 +298,15 @@ class TelegramReceiver:
             nav = getattr(self.bot_core, "radar_navigator", None)
             if nav and req_id in nav.pending_rotations:
                 nav.cancel_timeout_task(req_id)
-                rot = nav.pending_rotations.pop(req_id)
-                nav.symbols_pending_rotation.discard(rot["old_symbol"])
+                rot_data = nav.pending_rotations.pop(req_id)
+                rotations = rot_data.get("rotations")
+                if not rotations and "old_symbol" in rot_data:
+                    rotations = [rot_data]
+                for r in rotations:
+                    nav.symbols_pending_rotation.discard(r["old_symbol"])
                 await callback.message.edit_text(
                     f"❌ <b>Ротация отклонена.</b>\n"
-                    f"Боевой пул стратегии [{rot['strat_id']}] сохранен без изменений.",
+                    f"Боевой пул стратегии [{rot_data['strat_id']}] сохранен без изменений.",
                     parse_mode="HTML"
                 )
             else:
@@ -2790,12 +2806,13 @@ class TelegramReceiver:
         await self.dp.start_polling(self.bot)
 
 
-def build_rotation_inline_keyboard(req_id: str) -> dict:
+def build_rotation_inline_keyboard(req_id: str, count: int = 1) -> dict:
     """Генератор инлайн-клавиатуры для запроса подтверждения ротации."""
+    accept_text = f"✅ Применить ротацию ({count})" if count > 1 else "✅ Применить ротацию"
     return {
         "inline_keyboard": [
             [
-                {"text": "✅ Применить ротацию", "callback_data": f"rot_accept:{req_id}"},
+                {"text": accept_text, "callback_data": f"rot_accept:{req_id}"},
                 {"text": "❌ Оставить как есть", "callback_data": f"rot_reject:{req_id}"}
             ]
         ]

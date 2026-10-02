@@ -194,33 +194,31 @@ class RadarNavigator:
                 )
                 continue
 
-            # ПРАВИЛО 1 (Инициализация): Обойма формируется ровно из target_coins_count монет
-            # Если кандидатов меньше целевого размера, дополняем текущими монетами во избежание обрезания пула
+            # Инициализация пула: наполняем лидерами воронки Самсонова (до target_coins_count)
+            # При нехватке монет дополняем текущими боевыми монетами во избежание обрезания пула
             if len(top_coins) < self.target_count:
                 current_syms = app_data["active_strategies"][sid].get("symbols", [])
                 for s in current_syms:
                     if s not in top_coins and len(top_coins) < self.target_count:
                         top_coins.append(s)
                 logger.info(
-                    f"[RadarNavigator][{sid}] Радар вернул {len(stages.get('final_targets', []))} монет "
-                    f"(меньше целевых {self.target_count}). Обойма дополнена текущими монетами: {top_coins}"
+                    f"[RadarNavigator][{sid}] Кандидаты дополнены текущими боевыми монетами "
+                    f"(всего {len(top_coins)} из макс {self.target_count}): {top_coins}"
                 )
 
-            # Если монет больше целевого размера — строго обрезаем до target_coins_count
+            # Если монет больше целевого размера — ограничиваем до target_coins_count
             if len(top_coins) > self.target_count:
                 top_coins = top_coins[:self.target_count]
 
-            # Контрольная проверка правила: размер обоймы обязан быть СТРОГО равен target_coins_count
-            if len(top_coins) != self.target_count:
+            if not top_coins:
                 current_syms = app_data["active_strategies"][sid].get("symbols", [])
                 logger.warning(
-                    f"⚠️ [RadarNavigator][{sid}] Нарушение правила target_coins_count: "
-                    f"получено {len(top_coins)} монет вместо {self.target_count}. Автокомплит отклонен. "
+                    f"⚠️ [RadarNavigator][{sid}] Итоговый пул пуст. Автокомплит отклонен. "
                     f"Сохранен текущий боевой пул: {current_syms}"
                 )
                 continue
 
-            logger.info(f"🏆 [RadarNavigator][{sid}] Отобран первичный топ монет Самсонова (ровно {self.target_count}): {top_coins}")
+            logger.info(f"🏆 [RadarNavigator][{sid}] Отобран первичный пул монет Самсонова ({len(top_coins)} из макс {self.target_count}): {top_coins}")
             app_data["active_strategies"][sid]["symbols"] = top_coins
             needs_reload = True
 
@@ -280,112 +278,134 @@ class RadarNavigator:
             logger.warning(f"[RadarNavigator][{strat_id}] Текущий боевой пул стратегии пуст. Ротация невозможна.")
             return
 
-        # ПРАВИЛО 2 (Ротация после срабатывания храповика):
-        # Замена производится строго 1-к-1, только если текущий боевой пул полностью укомплектован (target_coins_count)
-        if len(current_symbols) != self.target_count:
-            logger.warning(
-                f"⚠️ [RadarNavigator][{strat_id}] Размер текущего пула ({len(current_symbols)}) "
-                f"не равен target_coins_count ({self.target_count}). Ротация 1-к-1 заблокирована до выравнивания пула."
-            )
-            return
-
-        # Находим слабейшую монету боевого пула
+        # Сортируем текущие монеты боевого пула по возрастанию скора (слабейшие первыми)
         current_scores = []
         for s in current_symbols:
             m = metrics_by_sym.get(s, {})
             score = float(m.get("samsonov_score", 0.0))
             current_scores.append((s, score, m))
         current_scores.sort(key=lambda x: x[1])
-        weakest_sym, weakest_score, weakest_meta = current_scores[0]
 
-        # Находим лучших кандидатов из Радара, не входящих в текущий боевой пул и имеющих положительный скор (>0)
+        # Находим лучших кандидатов из Радара вне текущего пула с положительным скором (>0), отсортированных по убыванию
         candidates = [
             m for m in metrics
             if m.get("symbol") and m["symbol"] not in current_symbols and float(m.get("samsonov_score", 0.0)) > 0.0
         ]
         if not candidates:
             logger.info(
-                f"[RadarNavigator][{strat_id}] Радар не вернул пригодных кандидатов с положительным скором (>0) вне текущего пула "
-                f"(список пуст или ни одна новая монета не показала положительной динамики). Боевой пул сохранен без изменений."
+                f"[RadarNavigator][{strat_id}] Радар не вернул пригодных кандидатов с положительным скором (>0) вне текущего пула. "
+                f"Боевой пул сохранен без изменений."
             )
             return
 
         candidates.sort(key=lambda x: float(x.get("samsonov_score", 0.0)), reverse=True)
-        best_cand = candidates[0]
-        cand_sym = best_cand["symbol"]
-        cand_score = float(best_cand.get("samsonov_score", 0.0))
 
-        # Базовая защита: кандидат обязан быть строго лучше слабейшей боевой монеты
-        if cand_score <= weakest_score:
+        # 4. Формируем пары ротации (слабейшие боевые W_i vs сильнейшие кандидаты C_i)
+        # Проверяем фильтр гистерезиса (+20%) для каждой пары
+        qualified_rotations = []
+        max_pairs = min(len(current_scores), len(candidates))
+        for i in range(max_pairs):
+            weak_sym, weak_score, weak_meta = current_scores[i]
+            cand = candidates[i]
+            cand_sym = cand["symbol"]
+            cand_score = float(cand.get("samsonov_score", 0.0))
+
+            if cand_score <= weak_score:
+                break
+
+            denom = max(weak_score, 0.001)
+            lead_pct = ((cand_score - weak_score) / denom) * 100.0
+
             logger.info(
-                f"[RadarNavigator][{strat_id}] Лучший кандидат {cand_sym} (Скор: {cand_score:.2f}) "
-                f"не превосходит слабейшую боевую монету {weakest_sym} (Скор: {weakest_score:.2f}). Обойма сохраняется."
+                f"[RadarNavigator][{strat_id}] Проверка пары #{i+1}: Кандидат {cand_sym} (Скор: {cand_score:.2f}) "
+                f"vs Слабейший {weak_sym} (Скор: {weak_score:.2f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{self.min_lead_pct}%)"
+            )
+
+            if lead_pct < self.min_lead_pct:
+                break
+
+            qualified_rotations.append({
+                "old_symbol": weak_sym,
+                "new_symbol": cand_sym,
+                "old_score": weak_score,
+                "new_score": cand_score,
+                "lead_pct": lead_pct,
+                "old_meta": weak_meta,
+                "new_meta": cand,
+            })
+
+        if not qualified_rotations:
+            logger.info(
+                f"[RadarNavigator][{strat_id}] Ни один кандидат не превысил порог гистерезиса (+{self.min_lead_pct}%). "
+                f"Обойма сохраняется без изменений."
             )
             return
 
-        # 4. Проверка фильтра гистерезиса (+20%)
-        denom = max(weakest_score, 0.001)
-        lead_pct = ((cand_score - weakest_score) / denom) * 100.0
-
-        logger.info(
-            f"[RadarNavigator][{strat_id}] Проверка гистерезиса: Кандидат {cand_sym} (Скор: {cand_score:.2f}) "
-            f"vs Слабейший {weakest_sym} (Скор: {weakest_score:.2f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{self.min_lead_pct}%)"
-        )
-
-        if lead_pct < self.min_lead_pct:
-            logger.info(f"[RadarNavigator][{strat_id}] Преимущество {lead_pct:+.1f}% < +{self.min_lead_pct}%. Обойма сохраняется без изменений.")
-            return
-
-        # 5. Исполнение решения
+        # 5. Исполнение решения (одиночная или множественная пакетная замена)
         rot_data = {
             "strat_id": strat_id,
-            "old_symbol": weakest_sym,
-            "new_symbol": cand_sym,
-            "old_score": weakest_score,
-            "new_score": cand_score,
-            "lead_pct": lead_pct,
+            "rotations": qualified_rotations,
+            "old_symbol": qualified_rotations[0]["old_symbol"],
+            "new_symbol": qualified_rotations[0]["new_symbol"],
+            "old_score": qualified_rotations[0]["old_score"],
+            "new_score": qualified_rotations[0]["new_score"],
+            "lead_pct": qualified_rotations[0]["lead_pct"],
             "matched_rule": matched_rule,
             "timestamp": time.time(),
         }
 
         if self.mode == "auto":
-            logger.info(f"[RadarNavigator][{strat_id}] АВТОПИЛОТ: Замена {weakest_sym} ➔ {cand_sym} (+{lead_pct:.1f}%)...")
-            await self.apply_rotation(strat_id, weakest_sym, cand_sym)
+            alert_lines = []
+            for rot in qualified_rotations:
+                old_s = rot["old_symbol"]
+                new_s = rot["new_symbol"]
+                lead_p = rot["lead_pct"]
+                logger.info(f"[RadarNavigator][{strat_id}] АВТОПИЛОТ: Замена {old_s} ➔ {new_s} (+{lead_p:.1f}%)...")
+                await self.apply_rotation(strat_id, old_s, new_s)
+                alert_lines.append(f"• 🔴 <b>{old_s}</b> ({rot['old_score']:.2f}) ➔ 🟢 <b>{new_s}</b> ({rot['new_score']:.2f}) [+{lead_p:.1f}%]")
+
             if getattr(self.bot_core, "notifier", None):
-                await self.bot_core.notifier.send_alert(
+                msg_auto = (
                     f"🔄 <b>АВТО-РОТАЦИЯ МОНЕТ [{strat_id}]</b>\n"
-                    f"Сброс цикла по стагнации ({matched_rule}).\n"
-                    f"🔴 Выбыла: <b>{weakest_sym}</b> (Скор: {weakest_score:.2f})\n"
-                    f"🟢 Заряжена: <b>{cand_sym}</b> (Скор: {cand_score:.2f})\n"
-                    f"📈 Превосходство: <b>+{lead_pct:.1f}%</b> (Гистерезис пройден!)"
+                    f"Сброс цикла по стагнации ({matched_rule}). Замен: {len(qualified_rotations)}.\n"
+                    + "\n".join(alert_lines) + "\n"
+                    f"📈 Все кандидаты превысили порог гистерезиса >= +{self.min_lead_pct}%."
                 )
+                await self.bot_core.notifier.send_alert(msg_auto)
         elif self.mode == "advisory":
             req_id = f"{strat_id}_{int(time.time())}"
             self.pending_rotations[req_id] = rot_data
-            self.symbols_pending_rotation.add(weakest_sym)
+            for rot in qualified_rotations:
+                self.symbols_pending_rotation.add(rot["old_symbol"])
 
             # Фоновый НЕБЛОКИРУЮЩИЙ таймаут: основная лупа бота не прерывается ни на миллисекунду
             timeout_task = asyncio.create_task(self._advisory_timeout_worker(req_id))
             self.timeout_tasks[req_id] = timeout_task
 
             if getattr(self.bot_core, "notifier", None):
-                action_desc = "авто-отклонение (возврат в торги)" if self.advisory_timeout_action == "skip" else "авто-замена на лидера"
+                action_desc = "авто-отклонение (возврат в торги)" if self.advisory_timeout_action == "skip" else "авто-замена на лидеров"
+                repl_lines = []
+                for idx, rot in enumerate(qualified_rotations, 1):
+                    repl_lines.append(
+                        f"{idx}) 🔴 <b>{rot['old_symbol']}</b> (Скор: {rot['old_score']:.2f}) ➔ "
+                        f"🟢 <b>{rot['new_symbol']}</b> (Скор: {rot['new_score']:.2f}) | +{rot['lead_pct']:.1f}%"
+                    )
+
                 msg = (
                     f"🧭 <b>ШТУРМАН: СИГНАЛ РОТАЦИИ МОНЕТ [{strat_id}]</b>\n"
                     f"Сброс цикла по карте стагнации: <code>{matched_rule}</code>.\n"
                     f"Все позиции сброшены в кэш.\n\n"
-                    f"Предлагается замена слабейшего актива:\n"
-                    f"🔴 <b>{weakest_sym}</b> (Скор: {weakest_score:.2f}, Realized: {weakest_meta.get('realized_net', 0):+.2f}$)\n"
-                    f"🟢 <b>{cand_sym}</b> (Скор: {cand_score:.2f}, Realized: {best_cand.get('realized_net', 0):+.2f}$)\n"
-                    f"📊 Превосходство: <b>+{lead_pct:.1f}%</b> (Порог гистерезиса >= +{self.min_lead_pct}% пройден)\n\n"
+                    f"Предлагается замена затухших активов ({len(qualified_rotations)}):\n"
+                    + "\n".join(repl_lines) + "\n\n"
                     f"⏳ <i>Таймаут ожидания ответа: <b>{int(self.advisory_timeout_sec)} сек.</b>\n"
                     f"При отсутствии реакции: {action_desc}.\n"
                     f"Остальные монеты продолжают торги штатно.</i>\n\n"
                     f"Применить замену перед стартом нового цикла?"
                 )
                 from TG.tg_receiver import build_rotation_inline_keyboard
+                kb = build_rotation_inline_keyboard(req_id, count=len(qualified_rotations))
                 if hasattr(self.bot_core.notifier, "send_alert_with_keyboard"):
-                    await self.bot_core.notifier.send_alert_with_keyboard(msg, build_rotation_inline_keyboard(req_id))
+                    await self.bot_core.notifier.send_alert_with_keyboard(msg, kb)
                 else:
                     await self.bot_core.notifier.send_alert(msg)
 
@@ -404,7 +424,7 @@ class RadarNavigator:
         Фоновый неблокирующий воркер таймаута:
         - Не блокирует основную лупу (await asyncio.sleep).
         - По истечении таймаута автоматически исполняет действие (skip или apply)
-          и возвращает монету/пул в штатные торги, исключая 'уход в дзен'.
+          и возвращает монеты/пул в штатные торги, исключая 'уход в дзен'.
         """
         try:
             await asyncio.sleep(self.advisory_timeout_sec)
@@ -414,27 +434,33 @@ class RadarNavigator:
         if req_id not in self.pending_rotations:
             return
 
-        rot = self.pending_rotations.pop(req_id)
-        old_sym = rot["old_symbol"]
-        new_sym = rot["new_symbol"]
-        strat_id = rot["strat_id"]
-        lead_pct = rot["lead_pct"]
-
-        # Снимаем блокировку со старой монеты
-        self.symbols_pending_rotation.discard(old_sym)
+        rot_data = self.pending_rotations.pop(req_id)
         self.timeout_tasks.pop(req_id, None)
+
+        strat_id = rot_data["strat_id"]
+        rotations = rot_data.get("rotations")
+        if not rotations and "old_symbol" in rot_data:
+            rotations = [rot_data]
+
+        for r in rotations:
+            self.symbols_pending_rotation.discard(r["old_symbol"])
 
         if self.advisory_timeout_action == "apply":
             logger.info(
                 f"[RadarNavigator][{strat_id}] Таймаут advisory ({self.advisory_timeout_sec:.0f}с) истек. "
-                f"Действие 'apply': автоматическое применение ротации {old_sym} -> {new_sym}."
+                f"Действие 'apply': автоматическое применение ротации ({len(rotations)} замен)."
             )
-            await self.apply_rotation(strat_id, old_sym, new_sym)
+            applied_lines = []
+            for r in rotations:
+                await self.apply_rotation(strat_id, r["old_symbol"], r["new_symbol"])
+                applied_lines.append(f"• <b>{r['old_symbol']}</b> ➔ <b>{r['new_symbol']}</b> (+{r['lead_pct']:.1f}%)")
+
             if getattr(self.bot_core, "notifier", None):
                 await self.bot_core.notifier.send_alert(
                     f"⚡ <b>ШТУРМАН: ТАЙМАУТ ADVISORY ({int(self.advisory_timeout_sec)}с) ИСТЕК</b>\n"
                     f"Оператор не ответил. Сработало действие: <code>apply</code>.\n"
-                    f"Монета <b>{old_sym}</b> автоматически заменена на <b>{new_sym}</b> (+{lead_pct:.1f}%).\n"
+                    f"Автоматически произведено замен: {len(rotations)}:\n"
+                    + "\n".join(applied_lines) + "\n"
                     f"Торги продолжаются на обновленном составе!"
                 )
         else:
@@ -443,15 +469,16 @@ class RadarNavigator:
                 f"Действие 'skip': ротация отменена, боевой пул сохранен без изменений."
             )
             if getattr(self.bot_core, "notifier", None):
+                skipped_syms = ", ".join(r["old_symbol"] for r in rotations)
                 await self.bot_core.notifier.send_alert(
                     f"⌛ <b>ШТУРМАН: ТАЙМАУТ ADVISORY ({int(self.advisory_timeout_sec)}с) ИСТЕК</b>\n"
                     f"Оператор не ответил. Сработало действие: <code>skip</code>.\n"
-                    f"Ротация отменена, монета <b>{old_sym}</b> возвращена к торгам.\n"
+                    f"Ротация отменена, монеты <b>{skipped_syms}</b> возвращены к торгам.\n"
                     f"Боевой пул сохранен без изменений, бот не простаивает!"
                 )
 
     async def apply_rotation(self, strat_id: str, old_symbol: str, new_symbol: str) -> None:
-        """Атомарная замена монеты в боевом боте с защитой от некорректных присвоений."""
+        """Атомарная замена монеты в боевом боте с сохранением размера обоймы стратегии."""
         self.symbols_pending_rotation.discard(old_symbol)
         self.symbols_pending_rotation.discard(new_symbol)
 
@@ -463,6 +490,7 @@ class RadarNavigator:
             return
 
         strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+        initial_count = len(strat_cfg.symbols) if strat_cfg else 0
         if strat_cfg:
             if old_symbol not in strat_cfg.symbols:
                 logger.warning(f"[RadarNavigator] Монета {old_symbol} отсутствует в стратегии [{strat_id}]. Ротация отменена.")
@@ -470,27 +498,21 @@ class RadarNavigator:
             if new_symbol in strat_cfg.symbols:
                 logger.warning(f"[RadarNavigator] Монета-кандидат {new_symbol} уже активна в стратегии [{strat_id}]. Дублирование исключено.")
                 return
-            if len(strat_cfg.symbols) != self.target_count:
-                logger.warning(
-                    f"⚠️ [RadarNavigator][{strat_id}] Текущий размер обоймы {len(strat_cfg.symbols)} != {self.target_count}. "
-                    f"Ротация 1-к-1 отклонена во избежание десинхронизации."
-                )
-                return
 
         await self.bot_core.delete_symbol(old_symbol)
         await self.bot_core.add_symbol(new_symbol, strat_id)
 
-        # Контрольная проверка инварианта target_coins_count после замены 1-к-1
+        # Контрольная проверка сохранения размера боевой обоймы
         if strat_cfg:
-            if len(strat_cfg.symbols) == self.target_count:
+            if len(strat_cfg.symbols) == initial_count:
                 logger.info(
                     f"✅ [RadarNavigator] Ротация 1-к-1 успешно завершена: {old_symbol} -> {new_symbol} в стратегии [{strat_id}]. "
-                    f"Инвариант target_coins_count={self.target_count} строго соблюден: {strat_cfg.symbols}."
+                    f"Размер обоймы сохранен ({len(strat_cfg.symbols)}): {strat_cfg.symbols}."
                 )
             else:
-                logger.error(
-                    f"🚨 [RadarNavigator] Нарушение инварианта target_coins_count после ротации [{strat_id}]! "
-                    f"В обойме {len(strat_cfg.symbols)} монет вместо {self.target_count}: {strat_cfg.symbols}"
+                logger.warning(
+                    f"⚠️ [RadarNavigator] Размер обоймы изменился после ротации [{strat_id}]: "
+                    f"было {initial_count}, стало {len(strat_cfg.symbols)}: {strat_cfg.symbols}"
                 )
         else:
             logger.info(f"✅ [RadarNavigator] Ротация успешно завершена: {old_symbol} -> {new_symbol} в стратегии {strat_id}.")

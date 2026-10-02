@@ -454,16 +454,16 @@ class TestRadarSynergy(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    def test_ratchet_rotation_blocks_if_pool_not_target_count(self):
-        """Проверка: если текущий пул стратегии не равен target_coins_count, ротация 1-к-1 блокируется."""
-        nav = self._create_navigator({"radar_synergy": {"target_coins_count": 4}})
-        # У стратегии только 3 монеты вместо 4
-        self.mock_bot.strategy_registry.active_strategies["u9_omni_zenith_apex"].symbols = ["GRASSUSDT", "ARXUSDT", "ZROUSDT"]
+    def test_ratchet_rotation_allows_smaller_pool_and_preserves_size(self):
+        """Проверка: если в стратегии 2 или 3 монеты (< target_coins_count), ротация не блокируется, а заменяет затухшую монету."""
+        nav = self._create_navigator({"radar_synergy": {"target_coins_count": 4, "mode": "auto"}})
+        # У стратегии только 2 монеты
+        strat = self.mock_bot.strategy_registry.active_strategies["u9_omni_zenith_apex"]
+        strat.symbols = ["ARXUSDT", "GRASSUSDT"]
 
         mock_metrics = [
             {"symbol": "GRASSUSDT", "samsonov_score": 50.0},
             {"symbol": "ARXUSDT", "samsonov_score": 10.0},
-            {"symbol": "ZROUSDT", "samsonov_score": 40.0},
             {"symbol": "0GUSDT", "samsonov_score": 30.0},
         ]
         nav.selector.calculate_coin_metrics = MagicMock(return_value=mock_metrics)
@@ -474,9 +474,84 @@ class TestRadarSynergy(unittest.TestCase):
                 matched_rule="<=2.0%",
                 is_stagnation=True
             )
-            # Ротация заблокирована, pending пуст
-            self.assertEqual(len(nav.pending_rotations), 0)
-            self.mock_bot.delete_symbol.assert_not_called()
+            # Ротация успешно исполнена для пула из 2 монет
+            self.mock_bot.delete_symbol.assert_called_once_with("ARXUSDT")
+            self.mock_bot.add_symbol.assert_called_once_with("0GUSDT", "u9_omni_zenith_apex")
+
+        asyncio.run(run_test())
+
+    def test_multi_coin_simultaneous_rotation_auto(self):
+        """Проверка множественной ротации: 2 затухшие монеты (ARX, XPLUS) пакетно заменяются на 2 лидеров (0G, PUMP)."""
+        nav = self._create_navigator({"radar_synergy": {"mode": "auto"}})
+        # Боевой пул: 4 монеты. GRASS (80), ZRO (50), XPLUS (15 - затухла), ARX (10 - затухла)
+        mock_metrics = [
+            {"symbol": "GRASSUSDT", "samsonov_score": 80.0, "realized_net": 30.0},
+            {"symbol": "ZROUSDT", "samsonov_score": 50.0, "realized_net": 20.0},
+            {"symbol": "XPLUSDT", "samsonov_score": 15.0, "realized_net": 1.0},
+            {"symbol": "ARXUSDT", "samsonov_score": 10.0, "realized_net": 0.5},
+            {"symbol": "0GUSDT", "samsonov_score": 90.0, "realized_net": 40.0},
+            {"symbol": "PUMPUSDT", "samsonov_score": 60.0, "realized_net": 25.0},
+            {"symbol": "KAITOUSDT", "samsonov_score": 20.0, "realized_net": 5.0},
+        ]
+        nav.selector.calculate_coin_metrics = MagicMock(return_value=mock_metrics)
+
+        async def run_test():
+            await nav.on_ratchet_closed(
+                strat_id="u9_omni_zenith_apex",
+                matched_rule="<=2.0%",
+                is_stagnation=True
+            )
+            # Обе затухшие монеты удалены
+            self.assertEqual(self.mock_bot.delete_symbol.call_count, 2)
+            self.mock_bot.delete_symbol.assert_any_call("ARXUSDT")
+            self.mock_bot.delete_symbol.assert_any_call("XPLUSDT")
+
+            # Оба лидера добавлены
+            self.assertEqual(self.mock_bot.add_symbol.call_count, 2)
+            self.mock_bot.add_symbol.assert_any_call("0GUSDT", "u9_omni_zenith_apex")
+            self.mock_bot.add_symbol.assert_any_call("PUMPUSDT", "u9_omni_zenith_apex")
+
+        asyncio.run(run_test())
+
+    def test_multi_coin_simultaneous_rotation_advisory(self):
+        """Проверка advisory при множественной ротации: обе монеты блокируются для входов и отправляются на подтверждение."""
+        nav = self._create_navigator({"radar_synergy": {"mode": "advisory"}})
+        mock_metrics = [
+            {"symbol": "GRASSUSDT", "samsonov_score": 80.0, "realized_net": 30.0},
+            {"symbol": "ZROUSDT", "samsonov_score": 50.0, "realized_net": 20.0},
+            {"symbol": "XPLUSDT", "samsonov_score": 15.0, "realized_net": 1.0},
+            {"symbol": "ARXUSDT", "samsonov_score": 10.0, "realized_net": 0.5},
+            {"symbol": "0GUSDT", "samsonov_score": 90.0, "realized_net": 40.0},
+            {"symbol": "PUMPUSDT", "samsonov_score": 60.0, "realized_net": 25.0},
+        ]
+        nav.selector.calculate_coin_metrics = MagicMock(return_value=mock_metrics)
+
+        async def run_test():
+            await nav.on_ratchet_closed(
+                strat_id="u9_omni_zenith_apex",
+                matched_rule="<=2.0%",
+                is_stagnation=True
+            )
+            # Обе монеты заблокированы
+            self.assertTrue(nav.is_symbol_pending_rotation("ARXUSDT"))
+            self.assertTrue(nav.is_symbol_pending_rotation("XPLUSDT"))
+            self.assertFalse(nav.is_symbol_pending_rotation("GRASSUSDT"))
+            self.assertFalse(nav.is_symbol_pending_rotation("ZROUSDT"))
+
+            # В pending_rotations сохранен запрос с 2 ротациями
+            self.assertEqual(len(nav.pending_rotations), 1)
+            req_id = next(iter(nav.pending_rotations.keys()))
+            rot_data = nav.pending_rotations[req_id]
+            self.assertEqual(len(rot_data["rotations"]), 2)
+            self.assertEqual(rot_data["rotations"][0]["old_symbol"], "ARXUSDT")
+            self.assertEqual(rot_data["rotations"][0]["new_symbol"], "0GUSDT")
+            self.assertEqual(rot_data["rotations"][1]["old_symbol"], "XPLUSDT")
+            self.assertEqual(rot_data["rotations"][1]["new_symbol"], "PUMPUSDT")
+
+            # Проверяем генерацию инлайн-клавиатуры с count=2
+            from TG.tg_receiver import build_rotation_inline_keyboard
+            kb = build_rotation_inline_keyboard(req_id, count=2)
+            self.assertIn("✅ Применить ротацию (2)", kb["inline_keyboard"][0][0]["text"])
 
         asyncio.run(run_test())
 
@@ -531,29 +606,28 @@ class TestRadarSynergy(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    def test_warmup_insufficient_unique_coins_aborts_autocomplete(self):
-        """Проверка: если суммарно уникальных монет меньше target_coins_count, автокомплит отклоняется."""
+    def test_warmup_partial_pool_accepted_without_artificial_rejection(self):
+        """Проверка: если радар вернул 2 здоровые монеты (меньше target_coins_count=4), автокомплит заряжает их без отказа."""
         nav = self._create_navigator({"radar_synergy": {"min_radar_warmup_hours": 0.01, "target_coins_count": 4}})
         nav.get_radar_runtime_hours = MagicMock(return_value=1.0)
-        # Радар выдал всего 1 монету
-        nav.selector.get_funnel_stages = MagicMock(return_value={"final_targets": [{"symbol": "SOLO"}]})
+        # Радар выдал 2 здоровые монеты
+        nav.selector.get_funnel_stages = MagicMock(return_value={"final_targets": [{"symbol": "0GUSDT"}, {"symbol": "PUMPUSDT"}]})
 
         async def run_test():
             with patch("CORE.radar_navigator.DATA_DIR", self.root):
                 app_path = self.root / "app.json"
-                # В стратегии тоже только 1 монета
                 orig_data = {
                     "active_strategies": {
                         "u9_omni_zenith_apex": {
-                            "symbols": ["SOLO"]
+                            "symbols": ["0GUSDT", "PUMPUSDT"]
                         }
                     }
                 }
                 app_path.write_text(json.dumps(orig_data), encoding="utf-8")
                 await nav.wait_radar_warmup_and_init()
                 after_data = json.loads(app_path.read_text(encoding="utf-8"))
-                # Пул не перезаписан неполными данными
-                self.assertEqual(after_data["active_strategies"]["u9_omni_zenith_apex"]["symbols"], ["SOLO"])
+                # Пул успешно записан с 2 монетами без искусственного отката
+                self.assertEqual(after_data["active_strategies"]["u9_omni_zenith_apex"]["symbols"], ["0GUSDT", "PUMPUSDT"])
 
         asyncio.run(run_test())
 
