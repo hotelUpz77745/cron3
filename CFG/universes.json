@@ -1,6 +1,6 @@
 {
     "u9_omni_zenith_apex": {
-        "name": "👑 U9: Omni Zenith Apex (Dual-Regime Inverted Fibonacci Fortress)",
+        "name": "🥈 U9: Omni Zenith Apex (Dual-Regime Inverted Fibonacci Fortress)",
         "description": "Универсальная формула Вселенной нового поколения: асимметричный дуальный режим. При аптрендах и флэте выжимает максимум (Step 0 TP 1.80%..2.88% + Smart TP + Smart Size 1.20x). При тотальных просадках гарантирует максимальную защиту (9-уровневый Fibonacci Shock Grid до -89%, инвертированный Panic Damper TP до 0.50%, Knife Blocker >=2, деэскалация объемов 0.60x).",
         "leverage": 20,
         "timeframe": "5m",
@@ -484,7 +484,7 @@
         }
     },
     "u6_symbiosis_gamma_fortress35": {
-        "name": "U6: Gamma Fortress Shield 35 (Медный Змей - 9-Level Static Fibonacci Grid 3.5%..89%)",
+        "name": "👑 U6: Gamma Fortress Shield 35 (Медный Змей - 9-Level Static Fibonacci Grid 3.5%..89%)",
         "description": "Флагман и чемпион полигона: Крепость со статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, Panic Damper TP (2.2% -> 0.50%), Knife Blocker >=1 и деэскалация сайза",
         "leverage": 20,
         "tp_purpose": "self",

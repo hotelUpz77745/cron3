@@ -114,8 +114,9 @@ cron3/
 ```
 Ветка:      uni
 Активные стратегии:
-  u9_omni_zenith_apex   → 4 монеты: GRASSUSDT, ARXUSDT, ZROUSDT, XPLUSDT (enabled: true, target_coins_count: 4)
-  Остальные             → enabled: false (спящий резерв)
+  u9_omni_zenith_apex           → 4 монеты: GRASSUSDT, ARXUSDT, ZROUSDT, XPLUSDT (enabled: true, target_coins_count: 4) [Вице-Чемпион 🥈]
+  u6_symbiosis_gamma_fortress35 → Чемпион Фабрики Звёзд 👑 (флагман на ротацию/перевооружение после закрытия Итерации #3)
+  Остальные                     → enabled: false (спящий резерв)
 
 Лидерборд (leaderboard.txt):
   u9_omni_zenith_apex: 121+ сделок | Winrate 85.95% | Gross Realized +54.63 USDT
