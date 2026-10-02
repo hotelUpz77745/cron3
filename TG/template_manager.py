@@ -153,11 +153,6 @@ class TemplateManager:
                     return False, f"ОШИБКА ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)})."
 
         Utils.write_json_file(target_file, final_data)
-        root_legacy = self.runtime_dir / f"{symbol.lower()}.json"
-        try:
-            Utils.write_json_file(root_legacy, final_data)
-        except Exception:
-            pass
         logger.info(f"Updated runtime config for {symbol} via TG at {target_file}.")
         
         return True, f"Настройки для {symbol} успешно применены!"

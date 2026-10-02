@@ -32,22 +32,22 @@
             },
             "positive": {
                 "enabled": true,
-                "threshold": 21.0,
+                "threshold": null,
                 "threshold_increment": null,
                 "min_floor": 7.0,
                 "mode": "velocity",
                 "stagnation_card": {
                     ">1.0": {
                         "target": 21.0,
-                        "enabled": false
+                        "enabled": true
                     },
                     ">0.4": {
                         "target": 12.0,
-                        "enabled": false
+                        "enabled": true
                     },
                     "<=0.4": {
                         "target": 8.0,
-                        "enabled": false
+                        "enabled": true
                     }
                 }
             }

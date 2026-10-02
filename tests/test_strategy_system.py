@@ -249,8 +249,9 @@ class TestStrategySystem(unittest.TestCase):
         bot = DummyBot(registry)
         notifier = NotifierManager(bot_core=bot)
 
-        # Прогон check_thresholds
-        asyncio.run(notifier.check_thresholds())
+        # Прогон check_thresholds с нейтральным PnL
+        with unittest.mock.patch("c_utils.Utils.read_json_file", return_value={"net_profit_usdt": 5.0}):
+            asyncio.run(notifier.check_thresholds())
         for strat_id in registry.active_strategies.keys():
             self.assertIn(strat_id, notifier.strat_flags)
             self.assertFalse(notifier.strat_flags[strat_id]["neg_flag"])

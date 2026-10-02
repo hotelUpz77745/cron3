@@ -11,10 +11,12 @@ import contextlib
 import logging
 import os
 import time
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from consts import (
-    _CFG, DATA_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME,
+    _CFG, DATA_DIR, ANALYTICS_DIR, CACHE_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME,
     DEFAULT_TIMEFRAME, DEFAULT_SMART_GRACE
 )
 from API.BINANCE.public import BinancePublic
@@ -844,8 +846,95 @@ class BotCore:
         if hasattr(self, 'volatility_manager'):
             self.volatility_manager.stop()
 
-    async def close_all_positions(self):
-        """Экстренное закрытие всех позиций и отмена лимитных ордеров для активных монет."""
+    async def reset_strategy_iteration(self, strategy_id: str) -> dict:
+        """
+        Принудительный сброс итерации стратегии и переход на новый цикл.
+        Синхронизирует stats, cache, leaderboard и fsm независимо от правил stagnation_card.
+        """
+        now_ms = int(time.time() * 1000)
+        strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strategy_id}.json"
+        strat_analytics = {}
+        if strat_stats_path.exists():
+            strat_analytics = Utils.read_json_file(strat_stats_path) or {}
+        elif hasattr(self, "analytics"):
+            strat_analytics = self.analytics._read_data() or {}
+
+        strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
+        cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
+        next_iter_idx = cur_iter_idx + 1
+        new_iter_start_net = round(strat_net, 4)
+        new_iter_start_real = round(float(strat_analytics.get("realized_pnl_usdt", strat_net)), 4)
+
+        strat_analytics["iteration_index"] = next_iter_idx
+        strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
+        strat_analytics["iteration_net_profit_usdt"] = 0.0
+        strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
+        strat_analytics["iteration_realized_pnl_usdt"] = 0.0
+        strat_analytics["iteration_start_ts"] = now_ms
+        strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
+        strat_analytics["iteration_peak_ts"] = now_ms
+        strat_analytics["iteration_peak_age_hours"] = 0.0
+        strat_analytics["iteration_net_velocity"] = 0.0
+
+        if strat_stats_path.exists():
+            Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
+
+        # Синхронизация CACHE/iteration_state.json
+        try:
+            c_file = CACHE_DIR / "iteration_state.json"
+            c_dict = {}
+            if c_file.exists():
+                try:
+                    c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                except Exception:
+                    c_dict = {}
+            prev_entry = c_dict.get(strategy_id, {})
+            c_dict[strategy_id] = {
+                "iteration_index": next_iter_idx,
+                "iteration_start_net_profit_usdt": new_iter_start_net,
+                "iteration_start_realized_pnl_usdt": new_iter_start_real,
+                "iteration_realized_pnl_usdt": 0.0,
+                "iteration_start_ts": now_ms,
+                "iteration_peak_net_profit_usdt": 0.0,
+                "iteration_peak_ts": now_ms,
+                "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", strat_net),
+                "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
+                "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            }
+            Utils.atomic_write_json(c_file, c_dict, indent=4)
+        except Exception as ce:
+            logger.error(f"[{strategy_id}] Error saving iteration cache on manual reset: {ce}")
+
+        # Сброс recent_closes у монет стратегии
+        if hasattr(self, "fsm_states") and hasattr(self, "strategy_registry"):
+            strat_cfg = self.strategy_registry.active_strategies.get(strategy_id)
+            if strat_cfg and hasattr(strat_cfg, "symbols"):
+                for sym in strat_cfg.symbols:
+                    if sym in self.fsm_states:
+                        for s_side in ("LONG", "SHORT"):
+                            if s_side in self.fsm_states[sym]:
+                                self.fsm_states[sym][s_side].recent_closes = []
+
+        # Кулдаун авто-закрытия
+        if hasattr(self, "auto_closer") and self.auto_closer:
+            self.auto_closer._last_close_ts[strategy_id] = time.time()
+
+        logger.info(
+            f"[{strategy_id}] Manual iteration reset: Cycle #{cur_iter_idx} -> #{next_iter_idx}. "
+            f"Base Net: {new_iter_start_net:+.2f} USDT, Iter Net reset to 0.0."
+        )
+
+        return {
+            "strategy_id": strategy_id,
+            "prev_iteration": cur_iter_idx,
+            "new_iteration": next_iter_idx,
+            "base_net": new_iter_start_net,
+            "base_realized": new_iter_start_real
+        }
+
+    async def close_all_positions(self, reset_iterations: bool = True) -> dict:
+        """Экстренное закрытие всех позиций, отмена лимитных ордеров и сброс итераций с синхронизацией лидерборда."""
         if False:
             raise Exception("Действие заблокировано: Эта нода сейчас в пассивном режиме (РЕЗЕРВ)!")
             
@@ -891,6 +980,74 @@ class BotCore:
             logger.warning(f"Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
         except Exception as e:
             logger.error(f"Error while calculating block_until_timestamp: {e}")
+
+        # 3. Синхронизация итераций и лидерборда
+        reset_report = {}
+        if reset_iterations:
+            if hasattr(self, "strategy_registry"):
+                for strat_id in self.strategy_registry.active_strategies.keys():
+                    try:
+                        res = await self.reset_strategy_iteration(strat_id)
+                        reset_report[strat_id] = res
+                    except Exception as re:
+                        logger.error(f"[{strat_id}] Error resetting strategy iteration: {re}")
+
+            # Сброс глобальной итерации портфеля
+            try:
+                g_path = ANALYTICS_DIR / "analytics.json"
+                if g_path.exists():
+                    g_data = Utils.read_json_file(g_path) or {}
+                    g_net = float(g_data.get("net_profit_usdt", 0.0))
+                    g_idx = int(g_data.get("iteration_index", 1))
+                    next_g_idx = g_idx + 1
+                    now_ms = int(time.time() * 1000)
+
+                    g_data["iteration_index"] = next_g_idx
+                    g_data["iteration_start_net_profit_usdt"] = round(g_net, 4)
+                    g_data["iteration_net_profit_usdt"] = 0.0
+                    g_data["iteration_start_ts"] = now_ms
+                    g_data["iteration_peak_net_profit_usdt"] = 0.0
+                    g_data["iteration_peak_ts"] = now_ms
+                    g_data["iteration_peak_age_hours"] = 0.0
+                    g_data["iteration_net_velocity"] = 0.0
+                    Utils.atomic_write_json(g_path, g_data, indent=4)
+
+                    c_file = CACHE_DIR / "iteration_state.json"
+                    c_dict = {}
+                    if c_file.exists():
+                        try:
+                            c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                        except Exception:
+                            c_dict = {}
+                    c_dict["__global__"] = {
+                        "iteration_index": next_g_idx,
+                        "iteration_start_net_profit_usdt": round(g_net, 4),
+                        "iteration_start_ts": now_ms,
+                        "iteration_peak_net_profit_usdt": 0.0,
+                        "iteration_peak_ts": now_ms,
+                        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    }
+                    Utils.atomic_write_json(c_file, c_dict, indent=4)
+                    if hasattr(self, "auto_closer") and self.auto_closer:
+                        self.auto_closer._last_close_ts["__global__"] = time.time()
+            except Exception as ge:
+                logger.error(f"Error resetting global portfolio iteration: {ge}")
+
+            # Синхронизация Лидерборда
+            try:
+                if hasattr(self, "analytics") and hasattr(self.analytics, "leaderboard_engine") and hasattr(self, "strategy_registry"):
+                    universes_meta = {
+                        sid: {"name": scfg.name, "enabled": True}
+                        for sid, scfg in self.strategy_registry.active_strategies.items()
+                    }
+                    entries = self.analytics.leaderboard_engine.generate_leaderboard(universes_meta)
+                    evaluated_coins = len(self.strategy_registry.get_all_active_symbols())
+                    self.analytics.leaderboard_engine.save_portfolio(entries, evaluated_coins_count=evaluated_coins)
+                    logger.info(f"[LEADERBOARD] Synchronized leaderboard on Close All. Active: {len(entries)}")
+            except Exception as le:
+                logger.error(f"Error syncing leaderboard on Close All: {le}")
+
+        return reset_report
 
     async def close_strategy_positions(self, strategy_id: str):
         """Экстренное закрытие позиций и отмена ордеров строго для монет одной конкретной стратегии."""

@@ -338,3 +338,39 @@
   - Подтверждена квантовая устойчивость связки `JUP` + `PYTH` (Max DD не превышает $4–$7 при высочайшей монетизации).
 
  -->
+
+
+
+### ADR (2026-10-02): Синхронизация кнопки Close All с итерациями Positive Auto-Closing и Ликвидация дублирования рантайма
+
+#### 1. Синхронизация Close All с переходом на новую итерацию и Лидербордом
+* **Контекст**:
+  При ручном закрытии через кнопку «🚨 Close All» в Telegram позиции закрывались, но итерация купола (`iteration_index`, `iteration_start_net_profit_usdt`) не сбрасывалась. Это приводило к рассинхрону с лидербордом и логикой `Positive Auto-Closing` (купол продолжал тащить старую базу Net).
+* **Решение**:
+  - В `CORE/bot.py` реализован метод `reset_strategy_iteration(strategy_id)` и расширен `close_all_positions(reset_iterations=True)`.
+  - При закрытии через «🚨 Close All» (или программно с `reset_iterations=True`):
+    1. Все позиции закрываются по рынку, лимитные ордера снимаются, входы блокируются до следующей свечи.
+    2. Для каждого активного купола стратегии принудительно (независимо от выполнения правил `stagnation_card`):
+       - `iteration_index` инкрементируется ($N \to N+1$).
+       - `iteration_start_net_profit_usdt` фиксируется на текущей отметке Net Profit.
+       - `iteration_net_profit_usdt` сбрасывается в `0.0`.
+       - `iteration_start_realized_pnl_usdt` фиксируется на текущем Realized PnL, `iteration_realized_pnl_usdt` сбрасывается в `0.0`.
+       - Обнуляются телеметрические поля итерации: `iteration_peak_net_profit_usdt`, `iteration_peak_age_hours`, `iteration_net_velocity`.
+       - Данные атомарно сохраняются в `ANALYTICS/STATS/analytics_<strat>.json` и кеш `CACHE/iteration_state.json`.
+       - Очищается `recent_closes` FSM для исключения блокировок Knife Blocker в новом цикле.
+       - Выставляется кулдаун авто-закрытия 45с.
+    3. Лидерборд (`LeaderboardEngine.save_portfolio`) немедленно перегенерируется и записывается в `ANALYTICS/leaderboard.txt` и `analytics_all.json`.
+    4. В Telegram выводится сводка с номером нового цикла и базовой точкой Net.
+
+#### 2. Единый источник истины: Ликвидация дублирования в корне `CFG/runtime/`
+* **Контекст**:
+  При сохранении кеша рантайма `RuntimeFsmManager.save_cache()` и применении шаблонов `TemplateManager.apply_tg_template()` файлы монет зеркалировались одновременно в корень `CFG/runtime/<sym>.json` и в подпапку купола `CFG/runtime/<strat_id>/<sym>.json`. Это создавало двойной источник истины и риск коллизий.
+* **Решение**:
+  - Из `RuntimeFsmManager.save_cache()` и `TemplateManager.apply_tg_template()` полностью удалено зеркалирование в `root_legacy`.
+  - `RuntimeFsmManager.get_runtime_path()` теперь строго возвращает путь под куполом назначенной стратегии (`CFG/runtime/<strat_id>/<sym>.json`).
+  - Из корня `CFG/runtime/` удалены устаревшие дубликаты (`arxusdt.json`, `grassusdt.json`, `zrousdt.json`). Единственным местом хранения рантайма монет являются субдомены стратегий.
+* **Тесты**:
+  - Набор `tests/test_close_all_sync.py` (3 теста) подтверждает:
+    1. `RuntimeFsmManager` пишет строго в субдиректорию стратегии и не создает файлов в корне.
+    2. `TemplateManager` применяет изменения только к субдоменному файлу.
+    3. `reset_strategy_iteration` корректно переводит купол на новый цикл с обнулением Iter Net.

@@ -32,25 +32,13 @@ class RuntimeFsmManager:
     def get_runtime_path(self, symbol: str) -> Path:
         """
         Возвращает путь к рантайм-файлу позиции под куполом назначенной стратегии.
-        Пример: CFG/runtime/u0_fat_swing123/zrousdt.json
+        Пример: CFG/runtime/u9_omni_zenith_apex/zrousdt.json
         """
         sym_lower = symbol.lower()
         if self.strategy_registry:
             strat_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
             if strat_id:
-                strat_path = self.runtime_dir / strat_id / f"{sym_lower}.json"
-                if strat_path.exists():
-                    return strat_path
-                # Проверка legacy корня для плавной миграции
-                legacy_path = self.runtime_dir / f"{sym_lower}.json"
-                if legacy_path.exists():
-                    strat_path.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        Utils.write_json_file(strat_path, Utils.read_json_file(legacy_path))
-                        return strat_path
-                    except Exception:
-                        pass
-                return strat_path
+                return self.runtime_dir / strat_id / f"{sym_lower}.json"
 
         # Поиск по подпапкам стратегий
         if self.runtime_dir.exists():
@@ -195,12 +183,6 @@ class RuntimeFsmManager:
                 path = self.get_runtime_path(symbol)
                 path.parent.mkdir(parents=True, exist_ok=True)
                 Utils.write_json_file(path, self.caches[symbol])
-                # Зеркалирование в корень runtime для обратной совместимости
-                root_legacy = self.runtime_dir / f"{symbol.lower()}.json"
-                try:
-                    Utils.write_json_file(root_legacy, self.caches[symbol])
-                except Exception:
-                    pass
                 if self.backup_manager:
                     self.backup_manager.mark_changed()
 

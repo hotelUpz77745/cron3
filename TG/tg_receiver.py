@@ -262,8 +262,20 @@ class TelegramReceiver:
                 
             msg = await message.answer("⏳ Отправка запросов на закрытие позиций и отмену ордеров...")
             try:
-                await self.bot_core.close_all_positions()
-                await msg.edit_text("✅ Все лимитные ордера отменены, а активные позиции закрыты по рынку!\n\n💡 <i>Пожалуйста, дождитесь обновления аналитики (обычно занимает несколько секунд).</i>", parse_mode="HTML")
+                reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
+                lines = [
+                    "✅ <b>Все лимитные ордера отменены, а активные позиции закрыты по рынку!</b>"
+                ]
+                if reset_report:
+                    lines.append("\n🔄 <b>Сброс циклов (Positive Auto-Closing):</b>")
+                    for strat_id, info in reset_report.items():
+                        meta = self._get_strategy_meta(strat_id)
+                        name = meta.get("name", strat_id)
+                        lines.append(
+                            f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
+                        )
+                lines.append("\n📊 <b>Лидерборд синхронизирован.</b>")
+                await msg.edit_text("\n".join(lines), parse_mode="HTML")
             except Exception as e:
                 logger.error(f"Failed to Close All: {e}")
                 await msg.edit_text(f"❌ Произошла ошибка при закрытии: {e}")
