@@ -342,9 +342,9 @@ class AutoCloser:
                     # 1. Закрываем позиции и отменяем ордера (в bot.py также блокируется вход до следующей свечи)
                     await self.bot_core.close_strategy_positions(strat_id)
 
-                    # 2. Продвигаем и сохраняем новую итерацию
+                    # 2. Продвигаем и сохраняем новую итерацию (после закрытия всех позиций Unrealized = 0, поэтому Realized равен Net)
                     now_ms = int(time.time() * 1000)
-                    new_iter_start_real = round(float(strat_analytics.get("realized_pnl_usdt", strat_net)), 4)
+                    new_iter_start_real = new_iter_start_net
                     strat_analytics["iteration_index"] = next_iter_idx
                     strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
                     strat_analytics["iteration_net_profit_usdt"] = 0.0

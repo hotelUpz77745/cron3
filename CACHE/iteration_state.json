@@ -2,14 +2,14 @@
     "u9_omni_zenith_apex": {
         "iteration_index": 3,
         "iteration_start_net_profit_usdt": 21.0624,
-        "iteration_start_realized_pnl_usdt": 26.5562,
-        "iteration_realized_pnl_usdt": -2.5661,
+        "iteration_start_realized_pnl_usdt": 21.0624,
+        "iteration_realized_pnl_usdt": 5.5873,
         "iteration_start_ts": 1790922286956,
-        "iteration_peak_net_profit_usdt": 0.6294,
-        "iteration_peak_ts": 1790925577357,
-        "historical_peak_net_profit_usdt": 21.6918,
-        "historical_peak_net_ts": 1790925577357,
+        "iteration_peak_net_profit_usdt": 1.9654,
+        "iteration_peak_ts": 1790932069449,
+        "historical_peak_net_profit_usdt": 23.0278,
+        "historical_peak_net_ts": 1790932069449,
         "historical_max_drawdown_usdt": -8.0038,
-        "updated_at": "2026-10-02 07:19:37 UTC"
+        "updated_at": "2026-10-02 09:13:31 UTC"
     }
 }
