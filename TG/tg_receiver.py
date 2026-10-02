@@ -262,9 +262,11 @@ class TelegramReceiver:
             req_id = callback.data.split(":", 1)[1]
             nav = getattr(self.bot_core, "radar_navigator", None)
             if not nav or req_id not in nav.pending_rotations:
-                await callback.message.answer("⚠️ Запрос на ротацию устарел или уже выполнен.")
+                await callback.message.answer("⚠️ Запрос на ротацию устарел (таймаут истек) или уже выполнен.")
                 return
+            nav.cancel_timeout_task(req_id)
             rot = nav.pending_rotations.pop(req_id)
+            nav.symbols_pending_rotation.discard(rot["old_symbol"])
             try:
                 await nav.apply_rotation(rot["strat_id"], rot["old_symbol"], rot["new_symbol"])
                 await callback.message.edit_text(
@@ -283,7 +285,9 @@ class TelegramReceiver:
             req_id = callback.data.split(":", 1)[1]
             nav = getattr(self.bot_core, "radar_navigator", None)
             if nav and req_id in nav.pending_rotations:
+                nav.cancel_timeout_task(req_id)
                 rot = nav.pending_rotations.pop(req_id)
+                nav.symbols_pending_rotation.discard(rot["old_symbol"])
                 await callback.message.edit_text(
                     f"❌ <b>Ротация отклонена.</b>\n"
                     f"Боевой пул стратегии [{rot['strat_id']}] сохранен без изменений.",

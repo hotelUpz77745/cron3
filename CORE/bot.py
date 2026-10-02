@@ -386,6 +386,10 @@ class BotCore:
 
     async def _process_signal(self, symbol: str, side: str, side_cfg: dict, current_price: float, concurrent_mode: bool = False):
         """Обработка сигнала входа для символа и стороны."""
+        if hasattr(self, "radar_navigator") and self.radar_navigator and self.radar_navigator.is_symbol_pending_rotation(symbol):
+            logger.info(f"[{symbol}] Вход в позицию отложен: монета ожидает решения по ротации Штурмана (advisory timeout).")
+            return
+
         state = self.fsm_states[symbol][side]
         try:
             logger.info(f"[{symbol}] Signal triggered for {side}.")
