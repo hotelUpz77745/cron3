@@ -240,6 +240,104 @@ class SamsonovFunnelSelector:
             "final_targets": final_targets,
         }
 
+    def run_samsonov_funnel(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        target_count: int = 4,
+    ) -> Dict[str, Any]:
+        """Алиас для get_funnel_stages."""
+        return self.get_funnel_stages(universe_id=universe_id, target_count=target_count)
+
+    def calculate_coin_metrics(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        w_resilience: float = 1.0,
+        w_realized: float = 1.0,
+        w_velocity: float = 1.0,
+        w_pain_ratio: float = 1.0,
+        w_pain_usdt: float = 1.0,
+    ) -> List[Dict[str, Any]]:
+        """
+        Производит расчет Скора Самсонова и Индекса Истощения (Exhaustion Alpha)
+        по всем монетам указанного универсума.
+        """
+        data = self.load_universe_data(universe_id)
+        if not data or "per_coin" not in data:
+            return []
+
+        per_coin: Dict[str, Dict[str, Any]] = data["per_coin"]
+        total_coins = max(len(per_coin), 1)
+        total_trades = sum(s.get("trades", 0) for s in per_coin.values())
+        avg_trades = total_trades / total_coins if total_coins > 0 else 1.0
+
+        records: List[Dict[str, Any]] = []
+
+        for sym, stats in per_coin.items():
+            realized_net = float(stats.get("realized_pnl_net_usdt", stats.get("realized_pnl_usdt", 0.0)))
+            net_profit = float(stats.get("net_profit_usdt", 0.0))
+            peak_net = float(stats.get("peak_net_profit_usdt", stats.get("max_net_profit", 0.0)))
+            max_dd = abs(float(stats.get("max_drawdown_net_usdt", stats.get("max_drawdown", 0.0))))
+            floating = float(stats.get("current_drawdown", 0.0))
+            trades = int(stats.get("trades", 0))
+
+            dd_denom = max(max_dd, 0.5)
+            peak_clamped = max(peak_net, 0.0)
+            resilience = peak_clamped / dd_denom
+            realized_pos = max(realized_net, 0.0)
+            velocity_ratio = trades / avg_trades if avg_trades > 0 else 1.0
+
+            samsonov_full = (resilience ** w_resilience) * (realized_pos ** w_realized) * (velocity_ratio ** w_velocity)
+            samsonov_base = (resilience ** w_resilience) * (realized_pos ** w_realized)
+
+            pain_usdt = abs(floating) if floating < 0 else 0.0
+            pain_ratio = pain_usdt / dd_denom
+            exhaustion_index = (pain_ratio ** w_pain_ratio) * ((pain_usdt / 10.0) ** w_pain_usdt) * (velocity_ratio ** 0.5)
+
+            records.append({
+                "symbol": sym,
+                "net_profit": round(net_profit, 2),
+                "realized_net": round(realized_net, 2),
+                "peak_net": round(peak_net, 2),
+                "max_dd": round(max_dd, 2),
+                "floating": round(floating, 2),
+                "resilience": round(resilience, 2),
+                "trades": trades,
+                "velocity_ratio": round(velocity_ratio, 2),
+                "samsonov_score": round(samsonov_full, 2),
+                "samsonov_base": round(samsonov_base, 2),
+                "pain_usdt": round(pain_usdt, 2),
+                "pain_ratio": round(pain_ratio, 2),
+                "exhaustion_index": round(exhaustion_index, 2),
+            })
+
+        return records
+
+    def get_samsonov_top(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        top_n: int = 20,
+        w_resilience: float = 1.0,
+        w_realized: float = 1.0,
+        w_velocity: float = 1.0,
+    ) -> List[Dict[str, Any]]:
+        records = self.calculate_coin_metrics(
+            universe_id=universe_id,
+            w_resilience=w_resilience,
+            w_realized=w_realized,
+            w_velocity=w_velocity,
+        )
+        records.sort(key=lambda x: x["samsonov_score"], reverse=True)
+        return records[:top_n]
+
+    def get_exhaustion_top(
+        self,
+        universe_id: str = "u0_fat_swing123",
+        top_n: int = 10,
+    ) -> List[Dict[str, Any]]:
+        records = self.calculate_coin_metrics(universe_id=universe_id)
+        records.sort(key=lambda x: x["pain_usdt"], reverse=True)
+        return records[:top_n]
+
     def select_top_coins(
         self,
         universe_id: str = "u0_fat_swing123",
@@ -248,6 +346,10 @@ class SamsonovFunnelSelector:
         """Основной интерфейс: возвращает целевой список ТОП-N монет по Воронке Самсонова."""
         funnel = self.get_funnel_stages(universe_id=universe_id, target_count=target_count)
         return funnel["final_targets"]
+
+
+# Алиас для обратной совместимости
+SamsonovSelector = SamsonovFunnelSelector
 
 
 # ==============================================================================

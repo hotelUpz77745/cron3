@@ -28,8 +28,7 @@ cron3/
 │   ├── bot.py                       # BotCore: _on_tick, _process_signal — главный оркестратор
 │   ├── auto_closer.py               # авто-закрытие по PnL куполов
 │   ├── notifier.py                  # уведомления по куполам
-│   ├── coin_selectors.py            # динамическая выборка монет
-│   ├── samsonov_selector.py         # Воронка Самсонова (3-шаговый алгоритм)
+│   ├── coin_selectors.py            # Селекторы монет (AgentMarketSelector + SamsonovFunnelSelector)
 │   ├── runtime_backup.py            # дебаунс-бэкап рантаймов
 │   ├── _utils.py                    # утилиты ядра
 │   ├── STRATEGY/
