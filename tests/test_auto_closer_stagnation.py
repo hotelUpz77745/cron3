@@ -176,5 +176,72 @@ class TestAutoCloserStagnation(unittest.TestCase):
         self.assertEqual(target, 21.0)
         self.assertFalse(is_stag)
 
+    def test_percentage_velocity_rules_top_target(self):
+        """Проверка работы правил с процентами от верхнего таргета (top_target: 21.0 -> 5%=1.05$/ч, 2%=0.42$/ч)."""
+        pos_cfg = {
+            "min_floor": 7.0,
+            "mode": "velocity",
+            "velocity_pct_of": "top_target",
+            "stagnation_card": {
+                ">5.0%": {"target": 21.0, "enabled": True},
+                ">2.0%": {"target": 13.0, "enabled": True},
+                "<=2.0%": {"target": 8.0, "enabled": True}
+            }
+        }
+
+        # 1. Высокая скорость (1.5 $/ч > 1.05 $/ч) -> держим таргет 21.0
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 1.5}, pos_cfg)
+        self.assertEqual(target, 21.0)
+        self.assertFalse(is_stag)
+        self.assertEqual(ref_top, 21.0)
+        self.assertIn("&gt;5.0%", info)
+        self.assertIn("1.05$/h", info)
+
+        # 2. Умеренная скорость (0.8 $/ч: между 0.42 и 1.05 $/ч) -> снижаем до 13.0 (Фибо)
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 0.8}, pos_cfg)
+        self.assertEqual(target, 13.0)
+        self.assertTrue(is_stag)
+        self.assertIn("&gt;2.0%", info)
+        self.assertIn("0.42$/h", info)
+
+        # 3. Затухание / стагнация (0.2 $/ч <= 0.42 $/ч) -> фиксируем базовый рэтчет 8.0
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 0.2}, pos_cfg)
+        self.assertEqual(target, 8.0)
+        self.assertTrue(is_stag)
+        self.assertIn("&lt;=2.0%", info)
+        self.assertIn("0.42$/h", info)
+
+    def test_scale_invariance_10x(self):
+        """Проверка инвариантности к масштабированию объема в 10 раз (таргеты 210, 130, 80)."""
+        pos_cfg_10x = {
+            "min_floor": 70.0,
+            "mode": "velocity",
+            "velocity_pct_of": "top_target",
+            "stagnation_card": {
+                ">5.0%": {"target": 210.0, "enabled": True},
+                ">2.0%": {"target": 130.0, "enabled": True},
+                "<=2.0%": {"target": 80.0, "enabled": True}
+            }
+        }
+        # 5% от 210 = 10.5 $/ч, 2% от 210 = 4.2 $/ч
+
+        # Скорость 12.0 $/ч > 10.5 $/ч -> максимальный таргет 210.0
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 12.0}, pos_cfg_10x)
+        self.assertEqual(target, 210.0)
+        self.assertFalse(is_stag)
+        self.assertIn("10.50$/h", info)
+
+        # Скорость 6.0 $/ч (между 4.2 и 10.5) -> таргет 130.0
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 6.0}, pos_cfg_10x)
+        self.assertEqual(target, 130.0)
+        self.assertTrue(is_stag)
+        self.assertIn("4.20$/h", info)
+
+        # Скорость 2.0 $/ч <= 4.2 $/ч -> таргет 80.0
+        target, is_stag, info, ref_top = AutoCloser.evaluate_stagnation_target({"iteration_net_velocity": 2.0}, pos_cfg_10x)
+        self.assertEqual(target, 80.0)
+        self.assertTrue(is_stag)
+
+
 if __name__ == "__main__":
     unittest.main()

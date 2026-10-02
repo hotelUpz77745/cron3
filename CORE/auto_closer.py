@@ -16,29 +16,58 @@ class AutoCloser:
         self._is_closing = False
         self._last_close_ts: dict[str, float] = {}
 
-    @staticmethod
-    def match_rule_float(rule: str, val: float) -> bool:
+    @classmethod
+    def match_rule_adaptive(cls, rule: str, eval_val: float, ref_target: float) -> tuple[bool, float]:
+        """
+        Проверяет соответствие значения правилу строки с поддержкой процентов от целевого ориентира.
+        Поддерживает:
+          - Проценты: '>5.0%', '<=2%', '>=1.5%' -> порог = (pct / 100.0) * ref_target
+          - Абсолютные числа: '>1.0', '<=0.4' -> порог = float(num)
+        Возвращает (is_matched: bool, calculated_threshold: float).
+        """
+        rule = rule.strip()
+        is_pct = rule.endswith("%")
+        clean_rule = rule[:-1].strip() if is_pct else rule
+
+        op = ""
+        for candidate_op in ("<=", ">=", "==", "<", ">"):
+            if clean_rule.startswith(candidate_op):
+                op = candidate_op
+                raw_num = clean_rule[len(candidate_op):].strip()
+                break
+        else:
+            op = "=="
+            raw_num = clean_rule
+
+        try:
+            val_num = float(raw_num)
+            threshold_val = (val_num / 100.0 * ref_target) if is_pct else val_num
+        except ValueError:
+            logger.warning(f"[AUTO_CLOSER] Invalid rule format: '{rule}'")
+            return False, 0.0
+
+        if op == "<=":
+            return eval_val <= threshold_val, threshold_val
+        elif op == ">=":
+            return eval_val >= threshold_val, threshold_val
+        elif op == "==":
+            return abs(eval_val - threshold_val) < 1e-4, threshold_val
+        elif op == "<":
+            return eval_val < threshold_val, threshold_val
+        elif op == ">":
+            return eval_val > threshold_val, threshold_val
+
+        return False, threshold_val
+
+    @classmethod
+    def match_rule_float(cls, rule: str, val: float, ref_target: float = 1.0) -> bool:
         """
         Проверяет соответствие вещественного значения (скорости или часов) правилу строки.
         Поддерживает операторы: '<=', '>=', '==', '<', '>'.
+        Обеспечивает обратную совместимость для абсолютных и процентных правил.
         """
-        rule = rule.strip()
-        try:
-            if rule.startswith("<="):
-                return val <= float(rule[2:])
-            elif rule.startswith(">="):
-                return val >= float(rule[2:])
-            elif rule.startswith("=="):
-                return abs(val - float(rule[2:])) < 1e-4
-            elif rule.startswith("<"):
-                return val < float(rule[1:])
-            elif rule.startswith(">"):
-                return val > float(rule[1:])
-            else:
-                return abs(val - float(rule)) < 1e-4
-        except ValueError:
-            logger.warning(f"[AUTO_CLOSER] Invalid rule format: '{rule}'")
-            return False
+        matched, _ = cls.match_rule_adaptive(rule, val, ref_target)
+        return matched
 
     @staticmethod
     def parse_card_target(raw_target: Any) -> tuple[Optional[float], bool]:
@@ -101,6 +130,7 @@ class AutoCloser:
 
         min_floor = float(stag_cfg.get("min_floor", 7.0))
         mode = stag_cfg.get("mode", "auto")
+        velocity_pct_of = stag_cfg.get("velocity_pct_of", "top_target")
 
         now_ms = int(time.time() * 1000)
         peak_age_h = float(analytics_dict.get("iteration_peak_age_hours", analytics_dict.get("peak_age_hours", 0.0)))
@@ -114,7 +144,7 @@ class AutoCloser:
 
         if mode == "auto":
             first_key = next(iter(card.keys()), "")
-            if "<" in first_key and any(c.isdigit() and int(c) >= 3 for c in first_key):
+            if "<" in first_key and any(c.isdigit() and int(c) >= 3 for c in first_key) and "%" not in first_key:
                 mode = "time"
             else:
                 mode = "velocity"
@@ -140,12 +170,18 @@ class AutoCloser:
             if not is_en or target_float is None:
                 continue
 
-            if cls.match_rule_float(rule, eval_val):
+            ref_target = reference_top if velocity_pct_of == "top_target" else target_float
+            is_matched, calc_threshold = cls.match_rule_adaptive(rule, eval_val, ref_target)
+
+            if is_matched:
                 effective_target = max(target_float, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
                 # HTML-экранируем rule: '<=' -> '&lt;=' чтобы Telegram HTML-парсер не падал
                 safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' -> target {effective_target} USDT]"
+                if "%" in rule:
+                    info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' ({calc_threshold:.2f}{unit}) -> target {effective_target} USDT]"
+                else:
+                    info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' -> target {effective_target} USDT]"
                 is_stag = effective_target < reference_top
                 return effective_target, is_stag, info, reference_top
 
