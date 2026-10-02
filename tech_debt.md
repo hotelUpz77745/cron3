@@ -397,3 +397,234 @@
      - В `CONFIG_GUIDE.md` обновлен раздел купола `auto_closing`.
 * **Тесты**:
   - `tests/test_auto_closer_stagnation.py` дополнен тестами `test_percentage_velocity_rules_top_target` и `test_scale_invariance_10x` (100% pass).
+
+
+
+Новое:
+---
+
+### ТЗ: Обновление конфигурации и логики модуля `volatility_scanner`
+
+#### 1. Цель
+
+Модифицировать структуру конфигурационного файла и логику скринера монет для сеточного бота. Добавить независимые подфильтры с гибким управлением через параметр `enabled` и зафиксировать формулу расчета ширины канала Боллинджера для оценки чистой волатильности относительно нижней границы.
+
+---
+
+#### 2. Структура конфигурации (JSON)
+
+Заменить текущий блок `volatility_scanner` на следующий формат:
+
+```json
+{
+  "volatility_scanner": {
+    "enabled": true,
+    "strict_window": true,
+    "min_dayly_vol_usdt": 3000000,
+
+    "atr_volatility_filter": {
+      "enabled": true,
+      "timeframe": "1w",
+      "window": 12,
+      "min_volatility_pct": 25.0,
+      "max_volatility_pct": 40.0
+    },
+
+    "rsi_filter": {
+      "enabled": true,
+      "timeframe": "4h",
+      "period": 14,
+      "min_rsi": 35.0,
+      "max_rsi": 65.0
+    },
+
+    "bollinger_width_filter": {
+      "enabled": true,
+      "timeframe": "4h",
+      "MA_type": "SMA",
+      "period": 20,
+      "multiplier": 2.0,
+      "min_width_pct": 8.0,
+      "max_width_pct": 13.0,
+
+      "center_proximity_filter": {
+        "enabled": true,
+        "max_deviation_from_center_pct": 75.0,
+        "_comment": "Максимальное отклонение текущей цены от middleBB в процентах от общей ширины канала Боллинджера"
+      }
+    }
+  }
+}
+
+```
+
+---
+
+#### 3. Требования к логике фильтрации (Алгоритм)
+
+При обработке каждой монеты скринер должен последовательно проверять включенные (`enabled: true`) блоки:
+
+1. **Базовый фильтр ликвидности:**
+* Проверить, что суточный объем торгов в USDT $\ge$ `min_dayly_vol_usdt` (3,000,000).
+
+
+2. **ATR Volatility Filter (`atr_volatility_filter`):**
+* Таймфрейм: `1w`, окно: `12`.
+* Волатильность по ATR должна находиться в диапазоне от `min_volatility_pct` (25.0%) до `max_volatility_pct` (40.0%). Если `strict_window: true`, учитывать строгое заполнение окна. -- ну тут все как по старому по части atr_volatility_filter, сама логика без изменения.
+
+
+3. **RSI Filter (`rsi_filter`):**
+* Таймфрейм: `4h`, период: `14`.
+* Значение RSI должно быть строго в диапазоне `(min_rsi, max_rsi)` — от 35.0 до 65.0 (отсев сильных пампов и дампов).
+
+
+4. **Bollinger Width & Center Proximity Filter (`bollinger_width_filter`):**
+* Таймфрейм: `4h`, расчет по SMA (период 20, стандартное отклонение `multiplier = 2.0`).
+* **Формула расчета ширины канала (BB Width):**
+
+$$\text{BB Width} = \left(\frac{\text{Upper Band}}{\text{Lower Band}} - 1\right) \times 100\%$$
+
+
+
+*(Использование отношения к нижней границе для оценки чистой волатильности).*
+* Ширина канала должна лежать в диапазоне от `min_width_pct` (8.0%) до `max_width_pct` (13.0%). -- можем согласовать (можешь поставить свои знаечния которые ты считаешь соразумными а также длинну окна и таймфрейм)
+* **Подфильтр близости к центру (`center_proximity_filter`):**
+* Проверить положение текущей цены относительно средней линии (`middleBB`).
+* Отклонение цены от центра не должно превышать `max_deviation_from_center_pct` (75.0%) от общей ширины канала, гарантируя, что бот стартует из сбалансированной средней зоны. -- ну тут тоже дилема от 25% и выше, использовать не использовать (то есть включать или нет) или вовсе указывать в более абсюлютных значениях (например допустимая девиация +- от централной линии (и чтобы текущая цена туда попадала))
+
+---
+
+#### 4. План имплементации (Implementation Plan)
+
+##### 4.1. Архитектурный анализ и модель конвейера (Waterfall Pipeline)
+
+Текущий сканер `CORE/ADVANCED/volatility_scanner.py` рассчитывает только среднюю волатильность свечей по одному таймфрейму (`1w`) на всем пуле монет.
+Новое ТЗ требует перехода к **многоуровневому каскадному конвейеру (Waterfall Pipeline)** с независимыми переключателями `enabled` на каждом этапе:
+
+```
+[Все USDT-M Perpetual Binance] (~350-400 монет)
+                 │
+                 ▼ (Шаг 1: Базовый фильтр ликвидности 24h ticker)
+[quoteVolume >= min_dayly_vol_usdt] (~80-120 монет)  <-- Экономия 70% API-запросов
+                 │
+                 ▼ (Шаг 2: ATR Volatility Filter [1w, window=12])
+[min_volatility_pct <= ATR Vol <= max_volatility_pct] (~30-50 монет)
+                 │
+                 ▼ (Шаг 3: Запрос свечей 4h — 1 раз на монету!)
+     [Пакет свечей 4h (limit=50)]
+        │                    │
+        ▼                    ▼
+[RSI Filter [4h, 14]]   [Bollinger Width Filter [4h, 20, 2.0]]
+(35.0 <= RSI <= 65.0)   (8.0% <= (Upper/Lower - 1)*100 <= 13.0%)
+        │                    │
+        └─────────┬──────────┘
+                  ▼ (Шаг 4: Подфильтр близости к центру)
+      [Center Proximity Filter]
+(|Price - middleBB| / (Upper - Lower) * 100 <= 75.0%)
+                  │
+                  ▼
+         [Финальный пул монет]
+```
+
+##### 4.2. Математическая спецификация индикаторов
+
+1. **ATR Volatility (`atr_volatility_filter`)**:
+   - Свечи: таймфрейм `1w`, окно `window` (12 свечей).
+   - Формула средней свечной волатильности:
+     $$\text{Candle Vol}_i = \left(\frac{\text{High}_i}{\text{Low}_i} - 1\right) \times 100\%$$
+     $$\overline{\text{Vol}} = \frac{1}{N} \sum_{i=1}^N \text{Candle Vol}_i$$
+   - Защита: `strict_window: true` отклоняет монеты с числом свечей $< N$. При `Low <= 0` свеча игнорируется.
+
+2. **RSI (`rsi_filter`)**:
+   - Свечи: таймфрейм `4h`, период `period` (14). Для стабилизации экспоненциального сглаживания Уайлдера (Wilder's Smoothing) запрашивается буфер из 50 свечей.
+   - Изменения цен: $\Delta_i = \text{Close}_i - \text{Close}_{i-1}$.
+   - Приросты $U_i = \max(\Delta_i, 0)$, падения $D_i = \max(-\Delta_i, 0)$.
+   - Сглаживание Уайлдера:
+     $$\text{AvgGain}_t = \frac{\text{AvgGain}_{t-1} \cdot (p - 1) + U_t}{p}, \quad \text{AvgLoss}_t = \frac{\text{AvgLoss}_{t-1} \cdot (p - 1) + D_t}{p}$$
+   - Относительная сила и индекс:
+     $$RS = \frac{\text{AvgGain}}{\text{AvgLoss}} \implies RSI = 100 - \frac{100}{1 + RS}$$
+   - Граничные случаи: если $\text{AvgLoss} = 0 \implies RSI = 100$; если $\text{AvgGain} = 0 \implies RSI = 0$.
+   - Условие прохода: $min\_rsi \le RSI \le max\_rsi$ (35.0..65.0).
+
+3. **Bollinger Bands & Width (`bollinger_width_filter`)**:
+   - Свечи: таймфрейм `4h`, период `period = 20`, множитель $\text{multiplier} = 2.0$.
+   - Средняя линия (SMA):
+     $$\text{middleBB} = \frac{1}{20} \sum_{i=1}^{20} \text{Close}_i$$
+   - Стандартное отклонение (генеральная совокупность):
+     $$\sigma = \sqrt{\frac{1}{20} \sum_{i=1}^{20} (\text{Close}_i - \text{middleBB})^2}$$
+   - Полосы Боллинджера:
+     $$\text{Upper Band} = \text{middleBB} + 2.0 \cdot \sigma, \quad \text{Lower Band} = \text{middleBB} - 2.0 \cdot \sigma$$
+   - **Ширина канала относительно нижней границы (BB Width)** строго по ТЗ:
+     $$\text{BB Width} = \left(\frac{\text{Upper Band}}{\text{Lower Band}} - 1\right) \times 100\%$$
+   - Условие прохода: $min\_width\_pct \le \text{BB Width} \le max\_width\_pct$ (8.0%..13.0%).
+   - Защита: если $\text{Lower Band} \le 0$, расчет блокируется (возврат `None`).
+
+4. **Center Proximity (`center_proximity_filter`)**:
+   - Текущая цена $P_{cur} = \text{Close}_{\text{last}}$.
+   - Общая ширина канала в валюте котировки:
+     $$\text{Band Span} = \text{Upper Band} - \text{Lower Band} = 4.0 \cdot \sigma$$
+   - Абсолютное отклонение цены от центральной линии:
+     $$\text{Deviation}_{abs} = |P_{cur} - \text{middleBB}|$$
+   - Отклонение цены в процентах от общей ширины канала Боллинджера (согласно ТЗ):
+     $$\text{Dev Pct} = \left(\frac{\text{Deviation}_{abs}}{\text{Band Span}}\right) \times 100\%$$
+     *(Примечание: при цене на границе канала $\text{Dev Pct} = 50\%$. Значение $75\%$ допускает нахождение цены в диапазоне $1.5\times$ полуширины от центра, гарантируя сбалансированную среднюю зону и отсекая крайние пробои).*
+   - Условие прохода: $\text{Dev Pct} \le max\_deviation\_from\_center\_pct$ (75.0%).
+
+##### 4.3. План изменений по компонентам
+
+1. **Рефакторинг `CORE/ADVANCED/volatility_scanner.py`**:
+   - Реализовать чистые математические функции индикаторов:
+     - `compute_atr_volatility(klines, window, strict_window)`
+     - `compute_rsi(closes, period=14)`
+     - `compute_bollinger_bands(closes, period=20, multiplier=2.0)`
+     - `compute_center_proximity(current_price, middle_bb, upper_bb, lower_bb)`
+   - Оптимизировать сетевой ввод-вывод:
+     - Шаг ликвидности отсекает неликвид до обращения за свечами.
+     - Для прошедших ликвидность запрашивать свечи `1w` (если включен ATR-фильтр).
+     - Для прошедших ATR запрашивать свечи `4h` (50 свечей) **один раз** для одновременного расчета RSI и Bollinger Bands.
+   - Сформировать расширенную структуру результата для каждой подходящей монеты:
+     ```json
+     {
+         "symbol": "BTCUSDT",
+         "atr_volatility": 31.45,
+         "rsi": 48.2,
+         "bb_width_pct": 9.85,
+         "bb_center_dev_pct": 22.1,
+         "current_price": 64320.5,
+         "daily_volume_usdt": 45000000.0,
+         "filters_passed": ["liquidity", "atr", "rsi", "bollinger_width", "center_proximity"]
+     }
+     ```
+   - Обновить форматирование отчетов `volatile_symbols.json` и `volatile_symbols.txt`:
+     - Сводная таблица с колонками: `Symbol | ATR Vol (1w) | RSI (4h) | BB Width (4h) | BB Center Dev% | 24h Vol USDT`.
+     - JSON-списки монет для прямой вставки в `app.json` (`symbols`).
+
+2. **Обновление конфигурации в `CFG/app.json`**:
+   - Заменить секцию `volatility_scanner` на новую иерархическую структуру со всеми подфильтрами.
+   - Добавить поясняющие ключи `_desc_*` и `_comment` для каждого параметра, чтобы оператор видел все настройки без чтения исходного кода.
+
+3. **Обновление Telegram-модуля `TG/tg_receiver.py`**:
+   - Адаптировать обработчик `/sonnik` и команду запуска: передавать детальную сводку по новым метрикам в Telegram-сообщении и TXT-файле.
+   - Обновить диалог редактирования `scanner_config.json` (`cb_edit_scanner_config` и `process_scanner_json`), чтобы бот отдавал и валидировал новую структуру JSON.
+
+4. **Обновление документации `CONFIG_GUIDE.md`**:
+   - Детально расписать каждый блок: `atr_volatility_filter`, `rsi_filter`, `bollinger_width_filter`, `center_proximity_filter`.
+   - Привести формулу расчета ширины канала через отношение к `Lower Band`.
+
+5. **Модульное тестирование (`tests/test_volatility_scanner.py`)**:
+   - Тест 1: Расчет ATR волатильности (проверка граничных условий и `strict_window`).
+   - Тест 2: Расчет RSI на синтетических растущих, падающих и флэтовых рядах цен.
+   - Тест 3: Расчет Bollinger Bands, ширины канала по формуле $((Upper/Lower)-1)*100\%$ и отклонения от центра.
+   - Тест 4: Независимое отключение/включение фильтров (`enabled: false/true`).
+   - Тест 5: Интеграционный сквозной тест сканера с мок-данными биржи.
+
+##### 4.4. Чек-лист реализации
+- [x] Шаг 1: Создать модуль тестирования `tests/test_volatility_scanner.py` с тестами на математику индикаторов.
+- [x] Шаг 2: Реализовать функции индикаторов (чистый Python без сторонних библиотек, поддержка SMA/EMA для BB) и каскадный пайплайн в `CORE/ADVANCED/volatility_scanner.py`.
+- [x] Шаг 3: Обновить `CFG/app.json` с полными inline-комментариями (`_desc_*`, `_comment`).
+- [x] Шаг 4: Адаптировать генерацию отчетов и Telegram FSM в `TG/tg_receiver.py`.
+- [x] Шаг 5: Обновить руководство `CONFIG_GUIDE.md`.
+- [x] Шаг 6: Запустить полный тестовый набор (`python -m unittest discover tests`), добиться 100% pass.
+- [x] Шаг 7: Зафиксировать изменения локальным git-коммитом без push.
+
+*Примечание*: Все индикаторы реализованы на чистом Python без использования TA-библиотек. Поддерживается переключение `MA_type: "SMA"` и `"EMA"` для средней линии полос Боллинджера. Формула ширины канала строго выдержана относительно нижней границы: `((Upper / Lower) - 1) * 100%`.

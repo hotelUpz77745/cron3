@@ -2343,8 +2343,13 @@ class TelegramReceiver:
                         
                         for item in data:
                             lines.append(f"Символ: {item['symbol']}")
-                            lines.append(f"Волатильность: {item['volatility']}%")
-                            lines.append(f"Свечей: {item['candles']}")
+                            lines.append(f"Волатильность (1w ATR): {item.get('volatility', 0.0)}% (свечей: {item.get('candles', 0)})")
+                            if item.get("rsi") is not None:
+                                lines.append(f"RSI (4h): {item['rsi']}")
+                            if item.get("bb_width_pct") is not None:
+                                lines.append(f"BB Width (4h): {item['bb_width_pct']}%")
+                            if item.get("bb_center_dev_pct") is not None:
+                                lines.append(f"BB Center Dev: {item['bb_center_dev_pct']}% (Middle: {item.get('middle_bb')}, Price: {item.get('current_price')})")
                             lines.append("_____")
                             
                         with open(txt_output_path, "w", encoding="utf-8") as f:
@@ -2370,17 +2375,42 @@ class TelegramReceiver:
             
             config_path = DATA_DIR / "app.json"
             cfg = {
-                "timeframe": "1w",
-                "window": 8,
-                "min_volatility_pct": 15.0,
-                "max_volatility_pct": None,
-                "strict_window": True
+                "enabled": True,
+                "strict_window": True,
+                "min_dayly_vol_usdt": 3000000,
+                "atr_volatility_filter": {
+                    "enabled": True,
+                    "timeframe": "1w",
+                    "window": 12,
+                    "min_volatility_pct": 25.0,
+                    "max_volatility_pct": 40.0
+                },
+                "rsi_filter": {
+                    "enabled": True,
+                    "timeframe": "4h",
+                    "period": 14,
+                    "min_rsi": 35.0,
+                    "max_rsi": 65.0
+                },
+                "bollinger_width_filter": {
+                    "enabled": true,
+                    "timeframe": "4h",
+                    "MA_type": "SMA",
+                    "period": 20,
+                    "multiplier": 2.0,
+                    "min_width_pct": 8.0,
+                    "max_width_pct": 13.0,
+                    "center_proximity_filter": {
+                        "enabled": true,
+                        "max_deviation_from_center_pct": 75.0
+                    }
+                }
             }
             if config_path.exists():
                 try:
                     data = Utils.read_json_file(config_path)
                     if "volatility_scanner" in data:
-                        cfg.update(data["volatility_scanner"])
+                        cfg = data["volatility_scanner"]
                 except:
                     pass
                     
