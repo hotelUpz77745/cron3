@@ -6,9 +6,12 @@
 import asyncio
 import json
 import math
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
+
+VALID_SYMBOL_REGEX = re.compile(r"^[A-Za-z0-9]+$")
 
 from c_log import UnifiedLogger
 from consts import DATA_DIR
@@ -267,6 +270,10 @@ class VolatilityScanner:
         Последовательно проверяет монету через все включенные (enabled: true) фильтры.
         Возвращает (passed, details_dict).
         """
+        # ── 0. Регулярный фильтр: только латиница и цифры ─────────────────────
+        if not VALID_SYMBOL_REGEX.match(str(symbol)):
+            return False, None
+
         strict_window = cfg.get("strict_window", True)
         atr_cfg = cfg.get("atr_volatility_filter", {})
         rsi_cfg = cfg.get("rsi_filter", {})
@@ -381,6 +388,8 @@ class VolatilityScanner:
 
     async def _process_symbol(self, symbol: str, cfg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Обрабатывает одну монету с сетевым ограничением semaphore."""
+        if not VALID_SYMBOL_REGEX.match(str(symbol)):
+            return None
         async with self.semaphore:
             try:
                 atr_cfg = cfg.get("atr_volatility_filter", {})
@@ -443,6 +452,9 @@ class VolatilityScanner:
         if not symbols:
             logger.error("[Scanner] Failed to fetch perpetual symbols from Binance.")
             return None
+
+        # Фильтр допустимых имен: только латиница и цифры (отсекаем иероглифы и спецсимволы)
+        symbols = [s for s in symbols if VALID_SYMBOL_REGEX.match(str(s))]
 
         logger.info(f"[Scanner] Found {len(symbols)} USDT-M Perpetual symbols.")
 

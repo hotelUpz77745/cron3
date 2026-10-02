@@ -8,9 +8,12 @@ from __future__ import annotations
 import asyncio
 import json
 import math
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+VALID_SYMBOL_REGEX = re.compile(r"^[A-Za-z0-9]+$")
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -76,6 +79,8 @@ class AgentMarketSelector:
 
         for t in tickers:
             sym = t.get("symbol", "")
+            if not VALID_SYMBOL_REGEX.match(str(sym)):
+                continue
             if not sym.endswith("USDT"):
                 continue
 
@@ -195,6 +200,8 @@ class SamsonovFunnelSelector:
         records: List[Dict[str, Any]] = []
 
         for sym, stats in per_coin.items():
+            if not VALID_SYMBOL_REGEX.match(str(sym)):
+                continue
             realized_net = float(stats.get("realized_pnl_net_usdt", stats.get("realized_pnl_usdt", 0.0)))
             net_profit = float(stats.get("net_profit_usdt", 0.0))
             peak_net = float(stats.get("peak_net_profit_usdt", stats.get("max_net_profit", 0.0)))
@@ -273,6 +280,8 @@ class SamsonovFunnelSelector:
         records: List[Dict[str, Any]] = []
 
         for sym, stats in per_coin.items():
+            if not VALID_SYMBOL_REGEX.match(str(sym)):
+                continue
             realized_net = float(stats.get("realized_pnl_net_usdt", stats.get("realized_pnl_usdt", 0.0)))
             net_profit = float(stats.get("net_profit_usdt", 0.0))
             peak_net = float(stats.get("peak_net_profit_usdt", stats.get("max_net_profit", 0.0)))
