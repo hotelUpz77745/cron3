@@ -69,11 +69,11 @@ class TestStrategySystem(unittest.TestCase):
                 "enabled": True,
                 "symbols": ["ARXUSDT", "LAUSDT"]
             },
-            "u0_fat_swing123": {
+            "u0_base_classic_supergrid": {
                 "enabled": True,
                 "symbols": ["FARTCOINUSDT"]
             },
-            "u0_base_classic_supergrid": {
+            "u9_omni_zenith_apex": {
                 "enabled": False,
                 "symbols": ["BTCUSDT"]  # Отключена
             }
@@ -97,7 +97,7 @@ class TestStrategySystem(unittest.TestCase):
                 "enabled": True,
                 "symbols": ["ARXUSDT"]
             },
-            "u0_fat_swing123": {
+            "u0_base_classic_supergrid": {
                 "enabled": True,
                 "symbols": ["ARXUSDT"]  # Дубликат!
             }
