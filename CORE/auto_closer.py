@@ -174,6 +174,7 @@ class AutoCloser:
             is_matched, calc_threshold = cls.match_rule_adaptive(rule, eval_val, ref_target)
 
             if is_matched:
+                cls._last_matched_rule = rule
                 effective_target = max(target_float, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
                 # HTML-экранируем rule: '<=' -> '&lt;=' чтобы Telegram HTML-парсер не падал
@@ -185,6 +186,7 @@ class AutoCloser:
                 is_stag = effective_target < reference_top
                 return effective_target, is_stag, info, reference_top
 
+        cls._last_matched_rule = ""
         fallback_target = base_th if base_th is not None else reference_top
         return fallback_target, False, "", reference_top
 
@@ -396,6 +398,17 @@ class AutoCloser:
                     Utils.write_json_file(app_json_path, app_data)
                     if strat_msg and getattr(self.bot_core, 'notifier', None):
                         await self.bot_core.notifier.send_alert(strat_msg)
+
+                    # 4. ХУК ШТУРМАНА: Оценка ротации обоймы по храповику стагнации
+                    if hasattr(self.bot_core, "radar_navigator") and self.bot_core.radar_navigator.is_enabled():
+                        matched_rule_str = getattr(self, "_last_matched_rule", "") or getattr(AutoCloser, "_last_matched_rule", "")
+                        asyncio.create_task(
+                            self.bot_core.radar_navigator.on_ratchet_closed(
+                                strat_id=strat_id,
+                                matched_rule=matched_rule_str,
+                                is_stagnation=is_stagnation
+                            )
+                        )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")
                 finally:

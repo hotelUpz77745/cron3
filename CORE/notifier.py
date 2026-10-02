@@ -203,6 +203,28 @@ class NotifierManager:
                 except Exception as e:
                     logger.error(f"[NOTIFIER] Error sending TG alert to {uid}: {e}")
 
+    async def send_alert_with_keyboard(self, text: str, reply_markup: dict):
+        token = os.getenv("TG_TOKEN")
+        if not token:
+            return
+            
+        chat_ids = self._get_chat_ids()
+        if not chat_ids:
+            return
+            
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        
+        async with aiohttp.ClientSession() as session:
+            for uid in chat_ids:
+                try:
+                    payload = {"chat_id": uid, "text": text, "parse_mode": "HTML", "reply_markup": reply_markup}
+                    async with session.post(url, json=payload, timeout=5) as response:
+                        if response.status != 200:
+                            err_text = await response.text()
+                            logger.error(f"[NOTIFIER] Failed to send TG alert with keyboard to {uid}: {err_text}")
+                except Exception as e:
+                    logger.error(f"[NOTIFIER] Error sending TG alert with keyboard to {uid}: {e}")
+
     def reset_flags(self):
         self.neg_flag = False
         self.pos_flag = False

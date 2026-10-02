@@ -206,6 +206,10 @@ class UnifiedLogger:
         if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.error(msg, *args, **kwargs)
 
+    def critical(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
+            self._logger.critical(msg, *args, **kwargs)
+
     def exception(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, exc: Exception = None, **kwargs):
         if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.exception(msg, *args, **kwargs)

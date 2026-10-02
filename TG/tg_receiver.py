@@ -247,6 +247,51 @@ class TelegramReceiver:
                 logger.error(f"Failed to execute manual deep sync: {e}")
                 await msg.edit_text(f"❌ Ошибка во время Deep Sync: {e}")
 
+        @self.dp.message(Command("radar"))
+        async def radar_cmd(message: Message):
+            nav = getattr(self.bot_core, "radar_navigator", None)
+            if not nav or not nav.is_enabled():
+                await message.answer("ℹ️ Штурман / Синергия с Радаром отключена или не инициализирована.")
+                return
+            report = nav.generate_telemetry_report()
+            await message.answer(report, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("rot_accept:"))
+        async def on_rot_accept(callback: CallbackQuery):
+            await callback.answer()
+            req_id = callback.data.split(":", 1)[1]
+            nav = getattr(self.bot_core, "radar_navigator", None)
+            if not nav or req_id not in nav.pending_rotations:
+                await callback.message.answer("⚠️ Запрос на ротацию устарел или уже выполнен.")
+                return
+            rot = nav.pending_rotations.pop(req_id)
+            try:
+                await nav.apply_rotation(rot["strat_id"], rot["old_symbol"], rot["new_symbol"])
+                await callback.message.edit_text(
+                    f"✅ <b>Ротация выполнена!</b>\n"
+                    f"Монета <b>{rot['old_symbol']}</b> заменена на <b>{rot['new_symbol']}</b> (+{rot['lead_pct']:.1f}% скора).\n"
+                    f"Новый цикл стартует на обновленном составе!",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"[TG] Ошибка применения ротации: {e}")
+                await callback.message.answer(f"❌ Ошибка применения ротации: {e}")
+
+        @self.dp.callback_query(F.data.startswith("rot_reject:"))
+        async def on_rot_reject(callback: CallbackQuery):
+            await callback.answer()
+            req_id = callback.data.split(":", 1)[1]
+            nav = getattr(self.bot_core, "radar_navigator", None)
+            if nav and req_id in nav.pending_rotations:
+                rot = nav.pending_rotations.pop(req_id)
+                await callback.message.edit_text(
+                    f"❌ <b>Ротация отклонена.</b>\n"
+                    f"Боевой пул стратегии [{rot['strat_id']}] сохранен без изменений.",
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.answer("ℹ️ Запрос на ротацию не найден или уже закрыт.")
+
         @self.dp.message(F.text == "🚨 Close All")
         async def on_close_all(message: Message, state: FSMContext):
             await state.set_state(TGStates.waiting_for_close_all_confirm)
@@ -2739,3 +2784,15 @@ class TelegramReceiver:
     async def start(self):
         logger.info("Starting Telegram Receiver...")
         await self.dp.start_polling(self.bot)
+
+
+def build_rotation_inline_keyboard(req_id: str) -> dict:
+    """Генератор инлайн-клавиатуры для запроса подтверждения ротации."""
+    return {
+        "inline_keyboard": [
+            [
+                {"text": "✅ Применить ротацию", "callback_data": f"rot_accept:{req_id}"},
+                {"text": "❌ Оставить как есть", "callback_data": f"rot_reject:{req_id}"}
+            ]
+        ]
+    }

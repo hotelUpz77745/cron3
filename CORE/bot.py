@@ -159,6 +159,8 @@ class BotCore:
         )
         
         self.auto_closer = AutoCloser(self)
+        from CORE.radar_navigator import RadarNavigator
+        self.radar_navigator = RadarNavigator(self)
 
     async def _restart_price_stream(self):
         """Безопасный перезапуск price_stream с сохранением сильной ссылки на Task."""
@@ -612,7 +614,11 @@ class BotCore:
         """Главный цикл торгового ядра."""
         self.is_running = True
         
-        # ШАГ 0. ПРОВЕРКА НА МОНЕТНОСТЬ
+        # ШАГ 0. ХОЛОСТОЙ ХОД И НАЧАЛЬНЫЙ АВТОКОМПЛИТ ШТУРМАНА
+        if hasattr(self, "radar_navigator") and self.radar_navigator.is_enabled():
+            await self.radar_navigator.wait_radar_warmup_and_init()
+
+        # ШАГ 0.1. ПРОВЕРКА НА МОНЕТНОСТЬ
         while self.is_running and not self.symbols:
             logger.warning("[BotCore] Symbol list is empty. Waiting for symbols to be configured in app.json...")
             await asyncio.sleep(5.0)

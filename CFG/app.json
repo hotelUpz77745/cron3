@@ -14,7 +14,8 @@
         "auto_start": true
     },
     "paths": {
-        "shared_api_dir": "../API"
+        "shared_api_dir": "../API",
+        "radar_dir": "../cron3PapperUniverses"
     },
     "streamer": {
         "port": 48123,
@@ -38,7 +39,8 @@
             "symbols": [
                 "GRASSUSDT",
                 "ARXUSDT",
-                "ZROUSDT"
+                "ZROUSDT",
+                "XPLUSDT"
             ],
             "analytics": {
                 "start_balance_usdt": 162.29
@@ -104,7 +106,7 @@
             "_desc_max_rsi": "Верхняя допустимая граница RSI (защита от хаев/пампов)."
         },
         "bollinger_width_filter": {
-            "enabled": true,
+            "enabled": false,
             "_desc_enabled": "Фильтр ширины канала Боллинджера (оценка чистой волатильности относительно нижней границы).",
             "timeframe": "4h",
             "_desc_timeframe": "Таймфрейм свечей для расчета полос Боллинджера.",
@@ -116,7 +118,7 @@
             "_desc_multiplier": "Множитель стандартного отклонения (сигм).",
             "min_width_pct": 8.0,
             "_desc_min_width_pct": "Минимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
-            "max_width_pct": 13.0,
+            "max_width_pct": 16.0,
             "_desc_max_width_pct": "Максимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
             "center_proximity_filter": {
                 "enabled": true,
@@ -138,5 +140,26 @@
         "enabled": true,
         "debounce_sec": 10,
         "max_interval_sec": 300
+    },
+    "radar_synergy": {
+        "enabled": true,
+        "_desc_enabled": "Мастер-тумблер автокомплита и синергии с Радаром.",
+        "mode": "advisory",
+        "_desc_mode": "'advisory' (кнопки в Telegram), 'auto' (авто-перезарядка), 'disabled'.",
+        "min_radar_warmup_hours": null,
+        "_desc_min_radar_warmup_hours": "Время холостого хода боевого бота до готовности Радара. Если null — первичная инициализация пропускается, бот стартует на текущих монетах и ждет первого храповика.",
+        "warmup_poll_interval_sec": 5.0,
+        "_desc_warmup_poll_interval_sec": "Периодичность проверки готовности Радара в холостом цикле (секунды).",
+        "target_coins_count": 4,
+        "_desc_target_coins_count": "Целевое количество монет на стратегию.",
+        "hysteresis": {
+            "min_score_lead_pct": 20.0,
+            "_desc_min_score_lead_pct": "Кандидат обязан опережать текущую монету минимум на 20% по скору Самсонова (в процентах от 100, 20.0 = 20%)."
+        },
+        "rotation_triggers": {
+            "on_stagnation_ratchet": true,
+            "excluded_top_rule": ">5.0%",
+            "_desc_excluded_top_rule": "Верхний скоростной уровень исключается: на быстром импульсе обойму не меняем."
+        }
     }
 }
