@@ -2393,7 +2393,7 @@ class TelegramReceiver:
                     "max_rsi": 65.0
                 },
                 "bollinger_width_filter": {
-                    "enabled": true,
+                    "enabled": True,
                     "timeframe": "4h",
                     "MA_type": "SMA",
                     "period": 20,
@@ -2401,8 +2401,8 @@ class TelegramReceiver:
                     "min_width_pct": 8.0,
                     "max_width_pct": 13.0,
                     "center_proximity_filter": {
-                        "enabled": true,
-                        "max_deviation_from_center_pct": 75.0
+                        "enabled": True,
+                        "max_deviation_from_center_pct": 40.0
                     }
                 }
             }
