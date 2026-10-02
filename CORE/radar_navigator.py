@@ -100,7 +100,8 @@ class RadarNavigator:
                 raise RuntimeError(msg)
 
             u_cfg = radar_universes[strat_id]
-            if not u_cfg.get("enabled", True):
+            is_active = u_cfg.get("is_active", u_cfg.get("enabled", True))
+            if not is_active:
                 msg = (
                     f"🚨 ФАТАЛЬНЫЙ СБОЙ КОНФИГУРАЦИИ!\n"
                     f"Стратегия '{strat_id}' выключена (enabled=false) в Радаре полигона!\n"
@@ -116,7 +117,12 @@ class RadarNavigator:
         data = self.selector.load_universe_data(strat_id)
         if not data:
             return 0.0
-        start_ts = data.get("start_ts") or data.get("created_at_ts")
+        start_ts = (
+            data.get("first_trade_ts")
+            or data.get("iteration_start_ts")
+            or data.get("start_ts")
+            or data.get("created_at_ts")
+        )
         if not start_ts:
             return 0.0
         now_ms = int(time.time() * 1000)
