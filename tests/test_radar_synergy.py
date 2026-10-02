@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from CORE.radar_navigator import RadarNavigator
+from CORE.radar_journal import RadarJournal
 
 
 class TestRadarSynergy(unittest.TestCase):
@@ -58,7 +59,18 @@ class TestRadarSynergy(unittest.TestCase):
         self.mock_bot.notifier.send_alert = AsyncMock()
         self.mock_bot.notifier.send_alert_with_keyboard = AsyncMock()
 
+        self.test_cache_dir = self.root / "CACHE"
+        self.test_ledgers_dir = self.root / "ANALYTICS" / "LEDGERS"
+        self.test_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.test_ledgers_dir.mkdir(parents=True, exist_ok=True)
+        self.patch_cache = patch("CORE.radar_journal.CACHE_DIR", self.test_cache_dir)
+        self.patch_ledgers = patch("CORE.radar_journal.ANALYTICS_LEDGERS_DIR", self.test_ledgers_dir)
+        self.patch_cache.start()
+        self.patch_ledgers.start()
+
     def tearDown(self):
+        self.patch_cache.stop()
+        self.patch_ledgers.stop()
         self.temp_dir.cleanup()
 
     def _create_navigator(self, config_override: dict = None) -> RadarNavigator:
@@ -757,9 +769,81 @@ class TestRadarSynergy(unittest.TestCase):
         # PUMPUSDT должен присутствовать ровно 1 раз
         self.assertEqual(len(final_list), len(combined))
 
+    def test_rotation_journal_records_event(self):
+        """Проверка фиксации смены монет в JSON-кэше и текстовом леджере с меткой UTC."""
+        entry = RadarJournal.record_rotation(
+            strat_id="u9_omni_zenith_apex",
+            old_symbol="ARXUSDT",
+            new_symbol="0GUSDT",
+            old_score=12.5,
+            new_score=85.0,
+            lead_pct=580.0,
+            matched_rule=">5.0%",
+            mode="auto"
+        )
+        # Проверяем структуру возвращенного словаря
+        self.assertEqual(entry["old_symbol"], "ARXUSDT")
+        self.assertEqual(entry["new_symbol"], "0GUSDT")
+        self.assertEqual(entry["old_score"], 12.5)
+        self.assertEqual(entry["new_score"], 85.0)
+        self.assertEqual(entry["lead_pct"], 580.0)
+        self.assertEqual(entry["matched_rule"], ">5.0%")
+        self.assertEqual(entry["mode"], "auto")
+        self.assertIn("UTC", entry["timestamp_utc"])
+        self.assertIsInstance(entry["timestamp_ms"], int)
+
+        # Проверяем JSON-кэш файл
+        cache_file = self.test_cache_dir / "rotations_log.json"
+        self.assertTrue(cache_file.exists())
+        cache_data = json.loads(cache_file.read_text(encoding="utf-8"))
+        self.assertIsInstance(cache_data, list)
+        self.assertEqual(len(cache_data), 1)
+        self.assertEqual(cache_data[0]["new_symbol"], "0GUSDT")
+
+        # Проверяем get_history
+        history = RadarJournal.get_history(limit=10)
+        self.assertEqual(len(history), 1)
+        self.assertEqual(history[0]["old_symbol"], "ARXUSDT")
+
+        # Проверяем текстовый леджер
+        ledger_file = self.test_ledgers_dir / "rotations_ledger.txt"
+        self.assertTrue(ledger_file.exists())
+        ledger_content = ledger_file.read_text(encoding="utf-8")
+        self.assertIn("ARXUSDT", ledger_content)
+        self.assertIn("0GUSDT", ledger_content)
+        self.assertIn("85.00", ledger_content)
+
+    def test_rotation_journal_telemetry_report(self):
+        """Проверка формирования телеметрического отчета с блоком истории ротаций."""
+        top_candidates = [
+            {"symbol": "0GUSDT", "samsonov_score": 90.0, "realized_net": 15.5},
+            {"symbol": "PUMPUSDT", "samsonov_score": 80.0, "realized_net": 8.2}
+        ]
+        recent_rotations = [
+            {
+                "timestamp_utc": "2026-10-03 00:00:00 UTC",
+                "old_symbol": "ARXUSDT",
+                "new_symbol": "0GUSDT",
+                "lead_pct": 500.0
+            }
+        ]
+        report = RadarJournal.format_telemetry_report(
+            strat_id="u9_omni_zenith_apex",
+            runtime_hours=2.5,
+            current_symbols=["0GUSDT", "GRASSUSDT"],
+            top_candidates=top_candidates,
+            recent_rotations=recent_rotations
+        )
+        self.assertIn("РАДАР ШТУРМАНА: [u9_omni_zenith_apex]", report)
+        self.assertIn("2.50 ч.", report)
+        self.assertIn("0GUSDT", report)
+        self.assertIn("ИСТОРИЯ РОТАЦИЙ ОБОЙМЫ:", report)
+        self.assertIn("ARXUSDT ➔ 0GUSDT", report)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
 
 

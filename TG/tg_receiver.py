@@ -277,7 +277,16 @@ class TelegramReceiver:
             try:
                 applied_lines = []
                 for r in rotations:
-                    await nav.apply_rotation(strat_id, r["old_symbol"], r["new_symbol"])
+                    await nav.apply_rotation(
+                        strat_id=strat_id,
+                        old_symbol=r["old_symbol"],
+                        new_symbol=r["new_symbol"],
+                        old_score=r.get("old_score", 0.0),
+                        new_score=r.get("new_score", 0.0),
+                        lead_pct=r.get("lead_pct", 0.0),
+                        matched_rule=rot_data.get("matched_rule", ""),
+                        mode="advisory_operator_accepted"
+                    )
                     applied_lines.append(f"• <b>{r['old_symbol']}</b> ➔ <b>{r['new_symbol']}</b> (+{r['lead_pct']:.1f}%)")
 
                 msg_applied = "\n".join(applied_lines)

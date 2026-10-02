@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from consts import BASE_DIR, DATA_DIR, PARENT_DIR, _CFG
 from c_log import UnifiedLogger
 from CORE.coin_selectors import SamsonovFunnelSelector
+from CORE.radar_journal import RadarJournal
 
 if TYPE_CHECKING:
     from CORE.bot import BotCore
@@ -361,7 +362,16 @@ class RadarNavigator:
                 new_s = rot["new_symbol"]
                 lead_p = rot["lead_pct"]
                 logger.info(f"[RadarNavigator][{strat_id}] АВТОПИЛОТ: Замена {old_s} ➔ {new_s} (+{lead_p:.1f}%)...")
-                await self.apply_rotation(strat_id, old_s, new_s)
+                await self.apply_rotation(
+                    strat_id=strat_id,
+                    old_symbol=old_s,
+                    new_symbol=new_s,
+                    old_score=rot["old_score"],
+                    new_score=rot["new_score"],
+                    lead_pct=lead_p,
+                    matched_rule=matched_rule,
+                    mode="auto"
+                )
                 alert_lines.append(f"• 🔴 <b>{old_s}</b> ({rot['old_score']:.2f}) ➔ 🟢 <b>{new_s}</b> ({rot['new_score']:.2f}) [+{lead_p:.1f}%]")
 
             if getattr(self.bot_core, "notifier", None):
@@ -452,7 +462,16 @@ class RadarNavigator:
             )
             applied_lines = []
             for r in rotations:
-                await self.apply_rotation(strat_id, r["old_symbol"], r["new_symbol"])
+                await self.apply_rotation(
+                    strat_id=strat_id,
+                    old_symbol=r["old_symbol"],
+                    new_symbol=r["new_symbol"],
+                    old_score=r.get("old_score", 0.0),
+                    new_score=r.get("new_score", 0.0),
+                    lead_pct=r.get("lead_pct", 0.0),
+                    matched_rule=rot_data.get("matched_rule", ""),
+                    mode="advisory_timeout_apply"
+                )
                 applied_lines.append(f"• <b>{r['old_symbol']}</b> ➔ <b>{r['new_symbol']}</b> (+{r['lead_pct']:.1f}%)")
 
             if getattr(self.bot_core, "notifier", None):
@@ -477,8 +496,18 @@ class RadarNavigator:
                     f"Боевой пул сохранен без изменений, бот не простаивает!"
                 )
 
-    async def apply_rotation(self, strat_id: str, old_symbol: str, new_symbol: str) -> None:
-        """Атомарная замена монеты в боевом боте с сохранением размера обоймы стратегии."""
+    async def apply_rotation(
+        self,
+        strat_id: str,
+        old_symbol: str,
+        new_symbol: str,
+        old_score: float = 0.0,
+        new_score: float = 0.0,
+        lead_pct: float = 0.0,
+        matched_rule: str = "",
+        mode: str = ""
+    ) -> None:
+        """Атомарная замена монеты в боевом боте с сохранением размера обоймы и записью в журнал."""
         self.symbols_pending_rotation.discard(old_symbol)
         self.symbols_pending_rotation.discard(new_symbol)
 
@@ -502,6 +531,18 @@ class RadarNavigator:
         await self.bot_core.delete_symbol(old_symbol)
         await self.bot_core.add_symbol(new_symbol, strat_id)
 
+        # Фиксация события смены монет в журнал кэша и текстовый леджер
+        RadarJournal.record_rotation(
+            strat_id=strat_id,
+            old_symbol=old_symbol,
+            new_symbol=new_symbol,
+            old_score=old_score,
+            new_score=new_score,
+            lead_pct=lead_pct,
+            matched_rule=matched_rule,
+            mode=mode or self.mode
+        )
+
         # Контрольная проверка сохранения размера боевой обоймы
         if strat_cfg:
             if len(strat_cfg.symbols) == initial_count:
@@ -516,6 +557,11 @@ class RadarNavigator:
                 )
         else:
             logger.info(f"✅ [RadarNavigator] Ротация успешно завершена: {old_symbol} -> {new_symbol} в стратегии {strat_id}.")
+
+    @staticmethod
+    def get_rotations_history(limit: int = 20) -> List[Dict[str, Any]]:
+        """Возвращает историю ротаций из журнала."""
+        return RadarJournal.get_history(limit=limit)
 
     def generate_telemetry_report(self, strat_id: Optional[str] = None) -> str:
         """Формирует текстовый отчет по состоянию Радара и скорам Самсонова."""
@@ -532,26 +578,15 @@ class RadarNavigator:
             return f"⚠️ Данные Радара для стратегии [{target_strat}] недоступны."
 
         metrics.sort(key=lambda x: x.get("samsonov_score", 0.0), reverse=True)
-        top_candidates = metrics[:8]
-
         strat_cfg = self.bot_core.strategy_registry.active_strategies.get(target_strat) if hasattr(self.bot_core, "strategy_registry") else None
         current_symbols = strat_cfg.symbols if strat_cfg else []
+        recent_rotations = RadarJournal.get_history(limit=5)
 
-        lines = [
-            f"🧭 <b>РАДАР ШТУРМАНА: [{target_strat}]</b>",
-            f"⏱ Время непрерывной работы: <b>{runtime:.2f} ч.</b>",
-            f"🎯 Текущая боевая обойма: {', '.join(current_symbols)}",
-            "",
-            "<b>ТОП КАНДИДАТОВ ВОРОНКИ САМСОНОВА:</b>",
-        ]
+        return RadarJournal.format_telemetry_report(
+            strat_id=target_strat,
+            runtime_hours=runtime,
+            current_symbols=current_symbols,
+            top_candidates=metrics,
+            recent_rotations=recent_rotations
+        )
 
-        medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣"]
-        for idx, m in enumerate(top_candidates):
-            icon = medals[idx] if idx < len(medals) else "▫️"
-            sym = m["symbol"]
-            score = m["samsonov_score"]
-            real = m["realized_net"]
-            tag = " <i>[В СТРОЮ]</i>" if sym in current_symbols else ""
-            lines.append(f"{icon} <b>{sym}</b>: Скор <b>{score:.1f}</b> (Realized: {real:+.2f}$){tag}")
-
-        return "\n".join(lines)
