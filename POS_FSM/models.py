@@ -24,6 +24,7 @@ class PositionState:
     in_position: bool = False
     in_position_papper: bool = False
     is_finished: bool = False
+    is_closing: bool = False
     pending_avg: bool = False
     pending_rolling_tp: bool = False
     
@@ -36,6 +37,8 @@ class PositionState:
     def set_in_position(self, status: bool):
         self.in_position = status
         self.in_position_papper = False
+        if not status:
+            self.is_closing = False
             
     def reset(self):
         """Сброс до дефолта: обнуление всех метрик и флагов."""
@@ -47,6 +50,7 @@ class PositionState:
         self.in_position = False
         self.in_position_papper = False
         self.is_finished = False
+        self.is_closing = False
         self.pending_avg = False
         self.pending_rolling_tp = False
         self.next_avg_price = None
