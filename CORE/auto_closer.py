@@ -85,7 +85,8 @@ class AutoCloser:
 
         idx = int(state.get("active_level_idx", 0))
         desc = state.get("armed_level_desc", f"L{idx}")
-        is_stag = (idx == 0 or iter_age_hours >= 12.0)
+        lvl_min_age = float(levels[idx].get("min_age_hours") or 0.0) if idx < len(levels) else 0.0
+        is_stag = (lvl_min_age > 0.0 or idx == 0)
 
         # 2. Проверка отката (pullback) к взведенному полу: срабатывание только при возврате к полу!
         if iter_net <= armed_floor:
