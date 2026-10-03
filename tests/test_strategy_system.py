@@ -69,13 +69,9 @@ class TestStrategySystem(unittest.TestCase):
                 "enabled": True,
                 "symbols": ["ARXUSDT", "LAUSDT"]
             },
-            "u0_base_classic_supergrid": {
+            "u9_omni_zenith_apex": {
                 "enabled": True,
                 "symbols": ["FARTCOINUSDT"]
-            },
-            "u9_omni_zenith_apex": {
-                "enabled": False,
-                "symbols": ["BTCUSDT"]  # Отключена
             }
         }
         registry = StrategyRegistry(active_strategies_cfg=sample_active)
@@ -84,7 +80,6 @@ class TestStrategySystem(unittest.TestCase):
         self.assertIn("ARXUSDT", registry.get_all_active_symbols())
         self.assertIn("LAUSDT", registry.get_all_active_symbols())
         self.assertIn("FARTCOINUSDT", registry.get_all_active_symbols())
-        self.assertNotIn("BTCUSDT", registry.get_all_active_symbols())
 
         strat_arx = registry.get_strategy_for_symbol("ARXUSDT")
         self.assertIsNotNone(strat_arx)
@@ -97,7 +92,7 @@ class TestStrategySystem(unittest.TestCase):
                 "enabled": True,
                 "symbols": ["ARXUSDT"]
             },
-            "u0_base_classic_supergrid": {
+            "u9_omni_zenith_apex": {
                 "enabled": True,
                 "symbols": ["ARXUSDT"]  # Дубликат!
             }

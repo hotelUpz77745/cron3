@@ -41,24 +41,12 @@
                 "start_balance_usdt": 162.29
             }
         },
-        "u0_base_classic_supergrid": {
-            "_comment_alias": "Моцарт 060 (СуперГрид)",
-            "_comment_pros": "Высокий валовый доход на закрытиях нижних усреднений при отскоке. Динамический SuperGrid адаптирует шаг сетки под волатильность.",
-            "_comment_cons": "Тяжелая классическая просадка (-16$ на боевом счете) и отсутствие Knife Blocker на безоткатных ножах.",
-            "enabled": false,
-            "symbols": [],
-            "analytics": {
-                "start_balance_usdt": 50.0
-            }
-        },
         "u6_symbiosis_gamma_fortress35": {
             "_comment_alias": "👑 Медный Змей (Gamma Fortress 35) - Новый Чемпион #1",
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
             "enabled": true,
             "symbols": [
-                "SOONUSDT",
-                "SCRUSDT",
                 "GRASSUSDT",
                 "AVAUSDT"
             ],
