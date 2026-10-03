@@ -1,11 +1,11 @@
 {
-    "ARXUSDT_CROSSED_20": true,
-    "FARTCOINUSDT_CROSSED_20": true,
-    "ZROUSDT_CROSSED_20": true,
-    "GRASSUSDT_CROSSED_20": true,
-    "0GUSDT_CROSSED_20": true,
-    "PUMPUSDT_CROSSED_20": true,
-    "JUPUSDT_CROSSED_20": true,
-    "PYTHUSDT_CROSSED_20": true,
-    "AVAUSDT_CROSSED_20": true
+    "ARXUSDT": true,
+    "FARTCOINUSDT": true,
+    "ZROUSDT": true,
+    "GRASSUSDT": true,
+    "0GUSDT": true,
+    "PUMPUSDT": true,
+    "JUPUSDT": true,
+    "PYTHUSDT": true,
+    "AVAUSDT": true
 }
