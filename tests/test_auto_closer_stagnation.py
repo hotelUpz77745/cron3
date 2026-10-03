@@ -353,7 +353,75 @@ class TestAutoCloserStagnation(unittest.TestCase):
         self.assertEqual(th, 55.0)
         self.assertIn("1H", info)
 
+    def test_trailing_ratchet_age_gating_and_pullback(self):
+        ratchet_cfg = {
+            "enabled": True,
+            "levels": [
+                { "activation": 5.0,  "floor": 3.8,  "min_age_hours": 12.0, "enabled": True, "_desc": "Выныривание из ямы" },
+                { "activation": 7.5,  "floor": 5.5,  "min_age_hours": 0.0,  "enabled": True, "_desc": "Локальный отскок" },
+                { "activation": 11.0, "floor": 8.0,  "min_age_hours": 0.0,  "enabled": True, "_desc": "Уверенное движение" },
+                { "activation": 17.0, "floor": 13.0, "min_age_hours": 0.0,  "enabled": True, "_desc": "Импульсный пробой" },
+                { "activation": 27.5, "floor": 21.0, "min_age_hours": 0.0,  "enabled": True, "_desc": "Тренд средней силы" },
+            ]
+        }
+
+        # 1. Молодой цикл (2 часа): Level 0 (min_age 12h) заблокирован возрастным цензом!
+        # При Net = +5.2 USDT курок не взводится (молодой цикл не должен выходить рано на микро-профите)
+        state_young = {}
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=5.2, iter_age_hours=2.0, ratchet_cfg=ratchet_cfg, state=state_young
+        )
+        self.assertFalse(should_close)
+        self.assertIsNone(floor)
+        self.assertIn("RATCHET IDLE", info)
+
+        # 2. Молодой цикл разгоняется до +7.6 USDT -> Level 1 (act 7.5, floor 5.5, min_age 0h) взводит пол 5.5!
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=7.6, iter_age_hours=2.5, ratchet_cfg=ratchet_cfg, state=state_young
+        )
+        self.assertFalse(should_close)  # Пока растет - держим!
+        self.assertEqual(floor, 5.5)
+        self.assertEqual(state_young["armed_floor"], 5.5)
+        self.assertEqual(state_young["active_level_idx"], 1)
+
+        # 3. Дальнейший памп до +12.0 USDT -> Ступенька шагает на Level 2 (floor 8.0)!
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=12.0, iter_age_hours=3.0, ratchet_cfg=ratchet_cfg, state=state_young
+        )
+        self.assertFalse(should_close)
+        self.assertEqual(floor, 8.0)
+        self.assertEqual(state_young["armed_floor"], 8.0)
+        self.assertEqual(state_young["highest_net"], 12.0)
+
+        # 4. Откат: Net снижается до +8.0 USDT -> Пол 8.0 срабатывает! Позиции закрываются в +8.0 USDT!
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=8.0, iter_age_hours=3.2, ratchet_cfg=ratchet_cfg, state=state_young
+        )
+        self.assertTrue(should_close)
+        self.assertEqual(floor, 8.0)
+        self.assertIn("L2", info)
+
+        # 5. Старый цикл (28.8 часов в просадке / стагнации):
+        # Level 0 (min_age 12h) РАЗРЕШЕН! При Net = +5.1 USDT взводится аварийный пол 3.8 USDT!
+        state_old = {}
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=5.1, iter_age_hours=28.8, ratchet_cfg=ratchet_cfg, state=state_old
+        )
+        self.assertFalse(should_close)
+        self.assertEqual(floor, 3.8)
+        self.assertTrue(is_stag)
+
+        # Откат старого цикла к 3.8 USDT -> Фиксация выхода из ямы!
+        should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
+            iter_net=3.8, iter_age_hours=29.0, ratchet_cfg=ratchet_cfg, state=state_old
+        )
+        self.assertTrue(should_close)
+        self.assertEqual(floor, 3.8)
+        self.assertTrue(is_stag)
+        self.assertIn("Выныривание из ямы", info)
+
 
 if __name__ == "__main__":
     unittest.main()
+
 
