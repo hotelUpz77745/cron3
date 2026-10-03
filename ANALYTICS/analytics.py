@@ -79,6 +79,12 @@ class AnalyticsManager:
         self.log_file = ANALYTICS_STATS_DIR / "analytics.json"
         self.txt_file = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
         self.leaderboard_engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=ANALYTICS_STATS_DIR)
+        try:
+            from ANALYTICS.trade_velocity import TradeVelocityEngine
+            self.velocity_engine = TradeVelocityEngine(universe_id="default", ledger_path=self.txt_file)
+        except Exception as ve:
+            logger.warning(f"Could not initialize TradeVelocityEngine: {ve}")
+            self.velocity_engine = None
         self._lock = asyncio.Lock()
         self._csv_lock = asyncio.Lock()
         self._background_tasks = set()
@@ -219,6 +225,11 @@ class AnalyticsManager:
     def _write_data(self, data: dict, mark_backup: bool = True):
         try:
             AnalyticsMathEngine.calculate(data)
+            if getattr(self, 'velocity_engine', None):
+                try:
+                    data["trade_velocity"] = self.velocity_engine.calculate_velocity(data)
+                except Exception as ve:
+                    logger.error(f"Error calculating trade velocity: {ve}")
             json_str = json.dumps(data, indent=4, ensure_ascii=False)
             Utils.atomic_write_text(self.log_file, json_str)
             # Зеркалирование в корень ANALYTICS для обратной совместимости
@@ -294,6 +305,12 @@ class AnalyticsManager:
                     with open(strat_txt, mode="a", newline="", encoding="utf-8") as f:
                         writer = csv.writer(f, delimiter=';')
                         writer.writerow([symbol, side, open_str, close_str, round(pnl, 4), round(balance, 4)])
+
+                if getattr(self, 'velocity_engine', None):
+                    try:
+                        self.velocity_engine.on_trade_closed(symbol, close_time)
+                    except Exception as ve:
+                        logger.error(f"Error updating velocity engine on trade closed: {ve}")
 
             except Exception as e:
                 logger.error(f"Error appending to CSV: {e}")

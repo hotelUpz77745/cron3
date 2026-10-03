@@ -386,6 +386,10 @@ class BotCore:
 
     async def _process_signal(self, symbol: str, side: str, side_cfg: dict, current_price: float, concurrent_mode: bool = False):
         """Обработка сигнала входа для символа и стороны."""
+        if getattr(self, 'is_paused', False) is True:
+            logger.warning(f"[{symbol}] {side}: Entry aborted — Bot is paused.")
+            return
+
         if getattr(self, 'entry_blocked', False) is True:
             logger.warning(f"[{symbol}] {side}: Entry aborted — Close All block is currently active.")
             return
@@ -422,6 +426,18 @@ class BotCore:
             
             order_side = "BUY" if side == "LONG" else "SELL"
             
+            # Защита от race condition: проверка перед отправкой рыночного ордера
+            if getattr(self, 'is_paused', False) is True or getattr(self, 'entry_blocked', False) is True:
+                logger.warning(f"[{symbol}] {side}: Entry aborted right before market order — bot is paused or entry blocked.")
+                state.in_position_papper = False
+                return
+
+            block_ts = getattr(self, 'block_until_timestamp', 0)
+            if isinstance(block_ts, (int, float)) and block_ts > time.time():
+                logger.warning(f"[{symbol}] {side}: Entry aborted right before market order — Close All cooldown is active.")
+                state.in_position_papper = False
+                return
+
             logger.info(f"[{symbol}] Opening {side} market order. Volume: {volume}")
             res = await self.client.make_order(
                 symbol=symbol,
@@ -433,6 +449,7 @@ class BotCore:
             )
             if not res.success:
                 logger.error(f"[{symbol}] Failed to open {side} position: {res.error_msg}")
+                state.in_position_papper = False
                 return
                 
             # БЕЗУСЛОВНАЯ фиксация входа в позицию (ИДЕМПОТЕНТНОСТЬ)
@@ -604,7 +621,7 @@ class BotCore:
                         logger.info(f"[{symbol}] {strat_tag}{side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
                     state.last_grace_period = current_grace
 
-                if is_signal and not BLOCK_ENTRY and getattr(self, 'entry_blocked', False) is not True:
+                if is_signal and not BLOCK_ENTRY and getattr(self, 'entry_blocked', False) is not True and not getattr(self, 'is_paused', False):
                     block_ts = getattr(self, 'block_until_timestamp', 0)
                     now_ts = time.time()
                     if isinstance(block_ts, (int, float)) and block_ts > now_ts:
@@ -971,7 +988,7 @@ class BotCore:
         interval = getattr(self.time_control, "interval_seconds", 300)
         # Блокируем входы НЕМЕДЛЕННО перед любыми асинхронными сетевыми вызовами
         self.entry_blocked = True
-        self.block_until_timestamp = max(((now // interval) + 1) * interval + 60.0, now + interval)
+        self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), ((now // interval) + 1) * interval + 60.0, now + interval)
         logger.warning(f"🛑 [CLOSE_ALL] Immediate entry block activated until timestamp {self.block_until_timestamp} (cooldown active).")
 
         # 1. Отмена лимитных ордеров
@@ -1005,6 +1022,30 @@ class BotCore:
         except Exception as e:
             logger.error(f"Error while fetching/closing positions: {e}")
 
+        # 2.5 Контрольный ре-чек (защита от race condition и зависших сделок)
+        await asyncio.sleep(0.5)
+        try:
+            positions_recheck = await self.client.fetch_positions()
+            for p in positions_recheck:
+                sym = p.get("symbol")
+                if sym not in symbols:
+                    continue
+                amt = float(p.get("positionAmt", 0.0))
+                if abs(amt) > 0:
+                    pos_side = p.get("positionSide")
+                    side = "SELL" if pos_side == "LONG" else "BUY"
+                    logger.critical(f"[{sym}] [RE-CHECK] Emergency closing hanging {pos_side} position! Volume: {abs(amt)}")
+                    await self.client.make_order(
+                        symbol=sym,
+                        qty=abs(amt),
+                        side=side,
+                        position_side=pos_side,
+                        market_type="MARKET"
+                    )
+                    await self.client.cancel_all_orders(sym)
+        except Exception as e:
+            logger.error(f"Error during close_all re-check: {e}")
+
         # Сброс in-memory FSM стейтов для закрытых монет
         if hasattr(self, "fsm_states"):
             for sym in symbols:
@@ -1017,7 +1058,9 @@ class BotCore:
                             st.current_step = 0
                             st.avg_entry_price = 0.0
                             st.total_volume = 0.0
-        self.entry_blocked = False
+                            st.tp_order_id = None
+        if not getattr(self, "is_paused", False):
+            self.entry_blocked = False
 
         # 3. Синхронизация итераций и лидерборда
         reset_report = {}
@@ -1135,6 +1178,30 @@ class BotCore:
         except Exception as e:
             logger.error(f"[{strategy_id}] Error closing positions: {e}")
 
+        # 2.5 Контрольный ре-чек (защита от race condition и зависших сделок)
+        await asyncio.sleep(0.5)
+        try:
+            positions_recheck = await self.client.fetch_positions()
+            for p in positions_recheck:
+                sym = p.get("symbol")
+                if sym not in symbols:
+                    continue
+                amt = float(p.get("positionAmt", 0.0))
+                if abs(amt) > 0:
+                    pos_side = p.get("positionSide")
+                    side = "SELL" if pos_side == "LONG" else "BUY"
+                    logger.critical(f"[{strategy_id}][{sym}] [RE-CHECK] Emergency closing hanging {pos_side} pos! Qty: {abs(amt)}")
+                    await self.client.make_order(
+                        symbol=sym,
+                        qty=abs(amt),
+                        side=side,
+                        position_side=pos_side,
+                        market_type="MARKET"
+                    )
+                    await self.client.cancel_all_orders(sym)
+        except Exception as e:
+            logger.error(f"[{strategy_id}] Error in re-check closing positions: {e}")
+
         # Сброс FSM стейтов для закрытых монет стратегии
         if hasattr(self, "fsm_states"):
             for sym in symbols:
@@ -1147,7 +1214,9 @@ class BotCore:
                             st.current_step = 0
                             st.avg_entry_price = 0.0
                             st.total_volume = 0.0
-        self.entry_blocked = False
+                            st.tp_order_id = None
+        if not getattr(self, "is_paused", False):
+            self.entry_blocked = False
 
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""

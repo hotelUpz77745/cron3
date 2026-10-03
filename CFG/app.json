@@ -154,5 +154,30 @@
             "excluded_top_rule": ">5.0%",
             "_desc_excluded_top_rule": "Верхний скоростной уровень исключается: на быстром импульсе обойму не меняем."
         }
+    },
+    "risk_system": {
+        "enabled": false,
+        "min_balance_threshold_usdt": null,
+        "_desc_min_balance_threshold_usdt": "Глобальный ручник: минимальный порог баланса в USDT (например 150.0). Если cur_balance_usdt падает ниже этого порога, бот экстренно закрывает все позиции по рынку, ожидает синхронизации аналитики, ставится на паузу и отправляет алерт в Telegram. null — отключен."
+    },
+    "trade_velocity": {
+        "enabled": true,
+        "timeframe_hours": 6.0,
+        "min_accumulation_hours": 1.0,
+        "_desc_min_accumulation_hours": "Минимальное время накопления истории в часах перед отправкой алертов (вычитывается из ленты).",
+        "benchmark_trades_per_coin": 10.0,
+        "_desc_benchmark_trades_per_coin": "Эталонное число сделок на 1 монету за указанный timeframe_hours.",
+        "top_coins_slice": null,
+        "_desc_top_coins_slice": "Срез монет: null для всех монет (рекомендуется), либо целое число N для топ N монет.",
+        "report_interval_hours": 6.0,
+        "notifications": {
+            "enabled": true,
+            "low_ratio_threshold": 0.25,
+            "low_recovery_ratio": 0.75,
+            "high_ratio_threshold": 1.0,
+            "high_reset_ratio": 0.75,
+            "negative_flag": false,
+            "positive_flag": false
+        }
     }
 }

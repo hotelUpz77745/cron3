@@ -63,6 +63,7 @@ class TGStates(StatesGroup):
     waiting_for_autoclose_neg_th = State()
     waiting_for_autoclose_neg_inc = State()
     waiting_for_risk_roi = State()
+    waiting_for_risk_threshold = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -107,12 +108,6 @@ class TelegramReceiver:
                 KeyboardButton(text="📜 Logs")
             ],
             [
-                KeyboardButton(text="⚙️ Set Coins"),
-                KeyboardButton(text="🔔 Notifications"),
-                KeyboardButton(text="🔧 Super Grid")
-            ],
-            [
-                KeyboardButton(text="🛑 Auto Closing"),
                 KeyboardButton(text="🛡️ Risk System"),
                 KeyboardButton(text="🚨 Close All")
             ]
@@ -323,36 +318,77 @@ class TelegramReceiver:
 
         @self.dp.message(F.text == "🚨 Close All")
         async def on_close_all(message: Message, state: FSMContext):
-            await state.set_state(TGStates.waiting_for_close_all_confirm)
-            await message.answer("⚠️ Вы уверены, что хотите закрыть все позиции по рынку и отменить лимитные ордера?\n\nДля подтверждения введите слово <b>ЗАКРЫТЬ</b>", parse_mode="HTML")
-
-        @self.dp.message(StateFilter(TGStates.waiting_for_close_all_confirm))
-        async def process_close_all_confirm(message: Message, state: FSMContext):
             await state.clear()
-            
-            if not message.text or message.text.strip().lower() != "закрыть":
-                await message.answer("❌ Подтверждение отменено. Действие прервано.")
+            active_strats = {}
+            if hasattr(self.bot_core, "strategy_registry"):
+                active_strats = self.bot_core.strategy_registry.active_strategies
+
+            buttons = []
+            for sid, scfg in active_strats.items():
+                s_name = scfg.name or sid
+                buttons.append([InlineKeyboardButton(
+                    text=f"🚨 Закрыть купол [{s_name}]",
+                    callback_data=f"close_dome_{sid}"
+                )])
+
+            buttons.append([InlineKeyboardButton(text="💥 ЗАКРЫТЬ ВСЁ (Все купола)", callback_data="close_dome_all")])
+            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="close_dome_cancel")])
+
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            await message.answer(
+                "🚨 <b>УПРАВЛЕНИЕ ЗАКРЫТИЕМ ПОЗИЦИЙ</b>\n\n"
+                "Выберите, какой купол стратегии необходимо закрыть, либо выполните закрытие всего портфеля:\n\n"
+                "<i>• <b>Закрыть купол</b>: закрывает позиции и снимает ордера только выбранной стратегии, фиксирует цикл в лидерборде.\n"
+                "• <b>ЗАКРЫТЬ ВСЁ</b>: глобальный экстренный сброс всех монет и всех стратегий.</i>",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+
+        @self.dp.callback_query(F.data.startswith("close_dome_"))
+        async def on_close_dome_callback(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            cdata = callback.data
+            if cdata == "close_dome_cancel":
+                await callback.message.edit_text("❌ Закрытие отменено.")
                 return
-                
-            msg = await message.answer("⏳ Отправка запросов на закрытие позиций и отмену ордеров...")
+
+            if cdata == "close_dome_all":
+                await callback.message.edit_text("⏳ Закрытие всех куполов и отмена лимитных ордеров...")
+                try:
+                    reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
+                    lines = ["✅ <b>Все купола закрыты, лимитные ордера отменены!</b>"]
+                    if reset_report:
+                        lines.append("\n🔄 <b>Сброс циклов куполов (Positive Auto-Closing):</b>")
+                        for strat_id, info in reset_report.items():
+                            meta = self._get_strategy_meta(strat_id)
+                            name = meta.get("name", strat_id)
+                            lines.append(
+                                f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
+                            )
+                    lines.append("\n📊 <b>Лидерборд синхронизирован.</b>")
+                    await callback.message.edit_text("\n".join(lines), parse_mode="HTML")
+                except Exception as e:
+                    logger.error(f"Failed to Close All: {e}")
+                    await callback.message.edit_text(f"❌ Произошла ошибка при закрытии всех куполов: {e}")
+                return
+
+            strat_id = cdata.replace("close_dome_", "")
+            strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+            strat_name = strat.name if strat else strat_id
+            await callback.message.edit_text(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", parse_mode="HTML")
             try:
-                reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
+                await self.bot_core.close_strategy_positions(strat_id)
+                info = await self.bot_core.reset_strategy_iteration(strat_id)
                 lines = [
-                    "✅ <b>Все лимитные ордера отменены, а активные позиции закрыты по рынку!</b>"
+                    f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
+                    f"Позиции монет закрыты по рынку, ордера отменены.",
+                    f"🔄 Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)",
+                    "\n📊 Лидерборд и аналитика обновлены."
                 ]
-                if reset_report:
-                    lines.append("\n🔄 <b>Сброс циклов (Positive Auto-Closing):</b>")
-                    for strat_id, info in reset_report.items():
-                        meta = self._get_strategy_meta(strat_id)
-                        name = meta.get("name", strat_id)
-                        lines.append(
-                            f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
-                        )
-                lines.append("\n📊 <b>Лидерборд синхронизирован.</b>")
-                await msg.edit_text("\n".join(lines), parse_mode="HTML")
+                await callback.message.edit_text("\n".join(lines), parse_mode="HTML")
             except Exception as e:
-                logger.error(f"Failed to Close All: {e}")
-                await msg.edit_text(f"❌ Произошла ошибка при закрытии: {e}")
+                logger.error(f"Failed to close strategy dome {strat_id}: {e}")
+                await callback.message.edit_text(f"❌ Ошибка закрытия купола {strat_name}: {e}")
 
         @self.dp.message(F.text == "▶️ Start")
         async def on_pre_start(message: Message, state: FSMContext):
@@ -465,11 +501,48 @@ class TelegramReceiver:
             await state.clear()
             status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
             
-            node_status = ""
+            # Active strategies and coins info
+            strat_info = []
+            if hasattr(self.bot_core, "strategy_registry"):
+                for sid, scfg in self.bot_core.strategy_registry.active_strategies.items():
+                    strat_info.append(f"• <b>{scfg.name}</b>: <code>{', '.join(scfg.symbols)}</code>")
+            strat_block = "\n".join(strat_info) if strat_info else "<i>Нет активных стратегий</i>"
+
+            # Trade Velocity Engine
+            vel_text = ""
+            if hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "velocity_engine"):
+                try:
+                    data = self.bot_core.analytics._read_data()
+                    vel_data = self.bot_core.analytics.velocity_engine.calculate_velocity(data)
+                    eff_speed = vel_data.get("avg_effective_speed", 0.0)
+                    speed_ratio = vel_data.get("speed_ratio", 1.0)
+                    status_desc = vel_data.get("status_desc", "NORMAL")
+                    vel_text = f"\n\n⚡ <b>Trade Velocity</b>: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})"
                     
-            super_grid_enabled = any(scfg.super_grid_enabled for scfg in self.bot_core.strategy_registry.active_strategies.values()) if hasattr(self.bot_core, "strategy_registry") else bool(_CFG.get("super_grid", {}).get("enabled", False))
-            super_grid_status = "✅ On" if super_grid_enabled else "❌ Off"
-            text = f"<b>Control Panel</b>\nCurrent Status: {status}{node_status}\nSuper Grid (Volatility): {super_grid_status}"
+                    per_coin = vel_data.get("per_coin", {})
+                    if per_coin:
+                        vel_text += "\n<i>Скорость по монетам:</i>"
+                        for sym, c_info in per_coin.items():
+                            c_speed = c_info.get("effective_speed", 0.0)
+                            c_ratio = c_info.get("speed_ratio", 1.0)
+                            vel_text += f"\n  - <b>{sym}</b>: {c_speed:.2f} сд/ч (x{c_ratio:.2f})"
+                except Exception as e:
+                    logger.error(f"Error calculating velocity for status: {e}")
+
+            # Risk System info
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            risk_cfg = app_data.get("risk_system") or app_data.get("stop_bot_rirk_system") or {}
+            risk_en = risk_cfg.get("enabled", False)
+            thresh = risk_cfg.get("min_balance_threshold_usdt")
+            risk_str = f"🟢 Включен (порог: {thresh:.2f} USDT)" if (risk_en and thresh is not None) else ("⚠️ Включен, но порог не задан" if risk_en else "🔴 Выключен")
+
+            text = (
+                f"<b>Control Panel</b>\n"
+                f"Статус бота: <b>{status}</b>\n"
+                f"Ручник Risk System: <b>{risk_str}</b>\n\n"
+                f"🌌 <b>Купола стратегий:</b>\n{strat_block}"
+                f"{vel_text}"
+            )
             await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         @self.dp.message(F.text == "📜 Logs")
@@ -1050,7 +1123,15 @@ class TelegramReceiver:
                     msg += f"▪️ Margin Load: <b>{data.get('margin_load_pct', 0)}%</b> (Used: <b>{data.get('total_margin_used_usdt', 0)}</b> USDT | Max: <b>{data.get('max_margin_load_pct', 0)}%</b>)\n"
                     msg += f"▪️ Free Margin: <b>{data.get('free_margin_usdt', 0)}</b> USDT ({data.get('free_margin_pct', 0)}% | Min: <b>{data.get('min_free_margin_usdt', 0)}</b> USDT)\n"
                     msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0)}</b>\n"
-                    msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0)}%</b>)\n\n"
+                    msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0)}%</b>)\n"
+                    
+                    vel_dict = data.get("trade_velocity", {})
+                    if vel_dict:
+                        eff_speed = vel_dict.get("avg_effective_speed", 0.0)
+                        speed_ratio = vel_dict.get("speed_ratio", 1.0)
+                        status_desc = vel_dict.get("status_desc", "NORMAL")
+                        msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
+                    msg += "\n"
                     
                     await message.answer(header + msg, parse_mode="HTML")
                 except Exception as e:
@@ -1123,7 +1204,15 @@ class TelegramReceiver:
                         msg_coins += f"  • Recovery Factor: <b>{cdata.get('recovery_factor', 0)}</b>\n"
                         msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
                         msg_coins += f"  • DRME: <b>{cdata.get('DRME', 0)}</b>\n"
-                        msg_coins += f"  • MDME: <b>{cdata.get('MDME', 0)}</b>\n\n"
+                        msg_coins += f"  • MDME: <b>{cdata.get('MDME', 0)}</b>\n"
+                        vel_dict = data.get("trade_velocity", {})
+                        coin_vel = vel_dict.get("per_coin", {}).get(symbol, {})
+                        if coin_vel:
+                            c_speed = coin_vel.get("effective_speed", 0.0)
+                            c_ratio = coin_vel.get("speed_ratio", 1.0)
+                            c_stat = coin_vel.get("status_desc", "NORMAL")
+                            msg_coins += f"  • Trade Velocity: <b>{c_speed:.2f} сд/ч</b> (x{c_ratio:.2f} | {c_stat})\n"
+                        msg_coins += "\n"
                         await callback.message.answer(msg_coins, parse_mode="HTML")
                 except Exception as e:
                     logger.error(f"Error reading per_coin data for {symbol}: {e}")
@@ -2739,17 +2828,37 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🛡️ Risk System")
         async def on_risk_system(message: Message, state: FSMContext):
             await state.clear()
-            app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            risk_cfg = app_data.get("stop_bot_rirk_system", {"enabled": False, "roi_critical_level_pct": None})
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            risk_cfg = app_data.get("risk_system") or app_data.get("stop_bot_rirk_system") or {}
             enabled = risk_cfg.get("enabled", False)
-            roi = risk_cfg.get("roi_critical_level_pct")
+            thresh = risk_cfg.get("min_balance_threshold_usdt")
             
-            status = "✅ Включена" if enabled else "❌ Выключена"
-            text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."
-            
+            analytics_path = ANALYTICS_DIR / "analytics.json"
+            cur_bal = 0.0
+            if analytics_path.exists():
+                try:
+                    adata = json.loads(analytics_path.read_text(encoding="utf-8"))
+                    cur_bal = float(adata.get("cur_balance_usdt", 0.0))
+                except Exception:
+                    pass
+
+            status_str = "🟢 Включен" if enabled else "🔴 Выключен"
+            thresh_str = f"<b>{thresh:.2f} USDT</b>" if thresh is not None else "<i>Отключен (null)</i>"
+
+            text = (
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                f"Статус защиты: <b>{status_str}</b>\n"
+                f"Минимальный порог баланса: {thresh_str}\n"
+                f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
+                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
+                "закрывает все позиции по рынку, снимает лимитные ордера, "
+                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+            )
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Выключить" if enabled else "Включить", callback_data="risk_toggle")],
-                [InlineKeyboardButton(text="Изменить уровень ROI", callback_data="risk_set_roi")]
+                [InlineKeyboardButton(text="🔴 Выключить" if enabled else "🟢 Включить", callback_data="risk_toggle")],
+                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
+                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
             ])
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -2757,57 +2866,145 @@ class TelegramReceiver:
         async def on_risk_toggle(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             app_json_path = DATA_DIR / "app.json"
-            app_data = Utils.read_json_file(app_json_path)
-            risk_cfg = app_data.get("stop_bot_rirk_system", {})
+            app_data = Utils.read_json_file(app_json_path) or {}
             
+            risk_cfg = app_data.get("risk_system", {})
             enabled = not risk_cfg.get("enabled", False)
-            if "stop_bot_rirk_system" not in app_data:
-                app_data["stop_bot_rirk_system"] = {}
-            app_data["stop_bot_rirk_system"]["enabled"] = enabled
+            
+            if "risk_system" not in app_data:
+                app_data["risk_system"] = {}
+            app_data["risk_system"]["enabled"] = enabled
+            
+            if "stop_bot_rirk_system" in app_data:
+                app_data["stop_bot_rirk_system"]["enabled"] = enabled
+                
             Utils.write_json_file(app_json_path, app_data)
             
             await callback.answer(f"Risk System {'включена' if enabled else 'выключена'}!")
             
-            roi = app_data["stop_bot_rirk_system"].get("roi_critical_level_pct", -41.0)
-            status = "✅ Включена" if enabled else "❌ Выключена"
-            text = f"<b>🛡️ Система защиты от рисков (Risk System)</b>\n\nСтатус: {status}\nКритический уровень ROI: <b>{roi}%</b>\n\nЕсли текущий ROI опустится ниже этого уровня, бот закроет все позиции по рынку и остановит торговлю."
+            thresh = app_data["risk_system"].get("min_balance_threshold_usdt")
+            thresh_str = f"<b>{thresh:.2f} USDT</b>" if thresh is not None else "<i>Отключен (null)</i>"
+            status_str = "🟢 Включен" if enabled else "🔴 Выключен"
+            
+            cur_bal = 0.0
+            analytics_path = ANALYTICS_DIR / "analytics.json"
+            if analytics_path.exists():
+                try:
+                    adata = json.loads(analytics_path.read_text(encoding="utf-8"))
+                    cur_bal = float(adata.get("cur_balance_usdt", 0.0))
+                except Exception:
+                    pass
+
+            text = (
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                f"Статус защиты: <b>{status_str}</b>\n"
+                f"Минимальный порог баланса: {thresh_str}\n"
+                f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
+                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
+                "закрывает все позиции по рынку, снимает лимитные ордера, "
+                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+            )
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="Выключить" if enabled else "Включить", callback_data="risk_toggle")],
-                [InlineKeyboardButton(text="Изменить уровень ROI", callback_data="risk_set_roi")]
+                [InlineKeyboardButton(text="🔴 Выключить" if enabled else "🟢 Включить", callback_data="risk_toggle")],
+                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
+                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
             ])
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
-        @self.dp.callback_query(F.data == "risk_set_roi")
-        async def on_risk_set_roi(callback: CallbackQuery, state: FSMContext):
+        @self.dp.callback_query(F.data == "risk_clear_threshold")
+        async def on_risk_clear_threshold(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            if "risk_system" in app_data:
+                app_data["risk_system"]["min_balance_threshold_usdt"] = None
+            if "stop_bot_rirk_system" in app_data:
+                app_data["stop_bot_rirk_system"]["min_balance_threshold_usdt"] = None
+            Utils.write_json_file(app_json_path, app_data)
+            await callback.answer("Порог сброшен на null")
+            
+            thresh_str = "<i>Отключен (null)</i>"
+            status_str = "🟢 Включен" if app_data.get("risk_system", {}).get("enabled") else "🔴 Выключен"
+            cur_bal = 0.0
+            analytics_path = ANALYTICS_DIR / "analytics.json"
+            if analytics_path.exists():
+                try:
+                    adata = json.loads(analytics_path.read_text(encoding="utf-8"))
+                    cur_bal = float(adata.get("cur_balance_usdt", 0.0))
+                except Exception:
+                    pass
+
+            text = (
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                f"Статус защиты: <b>{status_str}</b>\n"
+                f"Минимальный порог баланса: {thresh_str}\n"
+                f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
+                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
+                "закрывает все позиции по рынку, снимает лимитные ордера, "
+                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔴 Выключить" if app_data.get("risk_system", {}).get("enabled") else "🟢 Включить", callback_data="risk_toggle")],
+                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
+                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
+            ])
+            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "risk_set_threshold")
+        async def on_risk_set_threshold(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            await callback.message.answer("Введите новый критический уровень ROI (в процентах, например -40.5):", reply_markup=self._get_back_keyboard())
-            await state.set_state(TGStates.waiting_for_risk_roi)
+            await callback.message.answer(
+                "Введите минимальный порог баланса в USDT (например: <code>160.0</code> или <code>150</code>):\n\n"
+                "Для отключения порога введите <code>null</code> или нажмите 🔙 Back:",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await state.set_state(TGStates.waiting_for_risk_threshold)
 
-        @self.dp.message(StateFilter(TGStates.waiting_for_risk_roi))
-        async def process_risk_roi(message: Message, state: FSMContext):
+        @self.dp.message(StateFilter(TGStates.waiting_for_risk_threshold))
+        async def process_risk_threshold(message: Message, state: FSMContext):
             if message.text == "🔙 Back":
                 await state.clear()
-                await message.answer("Изменение уровня ROI отменено.", reply_markup=self._get_main_keyboard())
+                await message.answer("Изменение порога отменено.", reply_markup=self._get_main_keyboard())
                 return
-                
-            try:
-                new_roi = float(message.text.replace(',', '.'))
-                if new_roi > 0:
-                    new_roi = -new_roi # auto convert to negative
-            except ValueError:
-                await message.answer("❌ Некорректное число. Попробуйте еще раз:")
-                return
-                
-            app_json_path = DATA_DIR / "app.json"
-            app_data = Utils.read_json_file(app_json_path)
-            if "stop_bot_rirk_system" not in app_data:
-                app_data["stop_bot_rirk_system"] = {}
-                
-            app_data["stop_bot_rirk_system"]["roi_critical_level_pct"] = new_roi
-            Utils.write_json_file(app_json_path, app_data)
             
-            await message.answer(f"✅ Критический уровень ROI установлен на <b>{new_roi}%</b>.", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+            raw = (message.text or "").strip().lower().replace(",", ".")
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            if "risk_system" not in app_data:
+                app_data["risk_system"] = {}
+
+            if raw in ["null", "none", "off", "0", "сброс"]:
+                app_data["risk_system"]["min_balance_threshold_usdt"] = None
+                if "stop_bot_rirk_system" in app_data:
+                    app_data["stop_bot_rirk_system"]["min_balance_threshold_usdt"] = None
+                Utils.write_json_file(app_json_path, app_data)
+                await message.answer("✅ Порог баланса отключен (установлен в <b>null</b>).", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+                await state.clear()
+                return
+
+            try:
+                new_val = float(raw)
+                if new_val <= 0:
+                    raise ValueError()
+            except ValueError:
+                await message.answer("❌ Введите корректное положительное число в $ (например: 160.5) или <code>null</code>:")
+                return
+
+            app_data["risk_system"]["min_balance_threshold_usdt"] = new_val
+            app_data["risk_system"]["enabled"] = True
+            if "stop_bot_rirk_system" in app_data:
+                app_data["stop_bot_rirk_system"]["min_balance_threshold_usdt"] = new_val
+                app_data["stop_bot_rirk_system"]["enabled"] = True
+            Utils.write_json_file(app_json_path, app_data)
+
+            await message.answer(
+                f"✅ Минимальный порог баланса установлен на <b>{new_val:.2f} USDT</b>!\n"
+                f"Система защиты автоматически <b>активирована</b>.",
+                reply_markup=self._get_main_keyboard(),
+                parse_mode="HTML"
+            )
             await state.clear()
 
     async def start(self):
