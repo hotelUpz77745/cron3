@@ -242,6 +242,118 @@ class TestAutoCloserStagnation(unittest.TestCase):
         self.assertEqual(target, 80.0)
         self.assertTrue(is_stag)
 
+    def test_gradient_cascade_full_cycle(self):
+        """Тестирование градиентного каскада 1h -> 6h -> 12h -> 24h."""
+        pos_cfg = {
+            "enabled": True,
+            "mode": "velocity",
+            "timeframes": {
+                "1h": {
+                    "enabled": True,
+                    "min_age_hours": 0.0,
+                    "card": {
+                        ">3.0": {"target": 55.0, "enabled": True},
+                        ">2.0": {"target": 34.0, "enabled": True},
+                        ">1.0": {"target": 21.0, "enabled": True},
+                        ">0.4": {"target": 12.0, "enabled": True},
+                        "<=0.4": {"target": 8.0, "enabled": True}
+                    }
+                },
+                "6h": {
+                    "enabled": True,
+                    "min_age_hours": 6.0,
+                    "card": {
+                        ">2.5": {"target": 34.0, "enabled": True},
+                        ">1.5": {"target": 21.0, "enabled": True},
+                        ">0.8": {"target": 13.0, "enabled": True},
+                        ">0.3": {"target": 8.0, "enabled": True},
+                        "<=0.3": {"target": 6.0, "enabled": True}
+                    }
+                },
+                "12h": {
+                    "enabled": True,
+                    "min_age_hours": 12.0,
+                    "card": {
+                        ">2.0": {"target": 21.0, "enabled": True},
+                        ">1.0": {"target": 13.0, "enabled": True},
+                        ">0.5": {"target": 8.0, "enabled": True},
+                        ">0.2": {"target": 5.5, "enabled": True},
+                        "<=0.2": {"target": 4.5, "enabled": True}
+                    }
+                },
+                "24h": {
+                    "enabled": True,
+                    "min_age_hours": 24.0,
+                    "card": {
+                        ">1.5": {"target": 13.0, "enabled": True},
+                        ">0.8": {"target": 8.0, "enabled": True},
+                        ">0.3": {"target": 5.0, "enabled": True},
+                        "<=0.3": {"target": 3.8, "enabled": True}
+                    }
+                }
+            }
+        }
+
+        now_ms = int(time.time() * 1000)
+
+        # 1. Отрицательный Net: фиксация категорически запрещена
+        analytics_neg = {
+            "iteration_net_profit_usdt": -2.5,
+            "iteration_net_velocity": 0.1,
+            "iteration_start_ts": now_ms - int(30 * 3600 * 1000)
+        }
+        th, is_trig, info, ref = AutoCloser.evaluate_stagnation_target(analytics_neg, pos_cfg)
+        self.assertFalse(is_trig)
+        self.assertIsNone(th)
+
+        # 2. Сегодняшний реальный кейс (28.8ч в позе, Net +4.74 USDT, скорость 0.2 $/ч):
+        # 1h (порог 8.0) не взят, 6h (порог 6.0) не взят, 12h (порог 4.5) - взят!
+        analytics_today_474 = {
+            "iteration_net_profit_usdt": 4.74,
+            "iteration_net_velocity": 0.2,
+            "iteration_start_ts": now_ms - int(28.8 * 3600 * 1000)
+        }
+        th, is_trig, info, ref = AutoCloser.evaluate_stagnation_target(analytics_today_474, pos_cfg)
+        self.assertTrue(is_trig)
+        self.assertEqual(th, 4.5)
+        self.assertIn("12H", info)
+
+        # 3. Случай глубокой стагнации на 28ч при профите +3.90 USDT (скорость 0.15 $/ч):
+        # 1h, 6h, 12h (порог 4.5) не взяты -> срабатывает 24h с порогом 3.8 USDT!
+        analytics_today_390 = {
+            "iteration_net_profit_usdt": 3.90,
+            "iteration_net_velocity": 0.15,
+            "iteration_start_ts": now_ms - int(28.8 * 3600 * 1000)
+        }
+        th, is_trig, info, ref = AutoCloser.evaluate_stagnation_target(analytics_today_390, pos_cfg)
+        self.assertTrue(is_trig)
+        self.assertEqual(th, 3.8)
+        self.assertIn("24H", info)
+
+        # 4. Проверка отключения таймфрейма ("enabled": False)
+        # Отключаем 24h:
+        pos_cfg["timeframes"]["24h"]["enabled"] = False
+        pos_cfg["timeframes"]["12h"]["enabled"] = False
+        # Теперь для профита 3.90$ срабатывания не будет:
+        th, is_trig, info, ref = AutoCloser.evaluate_stagnation_target(analytics_today_390, pos_cfg)
+        self.assertFalse(is_trig)
+
+        # 5. Гипер-памп на старом цикле: не продешевить!
+        # Даже если циклу 28 часов, при резком пампе (скорость 3.5 $/ч, Net +56.0 USDT)
+        # 1h карта срабатывает первой и забирает 55.0 USDT, а не 3.8 USDT!
+        pos_cfg["timeframes"]["12h"]["enabled"] = True
+        pos_cfg["timeframes"]["24h"]["enabled"] = True
+        analytics_pump = {
+            "iteration_net_profit_usdt": 56.0,
+            "iteration_net_velocity": 3.5,
+            "iteration_start_ts": now_ms - int(28.8 * 3600 * 1000)
+        }
+        th, is_trig, info, ref = AutoCloser.evaluate_stagnation_target(analytics_pump, pos_cfg)
+        self.assertTrue(is_trig)
+        self.assertEqual(th, 55.0)
+        self.assertIn("1H", info)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -118,12 +118,74 @@ class AutoCloser:
 
         stag_cfg = pos_cfg.get("stagnation")
         if stag_cfg is None:
-            # Поддержка плоской структуры: stagnation_card прямо внутри pos_cfg
-            stag_cfg = pos_cfg if ("stagnation_card" in pos_cfg or "card" in pos_cfg) else {}
+            # Поддержка плоской структуры: stagnation_card или timeframes прямо внутри pos_cfg
+            stag_cfg = pos_cfg if ("stagnation_card" in pos_cfg or "card" in pos_cfg or "timeframes" in pos_cfg) else {}
 
         if not stag_cfg or not stag_cfg.get("enabled", True):
             return base_th, False, "", (base_th or 0.0)
 
+        now_ms = int(time.time() * 1000)
+        iter_net = float(analytics_dict.get("iteration_net_profit_usdt", analytics_dict.get("net_profit_usdt", 0.0)))
+        peak_age_h = float(analytics_dict.get("iteration_peak_age_hours", analytics_dict.get("peak_age_hours", 0.0)))
+        velocity = float(analytics_dict.get("iteration_net_velocity", analytics_dict.get("net_velocity", 0.0)))
+        if "iteration_net_velocity" not in analytics_dict and "net_velocity" not in analytics_dict:
+            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
+            active_h = max(0.05, (now_ms - first_ts) / 3600000.0)
+            velocity = round(iter_net / active_h, 2)
+
+        # ------------------------------------------------------------------
+        # 1. РЕЖИМ ГРАДИЕНТНОГО КАСКАДА ПО ТАЙМФРЕЙМАМ (1h -> 6h -> 12h -> 24h)
+        # ------------------------------------------------------------------
+        tf_dict = stag_cfg.get("timeframes") or pos_cfg.get("timeframes")
+        if tf_dict and isinstance(tf_dict, dict):
+            # Главный инвариант: фиксация строго при положительном Net
+            if iter_net <= 0.0:
+                return None, False, "Net <= 0", 0.0
+
+            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
+            iter_age_hours = max(0.0, (now_ms - first_ts) / 3600000.0)
+            eval_val = velocity if stag_cfg.get("mode", "velocity") == "velocity" else peak_age_h
+
+            tf_keys = list(tf_dict.keys())
+            priority_order = ["1h", "6h", "12h", "24h"]
+            sorted_keys = [k for k in priority_order if k in tf_dict] + [k for k in tf_keys if k not in priority_order]
+
+            matched_any_target = None
+            matched_any_info = ""
+
+            for tf_key in sorted_keys:
+                tf_cfg = tf_dict[tf_key]
+                if not isinstance(tf_cfg, dict) or not tf_cfg.get("enabled", True):
+                    continue
+                min_age = float(tf_cfg.get("min_age_hours", 0.0))
+                if iter_age_hours < min_age:
+                    continue
+
+                card = tf_cfg.get("card") or tf_cfg.get("stagnation_card", {})
+                if not card:
+                    continue
+
+                for rule, raw_target in card.items():
+                    target_float, is_en = cls.parse_card_target(raw_target)
+                    if not is_en or target_float is None:
+                        continue
+                    is_matched, _ = cls.match_rule_adaptive(rule, eval_val, target_float)
+                    if is_matched:
+                        safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                        matched_any_target = target_float
+                        matched_any_info = f"[{tf_key.upper()} matched '{safe_rule}' (vel {eval_val:.2f}$/h, age {iter_age_hours:.1f}h) -> target {target_float} USDT]"
+                        if iter_net >= target_float:
+                            cls._last_matched_rule = f"{tf_key}:{rule}"
+                            return target_float, True, matched_any_info, target_float
+                        else:
+                            # Правило скорости подошло, но профита не хватает -> спуск к следующему таймфрейму
+                            break
+
+            return matched_any_target, False, matched_any_info, (matched_any_target or 0.0)
+
+        # ------------------------------------------------------------------
+        # 2. ЛЕГАСИ РЕЖИМ: ОДНОРОДНАЯ КАРТА СО СТАТИЧЕСКИМ MIN_FLOOR
+        # ------------------------------------------------------------------
         card = stag_cfg.get("stagnation_card") or stag_cfg.get("card", {})
         if not card:
             return base_th, False, "", (base_th or 0.0)
@@ -131,16 +193,6 @@ class AutoCloser:
         min_floor = float(stag_cfg.get("min_floor", 7.0))
         mode = stag_cfg.get("mode", "auto")
         velocity_pct_of = stag_cfg.get("velocity_pct_of", "top_target")
-
-        now_ms = int(time.time() * 1000)
-        peak_age_h = float(analytics_dict.get("iteration_peak_age_hours", analytics_dict.get("peak_age_hours", 0.0)))
-        
-        velocity = float(analytics_dict.get("iteration_net_velocity", analytics_dict.get("net_velocity", 0.0)))
-        if "iteration_net_velocity" not in analytics_dict and "net_velocity" not in analytics_dict:
-            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
-            active_h = max(0.05, (now_ms - first_ts) / 3600000.0)
-            iter_profit = float(analytics_dict.get("iteration_net_profit_usdt", analytics_dict.get("net_profit_usdt", 0.0)))
-            velocity = round(iter_profit / active_h, 2)
 
         if mode == "auto":
             first_key = next(iter(card.keys()), "")
@@ -159,7 +211,6 @@ class AutoCloser:
                 active_targets.append(target_float)
 
         if not active_targets:
-            # Все уровни карты отключены
             return base_th, False, "", (base_th or 0.0)
 
         top_target = max(active_targets)
@@ -177,7 +228,6 @@ class AutoCloser:
                 cls._last_matched_rule = rule
                 effective_target = max(target_float, min_floor)
                 unit = "$/h" if mode == "velocity" else "h"
-                # HTML-экранируем rule: '<=' -> '&lt;=' чтобы Telegram HTML-парсер не падал
                 safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 if "%" in rule:
                     info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' ({calc_threshold:.2f}{unit}) -> target {effective_target} USDT]"
