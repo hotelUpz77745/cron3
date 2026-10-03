@@ -122,13 +122,16 @@ cron3/
   u9_omni_zenith_apex: 121+ сделок | Winrate 85.95% | Gross Realized +54.63 USDT
 
 Ключевые ADR (последние):
+  - Trailing Profit Ratchet: ступенчатый кумулятивный трейлинг-тейк с возрастным цензом уровней (min_age_hours: 24h для ямы, 0h для импульсов), Фибо-лестница, откат к полу (floor), флаг стагнации is_stagnation для Штурмана.
+  - Dollar Risk System: абсолютный долларовый порог закрытия (/risk_close), остановка входов, ожидание аналитики, TG-отчет и штатный стоп.
+  - Concurrency Hardening: двухуровневые блокировки (_close_lock + _symbol_locks), флаг is_closing в PositionState против гонок пакетов, строгая локализация символов (Symbol Confinement).
+  - Leverage Fast-Path: ключи кэша плеч стандартизированы к чистым именам тикеров ("GRASSUSDT": true).
+  - Trade Velocity & TG Cleanup: удалена секция notifications из velocity, убраны устаревшие кнопки TG.
   - Radar Synergy & 1:1 Auto-Rotation: интеграция RadarNavigator с Радаром полигона, воронка Самсонова,
     атомарная ротация 1-к-1 при храповике стагнации с гистерезисом +35%, защита победителей (>5.0%),
     аудит-журнал (rotations_log.json / rotations_ledger.txt) и сохранение инварианта обоймы.
-  - Radar Trade Velocity Sync: чтение pre-calculated velocity из аналитики в изолированном TG-процессе Радара.
   - Купольная изоляция: Analytics / AutoCloser / Notifications / SuperGrid — по стратегии.
   - iteration_state.json: персистентность iter PnL и guards авто-закрытия.
-  - universes.json: per-side overrides, убраны is_active флаги.
 ```
 
 ---
