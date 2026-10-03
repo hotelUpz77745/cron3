@@ -44,64 +44,11 @@
     - В кодовой базе намертво вшит архитектурный инвариант: `tp_indent = max(0.5, tp_indent)` и `fallback_indent_pct = max(0.5, fallback_indent_pct)`. Все деградирующие сетки масштабируются от минимума 0.50%.
     ---
 
- **Фундаментальный закон выживания алготрейдинга (от Самсонова Николая):**  
-«Если вы*бет, то по-честному, на боевом полигоне и на небольшом депозите — и это спасение, а не поражение. Поражение — это когда заливаешь X * 100... $, а наутро 0 из-за того, что переоценил систему».
+12. **Фундаментальный закон выживания алготрейдинга (от Самсонова Николая):**
+    > [!IMPORTANT]
+    > «Если вы*бет, то по-честному, на боевом полигоне и на небольшом депозите — и это спасение, а не поражение. Поражение — это когда заливаешь X * 100... $, а наутро 0 из-за того, что переоценил систему».
 
----
-
-
-<!-- 
-<!-- ## 2. ADR Log
-
-### ADR-2026-09-28: Синхронизация u0_fat_swing_supergrid, фикс Rec.Fact и соблюдение Правил 2/3
-- **Синхронизация u0_fat_swing_supergrid:**
-  - `_base.json`: выставлены `leverage: 10`, `super_grid: {enabled: true}`, `invest_size: 400`, `tp_map`: 0 (0.9/1.5), 1 (1.1/1.8), 2 (1.4/2.2), 3 (1.8/2.8), 4 (2.3/3.5), 5 (3.0/4.2), 6-й шаг fallback.
-  - `app.json`: добавлены секции `analytics` (`start_balance_usdt: 3000.0`), `super_grid` параметры (`timeframe: "1w"`, `window: 12`, `multiplier: 2.0`, `min_volatility_pct: 15.0`).
-- **Исправление Recovery Factor (Rec.Fact):**
-  - Синхронизирована формула из полигона `cron3PapperUniverses`:
-    - В метриках (`ANALYTICS/metrics.py`): отслеживается `peak_net_profit_usdt` и `max_drawdown_net_usdt = round(min(prev_net_dd, net_dd, floating_dd), 4)`. Расчет: `net_profit_usdt / abs(max_drawdown_net_usdt)`.
-    - В аналитике (`ANALYTICS/analytics.py` & `metrics.py`): устранено деление на `bot_gross_profit` и закреплен расчет `net_profit_usdt / abs(max_drawdown_usdt)`.
-    - Статус: корректный расчет Recovery Factor отображается в `full_analytics_report.txt` и сводках Telegram.
-- **Протокол (Правила 2 и 3):**
-  - Запрещен неявный `.get(..., default)` при чтении критических конфигов в пользу явных ключей `['']`.
-  - Устранены магические числа: все константы (`start_balance_usdt`, `timeframe`, `window`, `multiplier`, пороги переворотов, стоп-лоссы и тайм-ауты) вынесены в JSON-конфиги.
-  - Отрефакторены: `consts.py`, `CORE/bot.py`, `CORE/ADVANCED/volatility_manager.py`, `CORE/notifier.py`, `CORE/auto_closer.py`, `CORE/dynamic_coin_selector.py`, `RUNTIME_FSM/runtime_builder.py`, `quant_calculator.py`, `TG/tg_receiver.py`.
-
-### ADR-2026-09-28: Переименование Grid Load Ratio, внедрение Margin Load и Free Margin
-
-1. **Ребрендинг Grid Load Ratio -> Загрузка сетки (Grid Capacity Utilization):**
-   - Устранена метрика `abs(unrealized_pnl) / realized_pnl`. Введен расчет от максимальной емкости сетки по обеим сторонам (LONG + SHORT): `grid_capacity_usdt = LONG.invest_size + SHORT.invest_size`.
-   - Внутренние поля: `current_grid_load_usdt`, `current_grid_load_pct`, `max_grid_load_usdt`, `max_grid_load_pct`.
-   - Экспорт в словарь: `total_grid_size_usdt`, `current_grid_load_usdt`, `grid_load_pct`, `max_grid_load_pct`, `load_ratio` (0.0-1.0).
-
-2. **Загрузка маржи (Margin Load) и Свободная маржа (Free Margin) в аналитике:**
-   - Текущий баланс: `cur_balance_usdt = start_balance_usdt + net_profit_usdt`.
-   - Использованная маржа позиций: `current_margin_usdt = (long_notional / long_leverage) + (short_notional / short_leverage)`.
-   - Метрики загрузки маржи: `total_margin_used_usdt`, `margin_load_pct = (total_margin_used_usdt / cur_balance_usdt) * 100`, `max_margin_load_pct`, `max_margin_used_usdt`.
-   - Свободная маржа: `free_margin_usdt = max(0.0, cur_balance_usdt - total_margin_used_usdt)`, `free_margin_pct`, `min_free_margin_usdt`, `min_free_margin_pct`.
-
-3. **Интеграция (TG, TXT-отчет, Cheat Sheet):**
-   - Блоки метрик `Grid Load`, `Margin Load`, `Free Margin` интегрированы в `/analytics` и периодические отчеты.
-
-
-### ADR-2026-09-28 (Часть 3): Разрезание токсичного диапазона диспозиции, селекция монет и спецификация Volatility Scanner 2
-
-#### 1. Идея для обсуждения: «Разрезание диапазона пополам» (Bisection Re-entry / Intra-Corridor Harvesting)
-* **Контекст проблемы (кейс ARXUSDT)**:
-  * Боевой бот застрял в двусторонней диспозиции: куплен LONG на локальном хае по 0.27978 (PnL -3.43 USDT / -142% ROI при 20x плече), и открыт SHORT на локальном лое по 0.23080 (PnL -6.84 USDT / -232% ROI).
-  * Текущая цена 0.26114 зажата ровно посередине мертвого диапазона шириной 21.2%.
-  * Тейк лонга (>0.2815) и тейк шорта (<0.2290) недостижимы без глубокого движения. Позиция заблокирована, капитал заморожен, начисляется фандинг.
-* **Архитектурная идея решения**:
-  * Вместо пассивного удержания, при превышении расстояния между средними цен $\Delta = P_{long} - P_{short} > 12\%$ активировать механизм **бисекции диапазона**.
-  * Определение виртуального центра коридора: $P_{mid} = (P_{long} + P_{short}) / 2$.
-  * Вход уменьшенным объемом (15%–25% от базового шага) на отскоках от границ коридора к центру.
-  * Нарезка локальной прибыли внутри коридора и направление полученного Realized PnL на постепенное закрытие крайних неликвидных объемов.
-
-#### 2. Проблема отбора монет для боевого бота (Coin Feed & Liquidity Filtration)
-* **Суть проблемы**: Алгоритм сетки/качелей критически зависит от характера волатильности. Безоткатные пампы/дампы истощают маржу, а монеты в анабиозе замораживают капитал.
-* **Решение**: Регулярный систематический скрининг всего рынка фьючерсов Binance на предмет устойчивой плотности волатильности и ликвидности. -->
-
-
+    ---
 
 ## 2. ADR Log: Мультистратегический диспетчер и диверсификация торгового ядра (Multi-Strategy Universe Templates)
 
