@@ -357,7 +357,7 @@ class TestAutoCloserStagnation(unittest.TestCase):
         ratchet_cfg = {
             "enabled": True,
             "levels": [
-                { "activation": 5.0,  "floor": 3.8,  "min_age_hours": 12.0, "enabled": True, "_desc": "Выныривание из ямы" },
+                { "activation": 5.0,  "floor": 3.8,  "min_age_hours": 24.0, "enabled": True, "_desc": "Выныривание из ямы" },
                 { "activation": 7.5,  "floor": 5.5,  "min_age_hours": 0.0,  "enabled": True, "_desc": "Локальный отскок" },
                 { "activation": 11.0, "floor": 8.0,  "min_age_hours": 0.0,  "enabled": True, "_desc": "Уверенное движение" },
                 { "activation": 17.0, "floor": 13.0, "min_age_hours": 0.0,  "enabled": True, "_desc": "Импульсный пробой" },
@@ -365,7 +365,7 @@ class TestAutoCloserStagnation(unittest.TestCase):
             ]
         }
 
-        # 1. Молодой цикл (2 часа): Level 0 (min_age 12h) заблокирован возрастным цензом!
+        # 1. Молодой цикл (2 часа): Level 0 (min_age 24h) заблокирован возрастным цензом!
         # При Net = +5.2 USDT курок не взводится (молодой цикл не должен выходить рано на микро-профите)
         state_young = {}
         should_close, floor, info, is_stag = AutoCloser.evaluate_trailing_ratchet(
