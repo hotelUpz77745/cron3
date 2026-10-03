@@ -386,6 +386,15 @@ class BotCore:
 
     async def _process_signal(self, symbol: str, side: str, side_cfg: dict, current_price: float, concurrent_mode: bool = False):
         """Обработка сигнала входа для символа и стороны."""
+        if getattr(self, 'entry_blocked', False) is True:
+            logger.warning(f"[{symbol}] {side}: Entry aborted — Close All block is currently active.")
+            return
+
+        block_ts = getattr(self, 'block_until_timestamp', 0)
+        if isinstance(block_ts, (int, float)) and block_ts > time.time():
+            logger.warning(f"[{symbol}] {side}: Entry aborted — Close All cooldown is currently active.")
+            return
+
         if hasattr(self, "radar_navigator") and self.radar_navigator and self.radar_navigator.is_symbol_pending_rotation(symbol):
             logger.info(f"[{symbol}] Вход в позицию отложен: монета ожидает решения по ротации Штурмана (advisory timeout).")
             return
@@ -595,9 +604,17 @@ class BotCore:
                         logger.info(f"[{symbol}] {strat_tag}{side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
                     state.last_grace_period = current_grace
 
-                if is_signal and not BLOCK_ENTRY and not getattr(self, 'entry_blocked', False):
-                    if getattr(self, 'block_until_timestamp', 0) > time.time():
-                        logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked due to Close All until {self.block_until_timestamp}")
+                if is_signal and not BLOCK_ENTRY and getattr(self, 'entry_blocked', False) is not True:
+                    block_ts = getattr(self, 'block_until_timestamp', 0)
+                    now_ts = time.time()
+                    if isinstance(block_ts, (int, float)) and block_ts > now_ts:
+                        if not hasattr(self, '_last_blocked_log'):
+                            self._last_blocked_log = {}
+                        last_log = self._last_blocked_log.get(symbol, {}).get(side, 0.0)
+                        if now_ts - last_log >= 30.0:
+                            self._last_blocked_log.setdefault(symbol, {})[side] = now_ts
+                            rem_s = int(block_ts - now_ts)
+                            logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked due to Close All cooldown ({rem_s}s remaining).")
                     else:
                         strat_tag = f"[{strat.strategy_id}] " if strat else ""
                         logger.info(f"[{symbol}] {strat_tag}{side}: Signal is TRUE! Entering position...")
@@ -950,6 +967,13 @@ class BotCore:
             
         symbols = self.symbols if hasattr(self, "symbols") and self.symbols else self.strategy_registry.get_all_active_symbols()
         
+        now = time.time()
+        interval = getattr(self.time_control, "interval_seconds", 300)
+        # Блокируем входы НЕМЕДЛЕННО перед любыми асинхронными сетевыми вызовами
+        self.entry_blocked = True
+        self.block_until_timestamp = max(((now // interval) + 1) * interval + 60.0, now + interval)
+        logger.warning(f"🛑 [CLOSE_ALL] Immediate entry block activated until timestamp {self.block_until_timestamp} (cooldown active).")
+
         # 1. Отмена лимитных ордеров
         for sym in symbols:
             try:
@@ -980,16 +1004,20 @@ class BotCore:
                     )
         except Exception as e:
             logger.error(f"Error while fetching/closing positions: {e}")
-            
-        # Блокируем новые входы до начала следующей свечи
-        try:
-            now = time.time()
-            interval = self.time_control.interval_seconds
-            next_candle = ((now // interval) + 1) * interval
-            self.block_until_timestamp = next_candle
-            logger.warning(f"Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
-        except Exception as e:
-            logger.error(f"Error while calculating block_until_timestamp: {e}")
+
+        # Сброс in-memory FSM стейтов для закрытых монет
+        if hasattr(self, "fsm_states"):
+            for sym in symbols:
+                if sym in self.fsm_states:
+                    for s_side in ("LONG", "SHORT"):
+                        if s_side in self.fsm_states[sym]:
+                            st = self.fsm_states[sym][s_side]
+                            st.in_position = False
+                            st.in_position_papper = False
+                            st.current_step = 0
+                            st.avg_entry_price = 0.0
+                            st.total_volume = 0.0
+        self.entry_blocked = False
 
         # 3. Синхронизация итераций и лидерборда
         reset_report = {}
@@ -1070,6 +1098,13 @@ class BotCore:
         symbols = strat.symbols
         logger.warning(f"[{strategy_id}] Emergency closing positions for strategy symbols: {symbols}")
 
+        now = time.time()
+        tf = getattr(strat, "timeframe", "5m") if strat else "5m"
+        interval = self.time_control.interval_to_seconds(tf) if hasattr(self.time_control, "interval_to_seconds") else 300
+        self.entry_blocked = True
+        self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), ((now // interval) + 1) * interval + 60.0, now + interval)
+        logger.warning(f"🛑 [{strategy_id}][CLOSE_STRATEGY] Immediate entry block activated until timestamp {self.block_until_timestamp}.")
+
         # 1. Отмена ордеров только для монет этой стратегии
         for sym in symbols:
             try:
@@ -1100,16 +1135,19 @@ class BotCore:
         except Exception as e:
             logger.error(f"[{strategy_id}] Error closing positions: {e}")
 
-        # 3. Блокируем новые входы до начала следующей свечи (идемпотентность как при Close All)
-        try:
-            now = time.time()
-            tf = getattr(strat, "timeframe", "5m") if strat else "5m"
-            interval = self.time_control.interval_to_seconds(tf)
-            next_candle = ((now // interval) + 1) * interval
-            self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), next_candle)
-            logger.warning(f"[{strategy_id}] Entries are blocked until next candle at timestamp {self.block_until_timestamp}")
-        except Exception as e:
-            logger.error(f"[{strategy_id}] Error while calculating block_until_timestamp: {e}")
+        # Сброс FSM стейтов для закрытых монет стратегии
+        if hasattr(self, "fsm_states"):
+            for sym in symbols:
+                if sym in self.fsm_states:
+                    for s_side in ("LONG", "SHORT"):
+                        if s_side in self.fsm_states[sym]:
+                            st = self.fsm_states[sym][s_side]
+                            st.in_position = False
+                            st.in_position_papper = False
+                            st.current_step = 0
+                            st.avg_entry_price = 0.0
+                            st.total_volume = 0.0
+        self.entry_blocked = False
 
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""

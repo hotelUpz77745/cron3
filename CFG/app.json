@@ -35,13 +35,8 @@
             "_comment_alias": "🥈 Омен-9 (Omni Zenith Apex) - Вице-Чемпион #2",
             "_comment_pros": "Асимметричный дуальный режим: на аптренде выжимает максимум (Smart TP до 2.88% + Smart Size 1.20x), а на дампе включает 9-уровневую Фибоначчи-броню до -89%, инвертированный Panic Damper до 0.50%, Knife Blocker >=2 и деэскалацию 0.60x. Мизерная просадка.",
             "_comment_cons": "Сложная синергия параметров; требует непрерывного мониторинга порогов Knife Blocker.",
-            "enabled": true,
-            "symbols": [
-                "GRASSUSDT",
-                "ARXUSDT",
-                "ZROUSDT",
-                "XPLUSDT"
-            ],
+            "enabled": false,
+            "symbols": [],
             "analytics": {
                 "start_balance_usdt": 162.29
             }
@@ -60,10 +55,15 @@
             "_comment_alias": "👑 Медный Змей (Gamma Fortress 35) - Новый Чемпион #1",
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
-            "enabled": false,
-            "symbols": [],
+            "enabled": true,
+            "symbols": [
+                "SOONUSDT",
+                "SCRUSDT",
+                "GRASSUSDT",
+                "AVAUSDT"
+            ],
             "analytics": {
-                "start_balance_usdt": 50.0
+                "start_balance_usdt": 171.97
             }
         }
     },
