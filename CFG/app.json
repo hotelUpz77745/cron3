@@ -48,7 +48,7 @@
             "enabled": true,
             "symbols": [
                 "GRASSUSDT",
-                "AVAUSDT"
+                "ZROUSDT"
             ],
             "analytics": {
                 "start_balance_usdt": 171.92
@@ -129,7 +129,7 @@
         "max_interval_sec": 300
     },
     "radar_synergy": {
-        "enabled": true,
+        "enabled": false,
         "_desc_enabled": "Мастер-тумблер автокомплита и синергии с Радаром.",
         "mode": "auto",
         "_desc_mode": "'advisory' (кнопки в Telegram), 'auto' (авто-перезарядка), 'disabled'.",
@@ -164,20 +164,10 @@
         "enabled": true,
         "timeframe_hours": 6.0,
         "min_accumulation_hours": 1.0,
-        "_desc_min_accumulation_hours": "Минимальное время накопления истории в часах перед отправкой алертов (вычитывается из ленты).",
+        "_desc_min_accumulation_hours": "Минимальное время накопления истории в часах (вычитывается из ленты).",
         "benchmark_trades_per_coin": 10.0,
         "_desc_benchmark_trades_per_coin": "Эталонное число сделок на 1 монету за указанный timeframe_hours.",
         "top_coins_slice": null,
-        "_desc_top_coins_slice": "Срез монет: null для всех монет (рекомендуется), либо целое число N для топ N монет.",
-        "report_interval_hours": 6.0,
-        "notifications": {
-            "enabled": true,
-            "low_ratio_threshold": 0.25,
-            "low_recovery_ratio": 0.75,
-            "high_ratio_threshold": 1.0,
-            "high_reset_ratio": 0.75,
-            "negative_flag": false,
-            "positive_flag": false
-        }
+        "_desc_top_coins_slice": "Срез монет: null для всех монет (рекомендуется), либо целое число N для топ N монет."
     }
 }

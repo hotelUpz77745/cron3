@@ -9,32 +9,20 @@ import os
 import csv
 import time
 import json
-import asyncio
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 
-import aiohttp
 from consts import (
     DATA_DIR,
     ANALYTICS_DIR,
     ANALYTICS_STATS_DIR,
     ANALYTICS_LEDGERS_DIR,
-    TG_ENABLED,
-    TG_ALLOWED_USERS,
     TRADE_VELOCITY_ENABLED,
     TRADE_VELOCITY_TIMEFRAME_HOURS,
     TRADE_VELOCITY_MIN_ACCUMULATION_HOURS,
     TRADE_VELOCITY_BENCHMARK_TRADES,
     TRADE_VELOCITY_TOP_SLICE,
-    TRADE_VELOCITY_REPORT_INTERVAL_HOURS,
-    TRADE_VELOCITY_NOTIF_ENABLED,
-    TRADE_VELOCITY_LOW_RATIO,
-    TRADE_VELOCITY_LOW_RECOVERY_RATIO,
-    TRADE_VELOCITY_HIGH_RATIO,
-    TRADE_VELOCITY_HIGH_RESET_RATIO,
-    TRADE_VELOCITY_NOTIF_NEG_FLAG,
-    TRADE_VELOCITY_NOTIF_POS_FLAG,
     _CFG,
 )
 from c_log import UnifiedLogger
@@ -64,10 +52,8 @@ class TradeVelocityEngine:
         self.min_accumulation_hours: float = TRADE_VELOCITY_MIN_ACCUMULATION_HOURS
         self.benchmark_trades: float = TRADE_VELOCITY_BENCHMARK_TRADES
         self.top_slice: Optional[int] = TRADE_VELOCITY_TOP_SLICE
-        self.low_ratio_threshold: float = TRADE_VELOCITY_LOW_RATIO
-        self.low_recovery_ratio: float = TRADE_VELOCITY_LOW_RECOVERY_RATIO
-        self.high_ratio_threshold: float = TRADE_VELOCITY_HIGH_RATIO
-        self.high_reset_ratio: float = TRADE_VELOCITY_HIGH_RESET_RATIO
+        self.low_ratio_threshold: float = 0.25
+        self.high_ratio_threshold: float = 1.0
         self.start_ts_ms: int = int(time.time() * 1000)
         self._trades_history: List[Tuple[int, str]] = []  # List of (timestamp_ms, symbol)
         self.earliest_trade_ts_ms: Optional[int] = None
@@ -98,55 +84,43 @@ class TradeVelocityEngine:
                     if len(row) < 4:
                         continue
                     
-                    sym: Optional[str] = None
-                    close_ts_ms: Optional[int] = None
-                    
-                    dt_candidates: List[int] = []
-                    for col in row:
-                        val = col.strip()
-                        if not sym and val.endswith("USDT"):
-                            sym = val
-                        elif len(val) == 19 and val[4] == '-' and val[7] == '-':
-                            try:
-                                dt = datetime.strptime(val, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-                                dt_candidates.append(int(dt.timestamp() * 1000))
-                            except Exception:
-                                pass
+                    symbol = row[0].strip()
+                    close_time_str = row[3].strip()
 
-                    if dt_candidates:
-                        close_ts_ms = dt_candidates[-1]
+                    try:
+                        dt = datetime.strptime(close_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        ts_ms = int(dt.timestamp() * 1000)
+                    except Exception:
+                        continue
 
-                    if sym and close_ts_ms is not None:
-                        if close_ts_ms >= cutoff_ms:
-                            new_trades.append((close_ts_ms, sym))
+                    if ts_ms >= cutoff_ms:
+                        new_trades.append((ts_ms, symbol))
 
-            new_trades.sort(key=lambda x: x[0])
             self._trades_history = new_trades
             if self._trades_history:
+                self._trades_history.sort(key=lambda x: x[0])
                 self.earliest_trade_ts_ms = self._trades_history[0][0]
                 self.latest_trade_ts_ms = self._trades_history[-1][0]
-                logger.info(
-                    f"[TRADE_VELOCITY:{self.universe_id}] Loaded {len(self._trades_history)} trades from {self.ledger_path.name}. "
-                    f"Earliest: {datetime.fromtimestamp(self.earliest_trade_ts_ms / 1000.0, tz=timezone.utc)}, "
-                    f"Latest: {datetime.fromtimestamp(self.latest_trade_ts_ms / 1000.0, tz=timezone.utc)}"
-                )
             else:
                 self.earliest_trade_ts_ms = None
                 self.latest_trade_ts_ms = None
+
         except Exception as e:
-            logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error reading ledger for history: {e}")
+            logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error loading trades ledger: {e}")
 
-    def on_trade_closed(self, symbol: str, ts_ms: Optional[int] = None) -> None:
-        """Регистрирует факт закрытия сделки."""
-        current_ms = ts_ms if ts_ms is not None else int(time.time() * 1000)
-        self._trades_history.append((current_ms, symbol))
-        self._purge_old_trades(current_ms)
+    def on_trade_closed(self, symbol: str, timestamp_ms: Optional[int] = None) -> None:
+        """
+        Коллбэк при закрытии сделки: инкрементирует счетчик и сдвигает скользящее окно.
+        """
+        ts = timestamp_ms or int(time.time() * 1000)
+        self._trades_history.append((ts, symbol))
+        self._purge_old_trades(ts)
 
-    def _purge_old_trades(self, now_ms: int) -> None:
-        """Удаляет сделки старше скользящего окна timeframe_hours."""
+    def _purge_old_trades(self, current_ts_ms: int) -> None:
+        """Очищает сделки за пределами timeframe_hours."""
         window_ms = int(self.timeframe_hours * 3600 * 1000)
-        cutoff_ms = now_ms - window_ms
-        self._trades_history = [item for item in self._trades_history if item[0] >= cutoff_ms]
+        cutoff_ms = current_ts_ms - window_ms
+        self._trades_history = [(t, s) for t, s in self._trades_history if t >= cutoff_ms]
         if self._trades_history:
             self._trades_history.sort(key=lambda x: x[0])
             self.earliest_trade_ts_ms = self._trades_history[0][0]
@@ -168,11 +142,6 @@ class TradeVelocityEngine:
                     self.min_accumulation_hours = float(tv_cfg.get("min_accumulation_hours", self.min_accumulation_hours))
                     self.benchmark_trades = float(tv_cfg.get("benchmark_trades_per_coin", self.benchmark_trades))
                     self.top_slice = tv_cfg.get("top_coins_slice", self.top_slice)
-                    n_cfg = tv_cfg.get("notifications", {})
-                    self.low_ratio_threshold = float(n_cfg.get("low_ratio_threshold", self.low_ratio_threshold))
-                    self.low_recovery_ratio = float(n_cfg.get("low_recovery_ratio", self.low_recovery_ratio))
-                    self.high_ratio_threshold = float(n_cfg.get("high_ratio_threshold", self.high_ratio_threshold))
-                    self.high_reset_ratio = float(n_cfg.get("high_reset_ratio", self.high_reset_ratio))
         except Exception as e:
             logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error reloading config: {e}")
 
@@ -200,7 +169,7 @@ class TradeVelocityEngine:
             history_span_sec = max(history_span_sec, elapsed_from_oldest_sec)
 
         accumulation_hours = round(history_span_sec / 3600.0, 2)
-        is_ready_for_alerts = history_span_sec >= min_acc_sec
+        is_ready = history_span_sec >= min_acc_sec
 
         per_coin_data = analytics_data.get("per_coin", {})
         configured_symbols = []
@@ -266,7 +235,7 @@ class TradeVelocityEngine:
                 "status_desc": c_status
             }
 
-        if not is_ready_for_alerts:
+        if not is_ready:
             status = "ACCUMULATING"
             status_desc = f"Накопление ({accumulation_hours}ч / {self.min_accumulation_hours}ч)"
             return {
@@ -287,10 +256,6 @@ class TradeVelocityEngine:
                 "deviation_pct": None,
                 "status": status,
                 "status_desc": status_desc,
-                "low_ratio_threshold": self.low_ratio_threshold,
-                "low_recovery_ratio": self.low_recovery_ratio,
-                "high_ratio_threshold": self.high_ratio_threshold,
-                "high_reset_ratio": self.high_reset_ratio,
                 "per_coin": per_coin_metrics,
             }
 
@@ -332,10 +297,6 @@ class TradeVelocityEngine:
             "deviation_pct": deviation_pct,
             "status": status,
             "status_desc": status_desc,
-            "low_ratio_threshold": self.low_ratio_threshold,
-            "low_recovery_ratio": self.low_recovery_ratio,
-            "high_ratio_threshold": self.high_ratio_threshold,
-            "high_reset_ratio": self.high_reset_ratio,
             "per_coin": per_coin_metrics,
         }
 
@@ -365,158 +326,6 @@ class TradeVelocityEngine:
             f"  Slice Total Trades:    {metrics['slice_trades_count']}",
             f"  Average Current Speed: {speed_str}",
             f"  Activity Ratio (R):    {ratio_str}",
-            f"    - Low Ratio Thresh:  <{metrics['low_ratio_threshold']}",
-            f"    - Low Recovery:      >={metrics['low_recovery_ratio']}",
-            f"    - High Ratio Thresh: >={metrics['high_ratio_threshold']}",
-            f"    - High Reset:        <={metrics['high_reset_ratio']}",
             f"  Volatility Status:     {metrics['status_desc']}\n"
         ]
         return "\n".join(lines)
-
-
-class TradeVelocityNotifier:
-    """Менеджер отчетов и пороговых уведомлений в Telegram для вселенной."""
-
-    def __init__(self, engine: TradeVelocityEngine, universe_id: str = "default"):
-        self.engine: TradeVelocityEngine = engine
-        self.universe_id: str = universe_id
-        self.is_running: bool = False
-        self._task: Optional[asyncio.Task] = None
-        self.low_vol_flag: bool = TRADE_VELOCITY_NOTIF_NEG_FLAG
-        self.high_vol_flag: bool = TRADE_VELOCITY_NOTIF_POS_FLAG
-        self._sync_flags_from_disk()
-        self.last_periodic_report_ts: float = time.time()
-        self.token: str = os.getenv("TG_TOKEN") or ""
-
-    def _sync_flags_from_disk(self) -> None:
-        try:
-            cfg_path = DATA_DIR / "app.json"
-            if cfg_path.exists():
-                cfg_data = json.loads(cfg_path.read_text(encoding="utf-8"))
-                if "trade_velocity" in cfg_data and "notifications" in cfg_data["trade_velocity"]:
-                    n_cfg = cfg_data["trade_velocity"]["notifications"]
-                    disk_neg = bool(n_cfg.get("negative_flag", TRADE_VELOCITY_NOTIF_NEG_FLAG))
-                    disk_pos = bool(n_cfg.get("positive_flag", TRADE_VELOCITY_NOTIF_POS_FLAG))
-                    if disk_neg != self.low_vol_flag:
-                        self.low_vol_flag = disk_neg
-                    if disk_pos != self.high_vol_flag:
-                        self.high_vol_flag = disk_pos
-        except Exception as e:
-            logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error syncing flags from disk: {e}")
-
-    def _save_flags_to_disk(self, neg: bool, pos: bool) -> None:
-        try:
-            cfg_path = DATA_DIR / "app.json"
-            if cfg_path.exists():
-                cfg_data = json.loads(cfg_path.read_text(encoding="utf-8"))
-                n_cfg = cfg_data.setdefault("trade_velocity", {}).setdefault("notifications", {})
-                n_cfg["negative_flag"] = neg
-                n_cfg["positive_flag"] = pos
-                Utils.atomic_write_json(cfg_path, cfg_data, indent=4)
-        except Exception as e:
-            logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error saving flags to disk: {e}")
-
-    async def start(self) -> None:
-        if not TRADE_VELOCITY_NOTIF_ENABLED or not TG_ENABLED:
-            return
-        self.is_running = True
-        self._task = asyncio.create_task(self._loop())
-        logger.info(f"[TRADE_VELOCITY:{self.universe_id}] Notifier loop started.")
-
-    async def stop(self) -> None:
-        self.is_running = False
-        if self._task:
-            self._task.cancel()
-        logger.info(f"[TRADE_VELOCITY:{self.universe_id}] Notifier loop stopped.")
-
-    async def _loop(self) -> None:
-        while self.is_running:
-            try:
-                await self.check_and_notify()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error in notifier loop: {e}")
-            await asyncio.sleep(60)
-
-    async def check_and_notify(self) -> None:
-        self._sync_flags_from_disk()
-
-        if self.universe_id == "default":
-            analytics_path = ANALYTICS_STATS_DIR / "analytics.json"
-        else:
-            analytics_path = ANALYTICS_STATS_DIR / f"analytics_{self.universe_id}.json"
-
-        if not analytics_path.exists():
-            return
-
-        analytics_data = Utils.read_json_file(analytics_path)
-        metrics = self.engine.calculate_velocity(analytics_data)
-
-        if not metrics.get("is_ready_for_alerts", False) or metrics.get("speed_ratio") is None:
-            return
-
-        speed_ratio = float(metrics["speed_ratio"])
-        low_th = float(self.engine.low_ratio_threshold)
-        low_rec = float(self.engine.low_recovery_ratio)
-        high_th = float(self.engine.high_ratio_threshold)
-        high_reset = float(self.engine.high_reset_ratio)
-
-        u_prefix = f"[{self.universe_id.upper()}] " if self.universe_id != "default" else ""
-
-        if speed_ratio <= low_th and not self.low_vol_flag:
-            self.low_vol_flag = True
-            self._save_flags_to_disk(neg=True, pos=self.high_vol_flag)
-            msg = (
-                f"❄️ <b>{u_prefix}ВНИМАНИЕ! НЕДОГРЕВ РЫНКА</b>\n\n"
-                f"Скорость сделок упала ниже допустимого критерия:\n"
-                f"• Срез: <b>{metrics['slice_description']}</b>\n"
-                f"• Скорость: <b>{metrics['avg_effective_speed']}</b> сд/монету (Эталон: <b>{metrics['benchmark_speed']}</b> сд/монету)\n"
-                f"• Коэффициент: <b>{speed_ratio:.2f}x</b> (Порог: &lt;= {low_th:.2f}x)"
-            )
-            await self._send_tg(msg)
-        elif self.low_vol_flag and speed_ratio >= low_rec:
-            self.low_vol_flag = False
-            self._save_flags_to_disk(neg=False, pos=self.high_vol_flag)
-            logger.info(f"[TRADE_VELOCITY:{self.universe_id}] Low volatility flag cleared (ratio reached {speed_ratio:.2f}x >= {low_rec:.2f}x)")
-
-        if speed_ratio >= high_th and not self.high_vol_flag:
-            self.high_vol_flag = True
-            self._save_flags_to_disk(neg=self.low_vol_flag, pos=True)
-            msg = (
-                f"🔥 <b>{u_prefix}ВНИМАНИЕ! ВОЛАТИЛЬНОСТЬ ЗАШИБИСЬ</b>\n\n"
-                f"Скорость сделок достигла/превысила эталон:\n"
-                f"• Срез: <b>{metrics['slice_description']}</b>\n"
-                f"• Скорость: <b>{metrics['avg_effective_speed']}</b> сд/монету (Эталон: <b>{metrics['benchmark_speed']}</b> сд/монету)\n"
-                f"• Коэффициент: <b>{speed_ratio:.2f}x</b> (Порог: &gt;= {high_th:.2f}x)"
-            )
-            await self._send_tg(msg)
-        elif self.high_vol_flag and speed_ratio <= high_reset:
-            self.high_vol_flag = False
-            self._save_flags_to_disk(neg=self.low_vol_flag, pos=False)
-            logger.info(f"[TRADE_VELOCITY:{self.universe_id}] High volatility flag cleared (ratio dropped to {speed_ratio:.2f}x <= {high_reset:.2f}x)")
-
-        now = time.time()
-        interval_sec = TRADE_VELOCITY_REPORT_INTERVAL_HOURS * 3600.0
-        if now - self.last_periodic_report_ts >= interval_sec:
-            self.last_periodic_report_ts = now
-            report_msg = (
-                f"📊 <b>{u_prefix}Отчет по скорости сделок ({metrics['timeframe_hours']}h)</b>\n\n"
-                f"• Срез: <b>{metrics['slice_description']}</b>\n"
-                f"• Скорость: <b>{metrics['avg_effective_speed']}</b> сд/монету (Эталон: <b>{metrics['benchmark_speed']}</b> сд/монету)\n"
-                f"• Коэффициент активности: <b>{speed_ratio:.2f}x</b> [{metrics['status_desc']}]"
-            )
-            await self._send_tg(report_msg)
-
-    async def _send_tg(self, text: str) -> None:
-        if not self.token or not TG_ALLOWED_USERS:
-            return
-        url = f"https://api.telegram.org/bot{self.token}/sendMessage"
-        async with aiohttp.ClientSession() as session:
-            for uid in TG_ALLOWED_USERS:
-                try:
-                    payload = {"chat_id": uid, "text": text, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as resp:
-                        pass
-                except Exception as e:
-                    logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Failed to send TG message to {uid}: {e}")

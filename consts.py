@@ -191,15 +191,7 @@ TRADE_VELOCITY_TIMEFRAME_HOURS: float = float(TRADE_VELOCITY_CFG.get("timeframe_
 TRADE_VELOCITY_MIN_ACCUMULATION_HOURS: float = float(TRADE_VELOCITY_CFG.get("min_accumulation_hours", 1.0))
 TRADE_VELOCITY_BENCHMARK_TRADES: float = float(TRADE_VELOCITY_CFG.get("benchmark_trades_per_coin", 10.0))
 TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slice")
-TRADE_VELOCITY_REPORT_INTERVAL_HOURS: float = float(TRADE_VELOCITY_CFG.get("report_interval_hours", 6.0))
-_tv_notif = TRADE_VELOCITY_CFG.get("notifications", {})
-TRADE_VELOCITY_NOTIF_ENABLED: bool = bool(_tv_notif.get("enabled", True))
-TRADE_VELOCITY_LOW_RATIO: float = float(_tv_notif.get("low_ratio_threshold", 0.25))
-TRADE_VELOCITY_LOW_RECOVERY_RATIO: float = float(_tv_notif.get("low_recovery_ratio", 0.75))
-TRADE_VELOCITY_HIGH_RATIO: float = float(_tv_notif.get("high_ratio_threshold", 1.0))
-TRADE_VELOCITY_HIGH_RESET_RATIO: float = float(_tv_notif.get("high_reset_ratio", 0.75))
-TRADE_VELOCITY_NOTIF_NEG_FLAG: bool = bool(_tv_notif.get("negative_flag", False))
-TRADE_VELOCITY_NOTIF_POS_FLAG: bool = bool(_tv_notif.get("positive_flag", False))
+
 
 # ============================================================
 # RISK SYSTEM
