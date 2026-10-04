@@ -36,12 +36,11 @@ class TakeProfitManager:
         elif state.tp_purpose == "both" and opposite_state:
             level_opp = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
             active_level_str = str(max(int(level_self), int(level_opp)))
+        elif state.tp_purpose == "neutral":
+            # При нейтральном режиме нет жесткой привязки шага TP к уровню сетки
+            active_level_str = level_self if level_self in state.tp_map else "0"
         else:
             active_level_str = level_self
-            
-        if getattr(state, "tp_purpose", "self") == "neutral":
-            logger.info(f"[{symbol}] {side} tp_purpose is 'neutral'. Skipping LIMIT order placement to rely on Trailing TP.")
-            return True
 
         tp_map = state.tp_map
         current_tp = tp_map.get(active_level_str)

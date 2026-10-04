@@ -80,11 +80,7 @@ class FallbackTpManager:
                 state.pending_rolling_tp = False
                 return
 
-        # 2. Если режим neutral, классический фиксированный fallback не применяется
-        if state.tp_purpose == "neutral":
-            return
-
-        # 1. Детерминация цены фолбека (кешируем только прайс для горячего пути)
+        # 2. Детерминация цены фолбека (кешируем только прайс для горячего пути)
         if state.fallback_price is None:
             if state.avg_entry_price <= 0:
                 return # Ждем пока сенсоры синхронизируют цену входа
@@ -93,7 +89,10 @@ class FallbackTpManager:
             current_level = RiskCalculatingUtils.get_current_grid_level(state.grid)
             
             if current_level not in tp_map:
-                return
+                if getattr(state, "tp_purpose", "self") == "neutral" and "0" in tp_map:
+                    current_level = "0"
+                else:
+                    return
                 
             fallback_indent_pct = tp_map[current_level].get("fallback_indent")
             
