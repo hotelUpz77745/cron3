@@ -8,14 +8,17 @@ import copy
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 from CORE.trailing_system import BaseTrailingSystem
 from POS_FSM.models import PositionState
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
 from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+from CORE.TP.tp_manager import TakeProfitManager
+from CORE.TP.fallback_tp_manager import FallbackTpManager
 
 
-class TestU10SpinningTrailing(unittest.TestCase):
+class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
     def test_normalize_abs(self):
         """Тестирование знаково-агностического нормализатора normalize_abs."""
         self.assertEqual(BaseTrailingSystem.normalize_abs(10.5), 10.5)
@@ -282,6 +285,114 @@ class TestU10SpinningTrailing(unittest.TestCase):
         self.assertEqual(side_cfgs["LONG"]["avg_free_volume_behavior"], "distribute_remaining")
         self.assertEqual(len(side_cfgs["LONG"]["grid"]), 9)
         self.assertEqual(len(side_cfgs["LONG"]["tp_map"]), 14)
+
+    async def test_indent_determines_limit_vs_fallback_order(self):
+        """Проверка: если indent задан числом -> LIMIT ордер; если indent is None -> статический лимит не ставится (фолбек)."""
+        runtime_manager = MagicMock()
+        tp_mgr = TakeProfitManager(runtime_manager)
+
+        client = MagicMock()
+        client.cancel_orders_for_side = AsyncMock(return_value=MagicMock(success=True))
+        client.make_order = AsyncMock(return_value=MagicMock(success=True, data={"orderId": "123"}))
+
+        state = MagicMock()
+        state.grid = {"0": {"is_active": True}}
+        state.avg_entry_price = 100.0
+        state.total_volume = 1.0
+        state.recent_closes = []
+        spec_data = {"tick_size": 0.01, "step_size": 0.001, "min_qty": 0.001}
+
+        # 1. indent задан числом (например 1.5%) -> выставляется биржевой LIMIT-ордер
+        state.tp_purpose = "self"
+        state.tp_map = {"0": {"indent": 1.5, "is_active": False}}
+        res = await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state)
+        self.assertTrue(res)
+        client.make_order.assert_called_once()
+        self.assertEqual(client.make_order.call_args[1]["market_type"], "LIMIT")
+
+        # 2. indent is None (как в u10_spinning_basic_distribute) -> лимитка не выставляется, закрытие отдается фолбеку
+        client.make_order.reset_mock()
+        state.tp_map = {"0": {"indent": None, "fallback_indent": 1.9, "activation": 2.2, "is_active": False}}
+        res = await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state)
+        self.assertTrue(res)
+        client.make_order.assert_not_called()
+        self.assertTrue(state.tp_map["0"]["is_active"])
+
+    async def test_tp_purpose_element_resolution(self):
+        """Проверка: маркер tp_purpose строго определяет, какой элемент tp_map берется в конкретный момент."""
+        runtime_manager = MagicMock()
+        tp_mgr = TakeProfitManager(runtime_manager)
+
+        client = MagicMock()
+        client.cancel_orders_for_side = AsyncMock(return_value=MagicMock(success=True))
+        client.make_order = AsyncMock(return_value=MagicMock(success=True, data={"orderId": "123"}))
+
+        spec_data = {"tick_size": 0.01, "step_size": 0.001, "min_qty": 0.001}
+
+        state_long = MagicMock()
+        state_long.grid = {"0": {"is_active": True}, "1": {"is_active": True}}  # level_self = 1
+        state_long.avg_entry_price = 100.0
+        state_long.total_volume = 1.0
+        state_long.recent_closes = []
+
+        state_short = MagicMock()
+        state_short.grid = {"0": {"is_active": True}, "1": {"is_active": True}, "2": {"is_active": True}}  # level_opp = 2
+
+        # 1. tp_purpose = "self" -> уровень 1 (своя сетка)
+        state_long.tp_purpose = "self"
+        state_long.tp_map = {
+            "0": {"indent": 1.0},
+            "1": {"indent": 2.0},
+            "2": {"indent": 3.0},
+        }
+        await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state_long, state_short)
+        self.assertEqual(client.make_order.call_args[1]["price"], 102.0)
+
+        # 2. tp_purpose = "opposite" -> уровень 2 (соседняя сетка)
+        client.make_order.reset_mock()
+        state_long.tp_purpose = "opposite"
+        await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state_long, state_short)
+        self.assertEqual(client.make_order.call_args[1]["price"], 103.0)
+
+        # 3. tp_purpose = "both" -> max(level_self=1, level_opp=2) = 2
+        client.make_order.reset_mock()
+        state_long.tp_purpose = "both"
+        await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state_long, state_short)
+        self.assertEqual(client.make_order.call_args[1]["price"], 103.0)
+
+        # 4. tp_purpose = "neutral" -> автономный режим, отвязан от сетки
+        client.make_order.reset_mock()
+        state_long.tp_purpose = "neutral"
+        state_long.tp_map = {"0": {"indent": 1.5}}
+        await tp_mgr.place_take_profit(client, "BTCUSDT", "LONG", 100.0, spec_data, state_long, state_short)
+        self.assertEqual(client.make_order.call_args[1]["price"], 101.5)
+
+    async def test_fallback_tp_always_market_order(self):
+        """Проверка: Fallback TP всегда закрывает позицию по MARKET ордеру."""
+        fb_mgr = FallbackTpManager()
+        client = MagicMock()
+        client.cancel_orders_for_side = AsyncMock(return_value=MagicMock(success=True))
+        client.make_order = AsyncMock(return_value=MagicMock(success=True))
+
+        state = MagicMock()
+        state.in_position = True
+        state.is_finished = False
+        state.pending_rolling_tp = False
+        state.avg_entry_price = 100.0
+        state.total_volume = 1.0
+        state.trailing_tp_state = {"highest_gain": 3.0, "armed_floor": 2.4, "active_level": "2"}
+        state.tp_map = {
+            "0": {"indent": None, "fallback_indent": 1.9, "activation": 2.2},
+            "1": {"indent": None, "fallback_indent": 2.4, "activation": 2.7},
+        }
+        state.tp_purpose = "neutral"
+        state.grid = {"0": {"is_active": True}}
+        spec_data = {"step_size": 0.001, "min_qty": 0.001}
+
+        # При цене 102.35 (gain 2.35% <= armed_floor 2.4%) срабатывает Trailing TP
+        await fb_mgr.process(client, None, "BTCUSDT", "LONG", state, 102.35, spec_data)
+        client.make_order.assert_called_once()
+        self.assertEqual(client.make_order.call_args[1]["market_type"], "MARKET")
 
 
 if __name__ == "__main__":
