@@ -25,9 +25,12 @@ class FallbackTpManager:
         if state.pending_rolling_tp:
             return
 
-        # 1. Трейлинг Тейк-Профит (лестничный режим neutral или ступенчатый trailing в tp_map)
-        has_neutral = getattr(state, "tp_purpose", "self") == "neutral"
-        has_trailing_tp = has_neutral or any(isinstance(v, dict) and "trailing" in v for v in (getattr(state, "tp_map", {}) or {}).values())
+        # 1. Трейлинг Тейк-Профит: проверяем наличие условий трейлинга в tp_map (наличие activation/trailing) или взведенный пол
+        tp_map_vals = (getattr(state, "tp_map", {}) or {}).values()
+        has_trailing_tp = (
+            bool(getattr(state, "trailing_tp_state", {}).get("armed_floor"))
+            or any(isinstance(v, dict) and ("activation" in v or "trailing" in v) for v in tp_map_vals)
+        )
         if has_trailing_tp:
             gain_pct = ((current_price - state.avg_entry_price) / state.avg_entry_price * 100.0) if side == "LONG" else ((state.avg_entry_price - current_price) / state.avg_entry_price * 100.0)
             
@@ -86,13 +89,21 @@ class FallbackTpManager:
                 return # Ждем пока сенсоры синхронизируют цену входа
             
             tp_map = state.tp_map
-            current_level = RiskCalculatingUtils.get_current_grid_level(state.grid)
+            level_self = RiskCalculatingUtils.get_current_grid_level(state.grid)
             
+            if state.tp_purpose == "opposite" and opposite_state:
+                level_opp = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
+                current_level = level_opp
+            elif state.tp_purpose == "both" and opposite_state:
+                level_opp = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
+                current_level = str(max(int(level_self), int(level_opp)))
+            elif state.tp_purpose == "neutral":
+                current_level = level_self if level_self in tp_map else "0"
+            else:
+                current_level = level_self
+                
             if current_level not in tp_map:
-                if getattr(state, "tp_purpose", "self") == "neutral" and "0" in tp_map:
-                    current_level = "0"
-                else:
-                    return
+                return
                 
             fallback_indent_pct = tp_map[current_level].get("fallback_indent")
             
