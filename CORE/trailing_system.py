@@ -80,9 +80,18 @@ class BaseTrailingSystem:
         lvl_min_age = float(levels[idx].get("min_age_hours") or 0.0) if idx < len(levels) else 0.0
         is_stag = (lvl_min_age > 0.0 or idx == 0)
 
+        act_threshold = float(levels[idx]["activation"])
+        # Полиморфный прямой триггер: если курок равен полу (или ниже), мгновенная фиксация при касании/перелёте
+        if act_threshold <= armed_floor and iter_net >= act_threshold:
+            high_net = float(state.get("highest_net", 0.0))
+            info = (
+                f"[TRAILING RATCHET INSTANT L{idx} '{desc}': Net {iter_net:+.2f} >= Target {armed_floor:.2f} "
+                f"(High: {high_net:+.2f}, Age: {iter_age_hours:.1f}h)]"
+            )
+            return True, armed_floor, info, is_stag
+
         if iter_net <= armed_floor:
             high_net = float(state.get("highest_net", 0.0))
-            act_threshold = float(levels[idx]["activation"])
             info = (
                 f"[TRAILING RATCHET L{idx} '{desc}': Net {iter_net:+.2f} <= Floor {armed_floor:.2f} "
                 f"(Armed at >= {act_threshold:.2f}, High: {high_net:+.2f}, Age: {iter_age_hours:.1f}h)]"
@@ -152,6 +161,18 @@ class BaseTrailingSystem:
             return False, None, ""
 
         active_lvl = state_trailing.get("active_level", "0")
+        active_lvl_cfg = tp_map.get(active_lvl, {})
+        raw_act = active_lvl_cfg.get("activation")
+        act_val = cls.normalize_abs(raw_act) if raw_act is not None else None
+
+        # Полиморфный прямой триггер: если курок равен полу (или ниже), мгновенная фиксация при касании/перелёте
+        if act_val is not None and act_val <= armed_floor and gain_pct >= act_val:
+            info = (
+                f"[TRAILING TP INSTANT L{active_lvl}: Gain {gain_pct:.2f}% >= Target {armed_floor:.2f}% "
+                f"(Peak: {state_trailing.get('highest_gain', 0.0):.2f}%)]"
+            )
+            return True, armed_floor, info
+
         if gain_pct <= armed_floor:
             info = (
                 f"[TRAILING TP L{active_lvl}: Gain {gain_pct:.2f}% <= Floor {armed_floor:.2f}% "
@@ -229,9 +250,15 @@ class BaseTrailingSystem:
 
             raw_act = lvl_data.get("activation")
             if raw_act is not None:
-                # Трейлинг-уровень: должен быть взведен и цена должна отскочить до пола (drawdown <= floor)
+                act_val = cls.normalize_abs(raw_act)
+                # Трейлинг-уровень: должен быть взведен
                 if lvl_str in armed_levels:
-                    if drawdown_pct <= floor_val:
+                    # Полиморфный прямой триггер: если курок равен полу (или ниже), исполняется мгновенно без отскока
+                    if act_val <= floor_val and drawdown_pct >= floor_val:
+                        candidate_level = lvl_str
+                        break
+                    # Классический трейлинг: цена должна отскочить до пола (drawdown <= floor)
+                    elif drawdown_pct <= floor_val:
                         candidate_level = lvl_str
                         break
             else:

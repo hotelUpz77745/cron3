@@ -158,6 +158,65 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         # Уровень 3 был пропущен!
         self.assertEqual(skipped, ["3"])
 
+    def test_polymorphic_direct_trigger_when_activation_equals_floor(self):
+        """
+        Проверка архитектурного принципа полиморфизма:
+        Если курок стоит вровень с полом (activation == floor), система срабатывает
+        как мгновенный прямой триггер (direct touch/overshoot) без ожидания отката/отскока.
+        """
+        # 1. Trailing Ratchet
+        ratchet_cfg = {
+            "enabled": True,
+            "levels": [
+                {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Мега-ралли"}
+            ]
+        }
+        # Недолет
+        c, f, _, _ = BaseTrailingSystem.evaluate_ratchet(85.0, 1.0, ratchet_cfg, {})
+        self.assertFalse(c)
+        # Точное касание
+        c, f, inf, _ = BaseTrailingSystem.evaluate_ratchet(89.0, 1.0, ratchet_cfg, {})
+        self.assertTrue(c)
+        self.assertEqual(f, 89.0)
+        self.assertIn("INSTANT", inf)
+        # Перелет (overshoot на импульсе)
+        c, f, inf, _ = BaseTrailingSystem.evaluate_ratchet(91.5, 1.0, ratchet_cfg, {})
+        self.assertTrue(c)
+        self.assertEqual(f, 89.0)
+        self.assertIn("INSTANT", inf)
+
+        # 2. Trailing TP
+        tp_map = {
+            "13": {"activation": 89.5, "fallback_indent": 89.5, "indent": 0.0}
+        }
+        # Недолет
+        c, f, _ = BaseTrailingSystem.evaluate_trailing_tp(88.0, tp_map, {}, "neutral")
+        self.assertFalse(c)
+        # Точное касание
+        c, f, inf = BaseTrailingSystem.evaluate_trailing_tp(89.5, tp_map, {}, "neutral")
+        self.assertTrue(c)
+        self.assertEqual(f, 89.5)
+        self.assertIn("INSTANT", inf)
+        # Перелет
+        c, f, inf = BaseTrailingSystem.evaluate_trailing_tp(93.0, tp_map, {}, "neutral")
+        self.assertTrue(c)
+        self.assertEqual(f, 89.5)
+        self.assertIn("INSTANT", inf)
+
+        # 3. Trailing Grid
+        grid_map = {
+            "8": {"activation": -89.0, "indent": -89.0, "volume": 68.0}
+        }
+        # Недолет
+        cand, _, _ = BaseTrailingSystem.evaluate_trailing_grid(85.0, grid_map, {})
+        self.assertIsNone(cand)
+        # Точное касание
+        cand, skipped, inf = BaseTrailingSystem.evaluate_trailing_grid(89.0, grid_map, {})
+        self.assertEqual(cand, "8")
+        # Перелет (пролив глубже без отскока)
+        cand, skipped, inf = BaseTrailingSystem.evaluate_trailing_grid(92.0, grid_map, {})
+        self.assertEqual(cand, "8")
+
     def test_avg_free_volume_behaviors(self):
         """Проверка трех режимов обработки сэкономленного объема сетки."""
         base_grid = {
