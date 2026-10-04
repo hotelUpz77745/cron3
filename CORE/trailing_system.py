@@ -126,7 +126,14 @@ class BaseTrailingSystem:
         if tp_purpose == "neutral":
             levels_to_check = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
         else:
-            levels_to_check = [active_grid_level] if active_grid_level in tp_map else []
+            if active_grid_level in tp_map:
+                levels_to_check = [active_grid_level]
+            elif tp_map:
+                # Если усреднялка перевалила за последний уровень сетки, берем крайнее высшее значение тейка
+                sorted_keys = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
+                levels_to_check = [sorted_keys[-1]]
+            else:
+                levels_to_check = []
 
         for lvl_str in levels_to_check:
             lvl_cfg = tp_map.get(lvl_str)

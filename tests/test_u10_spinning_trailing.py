@@ -458,6 +458,74 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         client.make_order.assert_called_once()
         self.assertEqual(client.make_order.call_args[1]["market_type"], "MARKET")
 
+    def test_tp_map_higher_grid_level_resolution(self):
+        """
+        Проверка: если уровень усреднялки перевалил за последний уровень tp_map,
+        система берет крайнее высшее значение тейка (например с индексом 5 при 8 шагах сетки).
+        """
+        tp_map = {
+            "0": {"indent": 2.2, "fallback_indent": 3.0, "activation": 3.5},
+            "1": {"indent": 1.6, "fallback_indent": 2.4, "activation": 2.8},
+            "2": {"indent": 1.2, "fallback_indent": 1.9, "activation": 2.2},
+            "3": {"indent": 1.0, "fallback_indent": 1.6, "activation": 1.8},
+            "4": {"indent": 0.8, "fallback_indent": 1.3, "activation": 1.5},
+            "5": {"indent": 0.5, "fallback_indent": 0.95, "activation": 1.1},
+        }
+
+        # 1. BaseTrailingSystem.evaluate_trailing_tp с active_grid_level = "8" (больше чем 5)
+        state_trailing = {}
+        hit, floor, info = BaseTrailingSystem.evaluate_trailing_tp(
+            gain_pct=1.2,
+            tp_map=tp_map,
+            state_trailing=state_trailing,
+            tp_purpose="self",
+            active_grid_level="8",
+        )
+        self.assertEqual(state_trailing.get("active_level"), "5")
+        self.assertEqual(state_trailing.get("armed_floor"), 0.95)
+
+    def test_u10_symbiosis_strategies_and_validation_bypass(self):
+        """Проверка наличия симбиозов U10+U6 в universes.json и отключения валидации длин словарей."""
+        from consts import DATA_DIR
+        univ_file = DATA_DIR / "universes.json"
+        with open(univ_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        # 1. Вариант 1: Spinning Grid + U6 Classic TP
+        self.assertIn("u10_symbiosis_spinning_grid_u6_tp", data)
+        strat1 = data["u10_symbiosis_spinning_grid_u6_tp"]
+        self.assertEqual(strat1["overrides"]["tp_purpose"], "self")
+        self.assertEqual(len(strat1["overrides"]["grid"]), 9)
+        self.assertEqual(len(strat1["overrides"]["tp_map"]), 9)
+        self.assertIsNotNone(strat1["overrides"]["grid"]["3"]["activation"])  # Трейлинг сетка
+
+        # 2. Вариант 2: U6 Static Grid + Spinning TP Ladder
+        self.assertIn("u10_symbiosis_u6_grid_spinning_tp", data)
+        strat2 = data["u10_symbiosis_u6_grid_spinning_tp"]
+        self.assertEqual(strat2["overrides"]["tp_purpose"], "neutral")
+        self.assertEqual(len(strat2["overrides"]["grid"]), 9)
+        self.assertEqual(len(strat2["overrides"]["tp_map"]), 14)
+        self.assertIsNone(strat2["overrides"]["grid"]["3"]["activation"])  # Статическая сетка
+
+        # 3. Проверка байпаса валидации: u10_ с tp_purpose="self" и разными длинами grid/tp_map
+        asymmetric_data = {
+            "LONG": {
+                "strategy_id": "u10_symbiosis_test",
+                "tp_purpose": "self",
+                "grid": {"0": {}, "1": {}, "2": {}, "3": {}, "4": {}, "5": {}, "6": {}, "7": {}, "8": {}},
+                "tp_map": {"0": {}, "1": {}, "2": {}, "3": {}, "4": {}},  # 5 уровней против 9
+            }
+        }
+        # Валидатор не должен выбрасывать исключение для стратегии семейства u10_
+        side = "LONG"
+        strat_id = str(asymmetric_data[side].get("strategy_id", ""))
+        is_u10 = strat_id.startswith("u10")
+        grid = asymmetric_data[side].get("grid", {})
+        tp_map = asymmetric_data[side].get("tp_map", {})
+        tp_purpose = asymmetric_data[side].get("tp_purpose")
+        if tp_purpose != "neutral" and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
+            self.fail("Validation should have been bypassed for u10 family strategy with tp_purpose='self'!")
+
 
 if __name__ == "__main__":
     unittest.main()

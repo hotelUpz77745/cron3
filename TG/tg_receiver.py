@@ -2230,9 +2230,11 @@ class TelegramReceiver:
                 for side in ("LONG", "SHORT"):
                     if side in new_base:
                         tp_purpose = new_base[side].get("tp_purpose", "self")
+                        strat_id = str(new_base[side].get("strategy_id", ""))
                         grid = new_base[side].get("grid", {})
                         tp_map = new_base[side].get("tp_map", {})
-                        if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
+                        is_u10 = strat_id.startswith("u10")
+                        if tp_purpose != "neutral" and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
                             await message.answer(f"❌ ОШИБКА КОНФИГУРАЦИИ ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)}).\nШаблон НЕ сохранен!")
                             return
                             

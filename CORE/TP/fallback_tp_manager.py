@@ -102,6 +102,11 @@ class FallbackTpManager:
             else:
                 current_level = level_self
                 
+            if current_level not in tp_map and tp_map:
+                sorted_keys = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
+                if sorted_keys:
+                    current_level = sorted_keys[-1]
+
             if current_level not in tp_map:
                 return
                 

@@ -64,9 +64,11 @@ class RuntimeFsmManager:
                 for side in ["LONG", "SHORT"]:
                     if side in data:
                         tp_purpose = data[side].get("tp_purpose", "self")
+                        strat_id = str(data[side].get("strategy_id", ""))
                         grid = data[side].get("grid", {})
                         tp_map = data[side].get("tp_map", {})
-                        if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
+                        is_u10 = strat_id.startswith("u10") or "u10" in str(path).lower()
+                        if tp_purpose != "neutral" and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
                             raise ValueError(f"[{sym}] {side} ОШИБКА КОНФИГУРАЦИИ: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте настройки!")
                             
                 self.caches[sym] = data
