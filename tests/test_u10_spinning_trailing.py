@@ -264,7 +264,7 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(grid["5"]["activation"], -27.5)
         self.assertEqual(grid["6"]["activation"], -44.5)
         self.assertEqual(grid["7"]["activation"], -72.0)
-        self.assertEqual(grid["8"]["activation"], -91.0)
+        self.assertEqual(grid["8"]["activation"], -89.0)
 
         # Проверка tp_map в LONG: 14 уровней нейтральной лестницы Фибоначчи
         tp_map = u10["LONG"]["tp_map"]
@@ -276,6 +276,11 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tp_map["12"]["activation"], 89.5)
         self.assertEqual(tp_map["13"]["fallback_indent"], 89.5)
         self.assertEqual(tp_map["13"]["activation"], 89.5)
+
+        # Проверка равенства курка и пола на последнем уровне храповика (89.0 == 89.0)
+        tr_levels = u10["auto_closing"]["positive"]["trailing_ratchet"]["levels"]
+        self.assertEqual(tr_levels[-1]["activation"], tr_levels[-1]["floor"])
+        self.assertEqual(tr_levels[-1]["activation"], 89.0)
 
         from CORE.STRATEGY.strategy_registry import StrategyConfig
         strat_cfg = StrategyConfig("u10_spinning_basic_distribute", u10, ["BTCUSDT"])

@@ -82,7 +82,7 @@
                             "_desc": "Экстраординарный памп (Фибо 55.0)"
                         },
                         {
-                            "activation": 116.0,
+                            "activation": 89.0,
                             "floor": 89.0,
                             "min_age_hours": 0.0,
                             "enabled": true,
@@ -409,7 +409,7 @@
                             "_desc": "Экстраординарный памп (Фибо 55.0)"
                         },
                         {
-                            "activation": 116.0,
+                            "activation": 89.0,
                             "floor": 89.0,
                             "min_age_hours": 0.0,
                             "enabled": true,
@@ -656,7 +656,7 @@
     },
     "u10_spinning_basic_distribute": {
         "name": "🌀 U10: Spinning Basic Distribute (Trailing TP + Trailing Grid + Distribute Remaining Volume)",
-        "description": "Семейство Спиннинг: Безоткатное динамическое усреднение по трейлингу на отскоках (курки -10.5%..-91.0%), лестничный трейлинг Тейк-Профит по Фибоначчи (2.2%..89.5%), нейтральная связка tp_purpose=neutral, динамическое перераспределение сэкономленных объемов сетки (distribute_remaining)",
+        "description": "Семейство Спиннинг: Безоткатное динамическое усреднение по трейлингу на отскоках (курки -10.5%..-89.0%), лестничный трейлинг Тейк-Профит по Фибоначчи (2.2%..89.5%), нейтральная связка tp_purpose=neutral, динамическое перераспределение сэкономленных объемов сетки (distribute_remaining)",
         "start_balance_usdt": 3000.0,
         "leverage": 10,
         "timeframe": "5m",
@@ -727,7 +727,7 @@
                             "_desc": "Экстраординарный памп (Фибо 55.0)"
                         },
                         {
-                            "activation": 116.0,
+                            "activation": 89.0,
                             "floor": 89.0,
                             "min_age_hours": 0.0,
                             "enabled": true,
@@ -828,7 +828,7 @@
                 },
                 "8": {
                     "indent": -89.0,
-                    "activation": -91.0,
+                    "activation": -89.0,
                     "volume": 15.79,
                     "super_indent": null,
                     "activated_at": null,
@@ -977,7 +977,7 @@
                 },
                 "8": {
                     "indent": -89.0,
-                    "activation": -91.0,
+                    "activation": -89.0,
                     "volume": 15.79,
                     "super_indent": null,
                     "activated_at": null,
