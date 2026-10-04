@@ -658,7 +658,7 @@
         "name": "🌀 U10: Spinning Basic Distribute (Trailing TP + Trailing Grid + Distribute Remaining Volume)",
         "description": "Семейство Спиннинг: Безоткатное динамическое усреднение по трейлингу на отскоках (курки -10.5%..-89.0%), лестничный трейлинг Тейк-Профит по Фибоначчи (2.2%..89.5%), нейтральная связка tp_purpose=neutral, динамическое перераспределение сэкономленных объемов сетки (distribute_remaining)",
         "start_balance_usdt": 3000.0,
-        "leverage": 10,
+        "leverage": 20,
         "timeframe": "5m",
         "tp_purpose": "neutral",
         "avg_free_volume_behavior": "distribute_remaining",
@@ -1056,16 +1056,17 @@
                     "activation": 89.5
                 }
             }
-        },
-        "super_grid_enabled": false
+        }
     },
     "u10_symbiosis_spinning_grid_u6_tp": {
-        "name": "👑 U10 Symbiosis: Spinning Trailing Grid + U6 Classic TP",
+        "name": "🌀 U10 Symbiosis: Spinning Trailing Grid + U6 Classic TP",
         "description": "Симбиоз U10 и U6 (Вариант 1): Трейлинг-усреднение на импульсах и отскоках со сэкономленным объемом от U10 («Спиннинг», distribute_remaining) + классические статические лимитные тейки от чемпиона U6 («Медный Змей», tp_purpose: self, indent: 2.2%..0.5%)",
-        "is_active": true,
-        "start_balance_usdt": 4000.0,
-        "invest_size": 600.0,
-        "leverage": 10,
+        "leverage": 20,
+        "tp_purpose": "self",
+        "avg_free_volume_behavior": "distribute_remaining",
+        "super_grid": {
+            "enabled": false
+        },
         "auto_closing": {
             "negative": {
                 "threshold": null,
@@ -1138,31 +1139,30 @@
                 }
             }
         },
-        "overrides": {
-            "smart_grace": {
-                "start_period_sec": 57,
-                "shift_interval_sec": 13,
-                "eval_window_sec": 300,
-                "increments_card": {
-                    "==1": 30,
-                    "==2": 90,
-                    "==3": 140,
-                    ">=4": 170
-                }
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
             },
-            "smart_size": {
-                "eval_window_sec": 300,
-                "profiting_size_weights": {
-                    "<2": 1.0,
-                    "==2": 1.0,
-                    "==3": 1.0,
-                    ">=4": 1.0
-                },
-                "knife_blocker_enabled": false,
-                "knife_blocker_threshold": 1
-            },
-            "tp_purpose": "self",
-            "avg_free_volume_behavior": "distribute_remaining",
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "LONG": {
+            "invest_size": 600.0,
             "grid": {
                 "0": {
                     "indent": 0.0,
@@ -1276,15 +1276,131 @@
                 }
             }
         },
-        "super_grid_enabled": false
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.58,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.53,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.5,
+                    "fallback_indent": 0.95
+                }
+            }
+        }
     },
     "u10_symbiosis_u6_grid_spinning_tp": {
-        "name": "👑 U10 Symbiosis: U6 Static Grid + Spinning TP Ladder",
+        "name": "🌀 U10 Symbiosis: U6 Static Grid + Spinning TP Ladder",
         "description": "Симбиоз U10 и U6 (Вариант 2): Надежная статическая Фибо-сетка усреднения от чемпиона U6 («Медный Змей», 3.5%..89% без трейлинга) + автономная 14-ступенчатая лестница Трейлинг Тейк-Профита от U10 («Спиннинг», tp_purpose: neutral, 1.9%..89.5% по рынку)",
-        "is_active": true,
-        "start_balance_usdt": 4000.0,
-        "invest_size": 600.0,
-        "leverage": 10,
+        "leverage": 20,
+        "tp_purpose": "neutral",
+        "avg_free_volume_behavior": "distribute_remaining",
+        "super_grid": {
+            "enabled": false
+        },
         "auto_closing": {
             "negative": {
                 "threshold": null,
@@ -1357,31 +1473,30 @@
                 }
             }
         },
-        "overrides": {
-            "smart_grace": {
-                "start_period_sec": 57,
-                "shift_interval_sec": 13,
-                "eval_window_sec": 300,
-                "increments_card": {
-                    "==1": 30,
-                    "==2": 90,
-                    "==3": 140,
-                    ">=4": 170
-                }
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
             },
-            "smart_size": {
-                "eval_window_sec": 300,
-                "profiting_size_weights": {
-                    "<2": 1.0,
-                    "==2": 1.0,
-                    "==3": 1.0,
-                    ">=4": 1.0
-                },
-                "knife_blocker_enabled": false,
-                "knife_blocker_threshold": 1
-            },
-            "tp_purpose": "neutral",
-            "avg_free_volume_behavior": "distribute_remaining",
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "LONG": {
+            "invest_size": 600.0,
             "grid": {
                 "0": {
                     "indent": 0.0,
@@ -1529,6 +1644,154 @@
                 }
             }
         },
-        "super_grid_enabled": false
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": null,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": null,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": null,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": null,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": null,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": null,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": 1.9,
+                    "activation": 2.2
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": 2.2,
+                    "activation": 2.4
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": 2.4,
+                    "activation": 2.7
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": 3.2,
+                    "activation": 3.6
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": 3.6,
+                    "activation": 4.4
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": 4.4,
+                    "activation": 5.2
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": 5.2,
+                    "activation": 6.7
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": 6.7,
+                    "activation": 8.9
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": 8.9,
+                    "activation": 12.3
+                },
+                "9": {
+                    "indent": null,
+                    "fallback_indent": 12.3,
+                    "activation": 18.7
+                },
+                "10": {
+                    "indent": null,
+                    "fallback_indent": 18.7,
+                    "activation": 29.1
+                },
+                "11": {
+                    "indent": null,
+                    "fallback_indent": 29.1,
+                    "activation": 49.7
+                },
+                "12": {
+                    "indent": null,
+                    "fallback_indent": 49.7,
+                    "activation": 89.5
+                },
+                "13": {
+                    "indent": null,
+                    "fallback_indent": 89.5,
+                    "activation": 89.5
+                }
+            }
+        }
     }
 }

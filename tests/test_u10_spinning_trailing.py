@@ -494,18 +494,32 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         # 1. Вариант 1: Spinning Grid + U6 Classic TP
         self.assertIn("u10_symbiosis_spinning_grid_u6_tp", data)
         strat1 = data["u10_symbiosis_spinning_grid_u6_tp"]
-        self.assertEqual(strat1["overrides"]["tp_purpose"], "self")
-        self.assertEqual(len(strat1["overrides"]["grid"]), 9)
-        self.assertEqual(len(strat1["overrides"]["tp_map"]), 9)
-        self.assertIsNotNone(strat1["overrides"]["grid"]["3"]["activation"])  # Трейлинг сетка
+        tp_purpose1 = strat1.get("tp_purpose") or strat1.get("overrides", {}).get("tp_purpose")
+        grid1 = (strat1.get("LONG") or strat1.get("overrides", {})).get("grid", {})
+        tp_map1 = (strat1.get("LONG") or strat1.get("overrides", {})).get("tp_map", {})
+        smart_grace1 = strat1.get("smart_grace") or strat1.get("overrides", {}).get("smart_grace", {})
+        self.assertEqual(tp_purpose1, "self")
+        self.assertEqual(len(grid1), 9)
+        self.assertEqual(len(tp_map1), 9)
+        self.assertEqual(strat1.get("leverage"), 20)
+        self.assertEqual(smart_grace1.get("start_period_sec"), 87)
+        self.assertEqual(smart_grace1.get("increments_card", {}).get("==1"), 0)
+        self.assertIsNotNone(grid1["3"]["activation"])  # Трейлинг сетка
 
         # 2. Вариант 2: U6 Static Grid + Spinning TP Ladder
         self.assertIn("u10_symbiosis_u6_grid_spinning_tp", data)
         strat2 = data["u10_symbiosis_u6_grid_spinning_tp"]
-        self.assertEqual(strat2["overrides"]["tp_purpose"], "neutral")
-        self.assertEqual(len(strat2["overrides"]["grid"]), 9)
-        self.assertEqual(len(strat2["overrides"]["tp_map"]), 14)
-        self.assertIsNone(strat2["overrides"]["grid"]["3"]["activation"])  # Статическая сетка
+        tp_purpose2 = strat2.get("tp_purpose") or strat2.get("overrides", {}).get("tp_purpose")
+        grid2 = (strat2.get("LONG") or strat2.get("overrides", {})).get("grid", {})
+        tp_map2 = (strat2.get("LONG") or strat2.get("overrides", {})).get("tp_map", {})
+        smart_grace2 = strat2.get("smart_grace") or strat2.get("overrides", {}).get("smart_grace", {})
+        self.assertEqual(tp_purpose2, "neutral")
+        self.assertEqual(len(grid2), 9)
+        self.assertEqual(len(tp_map2), 14)
+        self.assertEqual(strat2.get("leverage"), 20)
+        self.assertEqual(smart_grace2.get("start_period_sec"), 87)
+        self.assertEqual(smart_grace2.get("increments_card", {}).get("==1"), 0)
+        self.assertIsNone(grid2["3"]["activation"])  # Статическая сетка
 
         # 3. Проверка байпаса валидации: u10_ с tp_purpose="self" и разными длинами grid/tp_map
         asymmetric_data = {
