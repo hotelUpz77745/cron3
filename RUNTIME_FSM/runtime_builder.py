@@ -48,9 +48,10 @@ def build_runtime_caches(
 
     for side in ("LONG", "SHORT"):
         if side in base_data:
+            tp_purpose = base_data[side].get("tp_purpose", "self")
             grid = base_data[side].get("grid", {})
             tp_map = base_data[side].get("tp_map", {})
-            if grid and tp_map and len(grid) != len(tp_map):
+            if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
     for symbol in symbols:

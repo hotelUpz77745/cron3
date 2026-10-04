@@ -147,9 +147,10 @@ class TemplateManager:
         # Валидация на совпадение количества усреднений и тейков
         for side in ("LONG", "SHORT"):
             if side in final_data:
+                tp_purpose = final_data[side].get("tp_purpose", "self")
                 grid = final_data[side].get("grid", {})
                 tp_map = final_data[side].get("tp_map", {})
-                if grid and tp_map and len(grid) != len(tp_map):
+                if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
                     return False, f"ОШИБКА ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)})."
 
         Utils.write_json_file(target_file, final_data)

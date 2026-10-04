@@ -6,6 +6,7 @@ from typing import Any, Optional, Dict
 from consts import DATA_DIR, ANALYTICS_DIR, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.trailing_system import BaseTrailingSystem
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -47,60 +48,15 @@ class AutoCloser:
     ) -> tuple[bool, Optional[float], str, bool]:
         """
         Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница).
-        Уровни задаются парами:
-          - activation: целевой порог Net, взводящий гарантированный уровень пола.
-          - floor: уровень гарантированной фиксации прибыли при откате.
-          - min_age_hours: возрастной ценз (например 24.0ч для 0-го уровня эвакуации).
-          - enabled: флаг активности уровня.
-        Возвращает (should_close: bool, trigger_floor: Optional[float], info: str, is_stagnation: bool).
+        Делегирует расчет базовой абстракции BaseTrailingSystem.
         """
-        if not ratchet_cfg.get("enabled", True):
-            return False, None, "", False
-        levels = ratchet_cfg.get("levels", [])
-        if not levels:
-            return False, None, "", False
-
-        state["highest_net"] = max(state.get("highest_net", 0.0), iter_net)
-
-        # 1. Проверяем и подтягиваем пол храповика строго вверх (ступеньки не снижаются)
-        for idx, lvl in enumerate(levels):
-            if not lvl.get("enabled", True):
-                continue
-            min_age = float(lvl.get("min_age_hours") or 0.0)
-            if iter_age_hours < min_age:
-                continue
-            act_val = float(lvl["activation"])
-            floor_val = float(lvl["floor"])
-            if iter_net >= act_val:
-                cur_floor = state.get("armed_floor")
-                if cur_floor is None or floor_val > cur_floor:
-                    state["armed_floor"] = floor_val
-                    state["active_level_idx"] = idx
-                    state["armed_level_desc"] = lvl.get("_desc", f"L{idx}")
-
-        armed_floor = state.get("armed_floor")
-        if armed_floor is None:
-            first_act = float(levels[0].get("activation", 5.0))
-            return False, None, f"[RATCHET IDLE: Net {iter_net:+.2f} < Act {first_act:.2f}]", False
-
-        idx = int(state.get("active_level_idx", 0))
-        desc = state.get("armed_level_desc", f"L{idx}")
-        lvl_min_age = float(levels[idx].get("min_age_hours") or 0.0) if idx < len(levels) else 0.0
-        is_stag = (lvl_min_age > 0.0 or idx == 0)
-
-        # 2. Проверка отката (pullback) к взведенному полу: срабатывание только при возврате к полу!
-        if iter_net <= armed_floor:
+        should_close, trigger_floor, info, is_stag = BaseTrailingSystem.evaluate_ratchet(
+            iter_net, iter_age_hours, ratchet_cfg, state
+        )
+        if should_close:
+            idx = state.get("active_level_idx", 0)
             cls._last_matched_rule = f"ratchet:L{idx}"
-            high_net = float(state.get("highest_net", 0.0))
-            act_threshold = float(levels[idx]["activation"])
-            info = (
-                f"[TRAILING RATCHET L{idx} '{desc}': Net {iter_net:+.2f} <= Floor {armed_floor:.2f} "
-                f"(Armed at >= {act_threshold:.2f}, High: {high_net:+.2f}, Age: {iter_age_hours:.1f}h)]"
-            )
-            return True, armed_floor, info, is_stag
-
-        info = f"[ARMED L{idx} '{desc}': Floor {armed_floor:.2f} | Net {iter_net:+.2f} | Peak {state.get('highest_net', 0.0):.2f}]"
-        return False, armed_floor, info, is_stag
+        return should_close, trigger_floor, info, is_stag
 
     @classmethod
     def match_rule_adaptive(cls, rule: str, eval_val: float, ref_target: float) -> tuple[bool, float]:

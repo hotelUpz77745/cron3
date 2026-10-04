@@ -6,6 +6,7 @@ ssh_key.txt
 .ssh-autostart.sh
 TESTS/
 test/
+!tests/
 logs/
 scratch/
 API/

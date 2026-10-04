@@ -31,6 +31,9 @@ class PositionState:
     grid: dict = field(default_factory=dict)
     tp_map: dict = field(default_factory=dict)
     tp_purpose: str = "self"
+    avg_free_volume_behavior: str = "distribute_remaining"
+    trailing_tp_state: dict = field(default_factory=dict)
+    trailing_grid_state: dict = field(default_factory=dict)
     recent_closes: list = field(default_factory=list)
     last_grace_period: float = 0.0
     
@@ -55,11 +58,14 @@ class PositionState:
         self.pending_rolling_tp = False
         self.next_avg_price = None
         self.fallback_price = None
+        self.trailing_tp_state = {}
+        self.trailing_grid_state = {}
         
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():
             v["is_active"] = False
             v["price"] = None
+            v["activation_price"] = None
             v["timestamp"] = None
             v["activated_at"] = None
             

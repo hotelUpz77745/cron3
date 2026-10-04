@@ -63,9 +63,10 @@ class RuntimeFsmManager:
                 # Валидация на совпадение количества усреднений и тейков
                 for side in ["LONG", "SHORT"]:
                     if side in data:
+                        tp_purpose = data[side].get("tp_purpose", "self")
                         grid = data[side].get("grid", {})
                         tp_map = data[side].get("tp_map", {})
-                        if grid and tp_map and len(grid) != len(tp_map):
+                        if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
                             raise ValueError(f"[{sym}] {side} ОШИБКА КОНФИГУРАЦИИ: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте настройки!")
                             
                 self.caches[sym] = data
@@ -109,6 +110,9 @@ class RuntimeFsmManager:
                 state.grid = copy.deepcopy(side_cache.get("grid", {}))
                 state.tp_map = copy.deepcopy(side_cache.get("tp_map", {}))
                 state.tp_purpose = side_cache.get("tp_purpose", "self")
+                state.avg_free_volume_behavior = side_cache.get("avg_free_volume_behavior", "distribute_remaining")
+                state.trailing_tp_state = copy.deepcopy(side_cache.get("trailing_tp_state", {}))
+                state.trailing_grid_state = copy.deepcopy(side_cache.get("trailing_grid_state", {}))
                 state.recent_closes = copy.deepcopy(side_cache.get("recent_closes", []))
                 
     # =========================================================================
@@ -150,6 +154,9 @@ class RuntimeFsmManager:
                     "grid": copy.deepcopy(state.grid),
                     "tp_map": copy.deepcopy(state.tp_map),
                     "tp_purpose": state.tp_purpose,
+                    "avg_free_volume_behavior": getattr(state, "avg_free_volume_behavior", "distribute_remaining"),
+                    "trailing_tp_state": copy.deepcopy(getattr(state, "trailing_tp_state", {})),
+                    "trailing_grid_state": copy.deepcopy(getattr(state, "trailing_grid_state", {})),
                     "recent_closes": state.recent_closes,
                 }
                 

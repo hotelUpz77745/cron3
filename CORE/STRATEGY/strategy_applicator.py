@@ -152,6 +152,21 @@ class StrategyApplicator:
             elif "margin_type" in strategy.overrides:
                 side_data["margin_type"] = strategy.overrides["margin_type"]
 
+            # 8. Применение avg_free_volume_behavior и auto_closing
+            if "avg_free_volume_behavior" in side_dict:
+                side_data["avg_free_volume_behavior"] = side_dict["avg_free_volume_behavior"]
+            elif hasattr(strategy, "raw_meta") and "avg_free_volume_behavior" in strategy.raw_meta:
+                side_data["avg_free_volume_behavior"] = strategy.raw_meta["avg_free_volume_behavior"]
+            elif hasattr(strategy, "overrides") and "avg_free_volume_behavior" in strategy.overrides:
+                side_data["avg_free_volume_behavior"] = strategy.overrides["avg_free_volume_behavior"]
+
+            if hasattr(strategy, "auto_closing_cfg") and strategy.auto_closing_cfg:
+                side_data["auto_closing"] = copy.deepcopy(strategy.auto_closing_cfg)
+            elif hasattr(strategy, "raw_meta") and "auto_closing" in strategy.raw_meta:
+                side_data["auto_closing"] = copy.deepcopy(strategy.raw_meta["auto_closing"])
+            elif hasattr(strategy, "overrides") and "auto_closing" in strategy.overrides:
+                side_data["auto_closing"] = copy.deepcopy(strategy.overrides["auto_closing"])
+
             side_cfgs[side] = side_data
 
         return side_cfgs
@@ -192,14 +207,15 @@ class StrategyApplicator:
                     "total_volume", "avg_entry_price", "pre_avg_price",
                     "initial_entry_price", "open_time", "next_avg_price",
                     "fallback_price", "in_position", "in_position_papper",
-                    "is_finished", "pending_avg", "pending_rolling_tp", "recent_closes"
+                    "is_finished", "pending_avg", "pending_rolling_tp", "recent_closes",
+                    "trailing_tp_state", "trailing_grid_state"
                 ]:
                     if state_key in exist_side:
                         new_side[state_key] = copy.deepcopy(exist_side[state_key])
                 if "grid" in exist_side and "grid" in new_side:
                     for g_idx, g_val in exist_side["grid"].items():
                         if g_idx in new_side["grid"] and isinstance(g_val, dict):
-                            for k in ["is_active", "price", "activated_at", "timestamp"]:
+                            for k in ["is_active", "price", "activated_at", "timestamp", "activation_price"]:
                                 if k in g_val:
                                     new_side["grid"][g_idx][k] = g_val[k]
                 if "tp_map" in exist_side and "tp_map" in new_side:
@@ -221,7 +237,9 @@ class StrategyApplicator:
                     "is_finished": False,
                     "pending_avg": False,
                     "pending_rolling_tp": False,
-                    "recent_closes": copy.deepcopy(exist_side.get("recent_closes", []))
+                    "recent_closes": copy.deepcopy(exist_side.get("recent_closes", [])),
+                    "trailing_tp_state": {},
+                    "trailing_grid_state": {}
                 })
                 if "grid" in new_side:
                     for grid_cfg in new_side["grid"].values():
@@ -229,6 +247,7 @@ class StrategyApplicator:
                         grid_cfg["price"] = None
                         grid_cfg["activated_at"] = None
                         grid_cfg["timestamp"] = None
+                        grid_cfg["activation_price"] = None
                 if "tp_map" in new_side:
                     for tp_cfg in new_side["tp_map"].values():
                         tp_cfg["is_active"] = False

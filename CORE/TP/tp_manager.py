@@ -39,6 +39,10 @@ class TakeProfitManager:
         else:
             active_level_str = level_self
             
+        if getattr(state, "tp_purpose", "self") == "neutral":
+            logger.info(f"[{symbol}] {side} tp_purpose is 'neutral'. Skipping LIMIT order placement to rely on Trailing TP.")
+            return True
+
         tp_map = state.tp_map
         current_tp = tp_map.get(active_level_str)
         if not current_tp:

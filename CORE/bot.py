@@ -687,7 +687,7 @@ class BotCore:
                     continue
                 opposite_state = states["SHORT"] if side == "LONG" else states["LONG"]
                 await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
-                await self.fallback_tp_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data)
+                await self.fallback_tp_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, opposite_state=opposite_state)
 
         if signal_tasks:
             await asyncio.gather(*signal_tasks)

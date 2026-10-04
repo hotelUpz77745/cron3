@@ -2229,9 +2229,10 @@ class TelegramReceiver:
                 # Валидация шаблона
                 for side in ("LONG", "SHORT"):
                     if side in new_base:
+                        tp_purpose = new_base[side].get("tp_purpose", "self")
                         grid = new_base[side].get("grid", {})
                         tp_map = new_base[side].get("tp_map", {})
-                        if grid and tp_map and len(grid) != len(tp_map):
+                        if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
                             await message.answer(f"❌ ОШИБКА КОНФИГУРАЦИИ ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)}).\nШаблон НЕ сохранен!")
                             return
                             
