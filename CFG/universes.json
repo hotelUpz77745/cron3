@@ -656,7 +656,7 @@
     },
     "u10_spinning_basic_distribute": {
         "name": "🌀 U10: Spinning Basic Distribute (Trailing TP + Trailing Grid + Distribute Remaining Volume)",
-        "description": "Семейство Спиннинг: Безоткатное динамическое усреднение по трейлингу на отскоках (курки -10.5%..-101.5%), лестничный трейлинг Тейк-Профит по Фибоначчи (2.2%..89.5%), нейтральная связка tp_purpose=neutral, динамическое перераспределение сэкономленных объемов сетки (distribute_remaining)",
+        "description": "Семейство Спиннинг: Безоткатное динамическое усреднение по трейлингу на отскоках (курки -10.5%..-91.0%), лестничный трейлинг Тейк-Профит по Фибоначчи (2.2%..89.5%), нейтральная связка tp_purpose=neutral, динамическое перераспределение сэкономленных объемов сетки (distribute_remaining)",
         "start_balance_usdt": 3000.0,
         "leverage": 10,
         "timeframe": "5m",
@@ -828,7 +828,7 @@
                 },
                 "8": {
                     "indent": -89.0,
-                    "activation": -101.5,
+                    "activation": -91.0,
                     "volume": 15.79,
                     "super_indent": null,
                     "activated_at": null,
@@ -904,7 +904,7 @@
                 "13": {
                     "indent": null,
                     "fallback_indent": 89.5,
-                    "activation": 116.0
+                    "activation": 89.5
                 }
             }
         },
@@ -977,7 +977,7 @@
                 },
                 "8": {
                     "indent": -89.0,
-                    "activation": -101.5,
+                    "activation": -91.0,
                     "volume": 15.79,
                     "super_indent": null,
                     "activated_at": null,
@@ -1053,7 +1053,7 @@
                 "13": {
                     "indent": null,
                     "fallback_indent": 89.5,
-                    "activation": 116.0
+                    "activation": 89.5
                 }
             }
         }
