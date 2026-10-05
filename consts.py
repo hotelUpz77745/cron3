@@ -175,6 +175,30 @@ DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "eval_window_sec": 300,
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or {
+    "negative": {
+        "threshold": None,
+        "threshold_increment": None
+    },
+    "positive": {
+        "enabled": True,
+        "mode": "trailing_ratchet",
+        "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+        "trailing_ratchet": {
+            "enabled": True,
+            "levels": [
+                {"activation": 5.0, "floor": 3.8, "min_age_hours": 24.0, "enabled": True, "_desc": "Выныривание из ямы"},
+                {"activation": 7.5, "floor": 5.5, "min_age_hours": 0.0, "enabled": True, "_desc": "Локальный отскок"},
+                {"activation": 11.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Уверенное движение (Фибо 8.0)"},
+                {"activation": 17.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Импульсный пробой (Фибо 13.0)"},
+                {"activation": 27.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Тренд средней силы (Фибо 21.0)"},
+                {"activation": 44.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Мощный тренд (Фибо 34.0)"},
+                {"activation": 72.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Экстраординарный памп (Фибо 55.0)"},
+                {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Мега-ралли (Фибо 89.0)"}
+            ]
+        }
+    }
+}
 
 # ============================================================
 # LOGGING

@@ -16,6 +16,7 @@ from consts import (
     DEFAULT_SHIFT_INTERVAL_SEC,
     DEFAULT_SMART_SIZE,
     DEFAULT_SMART_TP,
+    DEFAULT_AUTO_CLOSING,
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -165,19 +166,15 @@ class StrategyConfig:
                 "positive_threshold": 20.0
             }
 
-        # 4. Купол Авто-закрытия (Auto-closing Dome)
+        # 4. Купол Авто-закрытия (Auto-closing Dome): берется из стратегии, либо базовый шаблон из app.json
         ac_cfg = (
             self.active_settings.get("auto_closing")
             or raw_meta.get("auto_closing")
             or self.overrides.get("auto_closing")
+            or _CFG.get("auto_closing")
+            or DEFAULT_AUTO_CLOSING
         )
-        if ac_cfg and isinstance(ac_cfg, dict):
-            self.auto_closing_cfg: Dict[str, Any] = copy.deepcopy(ac_cfg)
-        else:
-            self.auto_closing_cfg: Dict[str, Any] = {
-                "negative": {"threshold": None, "threshold_increment": None},
-                "positive": {"threshold": 100, "threshold_increment": 100}
-            }
+        self.auto_closing_cfg: Dict[str, Any] = copy.deepcopy(ac_cfg)
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)

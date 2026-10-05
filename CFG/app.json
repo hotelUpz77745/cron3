@@ -30,6 +30,79 @@
         "log_to_console": true,
         "log_to_file": true
     },
+    "auto_closing": {
+        "_comment_description": "Базовый шаблон ступенчатого Трейлинг-Храповика (auto_closing) по чистому Net (Фибо-лестница). Наследуется всеми стратегиями по умолчанию, если не переопределен точечно под конкретную стратегию.",
+        "negative": {
+            "threshold": null,
+            "threshold_increment": null
+        },
+        "positive": {
+            "enabled": true,
+            "mode": "trailing_ratchet",
+            "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+            "trailing_ratchet": {
+                "enabled": true,
+                "levels": [
+                    {
+                        "activation": 5.0,
+                        "floor": 3.8,
+                        "min_age_hours": 24.0,
+                        "enabled": true,
+                        "_desc": "Выныривание из ямы"
+                    },
+                    {
+                        "activation": 7.5,
+                        "floor": 5.5,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Локальный отскок"
+                    },
+                    {
+                        "activation": 11.0,
+                        "floor": 8.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Уверенное движение (Фибо 8.0)"
+                    },
+                    {
+                        "activation": 17.0,
+                        "floor": 13.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Импульсный пробой (Фибо 13.0)"
+                    },
+                    {
+                        "activation": 27.5,
+                        "floor": 21.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Тренд средней силы (Фибо 21.0)"
+                    },
+                    {
+                        "activation": 44.0,
+                        "floor": 34.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Мощный тренд (Фибо 34.0)"
+                    },
+                    {
+                        "activation": 72.0,
+                        "floor": 55.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Экстраординарный памп (Фибо 55.0)"
+                    },
+                    {
+                        "activation": 89.0,
+                        "floor": 89.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "Мега-ралли (Фибо 89.0)"
+                    }
+                ]
+            }
+        }
+    },
     "active_strategies": {
         "u6_symbiosis_gamma_fortress35": {
             "_comment_alias": "👑 Медный Змей (Gamma Fortress 35) - Новый Чемпион #1",

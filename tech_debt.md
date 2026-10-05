@@ -1341,6 +1341,38 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
 - Сквозная проверка через `StrategyApplicator.build_side_configs`.
 - Полный прогон всех тестов репозитория: **122 теста из 122 успешно пройдены (OK)**.
 
+---
+
+### Архитектурное решение: Вынесение базового шаблона `auto_closing` в `CFG/app.json` и очистка библиотеки Вселенных
+
+#### 1. Мотивация и устранение рудиментов
+Ранее в [CFG/universes.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes.json) блок `auto_closing` (8 ступеней Фибо-храповика по чистому Net: 5.0$, 7.5$, 11.0$, 17.0$, 27.5$, 44.0$, 72.0$, 89.0$) дублировался буквально во всех 21 Вселенных без каких-либо отличий (по 75 строк в каждой, суммарно более 1575 строк избыточного кода).
+
+#### 2. Архитектурная реализация
+1. **Базовый шаблон в [CFG/app.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json):**
+   Эталонная конфигурация ступенчатого Трейлинг-Храповика вынесена в единый корневой блок `"auto_closing"` в `CFG/app.json`.
+2. **Экспорт в [consts.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/consts.py):**
+   Объявлена константа `DEFAULT_AUTO_CLOSING = _CFG.get("auto_closing") or { ... }`.
+3. **Иерархия разрешения в [StrategyRegistry](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py):**
+   При инициализации купола стратегии `StrategyConfig` разрешение параметра `auto_closing` происходит по четкому каскаду приоритетов:
+   - 1-й приоритет: локальное переопределение в `app.json -> active_strategies -> <strat_id> -> auto_closing`;
+   - 2-й приоритет: точечное переопределение во Вселенной `universes.json -> <strat_id> -> auto_closing`;
+   - 3-й приоритет: переопределение через `overrides`;
+   - 4-й приоритет: **базовый глобальный шаблон из `app.json` (`_CFG.get("auto_closing")`)**;
+   - 5-й приоритет: безопасный fallback `DEFAULT_AUTO_CLOSING`.
+4. **Очистка [CFG/universes.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes.json):**
+   Из всех 21 Вселенных удален дублирующийся блок `auto_closing`.
+   - Размер файла `universes.json` уменьшился с **180.9 КБ до 115.2 КБ** (суммарно с исходных 265 КБ объем файла сократился более чем в 2.3 раза!).
+   - Все 21 стратегия по умолчанию получают единый актуальный Фибо-храповик из `app.json`.
+   - Любая стратегия может быть точечно переопределена оператором без засорения библиотеки шаблонов.
+
+#### 3. Тестовое покрытие
+В [tests/test_strategy_system.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_strategy_system.py) добавлены проверки:
+- Автоматическое наследование 8 уровней Фибо-храповика всеми активными стратегиями из `app.json`;
+- Корректная работа точечного переопределения `auto_closing` под отдельный купол стратегии.
+- Полный прогон всех тестов репозитория `cron3`: **123 теста из 123 успешно пройдены (OK)**.
+
+
 
 
 

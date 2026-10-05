@@ -253,6 +253,28 @@ class TestStrategySystem(unittest.TestCase):
             self.assertIsNotNone(strat.notifications_cfg)
             self.assertIsNotNone(strat.auto_closing_cfg)
             self.assertTrue(strat.notifications_cfg.get("enabled"))
+            # Проверяем, что auto_closing унаследовал базовый шаблон из app.json
+            self.assertTrue(strat.auto_closing_cfg.get("positive", {}).get("enabled"))
+            ratchet_levels = strat.auto_closing_cfg.get("positive", {}).get("trailing_ratchet", {}).get("levels", [])
+            self.assertEqual(len(ratchet_levels), 8)
+
+    def test_auto_closing_custom_override(self):
+        """Проверка, что кастомный auto_closing переопределяет базовый шаблон из app.json."""
+        custom_ac = {
+            "positive": {
+                "enabled": True,
+                "mode": "fixed_pnl",
+                "threshold": 15.0
+            }
+        }
+        strat = StrategyConfig(
+            strategy_id="u_custom",
+            raw_meta={"name": "Custom AC"},
+            symbols=["TESTUSDT"],
+            active_settings={"auto_closing": custom_ac}
+        )
+        self.assertEqual(strat.auto_closing_cfg["positive"]["mode"], "fixed_pnl")
+        self.assertEqual(strat.auto_closing_cfg["positive"]["threshold"], 15.0)
 
     def test_notifier_strategy_dome_monitoring(self):
         """Тестирование изоляции флагов уведомлений между куполами стратегий."""
