@@ -530,6 +530,7 @@ class BotCore:
                 if not res.success:
                     logger.error(f"[{symbol}] Failed to open {side} position: {res.error_msg}")
                     state.in_position_papper = False
+                    state.last_failed_entry_ts = time.time()
                     return
                     
                 # БЕЗУСЛОВНАЯ фиксация входа в позицию (ИДЕМПОТЕНТНОСТЬ)
@@ -720,6 +721,12 @@ class BotCore:
                 opposite_closed_count = len(opposite_state.recent_closes)
 
                 if MomentumEngine.is_knife_blocked(opposite_closed_count, smart_size_cfg):
+                    continue
+
+                # Защита от спама: если на текущей свече попытка входа завершилась ошибкой биржи,
+                # выдерживаем кулдаун 60 секунд (до закрытия окна grace period этой свечи)
+                failed_ts = getattr(state, "last_failed_entry_ts", 0.0)
+                if time.time() - failed_ts < 60.0:
                     continue
 
                 is_signal, current_grace = self.time_control.is_new_interval(closed_count, smart_grace_cfg)
