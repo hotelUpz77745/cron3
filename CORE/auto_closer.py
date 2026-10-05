@@ -287,7 +287,7 @@ class AutoCloser:
 
             strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
             strat_auto_cfg = strat_app_cfg.get("auto_closing") or strat_cfg.auto_closing_cfg
-            if not strat_auto_cfg:
+            if not strat_auto_cfg or not strat_auto_cfg.get("enabled", True):
                 continue
 
             strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strat_id}.json"
@@ -307,47 +307,49 @@ class AutoCloser:
             strat_msg = ""
             is_stagnation = False
             next_iter_idx = iter_idx + 1
-            new_iter_start_net = round(strat_net, 4)
 
             # Check Positive for Strategy Dome
+            pos_enabled = pos_cfg.get("enabled", True)
             mode = pos_cfg.get("mode", "")
             r_cfg = pos_cfg.get("trailing_ratchet")
-            if mode == "trailing_ratchet" or (r_cfg and r_cfg.get("enabled")):
-                r_state = self._trailing_ratchet_state.setdefault(strat_id, {})
-                if r_state.get("iteration_index") != iter_idx:
-                    r_state.clear()
-                    r_state["iteration_index"] = iter_idx
-                first_ts = strat_analytics.get("iteration_start_ts", strat_analytics.get("first_trade_ts", now_ms))
-                iter_age_h = max(0.0, (now_ms - first_ts) / 3600000.0)
-                should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
-                    iter_net=iter_net, iter_age_hours=iter_age_h, ratchet_cfg=r_cfg or {}, state=r_state
-                )
-                if should_close and trig_floor is not None:
-                    strat_triggered = True
-                    logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
-                    strat_msg = self._build_close_msg(
-                        name=f"КУПОЛА [{strat_cfg.name}]",
-                        symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
-                        iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                        new_iter_start_net=new_iter_start_net, close_type="TRAILING RATCHET",
-                        detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
+            if pos_enabled:
+                if mode == "trailing_ratchet" or (r_cfg and r_cfg.get("enabled", True)):
+                    r_state = self._trailing_ratchet_state.setdefault(strat_id, {})
+                    if r_state.get("iteration_index") != iter_idx:
+                        r_state.clear()
+                        r_state["iteration_index"] = iter_idx
+                    first_ts = strat_analytics.get("iteration_start_ts", strat_analytics.get("first_trade_ts", now_ms))
+                    iter_age_h = max(0.0, (now_ms - first_ts) / 3600000.0)
+                    should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
+                        iter_net=iter_net, iter_age_hours=iter_age_h, ratchet_cfg=r_cfg or {}, state=r_state
                     )
-            else:
-                th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
-                if th_pos is not None and iter_net >= th_pos:
-                    strat_triggered = True
-                    logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} Net ({iter_net:+.2f}) >= {th_pos} (Global: {strat_net:+.2f}). Auto-closing dome!")
-                    close_tag = "STAGNATION RATCHET" if is_stagnation else "TARGET REACHED"
-                    detail = f"Сработал затухающий порог {stag_info}." if is_stagnation else f"Достигнута цель {th_pos} USDT."
-                    strat_msg = self._build_close_msg(
-                        name=f"КУПОЛА [{strat_cfg.name}]",
-                        symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
-                        iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                        new_iter_start_net=new_iter_start_net, close_type=close_tag, detail_info=detail
-                    )
+                    if should_close and trig_floor is not None:
+                        strat_triggered = True
+                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
+                        strat_msg = self._build_close_msg(
+                            name=f"КУПОЛА [{strat_cfg.name}]",
+                            symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
+                            iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
+                            new_iter_start_net=0.0, close_type="TRAILING RATCHET",
+                            detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
+                        )
+                else:
+                    th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
+                    if th_pos is not None and iter_net >= th_pos:
+                        strat_triggered = True
+                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} Net ({iter_net:+.2f}) >= {th_pos} (Global: {strat_net:+.2f}). Auto-closing dome!")
+                        close_tag = "STAGNATION RATCHET" if is_stagnation else "TARGET REACHED"
+                        detail = f"Сработал затухающий порог {stag_info}." if is_stagnation else f"Достигнута цель {th_pos} USDT."
+                        strat_msg = self._build_close_msg(
+                            name=f"КУПОЛА [{strat_cfg.name}]",
+                            symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
+                            iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
+                            new_iter_start_net=0.0, close_type=close_tag, detail_info=detail
+                        )
 
             # Check Negative for Strategy Dome
-            th_neg = neg_cfg.get("threshold")
+            neg_enabled = neg_cfg.get("enabled", True)
+            th_neg = neg_cfg.get("threshold") if neg_enabled else None
             if th_neg == 0 or th_neg == 0.0:
                 th_neg = None
 
@@ -359,7 +361,7 @@ class AutoCloser:
                     name=f"КУПОЛА [{strat_cfg.name}]",
                     symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
                     iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                    new_iter_start_net=new_iter_start_net, close_type="NEGATIVE STOP",
+                    new_iter_start_net=0.0, close_type="NEGATIVE STOP",
                     detail_info=f"Просадка цикла: <b>{iter_net:.2f} USDT</b> (Порог стопа: <b>{th_neg} USDT</b>)."
                 )
 
@@ -370,20 +372,24 @@ class AutoCloser:
                     await self.bot_core.close_strategy_positions(strat_id)
                     self._trailing_ratchet_state[strat_id] = {}
 
+                    # Считываем свежие данные аналитики после закрытия ордеров
+                    fresh_strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else strat_analytics
+                    settled_net = round(float(fresh_strat_analytics.get("net_profit_usdt", strat_net)), 4)
+                    settled_realized = round(float(fresh_strat_analytics.get("realized_pnl_usdt", 0.0)), 4)
+
                     now_ms = int(time.time() * 1000)
-                    new_iter_start_real = new_iter_start_net
-                    strat_analytics["iteration_index"] = next_iter_idx
-                    strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
-                    strat_analytics["iteration_net_profit_usdt"] = 0.0
-                    strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
-                    strat_analytics["iteration_realized_pnl_usdt"] = 0.0
-                    strat_analytics["iteration_start_ts"] = now_ms
-                    strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
-                    strat_analytics["iteration_peak_ts"] = now_ms
-                    strat_analytics["iteration_peak_age_hours"] = 0.0
-                    strat_analytics["iteration_net_velocity"] = 0.0
+                    fresh_strat_analytics["iteration_index"] = next_iter_idx
+                    fresh_strat_analytics["iteration_start_net_profit_usdt"] = settled_net
+                    fresh_strat_analytics["iteration_net_profit_usdt"] = 0.0
+                    fresh_strat_analytics["iteration_start_realized_pnl_usdt"] = settled_realized
+                    fresh_strat_analytics["iteration_realized_pnl_usdt"] = 0.0
+                    fresh_strat_analytics["iteration_start_ts"] = now_ms
+                    fresh_strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
+                    fresh_strat_analytics["iteration_peak_ts"] = now_ms
+                    fresh_strat_analytics["iteration_peak_age_hours"] = 0.0
+                    fresh_strat_analytics["iteration_net_velocity"] = 0.0
                     if strat_stats_path:
-                        Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
+                        Utils.atomic_write_json(strat_stats_path, fresh_strat_analytics, indent=4)
 
                     try:
                         c_file = CACHE_DIR / "iteration_state.json"
@@ -391,8 +397,8 @@ class AutoCloser:
                         prev_entry = c_dict.get(strat_id, {})
                         c_dict[strat_id] = {
                             "iteration_index": next_iter_idx,
-                            "iteration_start_net_profit_usdt": new_iter_start_net,
-                            "iteration_start_realized_pnl_usdt": new_iter_start_real,
+                            "iteration_start_net_profit_usdt": settled_net,
+                            "iteration_start_realized_pnl_usdt": settled_realized,
                             "iteration_realized_pnl_usdt": 0.0,
                             "iteration_start_ts": now_ms,
                             "iteration_peak_net_profit_usdt": 0.0,
@@ -415,6 +421,7 @@ class AutoCloser:
 
                     Utils.write_json_file(app_json_path, app_data)
                     if strat_msg and getattr(self.bot_core, 'notifier', None):
+                        strat_msg = strat_msg.replace("базовая точка Net: <b>0.00 USDT</b>", f"базовая точка Net: <b>{settled_net:+.2f} USDT</b>")
                         await self.bot_core.notifier.send_alert(strat_msg)
 
                     if hasattr(self.bot_core, "radar_navigator") and self.bot_core.radar_navigator.is_enabled():
