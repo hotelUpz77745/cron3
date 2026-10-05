@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import shutil
+import copy
 from pathlib import Path
 from decimal import Decimal, getcontext
 
@@ -172,13 +173,119 @@ class Utils:
         return qty_precision, price_precision
 
     @staticmethod
-    def read_json_file(file_path: str) -> dict:
+    def deep_merge(base: dict, update: dict) -> dict:
+        """
+        Рекурсивное объединение двух словарей. Возвращает новый объединенный словарь.
+        Значения из update переопределяют значения из base.
+        """
+        if not isinstance(base, dict):
+            return copy.deepcopy(update)
+        if not isinstance(update, dict):
+            return copy.deepcopy(update)
+
+        result = copy.deepcopy(base)
+        for k, v in update.items():
+            if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+                result[k] = Utils.deep_merge(result[k], v)
+            else:
+                result[k] = copy.deepcopy(v)
+        return result
+
+    @staticmethod
+    def resolve_side_inheritance(data: Any) -> Any:
+        """
+        Разрешает компактное наследование настроек сторон (SHORT наследует LONG или наоборот).
+        Поддерживает:
+        1. Флаг `"_override": false` или `"override": false` — сторона полностью наследует доступную
+           базовую сторону (как правило LONG, так как исторически она прописана сверху).
+        2. Словарь `override: {}` (или `_override: {}`) — наследование с возможностью точечных
+           переопределений параметров.
+        3. Сохранение явных полей целевой стороны (например "enable": false) и удаление служебных ключей.
+        """
+        if not isinstance(data, dict):
+            return data
+
+        # Рекурсивный обход вложенных словарей (например, шаблонов или словаря вселенных)
+        resolved = copy.deepcopy(data)
+        for k, v in list(resolved.items()):
+            if isinstance(v, dict):
+                resolved[k] = Utils.resolve_side_inheritance(v)
+
+        def _is_inheritance_requested(side_dict: Any) -> bool:
+            if not isinstance(side_dict, dict):
+                return False
+            # Проверяем "_override"
+            if "_override" in side_dict:
+                v = side_dict["_override"]
+                if v is False or isinstance(v, dict):
+                    return True
+                return False
+            # Проверяем "override"
+            if "override" in side_dict:
+                v = side_dict["override"]
+                if v is False or isinstance(v, dict):
+                    return True
+                return False
+            return False
+
+        def _get_overrides_dict(side_dict: dict) -> Optional[dict]:
+            if "_override" in side_dict and isinstance(side_dict["_override"], dict):
+                return side_dict["_override"]
+            if "override" in side_dict and isinstance(side_dict["override"], dict):
+                return side_dict["override"]
+            return None
+
+        def _apply_side_inheritance(source_side_name: str, target_side_name: str):
+            target = resolved[target_side_name]
+            source = resolved[source_side_name]
+            if not isinstance(target, dict) or not isinstance(source, dict):
+                return
+            if not _is_inheritance_requested(target):
+                return
+
+            overrides_dict = _get_overrides_dict(target)
+            # Начинаем с полной копии стороны-источника
+            merged = copy.deepcopy(source)
+
+            # Переносим все явные ключи целевой стороны, кроме служебных ключей наследования
+            for tk, tv in target.items():
+                if tk not in ("override", "_override", "_comment_override"):
+                    merged[tk] = copy.deepcopy(tv)
+
+            # Применяем словарь переопределений (overrides), если задан
+            if overrides_dict:
+                merged = Utils.deep_merge(merged, overrides_dict)
+
+            # Гарантируем отсутствие служебных ключей
+            merged.pop("override", None)
+            merged.pop("_override", None)
+            merged.pop("_comment_override", None)
+
+            resolved[target_side_name] = merged
+
+        if "LONG" in resolved and "SHORT" in resolved:
+            short_req = _is_inheritance_requested(resolved["SHORT"])
+            long_req = _is_inheritance_requested(resolved["LONG"])
+
+            if short_req and not long_req:
+                _apply_side_inheritance("LONG", "SHORT")
+            elif long_req and not short_req:
+                _apply_side_inheritance("SHORT", "LONG")
+            elif short_req and long_req:
+                # Если оба заявили наследование, приоритет отдается LONG как верхней/базовой стороне
+                _apply_side_inheritance("LONG", "SHORT")
+
+        return resolved
+
+    @staticmethod
+    def read_json_file(file_path: Union[str, Path]) -> dict:
         try:
             p = Path(file_path)
             if not p.exists():
                 return {}
             with open(p, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+            return Utils.resolve_side_inheritance(data)
         except Exception:
             return {}
 

@@ -1287,5 +1287,60 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
   - Разные ключи $\to$ успешная бесконфликтная регистрация дублирующегося символа на разных счетах.
 - Успешно пройден полный регрессионный прогон всего репозитория: **110 тестов из 110 выполнены со статусом OK**.
 
+---
+
+### Архитектурное решение: Компактное наследование настроек сторон (Side Inheritance)
+
+#### 1. Проблема и мотивация
+Исторически база шаблонов [CFG/universes.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes.json) разрослась до 265 КБ и более 7300 строк кода из-за многократного дублирования идентичных блоков настроек (`grid`, `tp_map`, `invest_size`) для обеих сторон (`LONG` и `SHORT`). При этом в подавляющем большинстве стратегий стороны симметричны, а первым сверху объявляется блок `LONG`.
+
+#### 2. Архитектурная реализация
+В [c_utils.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/c_utils.py) добавлены методы:
+1. `Utils.deep_merge(base, update)` — рекурсивное слияние словарей;
+2. `Utils.resolve_side_inheritance(data)` — автоматическое разрешение наследования настроек сторон;
+3. Обновлен `Utils.read_json_file(file_path)` — каждый считываемый JSON-файл автоматически прогоняется через `resolve_side_inheritance`.
+
+#### 3. Поддерживаемый синтаксис
+1. **Флаг `"_override": false` (рекомендуемый, чистый формат):**
+   ```json
+   "SHORT": {
+       "enable": false,
+       "_override": false
+   }
+   ```
+   Целевая сторона (`SHORT`) полностью наследует структуру и параметры базовой стороны (`LONG`), сохраняя свои локальные поля (например, `"enable": false`).
+2. **Флаг `"_override": false` с точечным переопределением на верхнем уровне стороны:**
+   ```json
+   "SHORT": {
+       "enable": true,
+       "_override": false,
+       "invest_size": 250.0
+   }
+   ```
+   Поле `invest_size` точечно переопределяет значение из `LONG`, остальная сетка и тейки наследуются без дублирования.
+3. **Формат словаря `override: {}` (полная обратная совместимость с полигоном):**
+   ```json
+   "SHORT": {
+       "enable": true,
+       "override": {
+           "invest_size": 300.0,
+           "tp_purpose": "self"
+       }
+   }
+   ```
+4. **Служебные ключи очищаются:**
+   Ключи `_override`, `override`, `_comment_override` автоматически удаляются из результирующего конфига стороны и не засоряют боевые структуры `StrategyConfig` и `StrategyApplicator`.
+
+#### 4. Тестовое покрытие
+Создан модуль [tests/test_side_inheritance.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_side_inheritance.py) (9 тестов):
+- Слияние `deep_merge`;
+- Наследование со словарем `override: {}` и `override: { ... }`;
+- Наследование по флагу `_override: false` и `override: false`;
+- Наследование с инлайн-переопределением в теле `SHORT`;
+- Игнорирование при `_override: true` / `override: true`;
+- Интеграция с `read_json_file` и сквозная сборка в `StrategyApplicator.build_side_configs`.
+- Полный тестовый прогон: **119 тестов из 119 выполнены со статусом OK**.
+
+
 
 
