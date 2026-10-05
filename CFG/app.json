@@ -36,9 +36,9 @@
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
             "enabled": true,
-            "api_key_name": null,
-            "api_secret_name": null,
-            "_comment_api_keys": "Имена переменных в .env (например API_KEY_1 / API_SECRET_1). Если null — используется глобальный API_KEY/API_SECRET.",
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
+            "_comment_api_keys": "Имена переменных ключей в .env (например API_KEY и API_SECRET для основного аккаунта, либо API_KEY_1 и API_SECRET_1 для отдельного суб-аккаунта). Если стратегии торгуют на одном аккаунте — монеты между ними строго не пересекаются. На разных аккаунтах — монеты могут пересекаться.",
             "symbols": [
                 "GRASSUSDT",
                 "ZROUSDT"
@@ -52,6 +52,8 @@
             "_comment_pros": "Лидер по оборачиваемости и чистому профиту (+37.3% за 4 дня). Индивидуальный LIFO-пилинг колен L3..L9 на локальных отскоках +1.2%..2.4% с частичной разгрузкой токсичной маржи до закрытия всего пула.",
             "_comment_cons": "Высокая плотность сделок в широких затяжных боковиках.",
             "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
             "symbols": [],
             "analytics": {
                 "start_balance_usdt": 171.92
@@ -62,6 +64,8 @@
             "_comment_pros": "Комплексный флагман: трейлинг старших уровней сетки усреднения, глубокая разгрузка встречной прибылью и адаптивный тейк.",
             "_comment_cons": "Требует одновременной активности обоих направлений (LONG и SHORT) для максимального эффекта кросс-ресайклинга.",
             "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
             "symbols": [],
             "analytics": {
                 "start_balance_usdt": 171.92
@@ -72,6 +76,8 @@
             "_comment_pros": "Синтез лучших эвристик: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Panic Damper TP (2.2% -> 0.65%), Cross-Side Recycling (50% прибыли тушит просадку) и Knife Blocker 3.5%..89%. Феноменальный Recovery Factor и минимальная просадка.",
             "_comment_cons": "Широкий базовый тейк (2.2%) снижает число микро-сделок на тихом рынке.",
             "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
             "symbols": [],
             "analytics": {
                 "start_balance_usdt": 171.92

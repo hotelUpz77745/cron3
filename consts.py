@@ -94,15 +94,25 @@ ACTIVE_STRATEGIES: Dict[str, Any] = _CFG["active_strategies"]
 
 def _resolve_active_symbols() -> list[str]:
     active_syms: list[str] = []
-    seen: set[str] = set()
+    account_symbols: Dict[str, Dict[str, str]] = {}
     for strat_id, sdata in ACTIVE_STRATEGIES.items():
         if sdata.get("enabled", False):
+            acc_id = str(sdata.get("api_key_name") or "API_KEY").strip()
+            if acc_id not in account_symbols:
+                account_symbols[acc_id] = {}
             for sym in sdata.get("symbols", []):
                 sym_clean = str(sym).upper().strip()
                 if not sym_clean:
                     continue
-                if sym_clean not in seen:
-                    seen.add(sym_clean)
+                if sym_clean in account_symbols[acc_id]:
+                    conflicting_strat = account_symbols[acc_id][sym_clean]
+                    raise ValueError(
+                        f"[FATAL CONFIG ERROR] КОНФЛИКТ В РАМКАХ ОДНОГО АККАУНТА ('{acc_id}'): "
+                        f"Монета '{sym_clean}' одновременно закреплена за стратегиями '{conflicting_strat}' и '{strat_id}'. "
+                        f"На одном аккаунте Binance монеты не могут пересекаться! Укажите разные api_key_name в app.json."
+                    )
+                account_symbols[acc_id][sym_clean] = strat_id
+                if sym_clean not in active_syms:
                     active_syms.append(sym_clean)
     return active_syms
 

@@ -243,6 +243,19 @@ class StrategyConfig:
 
         return API_KEY, API_SECRET
 
+    def get_account_id(self) -> str:
+        """
+        Возвращает идентификатор аккаунта Binance (имя переменной ключа в .env).
+        Если имена ключей одинаковые — стратегии делят один физический аккаунт биржи.
+        """
+        if self.api_key_name:
+            return str(self.api_key_name).strip()
+        import os
+        strat_key_env = f"API_KEY_{self.strategy_id.upper()}"
+        if os.getenv(strat_key_env):
+            return strat_key_env
+        return "API_KEY"
+
     @property
     def grid(self) -> Dict[str, Any]:
         return (self.raw_meta.get("LONG") or {}).get("grid") or (self.raw_meta.get("SHORT") or {}).get("grid") or self.overrides.get("grid", {})
@@ -306,6 +319,7 @@ class StrategyRegistry:
         self.symbol_to_strategies.clear()
         resolved_symbols: List[str] = []
         seen_symbols: set[str] = set()
+        account_symbols: Dict[str, Dict[str, str]] = {}
 
         for strat_id, strat_settings in self.active_cfg.items():
             # Прямое чтение флага активности (Правило 2)
@@ -331,14 +345,28 @@ class StrategyRegistry:
                 active_settings=strat_settings
             )
             self.active_strategies[strat_id] = strat_config
+            acc_id = strat_config.get_account_id()
+            if acc_id not in account_symbols:
+                account_symbols[acc_id] = {}
 
             for sym in strat_symbols:
+                # ОБЯЗАТЕЛЬНАЯ ВАЛИДАЦИЯ: на одном аккаунте монеты не могут пересекаться
+                if sym in account_symbols[acc_id]:
+                    conflicting_strat = account_symbols[acc_id][sym]
+                    raise ValueError(
+                        f"[StrategyRegistry] КОНФЛИКТ В РАМКАХ ОДНОГО АККАУНТА ('{acc_id}')! "
+                        f"Символ '{sym}' одновременно назначен в две стратегии: '{conflicting_strat}' и '{strat_id}'. "
+                        f"На одном биржевом счете Binance монеты между стратегиями обязаны быть строго уникальными! "
+                        f"Для одновременной торговли одной монеты в разных стратегиях укажите разные api_key_name в app.json."
+                    )
+                account_symbols[acc_id][sym] = strat_id
+
                 self.symbol_to_strategies.setdefault(sym, []).append(strat_config)
                 if sym in self.symbol_to_strategy:
                     other_strat = self.symbol_to_strategy[sym].strategy_id
                     logger.info(
                         f"[StrategyRegistry] Символ '{sym}' зарегистрирован в нескольких стратегиях: "
-                        f"'{other_strat}' и '{strat_id}' (мультистратегический/мультиаккаунтный режим)."
+                        f"'{other_strat}' и '{strat_id}' (на РАЗНЫХ аккаунтах)."
                     )
                 self.symbol_to_strategy[sym] = strat_config
 

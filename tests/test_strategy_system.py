@@ -87,18 +87,37 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(strat_arx.strategy_id, "u6_symbiosis_gamma_fortress35")
         self.assertEqual(strat_arx.invest_size, 600.0)
 
-        # Проверка поддержки мультистратегического / мультиаккаунтного использования одной монеты
-        multi_active = {
+        # 1. На одном аккаунте (одинаковые ключи) одинаковые монеты ОБЯЗАНЫ выбрасывать ValueError!
+        single_account_conflict = {
             "u6_symbiosis_gamma_fortress35": {
                 "enabled": True,
+                "api_key_name": "API_KEY_MAIN",
                 "symbols": ["ARXUSDT"]
             },
             "u9_omni_zenith_apex": {
                 "enabled": True,
-                "symbols": ["ARXUSDT"]  # Разрешено!
+                "api_key_name": "API_KEY_MAIN",
+                "symbols": ["ARXUSDT"]  # Конфликт на одном аккаунте!
             }
         }
-        registry = StrategyRegistry(active_strategies_cfg=multi_active)
+        with self.assertRaises(ValueError) as ctx:
+            StrategyRegistry(active_strategies_cfg=single_account_conflict)
+        self.assertIn("КОНФЛИКТ В РАМКАХ ОДНОГО АККАУНТА", str(ctx.exception))
+
+        # 2. На разных аккаунтах (разные ключи) дублирование символов легально и разрешено!
+        multi_account_active = {
+            "u6_symbiosis_gamma_fortress35": {
+                "enabled": True,
+                "api_key_name": "API_KEY_ACCOUNT_1",
+                "symbols": ["ARXUSDT"]
+            },
+            "u9_omni_zenith_apex": {
+                "enabled": True,
+                "api_key_name": "API_KEY_ACCOUNT_2",
+                "symbols": ["ARXUSDT"]  # Разрешено на разных счетах!
+            }
+        }
+        registry = StrategyRegistry(active_strategies_cfg=multi_account_active)
         self.assertIn("ARXUSDT", registry.symbol_to_strategies)
         self.assertEqual(len(registry.symbol_to_strategies["ARXUSDT"]), 2)
         strats = [s.strategy_id for s in registry.get_strategies_for_symbol("ARXUSDT")]
