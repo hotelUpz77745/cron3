@@ -1255,7 +1255,7 @@ class AnalyticsManager:
             elif "iteration_start_realized_pnl_usdt" in iter_cache:
                 iter_start_real = float(iter_cache["iteration_start_realized_pnl_usdt"])
             else:
-                iter_start_real = iter_start_net
+                iter_start_real = s_real if iter_idx > 1 else 0.0
 
             iter_real = round(s_real - iter_start_real, 4)
             strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
