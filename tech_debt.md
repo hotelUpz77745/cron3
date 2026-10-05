@@ -1234,17 +1234,46 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
     - Инлайн-кнопки моментального применения среза под купол выбранной стратегии (`📥 Применить в <strat_id>`);
     - Инлайн-кнопка обновления среза (`🔄 Пересканировать`).
 
-#### 3. Снятие запрета пересечения монет и Мультиаккаунтность (Multi-Account Exchange Client)
-- **Снятие ограничения 1:1**:
-  - В [consts.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/consts.py) и [CORE/STRATEGY/strategy_registry.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py) устранены исключения `ValueError` при повторении символов в разных стратегиях. Введен `symbol_to_strategies: Dict[str, List[StrategyConfig]]`, позволяющий одной монете одновременно принадлежать разным куполам/аккаунтам.
-- **Мультиаккаунтная архитектура**:
-  - В [CFG/app.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json) под куполом каждой стратегии добавлены поля `"api_key_name"` и `"api_secret_name"`;
-  - [StrategyConfig](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py): метод `get_api_credentials()` извлекает ключи из `.env` по заданным именам, проверяет суффикс `API_KEY_<STRAT_ID>`, либо делает fallback на базовые глобальные ключи;
-  - [CORE/bot.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/bot.py):
-    - Создан пул независимых клиентов `self.clients: Dict[str, BinanceClient]` и `self._key_clients: Dict[tuple, BinanceClient]` (с переиспользованием сессий при одинаковых ключах);
-    - Добавлены методы `get_client_for_strategy(strat_id)` и `get_client_for_symbol(symbol)`;
-    - Все приватные методы (`make_order`, `fetch_positions`, `cancel_orders_for_side`, `set_leverage_and_margin`, `process_peel`, `process`, TP) направляются через клиент конкретной стратегии/символа;
-    - Метод `shutdown()` гарантированно и чисто закрывает соединения всех клиентов в пуле.
+#### 3. Архитектура Мультиаккаунтности и «Инвариант уникальности символа на аккаунт»
+
+##### А. Оформление ключей в `CFG/app.json`:
+- **Никаких `null`**: Во всех стратегиях под их куполом явно прописываются реальные имена строковых переменных из `.env`:
+  ```json
+  "active_strategies": {
+      "u6_symbiosis_gamma_fortress35": {
+          "enabled": true,
+          "api_key_name": "API_KEY",
+          "api_secret_name": "API_SECRET",
+          "symbols": ["GRASSUSDT", "ZROUSDT"],
+          "analytics": { "start_balance_usdt": 171.92 }
+      },
+      "u14_subgrid_level_recycler": {
+          "enabled": false,
+          "api_key_name": "API_KEY",
+          "api_secret_name": "API_SECRET",
+          "symbols": [],
+          "analytics": { "start_balance_usdt": 171.92 }
+      }
+  }
+  ```
+- **Один общий аккаунт**: Если стратегии должны торговать на одном аккаунте — у них указываются одинаковые имена переменных: `"API_KEY"` и `"API_SECRET"`.
+- **Разные аккаунты / субаккаунты**: Если стратегии разделяются по разным счетам Binance — указываются раздельные переменные из `.env`:
+  - У первой стратегии: `"api_key_name": "API_KEY_1"`, `"api_secret_name": "API_SECRET_1"`;
+  - У второй стратегии: `"api_key_name": "API_KEY_2"`, `"api_secret_name": "API_SECRET_2"`.
+
+##### Б. «Инвариант уникальности символа на аккаунт» (Account Symbol Isolation Invariant):
+1. **Стратегии имеют ОДИНАКОВЫЕ имена ключей (один биржевой счет):**
+   - На одном счете Binance позиция по конкретному символу едина. Две разные стратегии физически не могут одновременно вести независимые сетки и слать противоречивые ордера по одной и той же монете на одном счете.
+   - Включена **строгая обязательная валидация на непересекаемость символов** в [CORE/STRATEGY/strategy_registry.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py) и [consts.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/consts.py).
+   - Попытка назначить монету `GRASSUSDT` одновременно в `u6` и в `u14` при одинаковом `api_key_name` («API_KEY») немедленно выбрасывает фатальный `ValueError`:
+     ```text
+     [StrategyRegistry] КОНФЛИКТ В РАМКАХ ОДНОГО АККАУНТА ('API_KEY')! 
+     Символ 'GRASSUSDT' одновременно назначен в две стратегии: 'u6_symbiosis_gamma_fortress35' и 'u14_subgrid_level_recycler'. 
+     На одном биржевом счете Binance монеты между стратегиями обязаны быть строго уникальными!
+     ```
+2. **Стратегии имеют РАЗНЫЕ имена ключей (разные биржевые аккаунты):**
+   - У каждого аккаунта изолированный баланс, свой ордербук, свои позиции и свои лимиты на серверах биржи.
+   - В этом случае валидация **полностью разрешает** монете `GRASSUSDT` торговаться одновременно и в `u6` (на Аккаунте 1), и в `u14` (на Аккаунте 2). Ордера и аналитика направляются через изолированные экземпляры `BinanceClient` из пула `self.clients` боевого ядра `BotCore`.
 
 #### 4. Тестовое покрытие
 - Создан тестовый модуль [tests/test_selector_and_multiaccount.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_selector_and_multiaccount.py) (8 тестов):
@@ -1253,6 +1282,10 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
   - Прямое чтение параметров в `CoinSelectionService`;
   - On-demand отбор монет через `AlphaCoinSelector` и `SamsonovFunnelSelector`;
   - Проверка наличия кнопок `⚙️ Set Coins` и `🎯 Selector` в Telegram-клавиатурах.
+- В [tests/test_strategy_system.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_strategy_system.py) покрыты оба сценария «Инварианта уникальности символа на аккаунт»:
+  - Одинаковые ключи $\to$ выброс `ValueError`;
+  - Разные ключи $\to$ успешная бесконфликтная регистрация дублирующегося символа на разных счетах.
 - Успешно пройден полный регрессионный прогон всего репозитория: **110 тестов из 110 выполнены со статусом OK**.
+
 
 
