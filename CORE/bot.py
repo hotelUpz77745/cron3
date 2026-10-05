@@ -554,7 +554,29 @@ class BotCore:
         if sides_to_reset:
             for idx, side in enumerate(sides_to_reset):
                 logger.info(f"[{symbol}] {side} is_finished. Running analytics and resetting runtime cache...")
-                
+
+                # Рециркуляция прибыли (Cross-Side Profit Recycling), если закрытие в плюс
+                closed_vol = getattr(states[side], "last_closed_volume", 0.0)
+                closed_entry = getattr(states[side], "last_closed_avg_price", 0.0)
+                price_data = self.prices.get(symbol)
+                cur_price = price_data[0] if isinstance(price_data, tuple) else price_data
+
+                if closed_vol > 0 and closed_entry > 0 and cur_price and cur_price > 0:
+                    realized_pnl = (cur_price - closed_entry) * closed_vol if side == "LONG" else (closed_entry - cur_price) * closed_vol
+                    if realized_pnl > 0:
+                        try:
+                            from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler
+                            await CrossSideProfitRecycler.maybe_recycle(
+                                universe=self,
+                                symbol=symbol,
+                                winning_side=side,
+                                realized_profit=realized_pnl,
+                                current_price=cur_price,
+                                spec_data=self.spec_data,
+                            )
+                        except Exception as e:
+                            logger.error(f"[{symbol}] Error during cross-side recycling: {e}")
+
                 # Записываем метку времени для smart_grace
                 states[side].recent_closes.append(time.time())
                 
@@ -686,7 +708,16 @@ class BotCore:
                 if getattr(state, "is_closing", False) is True or symbol in getattr(self, "_closing_symbols", set()):
                     continue
                 opposite_state = states["SHORT"] if side == "LONG" else states["LONG"]
-                await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
+                
+                # LIFO Subgrid Peeling (U14 & U16 support)
+                has_peel = any(isinstance(v, dict) and v.get("peel_tp_pct") for v in getattr(state, "grid", {}).values())
+                peeled = False
+                if has_peel and hasattr(self.avg_manager, "process_peel"):
+                    peeled = await self.avg_manager.process_peel(
+                        self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, self.tp_manager
+                    )
+                if not peeled:
+                    await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
                 await self.fallback_tp_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, opposite_state=opposite_state)
 
         if signal_tasks:

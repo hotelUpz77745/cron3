@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from consts import BASE_DIR, DATA_DIR, PARENT_DIR, _CFG
 from c_log import UnifiedLogger
 from CORE.coin_selectors import SamsonovFunnelSelector
+from CORE.SELECTOR.alpha_coin_selector import AlphaCoinSelector
 from CORE.radar_journal import RadarJournal
 
 if TYPE_CHECKING:
@@ -26,8 +27,8 @@ class RadarNavigator:
     Класс Штурмана:
     1. Fail-Fast валидация стратегий в Радаре (краш при несовпадении).
     2. Управление холостым ходом (если min_radar_warmup_hours не null).
-    3. Первичный автокомплит пула монет по воронке Самсонова.
-    4. Оценка ротации по храповику стагнации с гистерезисом (+20%).
+    3. Первичный автокомплит пула монет по воронке Самсонова или Alpha-Селектору.
+    4. Оценка ротации по храповику с суточным фильтром (23ч) и гистерезисом.
     """
 
     def __init__(self, bot_core: "BotCore"):
@@ -37,6 +38,7 @@ class RadarNavigator:
         synergy_cfg = _CFG["radar_synergy"]
         self.enabled: bool = synergy_cfg["enabled"]
         self.mode: str = synergy_cfg["mode"]  # 'advisory', 'auto', 'disabled'
+        self.selector_type: str = synergy_cfg.get("selector_type", "samsonov_funnel")
 
         paths_cfg = _CFG["paths"]
         radar_raw_path: str = paths_cfg["radar_dir"]
@@ -46,27 +48,30 @@ class RadarNavigator:
         self.radar_cfg_path: Path = self.radar_dir / "CFG" / "universes.json"
 
         # Если min_radar_warmup_hours равен None / null — первичная инициализация пропускается
-        raw_warmup = synergy_cfg["min_radar_warmup_hours"]
+        raw_warmup = synergy_cfg.get("min_radar_warmup_hours")
         self.min_warmup_hours: Optional[float] = float(raw_warmup) if raw_warmup is not None else None
 
-        self.poll_interval_sec: float = float(synergy_cfg["warmup_poll_interval_sec"])
+        self.poll_interval_sec: float = float(synergy_cfg.get("warmup_poll_interval_sec", 5.0))
         self.target_count: int = int(synergy_cfg["target_coins_count"])
+        self.min_rotation_interval_hours: float = float(synergy_cfg.get("min_rotation_interval_hours", 0.0))
 
-        hyst_cfg = synergy_cfg["hysteresis"]
-        self.min_lead_pct: float = float(hyst_cfg["min_score_lead_pct"])
+        hyst_cfg = synergy_cfg.get("hysteresis", {})
+        self.min_lead_pct: float = float(hyst_cfg.get("min_score_lead_pct", 20.0))
 
-        rot_triggers = synergy_cfg["rotation_triggers"]
-        self.on_stagnation: bool = bool(rot_triggers["on_stagnation_ratchet"])
-        self.excluded_top_rule: str = str(rot_triggers["excluded_top_rule"])
+        rot_triggers = synergy_cfg.get("rotation_triggers", {})
+        self.on_stagnation: bool = bool(rot_triggers.get("on_stagnation_ratchet", True))
+        self.excluded_top_rule: str = str(rot_triggers.get("excluded_top_rule", ">5.0%"))
 
-        advisory_cfg = synergy_cfg["advisory"]
-        self.advisory_timeout_sec: float = float(advisory_cfg["timeout_sec"])
-        self.advisory_timeout_action: str = str(advisory_cfg["timeout_action"])  # 'skip' or 'apply'
+        advisory_cfg = synergy_cfg.get("advisory", {})
+        self.advisory_timeout_sec: float = float(advisory_cfg.get("timeout_sec", 120.0))
+        self.advisory_timeout_action: str = str(advisory_cfg.get("timeout_action", "skip"))
 
         self.selector = SamsonovFunnelSelector(radar_stats_dir=self.radar_stats_dir)
+        self.alpha_selector = AlphaCoinSelector
         self.pending_rotations: Dict[str, Dict[str, Any]] = {}
         self.timeout_tasks: Dict[str, asyncio.Task] = {}
         self.symbols_pending_rotation: set[str] = set()
+        self.last_rotation_ts_by_strat: Dict[str, float] = {}
 
     def is_enabled(self) -> bool:
         return self.enabled and self.mode != "disabled"
@@ -264,14 +269,78 @@ class RadarNavigator:
             logger.info(f"[RadarNavigator][{strat_id}] Закрытие не по стагнации. Ротация пропущена.")
             return
 
-        # 2. Если задан порог разгона, проверяем наработку
+        # Проверка зрелости Радара (если min_radar_warmup_hours задан явно)
         if self.min_warmup_hours is not None:
-            rt = self.get_radar_runtime_hours(strat_id)
-            if rt < self.min_warmup_hours:
-                logger.warning(f"[RadarNavigator][{strat_id}] Рантайм радара {rt:.2f}ч < {self.min_warmup_hours}ч. Ротация отклонена.")
+            runtime = self.get_radar_runtime_hours(strat_id)
+            if runtime < self.min_warmup_hours:
+                logger.info(
+                    f"[RadarNavigator][{strat_id}] Радар еще на разгоне ({runtime:.2f}ч < {self.min_warmup_hours}ч). "
+                    f"Ротация отклонена, обойма сохраняется."
+                )
                 return
 
-        # 3. Вызываем расчет скоров Самсонова
+        # 2. Суточное окно ротации: проверяем, что с прошлой ротации прошло >= min_rotation_interval_hours
+        now_ts = time.time()
+        last_rot = self.last_rotation_ts_by_strat.get(strat_id, 0.0)
+        min_interval_sec = self.min_rotation_interval_hours * 3600.0
+        if (now_ts - last_rot) < min_interval_sec:
+            elapsed_h = (now_ts - last_rot) / 3600.0
+            logger.info(
+                f"[RadarNavigator][{strat_id}] Храповик закрыт ({matched_rule}), но окно ротации "
+                f"({elapsed_h:.1f}ч < {self.min_rotation_interval_hours}ч) еще активно. Обойма сохраняется."
+            )
+            return
+
+        # 3. ВЕТКА АЛЬФА-СЕЛЕКТОРА (Динамический Wiggle/NATR отбор)
+        if self.selector_type == "alpha_coin_selector":
+            logger.info(f"[RadarNavigator][{strat_id}] Запуск AlphaCoinSelector (NATR + Wiggle + Anti-Exhaustion)...")
+            strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+            current_symbols = strat_cfg.symbols if strat_cfg else []
+
+            top_info = await self.alpha_selector.select_top_coins(target_count=self.target_count)
+            if not top_info:
+                logger.warning(f"[RadarNavigator][{strat_id}] Alpha-Селектор не вернул кандидатов. Пул сохранен.")
+                return
+
+            new_symbols = [x["symbol"] for x in top_info if x.get("eligible", True)][:self.target_count]
+            if not new_symbols:
+                logger.warning(f"[RadarNavigator][{strat_id}] Нет eligible монет по Alpha-фильтрам. Пул сохранен.")
+                return
+
+            if set(new_symbols) == set(current_symbols):
+                logger.info(f"[RadarNavigator][{strat_id}] Лидеры Alpha-Селектора не изменились ({new_symbols}). Обойма сохранена.")
+                self.last_rotation_ts_by_strat[strat_id] = now_ts
+                return
+
+            to_remove = [s for s in current_symbols if s not in new_symbols]
+            to_add = [s for s in new_symbols if s not in current_symbols]
+            logger.info(f"[RadarNavigator][{strat_id}] Пакетная замена обоймы: удалить {to_remove}, добавить {to_add}")
+
+            for s in to_remove:
+                await self.bot_core.delete_symbol(s)
+            for s in to_add:
+                await self.bot_core.add_symbol(s, strat_id)
+
+            self.last_rotation_ts_by_strat[strat_id] = now_ts
+
+            if getattr(self.bot_core, "notifier", None):
+                meta_lines = [
+                    f"• 🟢 <b>{x['symbol']}</b> (Alpha: {x['score']}, NATR: {x['natr']}%, Wiggle: {x['wiggle']})"
+                    for x in top_info[:self.target_count]
+                ]
+                msg = (
+                    f"🧭 <b>ШТУРМАН: СУТОЧНАЯ АЛЬФА-РОТАЦИЯ [{strat_id}]</b>\n"
+                    f"Сброс цикла храповика ({matched_rule}).\n"
+                    f"Окно ротации: >= {self.min_rotation_interval_hours}ч.\n"
+                    f"Удалено: <code>{', '.join(to_remove) if to_remove else 'нет'}</code>\n"
+                    f"Добавлено: <code>{', '.join(to_add) if to_add else 'нет'}</code>\n\n"
+                    f"<b>Новая боевая обойма (Top-{self.target_count}):</b>\n"
+                    + "\n".join(meta_lines)
+                )
+                await self.bot_core.notifier.send_alert(msg)
+            return
+
+        # 4. ВЕТКА ВОРОНКИ САМСОНОВА (Исторический квантовый фильтр Радара)
         metrics = self.selector.calculate_coin_metrics(universe_id=strat_id)
         if not metrics:
             logger.warning(f"[RadarNavigator][{strat_id}] Радар вернул пустой список метрик. Ротация отменена, боевой пул сохранен.")
@@ -379,6 +448,8 @@ class RadarNavigator:
                     mode="auto"
                 )
                 alert_lines.append(f"• 🔴 <b>{old_s}</b> ({rot['old_score']:.2f}) ➔ 🟢 <b>{new_s}</b> ({rot['new_score']:.2f}) [+{lead_p:.1f}%]")
+
+            self.last_rotation_ts_by_strat[strat_id] = now_ts
 
             if getattr(self.bot_core, "notifier", None):
                 msg_auto = (

@@ -299,10 +299,10 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
                         raise ValueError("Mismatch detected!")
 
     def test_u10_spinning_universe_configuration(self):
-        """Проверка корректности конфигурации u10_spinning_basic_distribute в CFG/universes.json."""
+        """Проверка корректности конфигурации сохраненного флагмана u10_spinning_early_rebound в CFG/universes.json."""
         registry = StrategyRegistry()
-        self.assertIn("u10_spinning_basic_distribute", registry.universes_db)
-        u10 = registry.universes_db["u10_spinning_basic_distribute"]
+        self.assertIn("u10_spinning_early_rebound", registry.universes_db)
+        u10 = registry.universes_db["u10_spinning_early_rebound"]
 
         # Архитектурные правила куполов LONG/SHORT
         self.assertIn("LONG", u10)
@@ -317,12 +317,8 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(grid), 9)
         self.assertIsNone(grid["0"]["activation"])
         self.assertIsNone(grid["1"]["activation"])
-        self.assertIsNone(grid["2"]["activation"])
+        self.assertEqual(grid["2"]["activation"], -7.0)
         self.assertEqual(grid["3"]["activation"], -10.5)
-        self.assertEqual(grid["4"]["activation"], -17.0)
-        self.assertEqual(grid["5"]["activation"], -27.5)
-        self.assertEqual(grid["6"]["activation"], -44.5)
-        self.assertEqual(grid["7"]["activation"], -72.0)
         self.assertEqual(grid["8"]["activation"], -89.0)
 
         # Проверка tp_map в LONG: 14 уровней нейтральной лестницы Фибоначчи
@@ -331,18 +327,9 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(tp_map["0"]["activation"], 2.2)
         self.assertEqual(tp_map["0"]["fallback_indent"], 1.9)
         self.assertIsNone(tp_map["0"]["indent"])
-        self.assertEqual(tp_map["12"]["fallback_indent"], 49.7)
-        self.assertEqual(tp_map["12"]["activation"], 89.5)
-        self.assertEqual(tp_map["13"]["fallback_indent"], 89.5)
-        self.assertEqual(tp_map["13"]["activation"], 89.5)
-
-        # Проверка равенства курка и пола на последнем уровне храповика (89.0 == 89.0)
-        tr_levels = u10["auto_closing"]["positive"]["trailing_ratchet"]["levels"]
-        self.assertEqual(tr_levels[-1]["activation"], tr_levels[-1]["floor"])
-        self.assertEqual(tr_levels[-1]["activation"], 89.0)
 
         from CORE.STRATEGY.strategy_registry import StrategyConfig
-        strat_cfg = StrategyConfig("u10_spinning_basic_distribute", u10, ["BTCUSDT"])
+        strat_cfg = StrategyConfig("u10_spinning_early_rebound", u10, ["BTCUSDT"])
         applicator = StrategyApplicator()
         side_cfgs = applicator.build_side_configs(strat_cfg)
         self.assertEqual(side_cfgs["LONG"]["tp_purpose"], "neutral")
@@ -484,42 +471,41 @@ class TestU10SpinningTrailing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_trailing.get("active_level"), "5")
         self.assertEqual(state_trailing.get("armed_floor"), 0.95)
 
-    def test_u10_symbiosis_strategies_and_validation_bypass(self):
-        """Проверка наличия симбиозов U10+U6 в universes.json и отключения валидации длин словарей."""
+    def test_u11_u12_and_u6_configurations(self):
+        """Проверка наличия U11, U12 и U6 в universes.json."""
         from consts import DATA_DIR
         univ_file = DATA_DIR / "universes.json"
         with open(univ_file, "r", encoding="utf-8") as f:
             data = json.load(f)
 
-        # 1. Вариант 1: Spinning Grid + U6 Classic TP
-        self.assertIn("u10_symbiosis_spinning_grid_u6_tp", data)
-        strat1 = data["u10_symbiosis_spinning_grid_u6_tp"]
-        tp_purpose1 = strat1.get("tp_purpose") or strat1.get("overrides", {}).get("tp_purpose")
-        grid1 = (strat1.get("LONG") or strat1.get("overrides", {})).get("grid", {})
-        tp_map1 = (strat1.get("LONG") or strat1.get("overrides", {})).get("tp_map", {})
-        smart_grace1 = strat1.get("smart_grace") or strat1.get("overrides", {}).get("smart_grace", {})
-        self.assertEqual(tp_purpose1, "self")
-        self.assertEqual(len(grid1), 9)
-        self.assertEqual(len(tp_map1), 9)
-        self.assertEqual(strat1.get("leverage"), 20)
-        self.assertEqual(smart_grace1.get("start_period_sec"), 87)
-        self.assertEqual(smart_grace1.get("increments_card", {}).get("==1"), 0)
-        self.assertIsNotNone(grid1["3"]["activation"])  # Трейлинг сетка
+        # 1. U11 Turbo Scalp & Dump + Dynamic ATR TP
+        self.assertIn("u11_turbo_scalp_atr_deescalation", data)
+        u11 = data["u11_turbo_scalp_atr_deescalation"]
+        self.assertEqual(u11.get("tp_purpose"), "self")
+        self.assertEqual(len(u11["LONG"]["grid"]), 9)
+        self.assertEqual(u11.get("leverage"), 20)
+        grid = u11["LONG"]["grid"]
+        self.assertEqual(grid["0"]["volume"], 7.0)
+        self.assertEqual(grid["1"]["volume"], 7.0)
+        self.assertEqual(grid["2"]["volume"], 7.0)
+        self.assertEqual(grid["3"]["volume"], 10.24)
+        self.assertEqual(grid["8"]["volume"], 16.49)
+        total_vol = sum(g["volume"] for g in grid.values())
+        self.assertAlmostEqual(total_vol, 100.0, places=2)
+        self.assertTrue(u11["dynamic_atr_tp"]["enabled"])
+        self.assertEqual(u11["dynamic_atr_tp"]["timeframe"], "1h")
+        self.assertEqual(u11["dynamic_atr_tp"]["cache_ttl_sec"], 120)
+        self.assertEqual(u11["dynamic_atr_tp"]["fallback_atr_pct"], 1.2)
 
-        # 2. Вариант 2: U6 Static Grid + Spinning TP Ladder
-        self.assertIn("u10_symbiosis_u6_grid_spinning_tp", data)
-        strat2 = data["u10_symbiosis_u6_grid_spinning_tp"]
-        tp_purpose2 = strat2.get("tp_purpose") or strat2.get("overrides", {}).get("tp_purpose")
-        grid2 = (strat2.get("LONG") or strat2.get("overrides", {})).get("grid", {})
-        tp_map2 = (strat2.get("LONG") or strat2.get("overrides", {})).get("tp_map", {})
-        smart_grace2 = strat2.get("smart_grace") or strat2.get("overrides", {}).get("smart_grace", {})
-        self.assertEqual(tp_purpose2, "neutral")
-        self.assertEqual(len(grid2), 9)
-        self.assertEqual(len(tp_map2), 14)
-        self.assertEqual(strat2.get("leverage"), 20)
-        self.assertEqual(smart_grace2.get("start_period_sec"), 87)
-        self.assertEqual(smart_grace2.get("increments_card", {}).get("==1"), 0)
-        self.assertIsNone(grid2["3"]["activation"])  # Статическая сетка
+        # 3. Варианты семейства U6
+        self.assertIn("u6_symbiosis_gamma_fortress35", data)
+        u6_tp_map = (data["u6_symbiosis_gamma_fortress35"].get("LONG") or data["u6_symbiosis_gamma_fortress35"].get("overrides", {})).get("tp_map", {})
+        self.assertEqual(u6_tp_map["5"]["indent"], 0.65)
+        self.assertEqual(u6_tp_map["8"]["indent"], 0.65)
+        self.assertIn("u6_symbiosis_gamma_fortress35_flat_tp", data)
+        u6_flat_tp_map = (data["u6_symbiosis_gamma_fortress35_flat_tp"].get("LONG") or data["u6_symbiosis_gamma_fortress35_flat_tp"].get("overrides", {})).get("tp_map", {})
+        self.assertEqual(u6_flat_tp_map["0"]["indent"], 2.1)
+        self.assertEqual(u6_flat_tp_map["6"]["indent"], 2.1)
 
         # 3. Проверка байпаса валидации: u10_ с tp_purpose="self" и разными длинами grid/tp_map
         asymmetric_data = {

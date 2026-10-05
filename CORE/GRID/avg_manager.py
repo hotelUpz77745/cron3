@@ -105,9 +105,19 @@ class AverageManager:
         dd_pct = max(0.0, dd_pct)
 
         # 3. Трейлинг оценка сетки через BaseTrailingSystem
+        prev_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys())
         candidate_level, skipped_levels, info = BaseTrailingSystem.evaluate_trailing_grid(
             dd_pct, grid, state.trailing_grid_state
         )
+        newly_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys()) - prev_armed
+        for lvl in sorted(newly_armed, key=lambda x: int(x) if x.isdigit() else x):
+            lvl_d = grid.get(lvl, {})
+            raw_act = lvl_d.get("activation")
+            raw_flr = lvl_d.get("super_indent") or lvl_d.get("indent")
+            logger.info(
+                f"[{symbol}] {side} ⚡ [GRID TRIGGER ARMED] Level {lvl}: "
+                f"Drawdown {dd_pct:.2f}% >= Trigger {raw_act}% (Waiting for rebound to <= {raw_flr}%)"
+            )
 
         if not candidate_level:
             # Обновляем ориентировочную next_avg_price для мониторинга
@@ -135,7 +145,7 @@ class AverageManager:
             if behavior == "accumulate_current":
                 level_data["volume"] = round(float(level_data.get("volume", 0.0)) + skipped_vol, 4)
                 logger.info(
-                    f"[{symbol}] {side} [avg_free_volume_behavior: accumulate_current] "
+                    f"[{symbol}] {side} 📦 [VOLUME ACCUMULATED] "
                     f"Added {skipped_vol:.2f}% from skipped levels {skipped_levels} into level {candidate_level} "
                     f"(new vol: {level_data['volume']:.2f}%)"
                 )
@@ -150,27 +160,30 @@ class AverageManager:
                     for rem_lvl in remaining:
                         grid[rem_lvl]["volume"] = round(float(grid[rem_lvl].get("volume", 0.0)) + vol_share, 4)
                     logger.info(
-                        f"[{symbol}] {side} [avg_free_volume_behavior: distribute_remaining] "
+                        f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: distribute_remaining] "
                         f"Distributed {skipped_vol:.2f}% from skipped levels {skipped_levels} across {remaining} "
                         f"(+{vol_share:.2f}% each)"
                     )
                 else:
                     logger.info(
-                        f"[{symbol}] {side} [avg_free_volume_behavior: distribute_remaining] "
+                        f"[{symbol}] {side} 📦 [VOLUME CEILING REACHED] "
                         f"Skipped {skipped_levels} at grid ceiling, remaining volume ignored."
                     )
             elif behavior == "mark_executed":
                 logger.info(
-                    f"[{symbol}] {side} [avg_free_volume_behavior: mark_executed] "
+                    f"[{symbol}] {side} 📦 [VOLUME BURNT: mark_executed] "
                     f"Skipped levels {skipped_levels} marked executed (volume burnt)."
                 )
 
-        logger.info(f"[{symbol}] {side} Averaging triggered for level {candidate_level} at price {current_price} ({info})")
+        is_trailing = grid[candidate_level].get("activation") is not None
+        trigger_tag = "🌀 [GRID REBOUND EXECUTED]" if is_trailing else "⚡ [GRID STATIC EXECUTED]"
+        logger.info(f"[{symbol}] {side} {trigger_tag} Level {candidate_level} triggered at price {current_price} ({info})")
 
         # 5. Взводим флаги исполнения
         state.pending_avg = True
         state.pre_avg_price = state.avg_entry_price
         level_data["is_active"] = True
+        level_data["is_armed"] = False
         now_sec = time.time()
         level_data["activated_at"] = now_sec
         level_data["timestamp"] = int(now_sec * 1000)
@@ -213,6 +226,8 @@ class AverageManager:
             return
 
         logger.info(f"[{symbol}] {side} Averaging order SUCCESS for level {level_str}. Waiting for FSM sync...")
+        level_data["fill_price"] = current_price
+        level_data["fill_qty"] = volume
         
         # 3. ДОЖИДАЕМСЯ ОБНОВЛЕНИЯ avg_entry_price ОТ ВЕБСОКЕТА
         # Предохранитель от бесконечного зависания: ждем максимум 3 секунды
@@ -243,3 +258,136 @@ class AverageManager:
         state.next_avg_price = None
         state.fallback_price = None
         state.trailing_tp_state = {}
+
+    async def process_peel(self, client, runtime_manager, symbol: str, side: str, state, current_price: float, spec_data: dict, tp_manager) -> bool:
+        """
+        Проверяет и исполняет частичную разгрузку (LIFO-пилинг) крайнего усреднения сетки.
+        Срабатывает ТОЛЬКО если у крайнего активного колена в grid задан peel_tp_pct,
+        и цена отскочила от fill_price этого колена на >= peel_tp_pct.
+        Возвращает True, если был исполнен пилинг колена.
+        """
+        if not state.in_position or state.is_finished or state.pending_avg or getattr(state, "pending_peel", False) or getattr(state, "pending_rolling_tp", False) or current_price is None:
+            return False
+
+        grid = getattr(state, "grid", {})
+        if not grid:
+            return False
+
+        # Находим крайний (наиболее глубокий) активный уровень сетки
+        active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
+        if not active_levels:
+            return False
+
+        cur_level_int = max(active_levels)
+        cur_level_str = str(cur_level_int)
+        level_data = grid.get(cur_level_str)
+        if not level_data:
+            return False
+
+        # Проверяем наличие настройки пилинга на этом уровне
+        peel_tp_pct = level_data.get("peel_tp_pct")
+        if peel_tp_pct is None or float(peel_tp_pct) <= 0:
+            return False
+
+        fill_price = level_data.get("fill_price")
+        if not fill_price or fill_price <= 0:
+            return False
+
+        # Расчет отскока от цены набора данного колена
+        if side == "LONG":
+            rebound_pct = (current_price - fill_price) / fill_price * 100.0
+        else:
+            rebound_pct = (fill_price - current_price) / fill_price * 100.0
+
+        if rebound_pct < float(peel_tp_pct):
+            return False
+
+        # Отскок зафиксирован! Определяем объем разгрузки
+        fill_qty = level_data.get("fill_qty")
+        if fill_qty and fill_qty > 0:
+            raw_qty = min(float(fill_qty), abs(state.total_volume))
+        else:
+            invest_size = 100.0
+            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+                invest_size = runtime_manager.caches[symbol].get(side, {}).get("invest_size", 100.0)
+            vol_pct = float(level_data.get("volume", 0.0))
+            raw_qty = TradeMath.calculate_order_volume(invest_size, vol_pct, current_price, spec_data, symbol)
+            raw_qty = min(raw_qty, abs(state.total_volume))
+
+        peel_qty = TradeMath.round_qty(raw_qty, spec_data, symbol)
+        if peel_qty <= 0:
+            return False
+
+        state.pending_peel = True
+        try:
+            # 1. Отменяем старые лимитные ордера перед маркет-закрытием порции
+            await client.cancel_orders_for_side(symbol, side)
+
+            order_side = "SELL" if side == "LONG" else "BUY"
+            logger.info(
+                f"[{symbol}] {side} 🍊 [SUB-GRID PEEL TRIGGERED] Level {cur_level_str}: "
+                f"Rebound +{rebound_pct:.2f}% >= {peel_tp_pct}% from fill {fill_price}. Closing peel vol {peel_qty}"
+            )
+
+            res = await client.make_order(
+                symbol=symbol,
+                qty=peel_qty,
+                side=order_side,
+                position_side=side,
+                market_type="MARKET"
+            )
+
+            if res.success:
+                # Синхронизируем уменьшение объема позиции при частичном сбросе колена
+                if side == "LONG":
+                    state.total_volume = max(0.0, round(state.total_volume - peel_qty, 8))
+                else:
+                    state.total_volume = min(0.0, round(state.total_volume + peel_qty, 8))
+
+                if abs(state.total_volume) <= 1e-8:
+                    state.in_position = False
+                    state.is_finished = True
+
+                # Сбрасываем статус разгруженного уровня в сетке (готов к повторному откупу)
+                level_data["is_active"] = False
+                level_data["is_armed"] = False
+                level_data["activated_at"] = None
+                level_data["timestamp"] = None
+                level_data["fill_price"] = None
+                level_data["fill_qty"] = None
+
+                rem_vol = abs(state.total_volume)
+                logger.info(
+                    f"[{symbol}] {side} 🍊 [SUB-GRID PEEL EXECUTED] Level {cur_level_str} successfully peeled! "
+                    f"Level reset for re-entry. Remaining vol: {rem_vol:.4f}"
+                )
+
+                # Сбрасываем кэш основного тейка для пересчета под оставшийся объем
+                state.tp_price = None
+                state.fallback_price = None
+                state.trailing_tp_state = {}
+
+                if hasattr(runtime_manager, "mark_dirty") and callable(runtime_manager.mark_dirty):
+                    runtime_manager.mark_dirty()
+
+                # Если позиция осталась активной, обновляем TP
+                if state.in_position and abs(state.total_volume) > 1e-8:
+                    if tp_manager and hasattr(tp_manager, "place_take_profit"):
+                        try:
+                            await tp_manager.place_take_profit(
+                                client=client,
+                                symbol=symbol,
+                                side=side,
+                                current_price=current_price,
+                                spec_data=spec_data,
+                                state=state,
+                                opposite_state=None,
+                            )
+                        except Exception as e:
+                            logger.warning(f"[{symbol}] Failed to refresh TP after peel: {e}")
+                return True
+            else:
+                logger.error(f"[{symbol}] Failed to execute peel market order: {res.error_msg}")
+                return False
+        finally:
+            state.pending_peel = False

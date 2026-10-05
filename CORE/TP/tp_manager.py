@@ -13,7 +13,10 @@ from CORE._utils import RiskCalculatingUtils
 from c_utils import Utils
 import asyncio
 import time
-from CORE.STRATEGY.momentum_engine import MomentumEngine
+try:
+    from CORE.STRATEGY.momentum_engine import MomentumEngine
+except ImportError:
+    from CORE.UNIVERSE.momentum_engine import MomentumEngine
 logger = UnifiedLogger("TakeProfitManager")
 
 class TakeProfitManager:
@@ -60,6 +63,28 @@ class TakeProfitManager:
                 state.tp_map[active_level_str] = {}
             state.tp_map[active_level_str]["is_active"] = True
             return True
+
+        # Динамический ATR Take-Profit (если стратегия задает dynamic_atr_tp)
+        if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
+            try:
+                strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                atr_cfg = getattr(strat, "dynamic_atr_tp_cfg", None)
+                if isinstance(atr_cfg, dict) and atr_cfg.get("enabled"):
+                    from CORE.TP.dynamic_atr_tp_manager import DynamicATRTakeProfitManager
+                    base_price_atr = state.avg_entry_price if state.avg_entry_price > 0 else current_price
+                    _, atr_tp_pct = await DynamicATRTakeProfitManager.calculate_tp_price(
+                        client=client,
+                        symbol=symbol,
+                        side=side,
+                        avg_entry_price=base_price_atr,
+                        active_level=active_level_str,
+                        cfg=strat.dynamic_atr_tp_cfg,
+                        spec_data=spec_data,
+                    )
+                    if atr_tp_pct > 0:
+                        tp_indent = atr_tp_pct
+            except Exception as e:
+                logger.debug(f"[{symbol}] Dynamic ATR TP error: {e}")
 
         # Динамический Smart TP множитель для импульсного рынка (если стратегия задает smart_tp)
         if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:

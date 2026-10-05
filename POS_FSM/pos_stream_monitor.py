@@ -148,6 +148,9 @@ class PositionMonitor:
         if not state:
             return
 
+        prev_amt = abs(state.total_volume)
+        prev_entry = state.avg_entry_price
+
         # Фиксируем количество и среднюю цену (разрешаем отрицательный total_volume)
         state.total_volume = pos_amt
         state.avg_entry_price = entry_price
@@ -161,6 +164,10 @@ class PositionMonitor:
             if state.in_position or state.initial_entry_price > 0 or state.fallback_price is not None:
                 if IS_SHOW_SIGNAL:
                     logger.debug(f"[MONITOR] POSITION CLOSED or DIRTY CACHE WIPED {symbol} {side}")
+                if prev_amt > 0:
+                    state.last_closed_volume = prev_amt
+                    state.last_closed_avg_price = prev_entry
+                    state.last_closed_timestamp = time.time()
                 # Вызов is_finished = True запустит полную очистку в _check_and_reset_finished_positions (включая state.reset())
                 state.is_finished = True
                 state.set_in_position(False)

@@ -6,6 +6,7 @@
 # Role: Менеджер страховочного тейк-профита (Fallback Market Hit)
 # ==============================================================================
 
+import time
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath, RiskCalculatingUtils
 from CORE.trailing_system import BaseTrailingSystem
@@ -41,6 +42,7 @@ class FallbackTpManager:
                 opp_lvl = RiskCalculatingUtils.get_current_grid_level(opposite_state.grid)
                 active_grid_lvl = str(max(int(active_grid_lvl), int(opp_lvl)))
 
+            prev_tp_floor = state.trailing_tp_state.get("armed_floor")
             tp_hit, tp_floor, tp_info = BaseTrailingSystem.evaluate_trailing_tp(
                 gain_pct=gain_pct,
                 tp_map=state.tp_map,
@@ -48,6 +50,14 @@ class FallbackTpManager:
                 tp_purpose=state.tp_purpose,
                 active_grid_level=active_grid_lvl,
             )
+            new_tp_floor = state.trailing_tp_state.get("armed_floor")
+            if prev_tp_floor is None and new_tp_floor is not None:
+                act_lvl = state.trailing_tp_state.get("active_level", active_grid_lvl)
+                raw_act = state.tp_map.get(act_lvl, {}).get("activation")
+                logger.warning(
+                    f"[{symbol}] {side} ⚡ [TRAILING TP ARMED] "
+                    f"Level {act_lvl}: Gain {gain_pct:.2f}% >= Trigger {raw_act}% (Trailing floor: {new_tp_floor:.2f}%)"
+                )
 
             if tp_hit:
                 state.pending_rolling_tp = True
@@ -58,7 +68,7 @@ class FallbackTpManager:
                 volume = TradeMath.round_qty(volume_float, spec_data, symbol)
                 order_side = "SELL" if side == "LONG" else "BUY"
 
-                logger.warning(f"[{symbol}] {side} TRAILING TP TRIGGERED! {tp_info}. Price: {current_price}, Gain: {gain_pct:.2f}%. Closing all.")
+                logger.warning(f"[{symbol}] {side} 🎯 [TRAILING TP TRIGGERED] {tp_info}. Price: {current_price}, Gain: {gain_pct:.2f}%. Closing all.")
 
                 res = await client.make_order(
                     symbol=symbol,
@@ -70,13 +80,42 @@ class FallbackTpManager:
 
                 if res.success:
                     logger.info(f"[{symbol}] Trailing TP Market Order successfully executed.")
+                    state.last_closed_volume = volume_float
+                    state.last_closed_avg_price = state.avg_entry_price
+                    state.last_closed_timestamp = time.time()
                     state.is_finished = True
                     state.trailing_tp_state = {}
+                    if isinstance(state.tp_map, dict):
+                        for lvl_d in state.tp_map.values():
+                            if isinstance(lvl_d, dict):
+                                lvl_d["is_armed"] = False
+                                lvl_d.pop("armed_at_gain", None)
+                                lvl_d.pop("armed_floor", None)
+                                lvl_d.pop("armed_timestamp", None)
+                    if isinstance(state.grid, dict):
+                        for lvl_d in state.grid.values():
+                            if isinstance(lvl_d, dict):
+                                lvl_d["is_armed"] = False
+                                lvl_d.pop("armed_at_drawdown", None)
+                                lvl_d.pop("armed_timestamp", None)
                 else:
                     if res.error_code == -2022 or "-2022" in str(res.error_msg):
                         logger.warning(f"[{symbol}] Trailing TP Market Order rejected with -2022 (ReduceOnly). Position is already closed by Limit TP. Assuming success.")
                         state.is_finished = True
                         state.trailing_tp_state = {}
+                        if isinstance(state.tp_map, dict):
+                            for lvl_d in state.tp_map.values():
+                                if isinstance(lvl_d, dict):
+                                    lvl_d["is_armed"] = False
+                                    lvl_d.pop("armed_at_gain", None)
+                                    lvl_d.pop("armed_floor", None)
+                                    lvl_d.pop("armed_timestamp", None)
+                        if isinstance(state.grid, dict):
+                            for lvl_d in state.grid.values():
+                                if isinstance(lvl_d, dict):
+                                    lvl_d["is_armed"] = False
+                                    lvl_d.pop("armed_at_drawdown", None)
+                                    lvl_d.pop("armed_timestamp", None)
                     else:
                         logger.error(f"[{symbol}] Failed to execute Trailing TP Market Order: {res.error_msg}")
 
@@ -152,6 +191,9 @@ class FallbackTpManager:
 
             if res.success:
                 logger.info(f"[{symbol}] Fallback Market Order successfully executed.")
+                state.last_closed_volume = volume_float
+                state.last_closed_avg_price = state.avg_entry_price
+                state.last_closed_timestamp = time.time()
                 state.is_finished = True  # Только теперь говорим оркестратору, что всё
             else:
                 if res.error_code == -2022 or "-2022" in str(res.error_msg):

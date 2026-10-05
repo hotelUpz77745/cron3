@@ -120,7 +120,7 @@ class MomentumEngine:
         в зависимости от частоты закрытий в пределах eval_window_sec.
         Если closed_count == 0 (спокойный рынок) -> 1.00x.
         """
-        if not smart_tp_cfg or closed_count == 0:
+        if not smart_tp_cfg or not smart_tp_cfg.get("enabled", True) or closed_count == 0:
             return 1.00
 
         increments = smart_tp_cfg.get("increments_tp", {})

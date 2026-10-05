@@ -215,19 +215,19 @@
                     "fallback_indent": 1.05
                 },
                 "5": {
-                    "indent": 0.54,
+                    "indent": 0.62,
                     "fallback_indent": 0.95
                 },
                 "6": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.85
                 },
                 "7": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.8
                 },
                 "8": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.8
                 }
             }
@@ -321,19 +321,19 @@
                     "fallback_indent": 1.05
                 },
                 "5": {
-                    "indent": 0.54,
+                    "indent": 0.62,
                     "fallback_indent": 0.95
                 },
                 "6": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.85
                 },
                 "7": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.8
                 },
                 "8": {
-                    "indent": 0.5,
+                    "indent": 0.62,
                     "fallback_indent": 0.8
                 }
             }
@@ -534,15 +534,15 @@
                     "fallback_indent": 1.1
                 },
                 "6": {
-                    "indent": 0.58,
+                    "indent": 0.65,
                     "fallback_indent": 1.05
                 },
                 "7": {
-                    "indent": 0.53,
+                    "indent": 0.65,
                     "fallback_indent": 1.0
                 },
                 "8": {
-                    "indent": 0.5,
+                    "indent": 0.65,
                     "fallback_indent": 0.95
                 }
             }
@@ -640,15 +640,15 @@
                     "fallback_indent": 1.1
                 },
                 "6": {
-                    "indent": 0.58,
+                    "indent": 0.65,
                     "fallback_indent": 1.05
                 },
                 "7": {
-                    "indent": 0.53,
+                    "indent": 0.65,
                     "fallback_indent": 1.0
                 },
                 "8": {
-                    "indent": 0.5,
+                    "indent": 0.65,
                     "fallback_indent": 0.95
                 }
             }
@@ -1792,6 +1792,5523 @@
                     "activation": 89.5
                 }
             }
+        }
+    },
+    "u0_base_classic": {
+        "name": "U0: Base Classic Benchmark",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "<2": 0,
+                ">=2": 120,
+                ">4": 150
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.6,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.7,
+                    "fallback_indent": 1.6
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.3
+                },
+                "3": {
+                    "indent": 1.4,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 1.9,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.6,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.7,
+                    "fallback_indent": 1.6
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.3
+                },
+                "3": {
+                    "indent": 1.4,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 1.9,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.0
+                }
+            }
+        }
+    },
+    "u0_base_classic_supergrid": {
+        "name": "U0: Base Classic Benchmark (Super Grid)",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, TP классический (0.6%..2.5%), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": true
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "<2": 0,
+                ">=2": 120,
+                ">4": 150
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.6,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.7,
+                    "fallback_indent": 1.6
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.3
+                },
+                "3": {
+                    "indent": 1.4,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 1.9,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.6,
+                    "fallback_indent": 1.0
+                },
+                "1": {
+                    "indent": 0.7,
+                    "fallback_indent": 1.6
+                },
+                "2": {
+                    "indent": 1.0,
+                    "fallback_indent": 2.3
+                },
+                "3": {
+                    "indent": 1.4,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 1.9,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 2.5,
+                    "fallback_indent": 4.0
+                }
+            }
+        }
+    },
+    "u0_base_classic_supergrid_075": {
+        "name": "U0: Base Classic Benchmark (Super Grid + Flat TP 0.75%)",
+        "description": "Контрольная боевая база: сетка 1.1x, smart_grace по умолчанию, плоский TP 0.75% на всех уровнях (0..5), Knife Blocker OFF с динамическим масштабированием шагов сетки по волатильности (Super Grid ON)",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": true
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "1": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "2": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "4": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "5": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "1": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "2": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "3": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "4": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                },
+                "5": {
+                    "indent": 0.75,
+                    "fallback_indent": 1.2
+                }
+            }
+        }
+    },
+    "u0_fat_swing123": {
+        "name": "U0: Fat Swing 123 (10-Level Fibonacci Grid)",
+        "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%) и начальным ордером ~50$ при множителе 1.1x",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        }
+    },
+    "u0_fat_swing123_flat7": {
+        "name": "U0: Fat Swing 123 Flat 7% (10-Level Fibonacci Grid)",
+        "description": "Широкий свинг-тейк с 10-уровневой сеткой (1.6%..89%): первые 3 уровня по 7.0% (21.0%), уровни 3..9 с множителем 1.1x в сумме 100%",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        }
+    },
+    "u0_fat_swing35": {
+        "name": "U0: Fat Swing 35 (9-Level Static Fibonacci Grid 3.5%..89%)",
+        "description": "Широкий свинг-тейк с модифицированной статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, до 89% просадки при множителе 1.1x",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                }
+            }
+        }
+    },
+    "u6_symbiosis_gamma_fortress35_flat_tp": {
+        "name": "👑 U6: Gamma Fortress Shield 35 Flat TP 2.1% (9-Level Static Fibonacci Grid 3.5%..89%)",
+        "description": "Крепость со статической Fibonacci сеткой (3.5%..89%): исключен ранний шаг 1.6%, первый вход усреднения на -3.5%, благодать 57с, сайзинг с Knife Blocker, отключенный Smart TP и строго плоские тейки 2.1% на всех уровнях (0..8), tp_purpose: self",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 30,
+                "==2": 90,
+                "==3": 140,
+                ">=4": 170
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.15,
+                "==3": 0.85,
+                ">=4": 0.6
+            },
+            "knife_blocker_enabled": true,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "2": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "3": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "5": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "6": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "7": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "8": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "2": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "3": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "4": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "5": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "6": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "7": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                },
+                "8": {
+                    "indent": 2.1,
+                    "fallback_indent": 3.0
+                }
+            }
+        }
+    },
+    "u6_symbiosis_gamma_fortress35_flat7": {
+        "name": "👑 U6: Gamma Fortress Shield 35 Flat7 (7% on Levels 0..2 + Panic Damper TP)",
+        "description": "Модификация Крепости Медного Змея с плоскими стартовыми объемами 7% на коленах 0..2 (7%-7%-7%), разгружающими начальную маржу, и масштабированными старшими уровнями 3..8 (до 16.49%) для мощного притягивания средней цены при глубоких просадках с Panic Damper TP (2.2% -> 0.65%), tp_purpose: self",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 30,
+                "==2": 90,
+                "==3": 140,
+                ">=4": 170
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.15,
+                "==3": 0.85,
+                ">=4": 0.6
+            },
+            "knife_blocker_enabled": true,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.65,
+                    "fallback_indent": 0.95
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.65,
+                    "fallback_indent": 0.95
+                }
+            }
+        }
+    },
+    "u8_golden_macro_symbiosis": {
+        "name": "👑 U8: Golden Macro Symbiosis (10m SuperGrid + Smart TP + Fat Swing TP)",
+        "description": "Золотое Руно: 10m Macro (низкие комиссии 8.6%) + SuperGrid ON + нарастающий Fat Swing TP (0.9%..3.4%) по канону стабильного лидера u0_fat_swing_supergrid + адаптивный Smart TP (1.3x..2.1x) + Knife Blocker OFF",
+        "leverage": 20,
+        "timeframe": "10m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": true
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 100,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 600,
+            "increments_card": {
+                "<2": 0,
+                ">=2": 0,
+                ">4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 600,
+            "knife_blocker_enabled": false,
+            "knife_blocker": {
+                "enabled": false
+            },
+            "profiting_size_weights": {
+                "<2": 1.0,
+                ">=2": 1.0,
+                ">4": 1.0
+            }
+        },
+        "smart_tp": {
+            "eval_window_sec": 600,
+            "increments_tp": {
+                "<2": 1.3,
+                ">=2": 1.6,
+                ">4": 2.1
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 2.1,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.7,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 3.4,
+                    "fallback_indent": 4.5
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0,
+                    "volume": 12.96,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -5.0,
+                    "volume": 14.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -8.0,
+                    "volume": 15.68,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -13.0,
+                    "volume": 17.25,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -21.0,
+                    "volume": 18.98,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -34.0,
+                    "volume": 20.87,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 2.1,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.7,
+                    "fallback_indent": 3.6
+                },
+                "5": {
+                    "indent": 3.4,
+                    "fallback_indent": 4.5
+                }
+            }
+        }
+    },
+    "u10_spinning_early_rebound": {
+        "name": "🌀 U10: Spinning Early Rebound (Early Trailing Starting Step 2)",
+        "description": "Семейство Спиннинг: Ранний трейлинг усреднения со 2-го шага (курок -7.0% -> отскок к -5.5%), классические курки 3..8, лестничный трейлинг Тейк-Профит по Фибоначчи, нейтральная связка tp_purpose=neutral, распределение сэкономленных объемов (distribute_remaining)",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "neutral",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": -7.0,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": 1.9,
+                    "activation": 2.2
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": 2.2,
+                    "activation": 2.4
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": 2.4,
+                    "activation": 2.7
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": 3.2,
+                    "activation": 3.6
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": 3.6,
+                    "activation": 4.4
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": 4.4,
+                    "activation": 5.2
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": 5.2,
+                    "activation": 6.7
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": 6.7,
+                    "activation": 8.9
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": 8.9,
+                    "activation": 12.3
+                },
+                "9": {
+                    "indent": null,
+                    "fallback_indent": 12.3,
+                    "activation": 18.7
+                },
+                "10": {
+                    "indent": null,
+                    "fallback_indent": 18.7,
+                    "activation": 29.1
+                },
+                "11": {
+                    "indent": null,
+                    "fallback_indent": 29.1,
+                    "activation": 49.7
+                },
+                "12": {
+                    "indent": null,
+                    "fallback_indent": 49.7,
+                    "activation": 89.5
+                },
+                "13": {
+                    "indent": null,
+                    "fallback_indent": 89.5,
+                    "activation": 89.5
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.36,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 8.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": -7.0,
+                    "volume": 8.91,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 9.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 10.78,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 11.86,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.05,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 15.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": 1.9,
+                    "activation": 2.2
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": 2.2,
+                    "activation": 2.4
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": 2.4,
+                    "activation": 2.7
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": 3.2,
+                    "activation": 3.6
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": 3.6,
+                    "activation": 4.4
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": 4.4,
+                    "activation": 5.2
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": 5.2,
+                    "activation": 6.7
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": 6.7,
+                    "activation": 8.9
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": 8.9,
+                    "activation": 12.3
+                },
+                "9": {
+                    "indent": null,
+                    "fallback_indent": 12.3,
+                    "activation": 18.7
+                },
+                "10": {
+                    "indent": null,
+                    "fallback_indent": 18.7,
+                    "activation": 29.1
+                },
+                "11": {
+                    "indent": null,
+                    "fallback_indent": 29.1,
+                    "activation": 49.7
+                },
+                "12": {
+                    "indent": null,
+                    "fallback_indent": 49.7,
+                    "activation": 89.5
+                },
+                "13": {
+                    "indent": null,
+                    "fallback_indent": 89.5,
+                    "activation": 89.5
+                }
+            }
+        },
+        "avg_free_volume_behavior": "distribute_remaining"
+    },
+    "u11_turbo_scalp_atr_deescalation": {
+        "name": "⚡ U11: Turbo Scalp & Dump + Dynamic ATR De-escalation TP",
+        "description": "Сверхбыстрый сброс прибыли по волатильному ATR с гарантированным полом (0.65%) и деэскалацией, сетка Turbo Scalp (7%-7%-7% + 1.1x).",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": null
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": null
+                }
+            }
+        },
+        "dynamic_atr_tp": {
+            "enabled": true,
+            "timeframe": "1h",
+            "period": 14,
+            "cache_ttl_sec": 120,
+            "min_guaranteed_floor_pct": 0.65,
+            "max_ceiling_pct": 4.5,
+            "fallback_atr_pct": 1.2
+        },
+        "avg_free_volume_behavior": "distribute_remaining"
+    },
+    "u12_cross_side_recycler": {
+        "name": "♻️ U12: Turbo Scalp ATR + Cross-Side Profit Recycling",
+        "description": "Сверхбыстрый сброс прибыли по ATR + Хедж-рециркуляция прибыли (50% тейка сильной стороны сжигает токсичный объем слабой стороны на уровне >= 2).",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 87,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": null
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "activation": -10.5,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": null
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": null
+                }
+            }
+        },
+        "dynamic_atr_tp": {
+            "enabled": true,
+            "timeframe": "1h",
+            "period": 14,
+            "cache_ttl_sec": 120,
+            "min_guaranteed_floor_pct": 0.65,
+            "max_ceiling_pct": 4.5,
+            "fallback_atr_pct": 1.2
+        },
+        "cross_side_recycling": {
+            "enabled": true,
+            "recycle_ratio": 0.5,
+            "min_burn_level": 2,
+            "min_drawdown_pct": 3.0,
+            "max_slice_pct": 25.0
+        },
+        "avg_free_volume_behavior": "distribute_remaining"
+    },
+    "u13_fat_swing_cross_recycler": {
+        "name": "♻️ U13: Fat Swing 123 Flat 7% + Gentle Cross-Recycler",
+        "description": "Свинг-стратегия с 10-уровневой сеткой (1.6%..89%) и стартом 7% + Мягкая хедж-рециркуляция прибыли (30% тейка сильной стороны сжигает до 15% токсичного объема слабой стороны только на уровне >= 3 и DD >= 5.0%).",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "cross_side_recycling": {
+            "enabled": true,
+            "recycle_ratio": 0.3,
+            "min_burn_level": 3,
+            "min_drawdown_pct": 5.0,
+            "max_slice_pct": 15.0
+        }
+    },
+    "u14_subgrid_level_recycler": {
+        "name": "🍊 U14: Fat Swing 123 Flat 7% + Sub-Grid Level Peeler",
+        "description": "Свинг-стратегия с 10-уровневой сеткой (1.6%..89%) и стартом 7% + LIFO-пилинг крайних усреднений (колена L3..L9 сбрасывают свой объем на локальном отскоке по peel_tp_pct, освобождая маржу и перезаряжаясь на повторный откуп)",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 2
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "peel_tp_pct": 1.2,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "peel_tp_pct": 1.3,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "peel_tp_pct": 1.5,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "peel_tp_pct": 1.7,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "peel_tp_pct": 1.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "peel_tp_pct": 2.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "peel_tp_pct": 2.4,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "volume": 8.33,
+                    "peel_tp_pct": 1.2,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "volume": 9.16,
+                    "peel_tp_pct": 1.3,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "volume": 10.08,
+                    "peel_tp_pct": 1.5,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "volume": 11.08,
+                    "peel_tp_pct": 1.7,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "volume": 12.19,
+                    "peel_tp_pct": 1.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "volume": 13.41,
+                    "peel_tp_pct": 2.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "volume": 14.75,
+                    "peel_tp_pct": 2.4,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        }
+    },
+    "u15_fat_swing_rebound_recycler": {
+        "name": "👑 U15: Fat Swing Rebound Recycler (Three Whales: Fat Grid + Senior Trailing + Cross-Recycling)",
+        "description": "Супер-флагман Нового Поколения («Три Кита»): 1) Валовый налив сетки Fat Swing 123 на шагах 0..4 (до -8.0%) с окном Smart Grace 57s (как у U12); 2) Трейлинг Жида на старших уровнях 5..9 (-13%..-89%) с переносом объемов (distribute_remaining); 3) Хедж-рециркуляция прибыли противоположных сторон U12 (50% тейка сжигает зависший объем на уровне >= 2 при DD >= 3%).",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "activation": null,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "activation": null,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "activation": null,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "activation": null,
+                    "volume": 6.27,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -1.6,
+                    "activation": null,
+                    "volume": 6.9,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -3.4,
+                    "activation": null,
+                    "volume": 7.59,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -5.5,
+                    "activation": null,
+                    "volume": 8.35,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "4": {
+                    "indent": -8.0,
+                    "activation": null,
+                    "volume": 9.19,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "5": {
+                    "indent": -13.0,
+                    "activation": -17.0,
+                    "volume": 10.11,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "6": {
+                    "indent": -21.0,
+                    "activation": -27.5,
+                    "volume": 11.12,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "7": {
+                    "indent": -34.0,
+                    "activation": -44.5,
+                    "volume": 12.23,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "8": {
+                    "indent": -55.0,
+                    "activation": -72.0,
+                    "volume": 13.45,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "9": {
+                    "indent": -89.0,
+                    "activation": -89.0,
+                    "volume": 14.79,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 0.9,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": 1.1,
+                    "fallback_indent": 1.8
+                },
+                "2": {
+                    "indent": 1.4,
+                    "fallback_indent": 2.2
+                },
+                "3": {
+                    "indent": 1.8,
+                    "fallback_indent": 2.8
+                },
+                "4": {
+                    "indent": 2.3,
+                    "fallback_indent": 3.5
+                },
+                "5": {
+                    "indent": 3.0,
+                    "fallback_indent": 4.2
+                },
+                "6": {
+                    "indent": 3.8,
+                    "fallback_indent": 5.0
+                },
+                "7": {
+                    "indent": 4.8,
+                    "fallback_indent": 6.0
+                },
+                "8": {
+                    "indent": 6.0,
+                    "fallback_indent": 7.5
+                },
+                "9": {
+                    "indent": 7.5,
+                    "fallback_indent": 9.0
+                }
+            }
+        },
+        "cross_side_recycling": {
+            "enabled": true,
+            "recycle_ratio": 0.5,
+            "min_burn_level": 2,
+            "min_drawdown_pct": 3.0,
+            "max_slice_pct": 25.0
+        },
+        "avg_free_volume_behavior": "distribute_remaining"
+    },
+    "u16_titan_universal_alpha": {
+        "name": "👑 U16: Titan Universal Alpha (Subgrid LIFO Peel + Panic Damper TP + Cross Recycling + Knife Blocker 35)",
+        "description": "Синтез абсолютной альфы: Flat 7% на L0..L2 + Logarithmic Fibonacci Grid (до -89%) + LIFO Subgrid Peeling на L3..L8 (сброс колен на отскоке +1.2%) + Panic Damper TP (2.2% -> 0.65%) + Cross-Side Profit Recycling (50% прибыли тушит зависшие колена) + Knife Blocker >= 1",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "auto_closing": {
+            "negative": {
+                "threshold": null,
+                "threshold_increment": null
+            },
+            "positive": {
+                "enabled": true,
+                "mode": "trailing_ratchet",
+                "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+                "trailing_ratchet": {
+                    "enabled": true,
+                    "levels": [
+                        {
+                            "activation": 5.0,
+                            "floor": 3.8,
+                            "min_age_hours": 24.0,
+                            "enabled": true,
+                            "_desc": "Выныривание из ямы"
+                        },
+                        {
+                            "activation": 7.5,
+                            "floor": 5.5,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Локальный отскок"
+                        },
+                        {
+                            "activation": 11.0,
+                            "floor": 8.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Уверенное движение (Фибо 8.0)"
+                        },
+                        {
+                            "activation": 17.0,
+                            "floor": 13.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Импульсный пробой (Фибо 13.0)"
+                        },
+                        {
+                            "activation": 27.5,
+                            "floor": 21.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Тренд средней силы (Фибо 21.0)"
+                        },
+                        {
+                            "activation": 44.0,
+                            "floor": 34.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мощный тренд (Фибо 34.0)"
+                        },
+                        {
+                            "activation": 72.0,
+                            "floor": 55.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Экстраординарный памп (Фибо 55.0)"
+                        },
+                        {
+                            "activation": 89.0,
+                            "floor": 89.0,
+                            "min_age_hours": 0.0,
+                            "enabled": true,
+                            "_desc": "Мега-ралли (Фибо 89.0)"
+                        }
+                    ]
+                }
+            }
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 30,
+                "==2": 90,
+                "==3": 140,
+                ">=4": 170
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.15,
+                "==3": 0.85,
+                ">=4": 0.6
+            },
+            "knife_blocker_enabled": true,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false
+        },
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.4
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.4
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.65,
+                    "fallback_indent": 0.95
+                }
+            }
+        },
+        "SHORT": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 7.0,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 10.24,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 11.26,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 12.39,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.63,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.2
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.99,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.4
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 16.49,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null,
+                    "peel_tp_pct": 1.4
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": 2.2,
+                    "fallback_indent": 3.0
+                },
+                "1": {
+                    "indent": 1.6,
+                    "fallback_indent": 2.4
+                },
+                "2": {
+                    "indent": 1.2,
+                    "fallback_indent": 1.9
+                },
+                "3": {
+                    "indent": 1.0,
+                    "fallback_indent": 1.6
+                },
+                "4": {
+                    "indent": 0.8,
+                    "fallback_indent": 1.3
+                },
+                "5": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.1
+                },
+                "6": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.05
+                },
+                "7": {
+                    "indent": 0.65,
+                    "fallback_indent": 1.0
+                },
+                "8": {
+                    "indent": 0.65,
+                    "fallback_indent": 0.95
+                }
+            }
+        },
+        "cross_side_recycling": {
+            "enabled": true,
+            "recycle_ratio": 0.5,
+            "min_burn_level": 3,
+            "min_drawdown_pct": 3.0,
+            "max_slice_pct": 25.0
         }
     }
 }

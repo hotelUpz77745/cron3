@@ -4,6 +4,7 @@
 # ============================================================
 
 import unittest
+import unittest.mock
 from pathlib import Path
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.STRATEGY.strategy_registry import StrategyConfig, StrategyRegistry
@@ -267,9 +268,9 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(len(raw_meta["LONG"]["tp_map"]), 9)
         self.assertEqual(len(strat.grid), 9)
         self.assertEqual(len(strat.tp_map), 9)
-        # Проверка демпфера тейка (Panic Damper) от 2.2% до 0.50%
+        # Проверка демпфера тейка (Panic Damper) от 2.2% до 0.65%
         self.assertEqual(raw_meta["LONG"]["tp_map"]["0"]["indent"], 2.2)
-        self.assertEqual(raw_meta["LONG"]["tp_map"]["8"]["indent"], 0.5)
+        self.assertEqual(raw_meta["LONG"]["tp_map"]["8"]["indent"], 0.65)
 
     def test_u9_omni_zenith_apex_template(self):
         """Тест универсальной формулы Вселенной u9_omni_zenith_apex."""
@@ -306,8 +307,10 @@ class TestStrategySystem(unittest.TestCase):
             self.assertEqual(grid["7"]["indent"], -58.0)
             self.assertEqual(grid["8"]["indent"], -89.0)
             self.assertEqual(tp_map["0"]["indent"], 1.8)
-            self.assertEqual(tp_map["7"]["indent"], 0.5)
-            self.assertEqual(tp_map["8"]["indent"], 0.5)
+            self.assertEqual(tp_map["5"]["indent"], 0.62)
+            self.assertEqual(tp_map["6"]["indent"], 0.62)
+            self.assertEqual(tp_map["7"]["indent"], 0.62)
+            self.assertEqual(tp_map["8"]["indent"], 0.62)
 
             # Строгое соблюдение Правила 11
             for tp_step in tp_map.values():

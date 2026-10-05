@@ -4,6 +4,7 @@
 # ============================================================
 
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger("BaseTrailingSystem")
@@ -156,6 +157,13 @@ class BaseTrailingSystem:
                     if cur_floor is None or floor_val > cur_floor:
                         state_trailing["armed_floor"] = floor_val
                         state_trailing["active_level"] = lvl_str
+
+                    # Маркируем курок прямо в структуре tp_map для прозрачной видимости и FSM
+                    lvl_cfg["is_armed"] = True
+                    lvl_cfg["armed_at_gain"] = round(gain_pct, 4)
+                    lvl_cfg["armed_floor"] = floor_val
+                    if "armed_timestamp" not in lvl_cfg or lvl_cfg["armed_timestamp"] is None:
+                        lvl_cfg["armed_timestamp"] = int(time.time() * 1000)
             elif raw_floor is not None and tp_purpose != "neutral":
                 # Шаг без трейлинга в классическом режиме: прямое срабатывание при достижении пола
                 floor_val = max(0.5, cls.normalize_abs(raw_floor))
@@ -245,6 +253,11 @@ class BaseTrailingSystem:
                         armed_levels[lvl_str]["deepest_drawdown"] = max(
                             armed_levels[lvl_str]["deepest_drawdown"], drawdown_pct
                         )
+                    # Маркируем курок прямо в структуре сетки
+                    lvl_data["is_armed"] = True
+                    lvl_data["armed_at_drawdown"] = round(drawdown_pct, 4)
+                    if "armed_timestamp" not in lvl_data or lvl_data["armed_timestamp"] is None:
+                        lvl_data["armed_timestamp"] = int(time.time() * 1000)
 
         # 2. Проверяем, какой уровень готов к исполнению
         # Если несколько уровней взведены и готовы, приоритет отдается уровню с более глубоким исполнением
@@ -297,8 +310,12 @@ class BaseTrailingSystem:
 
         # Очищаем сработавший уровень из armed_levels
         armed_levels.pop(candidate_level, None)
+        if candidate_level in grid and isinstance(grid[candidate_level], dict):
+            grid[candidate_level]["is_armed"] = False
         for sk in skipped_levels:
             armed_levels.pop(sk, None)
+            if sk in grid and isinstance(grid[sk], dict):
+                grid[sk]["is_armed"] = False
 
         raw_floor = grid[candidate_level].get("super_indent") or grid[candidate_level].get("indent")
         floor_val = cls.normalize_abs(raw_floor)

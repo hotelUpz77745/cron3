@@ -19,6 +19,7 @@ class PositionState:
     initial_entry_price: float = 0.0     # начальная точка входа позиции
     open_time: int = 0                   # время открытия первой сделки (unix ms)
     next_avg_price: float = None         # кешированная цена ближайшего усреднения
+    tp_price: float = None               # целевая цена основного тейк-профита
     fallback_price: float = None    # кешированная цена страховочного маркета
     
     in_position: bool = False
@@ -27,6 +28,7 @@ class PositionState:
     is_closing: bool = False
     pending_avg: bool = False
     pending_rolling_tp: bool = False
+    pending_peel: bool = False
     
     grid: dict = field(default_factory=dict)
     tp_map: dict = field(default_factory=dict)
@@ -36,6 +38,9 @@ class PositionState:
     trailing_grid_state: dict = field(default_factory=dict)
     recent_closes: list = field(default_factory=list)
     last_grace_period: float = 0.0
+    last_closed_volume: float = 0.0
+    last_closed_avg_price: float = 0.0
+    last_closed_timestamp: float = 0.0
     
     def set_in_position(self, status: bool):
         self.in_position = status
@@ -50,13 +55,18 @@ class PositionState:
         self.pre_avg_price = 0.0
         self.initial_entry_price = 0.0
         self.open_time = 0
+        self.last_closed_volume = 0.0
+        self.last_closed_avg_price = 0.0
+        self.last_closed_timestamp = 0.0
         self.in_position = False
         self.in_position_papper = False
         self.is_finished = False
         self.is_closing = False
         self.pending_avg = False
         self.pending_rolling_tp = False
+        self.pending_peel = False
         self.next_avg_price = None
+        self.tp_price = None
         self.fallback_price = None
         self.trailing_tp_state = {}
         self.trailing_grid_state = {}
@@ -64,11 +74,20 @@ class PositionState:
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():
             v["is_active"] = False
+            v["is_armed"] = False
             v["price"] = None
             v["activation_price"] = None
             v["timestamp"] = None
             v["activated_at"] = None
+            v["fill_price"] = None
+            v["fill_qty"] = None
+            v.pop("armed_at_drawdown", None)
+            v.pop("armed_timestamp", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():
             v["is_active"] = False
+            v["is_armed"] = False
+            v.pop("armed_at_gain", None)
+            v.pop("armed_floor", None)
+            v.pop("armed_timestamp", None)

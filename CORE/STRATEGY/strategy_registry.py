@@ -200,6 +200,17 @@ class StrategyConfig:
         if st_cfg and isinstance(st_cfg, dict):
             base_smart_tp.update(st_cfg)
         self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
+        self.dynamic_atr_tp_cfg: Dict[str, Any] = copy.deepcopy(raw_meta.get("dynamic_atr_tp") or self.overrides.get("dynamic_atr_tp") or {})
+        if self.dynamic_atr_tp_cfg.get("enabled"):
+            for req_k in ("timeframe", "period", "cache_ttl_sec", "min_guaranteed_floor_pct", "max_ceiling_pct", "fallback_atr_pct", "level_multipliers"):
+                if req_k not in self.dynamic_atr_tp_cfg:
+                    raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required dynamic_atr_tp field: '{req_k}'")
+
+        self.cross_recycling_cfg: Dict[str, Any] = copy.deepcopy(raw_meta.get("cross_side_recycling") or self.overrides.get("cross_side_recycling") or {})
+        if self.cross_recycling_cfg.get("enabled"):
+            for req_k in ("recycle_ratio", "min_burn_level", "min_drawdown_pct", "max_slice_pct"):
+                if req_k not in self.cross_recycling_cfg:
+                    raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 
         # Персональный таймфрейм вселенной (по умолчанию 5m)
         self.timeframe: str = str(raw_meta.get("timeframe") or self.overrides.get("timeframe", DEFAULT_TIMEFRAME))

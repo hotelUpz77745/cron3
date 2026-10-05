@@ -44,14 +44,34 @@
                 "start_balance_usdt": 171.92
             }
         },
-        "u9_omni_zenith_apex": {
-            "_comment_alias": "🥈 Омен-9 (Omni Zenith Apex) - Вице-Чемпион #2",
-            "_comment_pros": "Асимметричный дуальный режим: на аптренде выжимает максимум (Smart TP до 2.88% + Smart Size 1.20x), а на дампе включает 9-уровневую Фибоначчи-броню до -89%, инвертированный Panic Damper до 0.50%, Knife Blocker >=2 и деэскалацию 0.60x. Мизерная просадка.",
-            "_comment_cons": "Сложная синергия параметров; требует непрерывного мониторинга порогов Knife Blocker.",
+        "u14_subgrid_level_recycler": {
+            "_comment_alias": "🍊 U14: Fat Swing 123 Flat 7% + Sub-Grid Level Peeler (Абсолютный Чемпион по Прибыли)",
+            "_comment_pros": "Лидер по оборачиваемости и чистому профиту (+37.3% за 4 дня). Индивидуальный LIFO-пилинг колен L3..L9 на локальных отскоках +1.2%..2.4% с частичной разгрузкой токсичной маржи до закрытия всего пула.",
+            "_comment_cons": "Высокая плотность сделок в широких затяжных боковиках.",
             "enabled": false,
             "symbols": [],
             "analytics": {
-                "start_balance_usdt": 162.29
+                "start_balance_usdt": 171.92
+            }
+        },
+        "u15_fat_swing_rebound_recycler": {
+            "_comment_alias": "👑 U15: Fat Swing Rebound Recycler (Три Кита: Fat Grid + Senior Trailing + Cross-Recycling)",
+            "_comment_pros": "Комплексный флагман: трейлинг старших уровней сетки усреднения, глубокая разгрузка встречной прибылью и адаптивный тейк.",
+            "_comment_cons": "Требует одновременной активности обоих направлений (LONG и SHORT) для максимального эффекта кросс-ресайклинга.",
+            "enabled": false,
+            "symbols": [],
+            "analytics": {
+                "start_balance_usdt": 171.92
+            }
+        },
+        "u16_titan_universal_alpha": {
+            "_comment_alias": "👑 U16: Titan Universal Alpha (Синтез абсолютной альфы)",
+            "_comment_pros": "Синтез лучших эвристик: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Panic Damper TP (2.2% -> 0.65%), Cross-Side Recycling (50% прибыли тушит просадку) и Knife Blocker 3.5%..89%. Феноменальный Recovery Factor и минимальная просадка.",
+            "_comment_cons": "Широкий базовый тейк (2.2%) снижает число микро-сделок на тихом рынке.",
+            "enabled": false,
+            "symbols": [],
+            "analytics": {
+                "start_balance_usdt": 171.92
             }
         }
     },
@@ -129,30 +149,31 @@
         "max_interval_sec": 300
     },
     "radar_synergy": {
-        "enabled": false,
+        "enabled": true,
         "_desc_enabled": "Мастер-тумблер автокомплита и синергии с Радаром.",
         "mode": "auto",
         "_desc_mode": "'advisory' (кнопки в Telegram), 'auto' (авто-перезарядка), 'disabled'.",
-        "advisory": {
-            "timeout_sec": 120,
-            "_desc_timeout_sec": "Таймаут ожидания подтверждения оператора в Telegram (в секундах). Основная лупа не блокируется: остальные монеты торгуют штатно, а кандидат на замену ожидает решения без входа в новые сделки.",
-            "timeout_action": "skip",
-            "_desc_timeout_action": "'skip' (авто-отклонение, монета возвращается к торгам) или 'apply' (авто-применение ротации, раз кандидат доказанно лучше на +20%)."
-        },
-        "min_radar_warmup_hours": null,
-        "_desc_min_radar_warmup_hours": "Время холостого хода боевого бота до готовности Радара. Если null — первичная инициализация пропускается, бот стартует на текущих монетах и ждет первого храповика.",
-        "warmup_poll_interval_sec": 5.0,
-        "_desc_warmup_poll_interval_sec": "Периодичность проверки готовности Радара в холостом цикле (секунды).",
+        "selector_type": "alpha_coin_selector",
+        "_desc_selector_type": "Источник отбора монет: 'alpha_coin_selector' (Wiggle/NATR) или 'samsonov_funnel' (воронка Самсонова).",
+        "min_rotation_interval_hours": 23.0,
+        "_desc_min_rotation_interval_hours": "Минимальный интервал между ротациями боевой обоймы (строго не чаще раза в 23 часа при храповике).",
+        "_comment_replacement_mode": "hard (при срабатывании храповика все позиции уже закрыты в 100% кэш, производится прямая замена выбывших монет на лидеров)",
         "target_coins_count": 4,
-        "_desc_target_coins_count": "Целевое (максимальное) количество монет на стратегию. ПРАВИЛО: 1) При инициализации обойма формируется из лучших лидеров воронки Самсонова (до target_coins_count). Если пригодных монет меньше целевого (например, 2-3 монеты), заряжаются все найденные здоровые кандидаты без искусственных отказов; 2) При ротации по храповику все затухшие боевые монеты могут быть пакетно заменены на превосходящие здоровые монеты Радара (1-в-1 по каждой паре с опережением >=20%), размер боевой обоймы сохраняется.",
+        "_desc_target_coins_count": "Целевое количество монет в боевой обойме.",
         "hysteresis": {
-            "min_score_lead_pct": 35.0,
-            "_desc_min_score_lead_pct": "Кандидат обязан опережать текущую монету минимум на 20% по скору Самсонова (в процентах от 100, 20.0 = 20%)."
+            "min_score_lead_pct": 20.0,
+            "_desc_min_score_lead_pct": "Кандидат обязан опережать текущую монету минимум на 20% по скору (для воронки Самсонова)."
         },
         "rotation_triggers": {
             "on_stagnation_ratchet": true,
             "excluded_top_rule": ">5.0%",
             "_desc_excluded_top_rule": "Верхний скоростной уровень исключается: на быстром импульсе обойму не меняем."
+        },
+        "advisory": {
+            "timeout_sec": 120,
+            "_desc_timeout_sec": "Таймаут ожидания подтверждения оператора в Telegram (в секундах).",
+            "timeout_action": "skip",
+            "_desc_timeout_action": "'skip' или 'apply'."
         }
     },
     "risk_system": {
