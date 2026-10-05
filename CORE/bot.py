@@ -132,6 +132,12 @@ class BotCore:
 
         self.client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
         
+        # Мультиаккаунтный пул клиентов биржи: {strat_id: BinanceClient}
+        self.clients: Dict[str, BinanceClient] = {}
+        # Словарь уникальных клиентов по паре ключей: {(api_key, api_secret): BinanceClient}
+        self._key_clients: Dict[tuple[str, str], BinanceClient] = {(API_KEY, API_SECRET): self.client}
+        self._init_clients()
+        
         # Кеш FSM-состояний в формате {symbol: {"LONG": PositionState, "SHORT": PositionState}}
         self.fsm_states = {}
         
@@ -167,6 +173,40 @@ class BotCore:
         self.auto_closer = AutoCloser(self)
         from CORE.radar_navigator import RadarNavigator
         self.radar_navigator = RadarNavigator(self)
+
+    def _init_clients(self):
+        """
+        Инициализирует BinanceClient для каждой активной стратегии в соответствии с её ключами в .env.
+        Если разные стратегии используют один набор ключей, инстанс клиента переиспользуется.
+        """
+        if not hasattr(self, "strategy_registry") or not self.strategy_registry:
+            return
+            
+        for strat_id, strat_cfg in self.strategy_registry.active_strategies.items():
+            strat_key, strat_sec = strat_cfg.get_api_credentials()
+            cred_tuple = (strat_key, strat_sec)
+            
+            if cred_tuple not in self._key_clients:
+                logger.info(f"[BotCore] Инициализирован независимый BinanceClient для стратегии '{strat_id}' (key: {strat_key[:6]}...)")
+                self._key_clients[cred_tuple] = BinanceClient(api_key=strat_key, api_secret=strat_sec)
+                
+            self.clients[strat_id] = self._key_clients[cred_tuple]
+
+    def get_client_for_strategy(self, strat_id: str) -> BinanceClient:
+        """Возвращает BinanceClient для конкретной стратегии (или дефолтный self.client)."""
+        if strat_id in self.clients:
+            return self.clients[strat_id]
+        return self.client
+
+    def get_client_for_symbol(self, symbol: str, strat_id: Optional[str] = None) -> BinanceClient:
+        """Возвращает BinanceClient, привязанный к символу или стратегии."""
+        if strat_id and strat_id in self.clients:
+            return self.clients[strat_id]
+        if hasattr(self, "strategy_registry") and self.strategy_registry:
+            s_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
+            if s_id and s_id in self.clients:
+                return self.clients[s_id]
+        return self.client
 
     async def _restart_price_stream(self):
         """Безопасный перезапуск price_stream с сохранением сильной ссылки на Task."""
@@ -208,11 +248,6 @@ class BotCore:
         app_data = Utils.read_json_file(app_json_path)
         active_strategies = app_data.get("active_strategies", {})
         
-        # Enforce 1:1 Invariant: ensure symbol is not present in other strategies
-        for sid, sdata in active_strategies.items():
-            if "symbols" in sdata and symbol in sdata["symbols"]:
-                sdata["symbols"].remove(symbol)
-                
         target_strat = strategy_id
         if not target_strat:
             for sid, sdata in active_strategies.items():
@@ -260,6 +295,7 @@ class BotCore:
         if hasattr(self, "strategy_registry") and self.strategy_registry:
             try:
                 self.strategy_registry.reload(active_strategies)
+                self._init_clients()
             except Exception as e:
                 logger.error(f"Error reloading StrategyRegistry: {e}")
 
@@ -351,6 +387,7 @@ class BotCore:
         if hasattr(self, "strategy_registry") and self.strategy_registry:
             try:
                 self.strategy_registry.reload(active_strategies)
+                self._init_clients()
             except Exception as e:
                 logger.error(f"Error reloading StrategyRegistry on delete: {e}")
             
@@ -441,8 +478,9 @@ class BotCore:
         try:
             logger.info(f"[{symbol}] Signal triggered for {side}.")
             
+            sym_client = self.get_client_for_symbol(symbol)
             # 1. Установка плеча и маржи (использует кеш, 0 наносекунд если уже установлено)
-            await self.leverage_manager.set_leverage_and_margin(self.client, symbol, side_cfg)
+            await self.leverage_manager.set_leverage_and_margin(sym_client, symbol, side_cfg)
 
             # 1.5. Открытие позиции по маркету
             invest_size = float(side_cfg["invest_size"])
@@ -481,7 +519,7 @@ class BotCore:
                     return
 
                 logger.info(f"[{symbol}] Opening {side} market order. Volume: {volume}")
-                res = await self.client.make_order(
+                res = await sym_client.make_order(
                     symbol=symbol,
                     qty=volume,
                     side=order_side,
@@ -518,7 +556,7 @@ class BotCore:
             if not sync_success:
                 logger.warning(f"[{symbol}] {side} WS did not update avg_entry_price in time at start! Forcing REST fallback...")
                 try:
-                    positions = await self.client.fetch_positions(symbol)
+                    positions = await sym_client.fetch_positions(symbol)
                     for p in positions:
                         if p.get("positionSide") == side:
                             new_avg = float(p.get("entryPrice", 0.0))
@@ -535,7 +573,7 @@ class BotCore:
 
             # 2. Математика расчета объема и TP (Используем реальный объем из стрима)
             opposite_state = self.fsm_states[symbol]["SHORT"] if side == "LONG" else self.fsm_states[symbol]["LONG"]
-            await self.tp_manager.place_take_profit(self.client, symbol, side, current_price, self.spec_data, state, opposite_state)
+            await self.tp_manager.place_take_profit(sym_client, symbol, side, current_price, self.spec_data, state, opposite_state)
             
         finally:
             # ВСЕГДА сбрасываем временный флаг защиты от двойного входа
@@ -583,10 +621,11 @@ class BotCore:
                 # Вызов аналитики
                 open_time = runtime_cfg.get(side, {}).get("open_time", 0)
                 close_time = int(time.time() * 1000)
-                self.analytics.record_finished_position(self.client, symbol, side, open_time, close_time)
+                sym_client = self.get_client_for_symbol(symbol)
+                self.analytics.record_finished_position(sym_client, symbol, side, open_time, close_time)
                 # Снимаем все тейк-профит ордера этой стороны
                 logger.info(f"[{symbol}] {side} Canceling all limit orders for this side")
-                await self.client.cancel_orders_for_side(symbol, side)
+                await sym_client.cancel_orders_for_side(symbol, side)
                 
                 # Сбрасываем рантайм-кеш в памяти и восстанавливаем стейт до дефолта
                 self.runtime_manager.reset_state_to_default(symbol, side, states[side])
@@ -709,16 +748,17 @@ class BotCore:
                     continue
                 opposite_state = states["SHORT"] if side == "LONG" else states["LONG"]
                 
+                sym_client = self.get_client_for_symbol(symbol)
                 # LIFO Subgrid Peeling (U14 & U16 support)
                 has_peel = any(isinstance(v, dict) and v.get("peel_tp_pct") for v in getattr(state, "grid", {}).values())
                 peeled = False
                 if has_peel and hasattr(self.avg_manager, "process_peel"):
                     peeled = await self.avg_manager.process_peel(
-                        self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, self.tp_manager
+                        sym_client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, self.tp_manager
                     )
                 if not peeled:
-                    await self.avg_manager.process(self.client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
-                await self.fallback_tp_manager.process(self.client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, opposite_state=opposite_state)
+                    await self.avg_manager.process(sym_client, self.runtime_manager, symbol, side, state, opposite_state, current_price, self.spec_data, self.tp_manager)
+                await self.fallback_tp_manager.process(sym_client, self.runtime_manager, symbol, side, state, current_price, self.spec_data, opposite_state=opposite_state)
 
         if signal_tasks:
             await asyncio.gather(*signal_tasks)
@@ -950,9 +990,13 @@ class BotCore:
         if hasattr(self, '_pos_task') and self._pos_task:
             self._pos_task.cancel()
         # Попытка быстрого сохранения стейтов при нормальном завершении
-        await self.runtime_manager.sync_with_fsm(self.fsm_states, force_save=True)
-        await self.client.shutdown()
+        # Закрытие всех подключений мультиаккаунтного пула клиентов
+        for creds, cl in getattr(self, '_key_clients', {}).items():
+            with contextlib.suppress(Exception):
+                await cl.shutdown()
         tasks = [t for t in (getattr(self, '_price_task', None), getattr(self, '_pos_task', None), getattr(self, '_watchdog_task', None)) if t]
+        if hasattr(self, '_pos_tasks'):
+            tasks.extend([t for t in self._pos_tasks if t])
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 

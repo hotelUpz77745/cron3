@@ -1211,3 +1211,48 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
   - Блокировка ротации Штурмана до истечения 23 часов и успешное исполнение после 23 часов.
 - Успешно пройден полный регрессионный прогон всего репозитория: **102 теста из 102 выполнены с результатом OK**.
 
+---
+
+### 7.7. Сервис On-Demand отбора монет (CoinSelectionService), Telegram команда /selector, Мультиаккаунтность и Снятие запрета 1:1
+
+#### 1. Сервис On-Demand отбора монет (CoinSelectionService)
+- Создан модуль [CORE/SELECTOR/coin_selection_service.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/SELECTOR/coin_selection_service.py):
+  - Позволяет в любой момент запросить свежий срез лидеров по любому из алгоритмов:
+    - **`AlphaCoinSelector`** (Mean-Reversion, Wiggle Density, NATR, Anti-Pump/Dump, Alpha Score);
+    - **`SamsonovFunnelSelector`** (3-ступенчатая воронка полигона Радара);
+  - Обогащает выдачу актуальным боевым статусом (торгуется ли монета прямо сейчас и под каким куполом);
+  - Предоставляет метод `apply_coins_to_strategy(strat_id, symbols)`: обновляет `app.json`, компилирует изолированные рантайм-конфиги через `StrategyApplicator`, перезагружает `StrategyRegistry` и переинициализирует клиентов в `BotCore`;
+  - Конфигурация читается строго напрямую через `['']` (Правило 2), дефолты — строго `None` type (Правило 2.2).
+
+#### 2. Telegram-интеграция (/selector и Set Coins)
+- В [TG/tg_receiver.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/TG/tg_receiver.py):
+  - В главное меню `_get_main_keyboard()` возвращены кнопки `⚙️ Set Coins` и `🎯 Selector`;
+  - В меню управления монетами `_get_set_coins_keyboard()` добавлена кнопка `🎯 Selector`;
+  - Реализованы обработчики команды `/selector` и кнопки `🎯 Selector`:
+    - Инлайн-меню выбора селектора (`Alpha` vs `Samsonov` vs `По умолчанию`);
+    - On-demand сканирование с информативным отчетом (NATR, Wiggle, Shift, Score, статус);
+    - Инлайн-кнопки моментального применения среза под купол выбранной стратегии (`📥 Применить в <strat_id>`);
+    - Инлайн-кнопка обновления среза (`🔄 Пересканировать`).
+
+#### 3. Снятие запрета пересечения монет и Мультиаккаунтность (Multi-Account Exchange Client)
+- **Снятие ограничения 1:1**:
+  - В [consts.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/consts.py) и [CORE/STRATEGY/strategy_registry.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py) устранены исключения `ValueError` при повторении символов в разных стратегиях. Введен `symbol_to_strategies: Dict[str, List[StrategyConfig]]`, позволяющий одной монете одновременно принадлежать разным куполам/аккаунтам.
+- **Мультиаккаунтная архитектура**:
+  - В [CFG/app.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json) под куполом каждой стратегии добавлены поля `"api_key_name"` и `"api_secret_name"`;
+  - [StrategyConfig](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py): метод `get_api_credentials()` извлекает ключи из `.env` по заданным именам, проверяет суффикс `API_KEY_<STRAT_ID>`, либо делает fallback на базовые глобальные ключи;
+  - [CORE/bot.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/bot.py):
+    - Создан пул независимых клиентов `self.clients: Dict[str, BinanceClient]` и `self._key_clients: Dict[tuple, BinanceClient]` (с переиспользованием сессий при одинаковых ключах);
+    - Добавлены методы `get_client_for_strategy(strat_id)` и `get_client_for_symbol(symbol)`;
+    - Все приватные методы (`make_order`, `fetch_positions`, `cancel_orders_for_side`, `set_leverage_and_margin`, `process_peel`, `process`, TP) направляются через клиент конкретной стратегии/символа;
+    - Метод `shutdown()` гарантированно и чисто закрывает соединения всех клиентов в пуле.
+
+#### 4. Тестовое покрытие
+- Создан тестовый модуль [tests/test_selector_and_multiaccount.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_selector_and_multiaccount.py) (8 тестов):
+  - Разрешение кастомных ключей из `.env` и fallback по суффиксу стратегии;
+  - Изоляция инстансов `BinanceClient` в мультиаккаунтном пуле `BotCore`;
+  - Прямое чтение параметров в `CoinSelectionService`;
+  - On-demand отбор монет через `AlphaCoinSelector` и `SamsonovFunnelSelector`;
+  - Проверка наличия кнопок `⚙️ Set Coins` и `🎯 Selector` в Telegram-клавиатурах.
+- Успешно пройден полный регрессионный прогон всего репозитория: **110 тестов из 110 выполнены со статусом OK**.
+
+

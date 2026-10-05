@@ -686,6 +686,7 @@ class TestRadarSynergy(unittest.TestCase):
         bot.tp_manager.place_take_profit = AsyncMock()
         bot.client = MagicMock()
         bot.client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        bot.get_client_for_symbol = MagicMock(return_value=bot.client)
         bot.spec_data = {}
         bot.strategy_registry.get_strategy_for_symbol.return_value = MagicMock(smart_size_cfg=None)
 

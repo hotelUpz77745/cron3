@@ -87,20 +87,23 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(strat_arx.strategy_id, "u6_symbiosis_gamma_fortress35")
         self.assertEqual(strat_arx.invest_size, 600.0)
 
-        # Проверка Инварианта 1: Коллизия тикеров обязана выбрасывать ValueError!
-        conflict_active = {
+        # Проверка поддержки мультистратегического / мультиаккаунтного использования одной монеты
+        multi_active = {
             "u6_symbiosis_gamma_fortress35": {
                 "enabled": True,
                 "symbols": ["ARXUSDT"]
             },
             "u9_omni_zenith_apex": {
                 "enabled": True,
-                "symbols": ["ARXUSDT"]  # Дубликат!
+                "symbols": ["ARXUSDT"]  # Разрешено!
             }
         }
-        with self.assertRaises(ValueError) as ctx:
-            StrategyRegistry(active_strategies_cfg=conflict_active)
-        self.assertIn("КОНФЛИКТ ИНВАРИАНТА 1:1", str(ctx.exception))
+        registry = StrategyRegistry(active_strategies_cfg=multi_active)
+        self.assertIn("ARXUSDT", registry.symbol_to_strategies)
+        self.assertEqual(len(registry.symbol_to_strategies["ARXUSDT"]), 2)
+        strats = [s.strategy_id for s in registry.get_strategies_for_symbol("ARXUSDT")]
+        self.assertIn("u6_symbiosis_gamma_fortress35", strats)
+        self.assertIn("u9_omni_zenith_apex", strats)
 
     def test_strategy_applicator_rule11_min_tp(self):
         """Тестирование Инварианта 4 (Правило 11: TP строго >= 0.50%)."""

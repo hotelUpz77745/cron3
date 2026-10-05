@@ -367,6 +367,7 @@ class TestU12CrossSideProfitRecycling(unittest.IsolatedAsyncioTestCase):
         bot.tp_manager = MagicMock()
         bot.tp_manager.place_take_profit = AsyncMock()
         bot.avg_manager = MagicMock()
+        bot.get_client_for_symbol = MagicMock(return_value=bot.client)
         bot.spec_data = {"tick_size": 0.01, "step_size": 0.001, "min_qty": 0.001}
         bot.prices = {"BTCUSDT": (102.0, time.time())}
 

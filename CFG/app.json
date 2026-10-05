@@ -36,6 +36,9 @@
             "_comment_pros": "Абсолютный лидер Фабрики Звёзд по чистой прибыли (+9.84 USDT среди 38 универсумов). Первый вход на -3.5%, Knife Blocker >=1, Panic Damper со сжатием к 0.50%, деэскалация сайза до 0.60x.",
             "_comment_cons": "Игнорирует мелкий внутридневной шум до -3.5%, жертвуя микро-прибылью в узких боковиках.",
             "enabled": true,
+            "api_key_name": null,
+            "api_secret_name": null,
+            "_comment_api_keys": "Имена переменных в .env (например API_KEY_1 / API_SECRET_1). Если null — используется глобальный API_KEY/API_SECRET.",
             "symbols": [
                 "GRASSUSDT",
                 "ZROUSDT"
@@ -174,7 +177,8 @@
             "_desc_timeout_sec": "Таймаут ожидания подтверждения оператора в Telegram (в секундах).",
             "timeout_action": "skip",
             "_desc_timeout_action": "'skip' или 'apply'."
-        }
+        },
+        "_comment_cmd_selector": "Запуск в Telegram: команда /selector или кнопка '🎯 Selector' -> моментальный on-demand срез монет по AlphaCoinSelector или SamsonovFunnelSelector с кнопками применения под купол любой стратегии."
     },
     "risk_system": {
         "enabled": false,

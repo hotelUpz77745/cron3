@@ -215,6 +215,34 @@ class StrategyConfig:
         # Персональный таймфрейм вселенной (по умолчанию 5m)
         self.timeframe: str = str(raw_meta.get("timeframe") or self.overrides.get("timeframe", DEFAULT_TIMEFRAME))
 
+        # Мультиаккаунтность: привязка стратегии к ключам в .env
+        self.api_key_name: Optional[str] = self.active_settings.get("api_key_name")
+        self.api_secret_name: Optional[str] = self.active_settings.get("api_secret_name")
+
+    def get_api_credentials(self) -> tuple[str, str]:
+        """
+        Возвращает (api_key, api_secret) для аккаунта данной стратегии.
+        Если указаны api_key_name / api_secret_name в app.json — читает их из .env.
+        Также проверяет суффикс стратегии API_KEY_<STRAT_ID>.
+        Если не найдены — fallback на базовые глобальные API_KEY и API_SECRET.
+        """
+        import os
+        from consts import API_KEY, API_SECRET
+        if self.api_key_name:
+            custom_key = os.getenv(self.api_key_name)
+            custom_sec = os.getenv(self.api_secret_name or "") if self.api_secret_name else None
+            if custom_key and custom_sec:
+                return custom_key, custom_sec
+
+        strat_key_env = f"API_KEY_{self.strategy_id.upper()}"
+        strat_sec_env = f"API_SECRET_{self.strategy_id.upper()}"
+        strat_key = os.getenv(strat_key_env)
+        strat_sec = os.getenv(strat_sec_env)
+        if strat_key and strat_sec:
+            return strat_key, strat_sec
+
+        return API_KEY, API_SECRET
+
     @property
     def grid(self) -> Dict[str, Any]:
         return (self.raw_meta.get("LONG") or {}).get("grid") or (self.raw_meta.get("SHORT") or {}).get("grid") or self.overrides.get("grid", {})
@@ -250,6 +278,7 @@ class StrategyRegistry:
 
         self.active_strategies: Dict[str, StrategyConfig] = {}
         self.symbol_to_strategy: Dict[str, StrategyConfig] = {}
+        self.symbol_to_strategies: Dict[str, List[StrategyConfig]] = {}
         self.all_active_symbols: List[str] = []
 
         self._resolve_and_validate()
@@ -269,12 +298,14 @@ class StrategyRegistry:
 
     def _resolve_and_validate(self) -> None:
         """
-        Проверяет наличие объявленных стратегий в базе и строго соблюдает Инвариант 1:
-        Каждая торгуемая монета принадлежит строго одной активной стратегии (1:1).
+        Проверяет наличие объявленных стратегий в базе и регистрирует символы.
+        Поддерживает мультистратегичность и торговлю одинаковыми монетами под разными куполами/аккаунтами.
         """
         self.active_strategies.clear()
         self.symbol_to_strategy.clear()
+        self.symbol_to_strategies.clear()
         resolved_symbols: List[str] = []
+        seen_symbols: set[str] = set()
 
         for strat_id, strat_settings in self.active_cfg.items():
             # Прямое чтение флага активности (Правило 2)
@@ -302,16 +333,18 @@ class StrategyRegistry:
             self.active_strategies[strat_id] = strat_config
 
             for sym in strat_symbols:
-                # Проверка Инварианта 1 (1:1)
+                self.symbol_to_strategies.setdefault(sym, []).append(strat_config)
                 if sym in self.symbol_to_strategy:
-                    conflicting_strat = self.symbol_to_strategy[sym].strategy_id
-                    raise ValueError(
-                        f"[StrategyRegistry] КОНФЛИКТ ИНВАРИАНТА 1:1! "
-                        f"Символ '{sym}' одновременно назначен в две активные стратегии: "
-                        f"'{conflicting_strat}' и '{strat_id}'. Каждая монета обязана принадлежать строго одной стратегии!"
+                    other_strat = self.symbol_to_strategy[sym].strategy_id
+                    logger.info(
+                        f"[StrategyRegistry] Символ '{sym}' зарегистрирован в нескольких стратегиях: "
+                        f"'{other_strat}' и '{strat_id}' (мультистратегический/мультиаккаунтный режим)."
                     )
                 self.symbol_to_strategy[sym] = strat_config
-                resolved_symbols.append(sym)
+
+                if sym not in seen_symbols:
+                    seen_symbols.add(sym)
+                    resolved_symbols.append(sym)
 
         self.all_active_symbols = resolved_symbols
         logger.info(
@@ -338,6 +371,10 @@ class StrategyRegistry:
     def is_symbol_active(self, symbol: str) -> bool:
         """Проверяет, привязан ли символ к какой-либо активной стратегии."""
         return symbol.upper().strip() in self.symbol_to_strategy
+
+    def get_strategies_for_symbol(self, symbol: str) -> List[StrategyConfig]:
+        """Возвращает список всех стратегий, к которым привязан данный символ."""
+        return list(self.symbol_to_strategies.get(symbol.upper().strip(), []))
 
     def get_all_active_symbols(self) -> List[str]:
         """Возвращает общий объединенный список символов всех активных стратегий."""

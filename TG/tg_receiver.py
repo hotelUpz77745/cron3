@@ -108,8 +108,12 @@ class TelegramReceiver:
                 KeyboardButton(text="📜 Logs")
             ],
             [
-                KeyboardButton(text="🛡️ Risk System"),
+                KeyboardButton(text="⚙️ Set Coins"),
+                KeyboardButton(text="🎯 Selector"),
                 KeyboardButton(text="🚨 Close All")
+            ],
+            [
+                KeyboardButton(text="🛡️ Risk System")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -117,11 +121,12 @@ class TelegramReceiver:
     def _get_set_coins_keyboard(self):
         keyboard = [
             [
+                KeyboardButton(text="🎯 Selector"),
                 KeyboardButton(text="➕ Add"),
-                KeyboardButton(text="✏️ Edit"),
                 KeyboardButton(text="🗑️ Del")
             ],
             [
+                KeyboardButton(text="✏️ Edit"),
                 KeyboardButton(text="📄 _base"),
                 KeyboardButton(text="❓ Help")
             ],
@@ -2450,6 +2455,106 @@ class TelegramReceiver:
                     await message.answer(f"❌ Стратегия {sid} не найдена в active_strategies.")
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
+
+        # =========================================================
+        # /selector - COIN SELECTION SERVICE (ON-DEMAND ROTATION)
+        # =========================================================
+        @self.dp.message(Command("selector"))
+        @self.dp.message(F.text == "🎯 Selector")
+        async def on_selector_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            target_count = _CFG["radar_synergy"]["target_coins_count"]
+            configured_type = _CFG["radar_synergy"]["selector_type"]
+            text = (
+                f"🎯 <b>Coin Selection Service (On-Demand)</b>\n\n"
+                f"⚙️ <b>Текущий конфиг app.json:</b>\n"
+                f"• Источник: <code>{configured_type}</code>\n"
+                f"• Целевой срез: <code>{target_count}</code> монет\n\n"
+                f"Выберите алгоритм для сканирования и получения актуального среза:"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="⚡ Alpha Selector (Wiggle & NATR)", callback_data="cb_selector_run:alpha_coin_selector")
+                ],
+                [
+                    InlineKeyboardButton(text="📡 Samsonov Funnel (Радар Полигона)", callback_data="cb_selector_run:samsonov_funnel")
+                ],
+                [
+                    InlineKeyboardButton(text="⚙️ По умолчанию из конфига", callback_data=f"cb_selector_run:{configured_type}")
+                ]
+            ])
+            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("cb_selector_run:"))
+        async def process_cb_selector_run(callback: CallbackQuery, state: FSMContext):
+            selector_type = callback.data.split(":", 1)[1]
+            await callback.answer("Запускаю отбор монет...")
+            status_msg = await callback.message.answer(f"⏳ Сканирование ({selector_type}), пожалуйста подождите...")
+
+            try:
+                from CORE.SELECTOR.coin_selection_service import CoinSelectionService
+                service = CoinSelectionService(bot_core=self.bot_core)
+                target_count = service.get_configured_target_count()
+                results = await service.get_top_coins(selector_type=selector_type, target_count=target_count)
+
+                if not results:
+                    await status_msg.edit_text(f"⚠️ Селектор <code>{selector_type}</code> не вернул подходящих монет под текущие фильтры.")
+                    return
+
+                selected_symbols = [x["symbol"] for x in results]
+                self._last_selector_results = selected_symbols
+                self._last_selector_type = selector_type
+
+                report_text = service.format_telegram_report(results, selector_type, target_count)
+
+                inline_buttons = []
+                app_cfg = Utils.read_json_file(DATA_DIR / "app.json") or {}
+                for strat_id, sdata in (app_cfg.get("active_strategies") or {}).items():
+                    inline_buttons.append([
+                        InlineKeyboardButton(
+                            text=f"📥 Применить в {strat_id}",
+                            callback_data=f"cb_selector_apply:{strat_id}"
+                        )
+                    ])
+
+                inline_buttons.append([
+                    InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")
+                ])
+
+                keyboard = InlineKeyboardMarkup(inline_keyboard=inline_buttons)
+                await status_msg.edit_text(report_text, reply_markup=keyboard, parse_mode="HTML")
+
+            except Exception as e:
+                logger.error(f"Error in selector run: {e}", exc_info=True)
+                await status_msg.edit_text(f"❌ Ошибка при выполнении селектора: {e}")
+
+        @self.dp.callback_query(F.data.startswith("cb_selector_apply:"))
+        async def process_cb_selector_apply(callback: CallbackQuery, state: FSMContext):
+            strat_id = callback.data.split(":", 1)[1]
+            symbols = getattr(self, "_last_selector_results", None)
+            if not symbols:
+                await callback.answer("⚠️ Срез монет устарел или не найден. Запустите селектор снова.", show_alert=True)
+                return
+
+            await callback.answer("Применяю монеты под купол...")
+            try:
+                from CORE.SELECTOR.coin_selection_service import CoinSelectionService
+                service = CoinSelectionService(bot_core=self.bot_core)
+                ok = await service.apply_coins_to_strategy(strat_id, symbols)
+                if ok:
+                    text = (
+                        f"✅ <b>Обойма стратегии <code>{strat_id}</code> успешно обновлена!</b>\n\n"
+                        f"🎯 <b>Новые монеты ({len(symbols)}):</b>\n"
+                        f"<code>{', '.join(symbols)}</code>\n\n"
+                        f"📦 Рантайм-конфиги пересобраны через StrategyApplicator.\n"
+                        f"🔄 StrategyRegistry и клиенты биржи синхронизированы."
+                    )
+                    await callback.message.answer(text, parse_mode="HTML")
+                else:
+                    await callback.message.answer(f"❌ Не удалось применить монеты в стратегию <code>{strat_id}</code>.")
+            except Exception as e:
+                logger.error(f"Error in selector apply: {e}", exc_info=True)
+                await callback.message.answer(f"❌ Ошибка применения монет: {e}")
 
         # =========================================================
         # /sonnik - VOLATILITY SCANNER
