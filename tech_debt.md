@@ -1301,45 +1301,46 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
 3. Обновлен `Utils.read_json_file(file_path)` — каждый считываемый JSON-файл автоматически прогоняется через `resolve_side_inheritance`.
 
 #### 3. Поддерживаемый синтаксис
-1. **Флаг `"_override": false` (рекомендуемый, чистый формат):**
+1. **Канонический флаг `"_inheritance_base_side": true` (основной стандарт экосистемы):**
    ```json
+   "LONG": {
+       "enabled": true,
+       "invest_size": 600.0,
+       "grid": { ... },
+       "tp_map": { ... }
+   },
    "SHORT": {
-       "enable": false,
-       "_override": false
+       "enabled": true,
+       "_inheritance_base_side": true
    }
    ```
-   Целевая сторона (`SHORT`) полностью наследует структуру и параметры базовой стороны (`LONG`), сохраняя свои локальные поля (например, `"enable": false`).
-2. **Флаг `"_override": false` с точечным переопределением на верхнем уровне стороны:**
+   Утилита определяет, что у `LONG` поля наследования нет, и принимает её за базовую сторону, а `SHORT` копирует все настройки (сетку, тейки, объемы), сохраняя свой статус активности (`enabled`/`enable`).
+2. **Флаг `"_inheritance_base_side": true` при явном отключении стороны (`"enabled": false`):**
    ```json
    "SHORT": {
-       "enable": true,
-       "_override": false,
-       "invest_size": 250.0
+       "enabled": false,
+       "_inheritance_base_side": true
    }
    ```
-   Поле `invest_size` точечно переопределяет значение из `LONG`, остальная сетка и тейки наследуются без дублирования.
-3. **Формат словаря `override: {}` (полная обратная совместимость с полигоном):**
-   ```json
-   "SHORT": {
-       "enable": true,
-       "override": {
-           "invest_size": 300.0,
-           "tp_purpose": "self"
-       }
-   }
-   ```
+   Сторона полностью наследует структуру, но `enabled: false` гарантирует, что торговый цикл боевого ядра и полигона полностью пропустит вход по данной стороне.
+3. **Синхронизация полей `enable` и `enabled`:**
+   В [c_utils.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/c_utils.py), [StrategyApplicator](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_applicator.py) и [bot.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/bot.py) обеспечена взаимная синхронизация: если в конфиге указан `enabled: false`, ключ `enable` также выставляется в `False`, и торговый вход блокируется на всех уровнях.
 4. **Служебные ключи очищаются:**
-   Ключи `_override`, `override`, `_comment_override` автоматически удаляются из результирующего конфига стороны и не засоряют боевые структуры `StrategyConfig` и `StrategyApplicator`.
+   Ключи `_inheritance_base_side`, `__inheritance_base_side`, `_override`, `override`, `_comment_override` автоматически удаляются из результирующего конфига стороны и не засоряют боевые структуры `StrategyConfig` и `StrategyApplicator`.
 
-#### 4. Тестовое покрытие
-Создан модуль [tests/test_side_inheritance.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_side_inheritance.py) (9 тестов):
-- Слияние `deep_merge`;
-- Наследование со словарем `override: {}` и `override: { ... }`;
-- Наследование по флагу `_override: false` и `override: false`;
-- Наследование с инлайн-переопределением в теле `SHORT`;
-- Игнорирование при `_override: true` / `override: true`;
-- Интеграция с `read_json_file` и сквозная сборка в `StrategyApplicator.build_side_configs`.
-- Полный тестовый прогон: **119 тестов из 119 выполнены со статусом OK**.
+#### 4. Применение к библиотеке Вселенных (CFG/universes.json)
+Флаг `"_inheritance_base_side": true` применен ко **всем 21 Вселенным** в [CFG/universes.json](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes.json), где настройки `LONG` и `SHORT` симметричны.
+- Размер файла `universes.json` уменьшился с **245.2 КБ до 180.9 КБ** (устранено более 2200 строк избыточного дублирования сеток).
+- Выполнена автоматическая roundtrip-проверка: при чтении через `Utils.read_json_file` все 21 вселенные восстанавливают свои параметры `grid`, `tp_map`, `invest_size` с **100% математической точностью** (0 расхождений).
+
+#### 5. Тестовое покрытие
+В [tests/test_side_inheritance.py](file:///C:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/tests/test_side_inheritance.py) (12 тестов):
+- Канонический флаг `_inheritance_base_side: true` со сложной многоуровневой сеткой;
+- Отключение стороны `enabled: false` и `enable: false` под флагом `_inheritance_base_side`;
+- Автоматическое определение базовой стороны (LONG или SHORT);
+- Сквозная проверка через `StrategyApplicator.build_side_configs`.
+- Полный прогон всех тестов репозитория: **122 теста из 122 успешно пройдены (OK)**.
+
 
 
 

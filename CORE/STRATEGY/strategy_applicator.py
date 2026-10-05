@@ -99,9 +99,15 @@ class StrategyApplicator:
             elif isinstance(strategy.leverage, (int, float)):
                 side_data["leverage"] = int(strategy.leverage)
 
-            # 3. Enable флаг стороны
+            # 3. Enable / Enabled флаг стороны (если явно False, сторона не торгуется)
             if "enable" in side_dict:
-                side_data["enable"] = bool(side_dict["enable"])
+                val = bool(side_dict["enable"])
+                side_data["enable"] = val
+                side_data["enabled"] = val
+            elif "enabled" in side_dict:
+                val = bool(side_dict["enabled"])
+                side_data["enable"] = val
+                side_data["enabled"] = val
 
             side_data["strategy_id"] = strategy.strategy_id
             side_data["strategy_name"] = strategy.name

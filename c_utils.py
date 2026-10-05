@@ -195,12 +195,15 @@ class Utils:
     def resolve_side_inheritance(data: Any) -> Any:
         """
         Разрешает компактное наследование настроек сторон (SHORT наследует LONG или наоборот).
-        Поддерживает:
-        1. Флаг `"_override": false` или `"override": false` — сторона полностью наследует доступную
-           базовую сторону (как правило LONG, так как исторически она прописана сверху).
-        2. Словарь `override: {}` (или `_override: {}`) — наследование с возможностью точечных
-           переопределений параметров.
-        3. Сохранение явных полей целевой стороны (например "enable": false) и удаление служебных ключей.
+        
+        Принцип:
+        1. Утилита определяет сторону, у которой НЕТ поля наследования ('_inheritance_base_side',
+           '__inheritance_base_side', '_override', 'override'), и принимает ее за базовую (LONG или SHORT).
+        2. Вторая сторона, у которой задано это поле (например, "_inheritance_base_side": true
+           или "_override": false / "override": {}), наследует конфигурацию базовой стороны.
+        3. Сохраняются все явные поля целевой стороны (например, "enabled": false / "enable": false).
+        4. Служебные ключи наследования удаляются из результирующего конфига.
+        5. Ключи активности 'enable' и 'enabled' синхронизируются.
         """
         if not isinstance(data, dict):
             return data
@@ -211,28 +214,35 @@ class Utils:
             if isinstance(v, dict):
                 resolved[k] = Utils.resolve_side_inheritance(v)
 
-        def _is_inheritance_requested(side_dict: Any) -> bool:
+        INHERITANCE_KEYS = {
+            "_inheritance_base_side",
+            "__inheritance_base_side",
+            "_override",
+            "override",
+            "_comment_override",
+        }
+
+        def _has_inheritance_marker(side_dict: Any) -> bool:
             if not isinstance(side_dict, dict):
                 return False
-            # Проверяем "_override"
+            if "_inheritance_base_side" in side_dict:
+                v = side_dict["_inheritance_base_side"]
+                return v is not False and v is not None
+            if "__inheritance_base_side" in side_dict:
+                v = side_dict["__inheritance_base_side"]
+                return v is not False and v is not None
             if "_override" in side_dict:
                 v = side_dict["_override"]
-                if v is False or isinstance(v, dict):
-                    return True
-                return False
-            # Проверяем "override"
+                return v is False or isinstance(v, dict)
             if "override" in side_dict:
                 v = side_dict["override"]
-                if v is False or isinstance(v, dict):
-                    return True
-                return False
+                return v is False or isinstance(v, dict)
             return False
 
         def _get_overrides_dict(side_dict: dict) -> Optional[dict]:
-            if "_override" in side_dict and isinstance(side_dict["_override"], dict):
-                return side_dict["_override"]
-            if "override" in side_dict and isinstance(side_dict["override"], dict):
-                return side_dict["override"]
+            for k in ("_inheritance_base_side", "__inheritance_base_side", "_override", "override"):
+                if k in side_dict and isinstance(side_dict[k], dict):
+                    return side_dict[k]
             return None
 
         def _apply_side_inheritance(source_side_name: str, target_side_name: str):
@@ -240,16 +250,16 @@ class Utils:
             source = resolved[source_side_name]
             if not isinstance(target, dict) or not isinstance(source, dict):
                 return
-            if not _is_inheritance_requested(target):
+            if not _has_inheritance_marker(target):
                 return
 
             overrides_dict = _get_overrides_dict(target)
-            # Начинаем с полной копии стороны-источника
+            # Начинаем с полной копии базовой стороны
             merged = copy.deepcopy(source)
 
             # Переносим все явные ключи целевой стороны, кроме служебных ключей наследования
             for tk, tv in target.items():
-                if tk not in ("override", "_override", "_comment_override"):
+                if tk not in INHERITANCE_KEYS:
                     merged[tk] = copy.deepcopy(tv)
 
             # Применяем словарь переопределений (overrides), если задан
@@ -257,15 +267,26 @@ class Utils:
                 merged = Utils.deep_merge(merged, overrides_dict)
 
             # Гарантируем отсутствие служебных ключей
-            merged.pop("override", None)
-            merged.pop("_override", None)
-            merged.pop("_comment_override", None)
+            for k in INHERITANCE_KEYS:
+                merged.pop(k, None)
+
+            # Синхронизируем enable и enabled для 100% совместимости
+            if "enabled" in target and "enable" not in target:
+                merged["enable"] = bool(target["enabled"])
+                merged["enabled"] = bool(target["enabled"])
+            elif "enable" in target and "enabled" not in target:
+                merged["enable"] = bool(target["enable"])
+                merged["enabled"] = bool(target["enable"])
+            elif "enabled" in merged and "enable" not in merged:
+                merged["enable"] = bool(merged["enabled"])
+            elif "enable" in merged and "enabled" not in merged:
+                merged["enabled"] = bool(merged["enable"])
 
             resolved[target_side_name] = merged
 
         if "LONG" in resolved and "SHORT" in resolved:
-            short_req = _is_inheritance_requested(resolved["SHORT"])
-            long_req = _is_inheritance_requested(resolved["LONG"])
+            short_req = _has_inheritance_marker(resolved["SHORT"])
+            long_req = _has_inheritance_marker(resolved["LONG"])
 
             if short_req and not long_req:
                 _apply_side_inheritance("LONG", "SHORT")

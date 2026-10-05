@@ -150,6 +150,78 @@ class TestSideInheritance(unittest.TestCase):
         self.assertEqual(short["invest_size"], 450.0)
         self.assertNotIn("override", short)
 
+    def test_resolve_side_inheritance_base_side_flag_true(self):
+        """Проверка главного флага '_inheritance_base_side': true."""
+        data = {
+            "LONG": {
+                "enabled": True,
+                "invest_size": 600.0,
+                "grid": {
+                    "0": {"indent": 0.0, "volume": 7.0},
+                    "1": {"indent": -3.5, "volume": 7.0},
+                    "8": {"indent": -89.0, "volume": 16.49}
+                },
+                "tp_map": {
+                    "0": {"indent": 2.2, "fallback_indent": 3.0},
+                    "8": {"indent": 0.65, "fallback_indent": 0.95}
+                }
+            },
+            "SHORT": {
+                "enabled": True,
+                "_inheritance_base_side": True
+            }
+        }
+        resolved = Utils.resolve_side_inheritance(data)
+        short = resolved["SHORT"]
+        self.assertTrue(short["enabled"])
+        self.assertTrue(short["enable"])
+        self.assertEqual(short["invest_size"], 600.0)
+        self.assertEqual(len(short["grid"]), 3)
+        self.assertEqual(short["grid"]["8"]["indent"], -89.0)
+        self.assertEqual(short["tp_map"]["0"]["indent"], 2.2)
+        self.assertNotIn("_inheritance_base_side", short)
+
+    def test_resolve_side_inheritance_base_side_flag_with_disabled_side(self):
+        """Проверка '_inheritance_base_side': true при явном отключении стороны (enabled: false)."""
+        data = {
+            "LONG": {
+                "enabled": True,
+                "invest_size": 500.0,
+                "grid": {"0": {"indent": 0.0, "volume": 10.0}}
+            },
+            "SHORT": {
+                "enabled": False,
+                "_inheritance_base_side": True
+            }
+        }
+        resolved = Utils.resolve_side_inheritance(data)
+        short = resolved["SHORT"]
+        self.assertFalse(short["enabled"])
+        self.assertFalse(short["enable"])
+        self.assertEqual(short["invest_size"], 500.0)
+        self.assertEqual(short["grid"], {"0": {"indent": 0.0, "volume": 10.0}})
+        self.assertNotIn("_inheritance_base_side", short)
+
+    def test_resolve_side_inheritance_base_side_flag_with_enable_key_false(self):
+        """Проверка '_inheritance_base_side': true при явном ключе 'enable': false."""
+        data = {
+            "LONG": {
+                "enable": True,
+                "invest_size": 400.0,
+                "grid": {"0": {"indent": 0.0, "volume": 5.0}}
+            },
+            "SHORT": {
+                "enable": False,
+                "_inheritance_base_side": True
+            }
+        }
+        resolved = Utils.resolve_side_inheritance(data)
+        short = resolved["SHORT"]
+        self.assertFalse(short["enable"])
+        self.assertFalse(short["enabled"])
+        self.assertEqual(short["invest_size"], 400.0)
+        self.assertNotIn("_inheritance_base_side", short)
+
     def test_resolve_side_inheritance_ignored_when_override_true(self):
         """Если _override: true или override: true, сторона автономна и не перезаписывается."""
         data = {

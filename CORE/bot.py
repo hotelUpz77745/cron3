@@ -679,11 +679,18 @@ class BotCore:
         signal_tasks = []
         
         # Предварительно определяем, будут ли открыты обе стороны
+        def _is_side_active(cfg: Optional[dict]) -> bool:
+            if not cfg or not isinstance(cfg, dict):
+                return False
+            if cfg.get("enable") is False or cfg.get("enabled") is False:
+                return False
+            return bool(cfg.get("enable", cfg.get("enabled", True)))
+
         sides_to_open = []
         for side in ("LONG", "SHORT"):
             state = states[side]
             side_cfg = runtime_cfg.get(side)
-            if side_cfg and side_cfg.get("enable") and not state.in_position and not state.in_position_papper:
+            if side_cfg and _is_side_active(side_cfg) and not state.in_position and not state.in_position_papper:
                 sides_to_open.append(side)
 
         is_concurrent = len(sides_to_open) > 1
@@ -692,7 +699,7 @@ class BotCore:
             state = states[side]
             side_cfg = runtime_cfg.get(side)
             
-            if not side_cfg or not side_cfg.get("enable"):
+            if not side_cfg or not _is_side_active(side_cfg):
                 continue
             
             if not state.in_position and not state.in_position_papper:
