@@ -3430,5 +3430,187 @@
             "min_drawdown_pct": 3.0,
             "max_slice_pct": 25.0
         }
+    },
+    "u14_subgrid_level_recycler_atr35": {
+        "name": "🍊 U14 Symbiosis: Sub-Grid Level Peeler 3.5% + Dynamic ATR TP Ladder",
+        "description": "Симбиоз U14 и U12: 1) Вход в усреднение отодвинут на -3.5% (отсекает внутридневной шум до -3.5%); 2) LIFO-пилинг колен L3..L8 (peel_tp_pct 1.2%..2.4%) сбрасывает токсичный объем на локальных отскоках; 3) Dynamic ATR TP с инвертированным сжатием (0.75x -> 0.10x, floor 0.65%) гарантирует быстрый сброс на глубоких коленах.",
+        "leverage": 20,
+        "timeframe": "5m",
+        "tp_purpose": "self",
+        "super_grid": {
+            "enabled": false
+        },
+        "smart_grace": {
+            "start_period_sec": 57,
+            "shift_interval_sec": 13,
+            "eval_window_sec": 300,
+            "increments_card": {
+                "==1": 0,
+                "==2": 0,
+                "==3": 0,
+                ">=4": 0
+            }
+        },
+        "smart_size": {
+            "eval_window_sec": 300,
+            "profiting_size_weights": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            },
+            "knife_blocker_enabled": false,
+            "knife_blocker_threshold": 1
+        },
+        "smart_tp": {
+            "enabled": false,
+            "eval_window_sec": 300,
+            "increments_tp": {
+                "<2": 1.0,
+                "==2": 1.0,
+                "==3": 1.0,
+                ">=4": 1.0
+            }
+        },
+        "dynamic_atr_tp": {
+            "enabled": true,
+            "timeframe": "1h",
+            "period": 14,
+            "cache_ttl_sec": 120,
+            "min_guaranteed_floor_pct": 0.65,
+            "max_ceiling_pct": 4.5,
+            "fallback_atr_pct": 1.2,
+            "level_multipliers": {
+                "0": 0.75,
+                "1": 0.6,
+                "2": 0.5,
+                "3": 0.4,
+                "4": 0.3,
+                "5": 0.25,
+                "6": 0.2,
+                "7": 0.15,
+                "8": 0.1
+            }
+        },
+        "avg_free_volume_behavior": "distribute_remaining",
+        "LONG": {
+            "invest_size": 600.0,
+            "grid": {
+                "0": {
+                    "indent": 0.0,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "1": {
+                    "indent": -3.5,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "2": {
+                    "indent": -5.5,
+                    "volume": 7.0,
+                    "peel_tp_pct": null,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "3": {
+                    "indent": -8.0,
+                    "volume": 10.24,
+                    "peel_tp_pct": 1.2,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "4": {
+                    "indent": -13.0,
+                    "volume": 11.26,
+                    "peel_tp_pct": 1.4,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "5": {
+                    "indent": -21.0,
+                    "volume": 12.39,
+                    "peel_tp_pct": 1.6,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "6": {
+                    "indent": -34.0,
+                    "volume": 13.63,
+                    "peel_tp_pct": 1.8,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "7": {
+                    "indent": -55.0,
+                    "volume": 14.99,
+                    "peel_tp_pct": 2.1,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                },
+                "8": {
+                    "indent": -89.0,
+                    "volume": 16.49,
+                    "peel_tp_pct": 2.4,
+                    "super_indent": null,
+                    "activated_at": null,
+                    "timestamp": null
+                }
+            },
+            "tp_map": {
+                "0": {
+                    "indent": null,
+                    "fallback_indent": 1.5
+                },
+                "1": {
+                    "indent": null,
+                    "fallback_indent": 1.3
+                },
+                "2": {
+                    "indent": null,
+                    "fallback_indent": 1.1
+                },
+                "3": {
+                    "indent": null,
+                    "fallback_indent": 0.95
+                },
+                "4": {
+                    "indent": null,
+                    "fallback_indent": 0.85
+                },
+                "5": {
+                    "indent": null,
+                    "fallback_indent": 0.75
+                },
+                "6": {
+                    "indent": null,
+                    "fallback_indent": 0.7
+                },
+                "7": {
+                    "indent": null,
+                    "fallback_indent": 0.65
+                },
+                "8": {
+                    "indent": null,
+                    "fallback_indent": 0.65
+                }
+            }
+        },
+        "SHORT": {
+            "enabled": true,
+            "_inheritance_base_side": true
+        }
     }
 }
