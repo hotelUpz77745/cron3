@@ -212,58 +212,22 @@ class RadarNavigator:
             return
 
         # 3. ВЕТКА АЛЬФА-СЕЛЕКТОРА (Динамический Wiggle/NATR отбор)
+        # 3. ВЕТКА АЛЬФА-СЕЛЕКТОРА (Динамический Wiggle/NATR отбор)
         if selector_type == "alpha_coin_selector":
             logger.info(f"[RadarNavigator][{strat_id}] Запуск AlphaCoinSelector (NATR + Wiggle + Anti-Exhaustion)...")
 
-            full_ranked = await self.alpha_selector.select_top_coins(target_count=target_count)
+            full_ranked = await self.alpha_selector.select_top_coins(target_count=30)
             if not full_ranked:
                 logger.warning(f"[RadarNavigator][{strat_id}] Alpha-Селектор не вернул кандидатов. Пул сохранен.")
                 return
 
-            metrics_by_sym = {x["symbol"]: x for x in full_ranked}
-
-            current_scores = []
-            for s in current_symbols:
-                m = metrics_by_sym.get(s, {})
-                sc = float(m.get("score", 0.0))
-                current_scores.append((s, sc, m))
-            current_scores.sort(key=lambda x: x[1])  # слабейшие первыми
-
-            ext_candidates = [
-                m for m in full_ranked
-                if m.get("symbol") and m["symbol"] not in current_symbols and float(m.get("score", 0.0)) > 0.0 and m.get("eligible", True)
-            ]
-            ext_candidates.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
-
-            qualified_rotations = []
-            max_pairs = min(len(current_scores), len(ext_candidates))
-            for i in range(max_pairs):
-                weak_sym, weak_sc, weak_m = current_scores[i]
-                cand = ext_candidates[i]
-                cand_sym = cand["symbol"]
-                cand_sc = float(cand.get("score", 0.0))
-
-                if cand_sc <= weak_sc:
-                    break
-
-                denom = max(weak_sc, 0.001)
-                lead_pct = ((cand_sc - weak_sc) / denom) * 100.0
-                logger.info(
-                    f"[RadarNavigator][{strat_id}] Alpha пара #{i+1}: Кандидат {cand_sym} (Скор: {cand_sc:.4f}) "
-                    f"vs Слабейший {weak_sym} (Скор: {weak_sc:.4f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{min_lead_pct}%)"
-                )
-                if lead_pct < min_lead_pct:
-                    break
-
-                qualified_rotations.append({
-                    "old_symbol": weak_sym,
-                    "new_symbol": cand_sym,
-                    "old_score": weak_sc,
-                    "new_score": cand_sc,
-                    "lead_pct": lead_pct,
-                    "old_meta": weak_m,
-                    "new_meta": cand,
-                })
+            new_pool, qualified_rotations = self.resolve_multi_coin_rotation(
+                current_symbols=current_symbols,
+                ranked_top_candidates=full_ranked,
+                score_key="score",
+                target_count=target_count,
+                min_lead_pct=min_lead_pct,
+            )
 
             if not qualified_rotations:
                 logger.info(
@@ -282,71 +246,131 @@ class RadarNavigator:
             logger.warning(f"[RadarNavigator][{strat_id}] Радар вернул пустой список метрик. Ротация отменена, боевой пул сохранен.")
             return
 
-        metrics_by_sym = {m["symbol"]: m for m in metrics}
-
-        # Сортируем текущие монеты боевого пула по возрастанию скора (слабейшие первыми)
-        current_scores = []
-        for s in current_symbols:
-            m = metrics_by_sym.get(s, {})
-            score = float(m.get("samsonov_score", 0.0))
-            current_scores.append((s, score, m))
-        current_scores.sort(key=lambda x: x[1])
-
-        # Находим лучших кандидатов из Радара вне текущего пула с положительным скором (>0), отсортированных по убыванию
-        candidates = [
-            m for m in metrics
-            if m.get("symbol") and m["symbol"] not in current_symbols and float(m.get("samsonov_score", 0.0)) > 0.0
-        ]
-        if not candidates:
-            logger.info(
-                f"[RadarNavigator][{strat_id}] Радар не вернул пригодных кандидатов с положительным скором (>0) вне текущего пула. "
-                f"Боевой пул сохранен без изменений."
-            )
-            return
-
-        candidates.sort(key=lambda x: float(x.get("samsonov_score", 0.0)), reverse=True)
-
-        # Симметричное сравнение скоров с гистерезисом min_lead_pct
-        qualified_rotations = []
-        max_pairs = min(len(current_scores), len(candidates))
-        for i in range(max_pairs):
-            weak_sym, weak_score, weak_meta = current_scores[i]
-            cand = candidates[i]
-            cand_sym = cand["symbol"]
-            cand_score = float(cand.get("samsonov_score", 0.0))
-
-            if cand_score <= weak_score:
-                break
-
-            denom = max(weak_score, 0.001)
-            lead_pct = ((cand_score - weak_score) / denom) * 100.0
-
-            logger.info(
-                f"[RadarNavigator][{strat_id}] Samsonov пара #{i+1}: Кандидат {cand_sym} (Скор: {cand_score:.2f}) "
-                f"vs Слабейший {weak_sym} (Скор: {weak_score:.2f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{min_lead_pct}%)"
-            )
-
-            if lead_pct < min_lead_pct:
-                break
-
-            qualified_rotations.append({
-                "old_symbol": weak_sym,
-                "new_symbol": cand_sym,
-                "old_score": weak_score,
-                "new_score": cand_score,
-                "lead_pct": lead_pct,
-                "old_meta": weak_meta,
-                "new_meta": cand,
-            })
+        new_pool, qualified_rotations = self.resolve_multi_coin_rotation(
+            current_symbols=current_symbols,
+            ranked_top_candidates=metrics,
+            score_key="samsonov_score",
+            target_count=target_count,
+            min_lead_pct=min_lead_pct,
+        )
 
         if not qualified_rotations:
             logger.info(
-                f"[RadarNavigator][{strat_id}] Ни один кандидат не превысил порог гистерезиса (+{min_lead_pct}%). "
+                f"[RadarNavigator][{strat_id}] Ни один кандидат Samsonov не превысил порог гистерезиса (+{min_lead_pct}%). "
                 f"Обойма сохраняется без изменений."
             )
             return
 
         await self._execute_rotations(strat_id, qualified_rotations, matched_rule, now_ts, min_lead_pct)
+
+    @staticmethod
+    def resolve_multi_coin_rotation(
+        current_symbols: List[str],
+        ranked_top_candidates: List[Dict[str, Any]],
+        score_key: str = "score",
+        target_count: int = 4,
+        min_lead_pct: float = 35.0,
+    ) -> tuple[List[str], List[Dict[str, Any]]]:
+        """
+        Универсальный решатель мульти-ротации Top-N Rank & Swap:
+        1. Находит идеальный Top-N кандидатов (eligible=True, score > 0).
+        2. Совпавшие монеты (уже в обойме и вошли в Top-N) безусловно сохраняются.
+        3. Выбывшие монеты обоймы ранжируются от слабейшей к сильнейшей.
+        4. Новые претенденты из Top-N ранжируются от сильнейшего к слабейшему.
+        5. Попарно сопоставляются: замена происходит ТОЛЬКО если lead_pct >= min_lead_pct (35%).
+           Если отрыв < min_lead_pct, старая монета сохраняется (защита гистерезисом).
+        Возвращает (new_pool, qualified_rotations).
+        """
+        score_map = {}
+        meta_by_sym = {}
+        for item in ranked_top_candidates:
+            if not isinstance(item, dict):
+                continue
+            sym = item.get("symbol")
+            if not sym:
+                continue
+            sc = float(item.get(score_key, item.get("samsonov_score", item.get("score", 0.0))))
+            score_map[sym] = sc
+            meta_by_sym[sym] = item
+
+        # 1. Идеальный Top-N кандидатов
+        eligible_candidates = [
+            item for item in ranked_top_candidates
+            if isinstance(item, dict) and item.get("symbol") and item.get("eligible", True)
+            and float(item.get(score_key, item.get("samsonov_score", item.get("score", 0.0)))) > 0.0
+        ]
+        eligible_candidates.sort(
+            key=lambda item: float(item.get(score_key, item.get("samsonov_score", item.get("score", 0.0)))),
+            reverse=True
+        )
+        effective_target = len(current_symbols) if current_symbols else target_count
+        ideal_top_n = [item["symbol"] for item in eligible_candidates][:effective_target]
+
+        # 2. Совпавшие монеты (остаются)
+        kept_symbols = [s for s in current_symbols if s in ideal_top_n]
+
+        # 3. Выбывающие монеты (в обойме, но не в Top-N)
+        dropouts = [s for s in current_symbols if s not in ideal_top_n]
+        dropouts.sort(key=lambda s: score_map.get(s, 0.0))  # слабейшие первыми
+
+        # 4. Новые претенденты из Top-N (которых еще нет в обойме)
+        new_candidates = [s for s in ideal_top_n if s not in kept_symbols]
+        new_candidates.sort(key=lambda s: score_map.get(s, 0.0), reverse=True)  # сильнейшие первыми
+
+        final_pool = list(kept_symbols)
+        qualified_rotations = []
+
+        max_iter = max(len(dropouts), len(new_candidates))
+        for i in range(max_iter):
+            if i < len(dropouts) and i < len(new_candidates):
+                old_sym = dropouts[i]
+                cand_sym = new_candidates[i]
+                old_sc = score_map.get(old_sym, 0.0)
+                cand_sc = score_map.get(cand_sym, 0.0)
+                denom = max(old_sc, 0.001)
+                lead_pct = ((cand_sc - old_sc) / denom) * 100.0
+
+                logger.info(
+                    f"[RadarNavigator] Попарное сравнение #{i+1}: Претендент {cand_sym} (Скор: {cand_sc:.4f}) "
+                    f"vs Выбывающий {old_sym} (Скор: {old_sc:.4f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{min_lead_pct}%)"
+                )
+
+                if lead_pct >= min_lead_pct:
+                    final_pool.append(cand_sym)
+                    qualified_rotations.append({
+                        "old_symbol": old_sym,
+                        "new_symbol": cand_sym,
+                        "old_score": old_sc,
+                        "new_score": cand_sc,
+                        "lead_pct": lead_pct,
+                        "old_meta": meta_by_sym.get(old_sym, {}),
+                        "new_meta": meta_by_sym.get(cand_sym, {}),
+                    })
+                else:
+                    logger.info(
+                        f"[RadarNavigator] Претендент {cand_sym} не пробил порог (+{lead_pct:.1f}% < +{min_lead_pct}%). "
+                        f"Монета {old_sym} сохраняется в обойме."
+                    )
+                    final_pool.append(old_sym)
+
+            elif i < len(dropouts):
+                final_pool.append(dropouts[i])
+
+            elif i < len(new_candidates):
+                cand_sym = new_candidates[i]
+                cand_sc = score_map.get(cand_sym, 0.0)
+                final_pool.append(cand_sym)
+                qualified_rotations.append({
+                    "old_symbol": "<none>",
+                    "new_symbol": cand_sym,
+                    "old_score": 0.0,
+                    "new_score": cand_sc,
+                    "lead_pct": 100.0,
+                    "old_meta": {},
+                    "new_meta": meta_by_sym.get(cand_sym, {}),
+                })
+
+        return final_pool[:target_count], qualified_rotations
 
     async def _execute_rotations(
         self,
@@ -526,7 +550,7 @@ class RadarNavigator:
         self.symbols_pending_rotation.discard(old_symbol)
         self.symbols_pending_rotation.discard(new_symbol)
 
-        if not old_symbol or not new_symbol or old_symbol == new_symbol:
+        if not new_symbol or (old_symbol and old_symbol == new_symbol):
             logger.warning(
                 f"[RadarNavigator] Отклонена некорректная ротация: old='{old_symbol}', new='{new_symbol}'. "
                 f"Боевой пул сохранен без изменений."
@@ -536,14 +560,15 @@ class RadarNavigator:
         strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
         initial_count = len(strat_cfg.symbols) if strat_cfg else 0
         if strat_cfg:
-            if old_symbol not in strat_cfg.symbols:
+            if old_symbol and old_symbol != "<none>" and old_symbol not in strat_cfg.symbols:
                 logger.warning(f"[RadarNavigator] Монета {old_symbol} отсутствует в стратегии [{strat_id}]. Ротация отменена.")
                 return
             if new_symbol in strat_cfg.symbols:
                 logger.warning(f"[RadarNavigator] Монета-кандидат {new_symbol} уже активна в стратегии [{strat_id}]. Дублирование исключено.")
                 return
 
-        await self.bot_core.delete_symbol(old_symbol)
+        if old_symbol and old_symbol != "<none>":
+            await self.bot_core.delete_symbol(old_symbol)
         await self.bot_core.add_symbol(new_symbol, strat_id)
 
         # Фиксация события смены монет в журнал кэша и текстовый леджер

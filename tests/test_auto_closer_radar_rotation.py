@@ -171,6 +171,30 @@ class TestAutoCloserRadarRotation(unittest.TestCase):
         self.mock_bot.delete_symbol.assert_called_once_with("ARXUSDT")
         self.mock_bot.add_symbol.assert_called_once_with("PUMPUSDT", "u9_omni_zenith_apex")
 
+    def test_multi_coin_rotation_two_coins_replaced(self):
+        """Мульти-ротация Top-N: 2 монеты выбывают и заменяются двумя лидерами с отрывом >= 35%."""
+        nav = self._create_navigator(mode="auto")
+        mock_metrics = [
+            {"symbol": "GRASSUSDT", "samsonov_score": 60.0}, # Сохраняется (в Top-4)
+            {"symbol": "ZROUSDT", "samsonov_score": 50.0},   # Сохраняется (в Top-4)
+            {"symbol": "PEPEUSDT", "samsonov_score": 45.0},  # Новый кандидат #1 (в Top-4)
+            {"symbol": "NEARUSDT", "samsonov_score": 40.0},  # Новый кандидат #2 (в Top-4)
+            {"symbol": "XPLUSDT", "samsonov_score": 20.0},   # Выбывает #2 (40 vs 20 = +100% >= 35%)
+            {"symbol": "ARXUSDT", "samsonov_score": 10.0},   # Выбывает #1 (45 vs 10 = +350% >= 35%)
+        ]
+        nav.selector.calculate_coin_metrics = MagicMock(return_value=mock_metrics)
+
+        async def run():
+            await nav.on_ratchet_closed("u9_omni_zenith_apex", matched_rule="<=2.0%", is_stagnation=True)
+
+        asyncio.run(run())
+        self.mock_bot.delete_symbol.assert_any_call("ARXUSDT")
+        self.mock_bot.delete_symbol.assert_any_call("XPLUSDT")
+        self.mock_bot.add_symbol.assert_any_call("PEPEUSDT", "u9_omni_zenith_apex")
+        self.mock_bot.add_symbol.assert_any_call("NEARUSDT", "u9_omni_zenith_apex")
+        self.assertEqual(self.mock_bot.delete_symbol.call_count, 2)
+        self.assertEqual(self.mock_bot.add_symbol.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
