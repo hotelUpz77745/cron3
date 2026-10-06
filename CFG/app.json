@@ -31,7 +31,6 @@
         "log_to_file": true
     },
     "auto_closing": {
-        "_comment_description": "Базовый шаблон ступенчатого Трейлинг-Храповика (auto_closing) по чистому Net (Фибо-лестница). Наследуется всеми стратегиями по умолчанию, если не переопределен точечно под конкретную стратегию.",
         "negative": {
             "threshold": null,
             "threshold_increment": null
@@ -39,44 +38,49 @@
         "positive": {
             "enabled": true,
             "mode": "toxicity_adaptive",
-            "_desc_mode": "Режимы автоклозера: 'toxicity_adaptive' (Режим 2 - Рекомендуемый: инвентарный скор токсичности и эвакуация), 'iter_net_classic' (Режим 1: чистый Net Фибо-храповик 13$..89$), 'radar_sync_23h' (Режим 3: фиксация за 45 мин до ротации монет radar_synergy)",
+            "_desc_mode": "Выбор активной стратегии фиксации прибыли текущей итерации:\n• 'toxicity_adaptive' (Способ 2) — Институциональный сброс корзины в кэш по адаптивным фиксам на отскоке ямы со скором токсичности инвентаря (S >= 0.70 паника -> +3$, S < 0.70 умеренный -> +8$, S < 0.35 легкий -> +15$). БЕЗ трейлинга и откатов, закрытие только в гарантированный чистый плюс!\n• 'iter_net_classic' (Способ 1) — Классический трейлинг-храповик по лестнице Фибоначчи (trailing_ratchet: 8$, 13$, 21$, 34$, 55$). Взводит курок и кроет при откате цены назад.\n• 'fixed_net' (Способ 3) — Прямой плоский тейк корзины при достижении целевого Net профита (ровно +15.0 USDT). Мгновенный выход в 100% кэш без ожидания откатов.",
             "quant_base_usdt": 10.0,
             "quant_reference_size": 600.0,
-            "toxicity_weights": {
-                "margin_load": 0.35,
-                "grid_depth": 0.30,
-                "float_ratio": 0.25,
-                "delta_recovery": 0.15
+            "radar_rotation_on_close": {
+                "enabled": false,
+                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш. В боевом режиме по умолчанию false (или активируется штурманом по расписанию/23h).",
+                "min_universe_age_hours": 23.0,
+                "_desc_min_universe_age_hours": "Маст-хэв требование: минимальное время непрерывной работы обоймы (23.0 часа) с момента старта или предыдущей ротации. Если автоклоз сработал раньше 23ч, корзина фиксирует прибыль в кэш, но монеты сохраняются.",
+                "selector_type": "alpha_coin_selector",
+                "_desc_selector_type": "'alpha_coin_selector' (по свечам волатильности) или 'samsonov_funnel' (по телеметрии Радара).",
+                "target_coins_count": 4,
+                "_desc_target_coins_count": "Целевое количество активных монет в обойме стратегии.",
+                "min_score_lead_pct": 35.0,
+                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%."
+            },
+            "fixed_net": {
+                "_desc": "Способ 3: Прямой плоский тейк корзины без ожидания отката трейлинга. При iter_net >= target_net_usdt все позиции немедленно сбрасываются в 100% кэш.",
+                "target_net_usdt": 21.0,
+                "_desc_target_net_usdt": "Фиксированный целевой чистый Net профит итерации в USDT.",
+                "scale_by_invest_size": false,
+                "_desc_scale_by_invest_size": "Если true, целевой порог масштабируется по формуле (invest_size / quant_reference_size) * target_net_usdt."
             },
             "toxicity_adaptive": {
+                "_desc": "Способ 2: Динамические целевые фиксы с учетом скора токсичности инвентаря (загрузка маржи, глубина сетки, плавающий убыток, рассасывание ямы R_delta). Сброс корзины на отскоке ямы в чистый плюс.",
+                "score_weights": {
+                    "margin_load": 0.35,
+                    "grid_depth": 0.30,
+                    "float_ratio": 0.25,
+                    "delta_recovery": 0.15
+                },
+                "_desc_score_weights": "Купол скор-метода: карта распределения весов второго алгоритма оценки инвентаря (загрузка маржи 35%, глубина сетки 30%, доля плавающего минуса 25%, снятие стресса просадки 15%). Сумма = 1.0.",
                 "panic_toxicity_threshold": 0.70,
-                "emergency_exit_floor_mult": 0.30,
+                "emergency_exit_floor_usdt": 3.0,
+                "_desc_emergency_exit_floor_usdt": "Минимальный гарантированный чистый плюс при панике/навесе (S >= 0.70). В минус закрытие категорически запрещено.",
                 "min_panic_recovery": 0.40,
                 "relaxed_toxicity_threshold": 0.35,
-                "relaxed_min_level_idx": 1
-            },
-            "radar_sync_23h": {
-                "enabled": true,
-                "rotation_window_hours": 23.0,
-                "pre_rotation_lead_minutes": 45.0,
-                "daily_target_quant_mult": 1.5
-            },
-            "radar_rotation_on_close": {
-                "enabled": true,
-                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш.",
-                "selector_type": "samsonov_funnel",
-                "_desc_selector_type": "'samsonov_funnel' (по телеметрии Радара) или 'alpha_coin_selector' (по свечам волатильности).",
-                "target_coins_count": 4,
-                "_desc_target_coins_count": "Целевое количество монет в обойме стратегии.",
-                "min_score_lead_pct": 35.0,
-                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%.",
-                "quant_base_usdt": 10.0,
-                "quant_reference_size": 600.0
+                "moderate_exit_floor_usdt": 8.0,
+                "min_moderate_recovery": 0.20,
+                "relaxed_exit_floor_usdt": 15.0
             },
             "trailing_ratchet": {
+                "_desc": "Способ 1 (Скелет реагирования): Чистая карта уровней лестницы Фибоначчи L0..L5. Курок взводится при достижении activation и закрывает корзину при откате к floor.",
                 "enabled": true,
-                "quant_base_usdt": 10.0,
-                "quant_reference_size": 600.0,
                 "levels": [
                     {
                         "activation": 8.0,

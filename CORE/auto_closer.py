@@ -384,85 +384,36 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 if mode == "toxicity_adaptive":
                     margin_load, depth_ratio, f_ratio, d_rec = self.extract_toxicity_metrics(strat_cfg, strat_analytics, self.bot_core)
-                    weights = pos_cfg.get("toxicity_weights")
+                    t_cfg = pos_cfg.get("toxicity_adaptive", {})
+                    weights = t_cfg.get("score_weights") or pos_cfg.get("toxicity_weights")
                     t_score = ToxicityEngine.calculate_toxicity_score(margin_load, depth_ratio, f_ratio, d_rec, weights)
 
-                    # Проверка опционального суб-триггера 23h ротации
-                    sync_cfg = pos_cfg.get("radar_sync_23h", {})
-                    if sync_cfg.get("enabled", False):
-                        is_sync, s_target, s_info = ToxicityEngine.evaluate_radar_sync(
-                            iter_net=iter_net, iter_age_hours=iter_age_h, sync_cfg=sync_cfg, scale_factor=scale_factor
-                        )
-                        if is_sync:
-                            strat_triggered = True
-                            strat_msg = self._build_close_msg(
-                                name=f"КУПОЛА [{strat_cfg.name}]",
-                                symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
-                                iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                                new_iter_start_net=0.0, close_type="RADAR 23H PRE-ROTATION",
-                                detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Target: <b>{s_target:.2f} USDT</b>).\nСобытие: {s_info}."
-                            )
-
-                    if not strat_triggered:
-                        should_close, trig_floor, r_info, is_stagnation = ToxicityEngine.evaluate_toxicity_adaptive(
-                            iter_net=iter_net,
-                            iter_age_hours=iter_age_h,
-                            ratchet_cfg=r_cfg,
-                            state=r_state,
-                            toxicity_score=t_score,
-                            delta_recovery=d_rec,
-                            scale_factor=scale_factor,
-                        )
-                        if should_close and trig_floor is not None:
-                            strat_triggered = True
-                            logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
-                            strat_msg = self._build_close_msg(
-                                name=f"КУПОЛА [{strat_cfg.name}]",
-                                symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
-                                iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                                new_iter_start_net=0.0, close_type="TOXICITY ADAPTIVE",
-                                detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nИнвентарь: Toxicity Score: <b>{t_score:.2f}</b>, Delta Recovery: <b>{d_rec:.0%}</b>.\nСобытие: {r_info}."
-                            )
-
-                # -------------------------------------------------------------
-                # РЕЖИМ 3: RADAR SYNC 23H (Синхронизация с 23-часовым окном radar_synergy)
-                # -------------------------------------------------------------
-                elif mode == "radar_sync_23h":
-                    sync_cfg = pos_cfg.get("radar_sync_23h", {})
-                    is_sync, s_target, s_info = ToxicityEngine.evaluate_radar_sync(
-                        iter_net=iter_net, iter_age_hours=iter_age_h, sync_cfg=sync_cfg, scale_factor=scale_factor
+                    should_close, trig_floor, r_info, is_stagnation = ToxicityEngine.evaluate_toxicity_adaptive(
+                        iter_net=iter_net,
+                        iter_age_hours=iter_age_h,
+                        ratchet_cfg=pos_cfg,
+                        state=r_state,
+                        toxicity_score=t_score,
+                        delta_recovery=d_rec,
+                        scale_factor=scale_factor,
                     )
-                    if is_sync:
+                    if should_close and trig_floor is not None:
                         strat_triggered = True
-                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {s_info}. Auto-closing dome!")
+                        cls_rule = getattr(self, "_last_matched_rule", "") or "toxicity_adaptive"
+                        self._last_matched_rule = cls_rule
+                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
                         strat_msg = self._build_close_msg(
                             name=f"КУПОЛА [{strat_cfg.name}]",
                             symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
                             iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                            new_iter_start_net=0.0, close_type="RADAR 23H PRE-ROTATION",
-                            detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Target: <b>{s_target:.2f} USDT</b>).\nСобытие: {s_info}."
+                            new_iter_start_net=0.0, close_type="TOXICITY ADAPTIVE",
+                            detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nИнвентарь: Toxicity Score: <b>{t_score:.2f}</b>, Delta Recovery: <b>{d_rec:.0%}</b>.\nСобытие: {r_info}."
                         )
-                    else:
-                        r_cfg_scaled = copy.deepcopy(r_cfg)
-                        r_cfg_scaled["scale_factor"] = scale_factor
-                        should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
-                            iter_net=iter_net, iter_age_hours=iter_age_h, ratchet_cfg=r_cfg_scaled, state=r_state
-                        )
-                        if should_close and trig_floor is not None:
-                            strat_triggered = True
-                            logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
-                            strat_msg = self._build_close_msg(
-                                name=f"КУПОЛА [{strat_cfg.name}]",
-                                symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
-                                iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                                new_iter_start_net=0.0, close_type="RADAR SYNC / TRAILING RATCHET",
-                                detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
-                            )
 
                 # -------------------------------------------------------------
                 # РЕЖИМ 1: ITER NET CLASSIC / TRAILING RATCHET
                 # -------------------------------------------------------------
-                elif mode in ("iter_net_classic", "trailing_ratchet") or (r_cfg and r_cfg.get("enabled", True)):
+                elif mode in ("iter_net_classic", "trailing_ratchet"):
                     import copy
                     r_cfg_scaled = copy.deepcopy(r_cfg)
                     r_cfg_scaled["scale_factor"] = scale_factor
@@ -478,6 +429,26 @@ class AutoCloser:
                             iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
                             new_iter_start_net=0.0, close_type="ITER NET CLASSIC",
                             detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
+                        )
+
+                # -------------------------------------------------------------
+                # РЕЖИМ 3: FIXED NET (Прямой тейк корзины по фиксированному Net профиту)
+                # -------------------------------------------------------------
+                elif mode == "fixed_net":
+                    fixed_cfg = pos_cfg.get("fixed_net", {})
+                    is_fixed, trig_target, f_info = ToxicityEngine.evaluate_fixed_net(
+                        iter_net=iter_net, fixed_cfg=fixed_cfg, scale_factor=scale_factor
+                    )
+                    if is_fixed and trig_target is not None:
+                        strat_triggered = True
+                        self._last_matched_rule = "fixed_net"
+                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {f_info}. Auto-closing dome!")
+                        strat_msg = self._build_close_msg(
+                            name=f"КУПОЛА [{strat_cfg.name}]",
+                            symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
+                            iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
+                            new_iter_start_net=0.0, close_type="FIXED NET PROFIT",
+                            detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Цель: <b>+{trig_target:.2f} USDT</b>).\nСобытие: {f_info}."
                         )
 
                 # -------------------------------------------------------------
@@ -611,15 +582,57 @@ class AutoCloser:
         new_iter_start_net_g = round(net_usdt, 4)
         
         # Check Positive Portfolio
-        mode_g = pos_cfg.get("mode", "")
-        r_cfg_g = pos_cfg.get("trailing_ratchet")
-        if mode_g == "trailing_ratchet" or (r_cfg_g and r_cfg_g.get("enabled")):
-            r_state_g = self._trailing_ratchet_state.setdefault("__global__", {})
-            if r_state_g.get("iteration_index") != iter_idx_g:
-                r_state_g.clear()
-                r_state_g["iteration_index"] = iter_idx_g
-            first_ts_g = analytics_data.get("iteration_start_ts", analytics_data.get("first_trade_ts", now_ms))
-            iter_age_h_g = max(0.0, (now_ms - first_ts_g) / 3600000.0)
+        mode_g = pos_cfg.get("mode", "toxicity_adaptive")
+        r_cfg_g = pos_cfg.get("trailing_ratchet") or {}
+        r_state_g = self._trailing_ratchet_state.setdefault("__global__", {})
+        if r_state_g.get("iteration_index") != iter_idx_g:
+            r_state_g.clear()
+            r_state_g["iteration_index"] = iter_idx_g
+        first_ts_g = analytics_data.get("iteration_start_ts", analytics_data.get("first_trade_ts", now_ms))
+        iter_age_h_g = max(0.0, (now_ms - first_ts_g) / 3600000.0)
+
+        if mode_g == "toxicity_adaptive":
+            deposit_g = float(analytics_data.get("cur_balance_usdt", analytics_data.get("start_balance_usdt", 4000.0)))
+            cur_floating_g = float(analytics_data.get("unrealized_pnl_usdt", 0.0))
+            max_dd_g = float(analytics_data.get("max_drawdown_usdt", cur_floating_g))
+            realized_g = float(analytics_data.get("iteration_realized_pnl_usdt", analytics_data.get("realized_pnl_usdt", 0.0)))
+
+            total_margin_g = 0.0
+            per_coin_g = analytics_data.get("per_coin", {})
+            if isinstance(per_coin_g, dict):
+                for c_data in per_coin_g.values():
+                    if isinstance(c_data, dict):
+                        total_margin_g += float(c_data.get("current_margin_usdt", 0.0))
+            margin_load_g = (total_margin_g / deposit_g) if deposit_g > 0 else 0.0
+            depth_ratio_g = 0.5
+            float_ratio_g = abs(cur_floating_g) / (abs(cur_floating_g) + max(0.0, realized_g) + 1.0)
+            delta_rec_g = ToxicityEngine.calculate_delta_recovery(cur_floating_g, max_dd_g)
+
+            t_cfg_g = pos_cfg.get("toxicity_adaptive", {})
+            weights_g = t_cfg_g.get("score_weights") or pos_cfg.get("toxicity_weights")
+            t_score_g = ToxicityEngine.calculate_toxicity_score(margin_load_g, depth_ratio_g, float_ratio_g, delta_rec_g, weights_g)
+
+            should_close, trig_floor, r_info, is_stagnation = ToxicityEngine.evaluate_toxicity_adaptive(
+                iter_net=iter_net_g,
+                iter_age_hours=iter_age_h_g,
+                ratchet_cfg=pos_cfg,
+                state=r_state_g,
+                toxicity_score=t_score_g,
+                delta_recovery=delta_rec_g,
+                scale_factor=1.0,
+            )
+            if should_close and trig_floor is not None:
+                self._is_closing = True
+                triggered = True
+                logger.info(f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} {r_info}. Auto-closing portfolio!")
+                action_msg = self._build_close_msg(
+                    name="ПОРТФЕЛЯ", symbols_str="", iter_idx=iter_idx_g, next_iter_idx=next_iter_idx_g,
+                    iter_net=iter_net_g, strat_net=net_usdt, new_iter_start_net=new_iter_start_net_g,
+                    close_type="TOXICITY ADAPTIVE",
+                    detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nИнвентарь: Score: <b>{t_score_g:.2f}</b>, Recovery: <b>{delta_rec_g:.0%}</b>.\nСобытие: {r_info}."
+                )
+
+        elif mode_g in ("iter_net_classic", "trailing_ratchet"):
             should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
                 iter_net=iter_net_g, iter_age_hours=iter_age_h_g, ratchet_cfg=r_cfg_g or {}, state=r_state_g
             )
@@ -633,6 +646,23 @@ class AutoCloser:
                     close_type="TRAILING RATCHET",
                     detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
                 )
+
+        elif mode_g == "fixed_net":
+            fixed_cfg_g = pos_cfg.get("fixed_net", {})
+            is_fixed, trig_target, f_info = ToxicityEngine.evaluate_fixed_net(
+                iter_net=iter_net_g, fixed_cfg=fixed_cfg_g, scale_factor=1.0
+            )
+            if is_fixed and trig_target is not None:
+                self._is_closing = True
+                triggered = True
+                logger.info(f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} {f_info}. Auto-closing portfolio!")
+                action_msg = self._build_close_msg(
+                    name="ПОРТФЕЛЯ", symbols_str="", iter_idx=iter_idx_g, next_iter_idx=next_iter_idx_g,
+                    iter_net=iter_net_g, strat_net=net_usdt, new_iter_start_net=new_iter_start_net_g,
+                    close_type="FIXED NET PROFIT",
+                    detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Цель: <b>+{trig_target:.2f} USDT</b>).\nСобытие: {f_info}."
+                )
+
         else:
             th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(analytics_data, pos_cfg)
             if th_pos is not None and iter_net_g >= th_pos:

@@ -403,88 +403,89 @@ class ToxicityEngine:
         scale_factor: float = 1.0,
     ) -> Tuple[bool, Optional[float], str, bool]:
         """
-        Адаптивный автоклоз на основе Toxicity Score (Режим 2):
-        1. Высокая токсичность (S >= panic_threshold, по умолчанию 0.70):
-           - Портфель в критическом навесе.
-           - Если просадка хотя бы частично отскочила (delta_recovery >= 0.40)
-             и iter_net >= emergency_floor (по умолчанию 0.3 * Q, т.е. +3.0 USDT * scale_factor),
-             происходит экстренная фиксация и сброс в кэш!
-        2. Низкая токсичность (S < relaxed_threshold, по умолчанию 0.35):
-           - Легкий рынок. Нижние уровни (L1: 13$) пропускаются, курок сдвигается
-             на L2 (21$) или выше, чтобы не резать легкие Maker-позиции.
-        3. Средняя токсичность (0.35 <= S < 0.70):
-           - Обычная ступенчатая Фибо-лестница, стартующая с L1 (13$).
+        Способ 2: Адаптивный Фикс по СКОРУ и СПАДУ токсичности инвентаря.
+        Прямой сброс всей корзины в 100% USDT кэш без ожидания отката трейлинга:
+        - ЖЕЛЕЗНЫЙ ИНВАРИАНТ: iter_net ОБЯЗАН быть строго положительным (iter_net >= floor > 0). В минус не закрываем никогда!
+        1. Высокая токсичность (S >= panic_th, дефолт 0.70):
+           - При рассасывании ямы (delta_recovery >= min_panic_recovery, дефолт 0.40)
+             и iter_net >= emergency_floor (дефолт +3.0 USDT * scale) -> экстренный сброс в кэш!
+        2. Умеренная токсичность (relaxed_th <= S < panic_th, дефолт 0.35..0.70):
+           - При рассасывании ямы (delta_recovery >= min_moderate_recovery, дефолт 0.20)
+             и iter_net >= moderate_floor (дефолт +8.0 USDT * scale) -> рабочий сброс в кэш!
+        3. Низкая токсичность / Легкий рынок (S < relaxed_th, дефолт < 0.35):
+           - Инвентарь не давит, маржа свободна.
+             При iter_net >= relaxed_floor (дефолт +15.0 USDT * scale) -> целевой сброс в кэш!
         """
-        import copy
+        # Железная защита от минуса: в положительной ветке автоклозера минус запрещен абсолютно
+        if iter_net <= 0.0:
+            return False, None, "", False
+
         t_cfg = ratchet_cfg.get("toxicity_adaptive", {})
         panic_th = float(t_cfg.get("panic_toxicity_threshold", 0.70))
-        emergency_mult = float(t_cfg.get("emergency_exit_floor_mult", 0.30))
         relaxed_th = float(t_cfg.get("relaxed_toxicity_threshold", 0.35))
-        quant_base = float(ratchet_cfg.get("quant_base_usdt", 10.0))
-        q = quant_base * scale_factor
 
-        # 1. АВАРИЙНЫЙ СБРОС ТОКСИЧНОГО ИНВЕНТАРЯ (PANIC EVACUATION)
+        # Минимальные целевые пороги чистого профита (с учетом масштаба портфеля)
+        emergency_floor = max(1.0, round(float(t_cfg.get("emergency_exit_floor_usdt", 3.0)) * scale_factor, 2))
+        moderate_floor = max(2.0, round(float(t_cfg.get("moderate_exit_floor_usdt", 8.0)) * scale_factor, 2))
+        relaxed_floor = max(3.0, round(float(t_cfg.get("relaxed_exit_floor_usdt", 15.0)) * scale_factor, 2))
+
+        # 1. ВЫСОКАЯ ТОКСИЧНОСТЬ (ПАНИКА / НАВЕС МАРЖИ)
         if toxicity_score >= panic_th:
-            emergency_floor = max(0.0, round(emergency_mult * q, 2))
-            min_recovery = float(t_cfg.get("min_panic_recovery", 0.40))
-            if delta_recovery >= min_recovery and iter_net >= emergency_floor:
+            min_panic_rec = float(t_cfg.get("min_panic_recovery", 0.40))
+            if delta_recovery >= min_panic_rec and iter_net >= emergency_floor:
                 info = (
-                    f"[TOXICITY EVACUATION (Score {toxicity_score:.2f} >= {panic_th:.2f}, "
-                    f"Recovery {delta_recovery:.0%}): Net {iter_net:+.2f} >= Floor {emergency_floor:.2f} USDT]"
+                    f"[TOXICITY EVACUATION: Score {toxicity_score:.2f} >= {panic_th:.2f} | "
+                    f"Recovery {delta_recovery:.0%} >= {min_panic_rec:.0%} | "
+                    f"Net {iter_net:+.2f} >= Floor {emergency_floor:.2f} USDT]"
                 )
                 return True, emergency_floor, info, True
 
-        # 2. АДАПТИВНАЯ КОРРЕКЦИЯ УРОВНЕЙ ФИБО
-        cfg_copy = copy.deepcopy(ratchet_cfg)
-        cfg_copy["scale_factor"] = scale_factor
-        levels = cfg_copy.get("levels", [])
+        # 2. УМЕРЕННАЯ ТОКСИЧНОСТЬ (РАБОЧАЯ СЕТКА)
+        elif toxicity_score >= relaxed_th:
+            min_mod_rec = float(t_cfg.get("min_moderate_recovery", 0.20))
+            if delta_recovery >= min_mod_rec and iter_net >= moderate_floor:
+                info = (
+                    f"[TOXICITY MODERATE FIX: Score {toxicity_score:.2f} | "
+                    f"Recovery {delta_recovery:.0%} >= {min_mod_rec:.0%} | "
+                    f"Net {iter_net:+.2f} >= Floor {moderate_floor:.2f} USDT]"
+                )
+                return True, moderate_floor, info, False
 
-        # Если токсичность низкая (легкий рынок), отключаем L1 (13$), поднимаем порог до L2 (21$)
-        if toxicity_score < relaxed_th and len(levels) > 1:
-            relaxed_min_lvl = int(t_cfg.get("relaxed_min_level_idx", 1))
-            for i in range(min(relaxed_min_lvl + 1, len(levels))):
-                if levels[i].get("min_age_hours", 0.0) == 0.0:
-                    levels[i]["enabled"] = False
+        # 3. НИЗКАЯ ТОКСИЧНОСТЬ (ЛЕГКИЙ РЫНОК / 0-1 ШАГИ)
+        else:
+            if iter_net >= relaxed_floor:
+                info = (
+                    f"[TOXICITY LIGHT FIX: Score {toxicity_score:.2f} < {relaxed_th:.2f} | "
+                    f"Net {iter_net:+.2f} >= Floor {relaxed_floor:.2f} USDT]"
+                )
+                return True, relaxed_floor, info, False
 
-        should_close, floor, info, is_stag = BaseTrailingSystem.evaluate_ratchet(
-            iter_net=iter_net,
-            iter_age_hours=iter_age_hours,
-            ratchet_cfg=cfg_copy,
-            state=state,
-        )
-        if should_close:
-            info = f"[TOXICITY ADAPTIVE (Score {toxicity_score:.2f}, Rec {delta_recovery:.0%})] {info}"
-        return should_close, floor, info, is_stag
+        return False, None, "", False
 
     @classmethod
-    def evaluate_radar_sync(
+    def evaluate_fixed_net(
         cls,
         iter_net: float,
-        iter_age_hours: float,
-        sync_cfg: dict,
+        fixed_cfg: dict,
         scale_factor: float = 1.0,
     ) -> Tuple[bool, Optional[float], str]:
         """
-        Режим 3: Синхронизация с 23-часовым окном radar_synergy.
-        За pre_rotation_lead_minutes до ротации (22ч 15мин):
-        если iter_net >= daily_target_usdt * scale_factor,
-        фиксируем прибыль пула и очищаем позиции перед загрузкой свежих монет.
+        Режим 4: Фиксация по фиксированному значению чистого Net профита текущей итерации.
+        Без трейлинга, без ожидания отката: как только iter_net >= target_net_usdt,
+        немедленно фиксируем прибыль и сбрасываем корзину позиций в 100% USDT кэш.
         """
-        rot_window_h = float(sync_cfg.get("rotation_window_hours", 23.0))
-        lead_min = float(sync_cfg.get("pre_rotation_lead_minutes", 45.0))
-        target_mult = float(sync_cfg.get("daily_target_quant_mult", 1.5))
-        quant_base = float(sync_cfg.get("quant_base_usdt", 10.0))
+        if not fixed_cfg.get("enabled", True):
+            return False, None, ""
 
-        lead_h = lead_min / 60.0
-        trigger_time_h = rot_window_h - lead_h
-        target_profit = round(target_mult * quant_base * scale_factor, 2)
+        raw_target = float(fixed_cfg.get("target_net_usdt", 21.0))
+        if fixed_cfg.get("scale_by_invest_size", False):
+            target_fixed = round(raw_target * scale_factor, 2)
+        else:
+            target_fixed = raw_target
 
-        if iter_age_hours >= trigger_time_h and iter_net >= target_profit:
-            info = (
-                f"[RADAR 23H PRE-ROTATION HARVEST (Age {iter_age_hours:.1f}h >= {trigger_time_h:.2f}h): "
-                f"Net {iter_net:+.2f} >= Daily Target {target_profit:.2f} USDT]"
-            )
-            return True, target_profit, info
+        if iter_net >= target_fixed:
+            info = f"[FIXED NET PROFIT TARGET: Net {iter_net:+.2f} >= Target {target_fixed:.2f} USDT]"
+            return True, target_fixed, info
 
         return False, None, ""
 

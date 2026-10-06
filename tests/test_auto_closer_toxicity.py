@@ -101,11 +101,24 @@ class TestAutoCloserToxicityAndModes(unittest.TestCase):
         self.assertEqual(floor, 3.0)
         self.assertIn("TOXICITY EVACUATION", info)
 
-    def test_mode2_toxicity_adaptive_relaxed_skips_l1(self):
-        """Режим 2: При низкой токсичности (S < 0.35) порог L1 (13$) игнорируется, курок ждет L2 (21$)."""
+    def test_mode2_toxicity_adaptive_relaxed_target(self):
+        """Способ 2: При низкой токсичности (S < 0.35) бот ждет полноценный целевой фикс 15.0 USDT."""
         state = {}
-        # Легкий рынок: S = 0.20, Net = 16.0$ (пробил старый L1=15.5$, но в легком рынке L1 отключен!)
-        should_close, floor, info, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+        # 1. Легкий рынок: S = 0.20, Net = 12.0$ (< 15.0$) -> не закрываемся
+        sc_low, fl_low, _, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=12.0,
+            iter_age_hours=2.0,
+            ratchet_cfg=self.ratchet_cfg,
+            state=state,
+            toxicity_score=0.20,
+            delta_recovery=0.90,
+            scale_factor=1.0
+        )
+        self.assertFalse(sc_low)
+        self.assertIsNone(fl_low)
+
+        # 2. Net = 16.0$ (>= 15.0$) -> прямой сброс корзины в кэш
+        sc_hit, fl_hit, info_hit, _ = ToxicityEngine.evaluate_toxicity_adaptive(
             iter_net=16.0,
             iter_age_hours=2.0,
             ratchet_cfg=self.ratchet_cfg,
@@ -114,37 +127,114 @@ class TestAutoCloserToxicityAndModes(unittest.TestCase):
             delta_recovery=0.90,
             scale_factor=1.0
         )
-        # Не закрываемся, потому что L1 отключен, курок ждет L2 (24.5$)
+        self.assertTrue(sc_hit)
+        self.assertEqual(fl_hit, 15.0)
+        self.assertIn("TOXICITY LIGHT FIX", info_hit)
+
+    def test_toxicity_adaptive_never_closes_at_negative(self):
+        """Инвариант безопасности: в положительной ветке автоклозера закрытие при iter_net <= 0 категорически запрещено!"""
+        state = {}
+        # Даже при критической панике (S=0.95) и отскоке ямы (R_delta=0.80), если iter_net отрицательный - НИКАКОГО ЗАКРЫТИЯ
+        should_close, floor, _, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=-5.0,
+            iter_age_hours=2.0,
+            ratchet_cfg=self.ratchet_cfg,
+            state=state,
+            toxicity_score=0.95,
+            delta_recovery=0.80,
+            scale_factor=1.0,
+        )
         self.assertFalse(should_close)
         self.assertIsNone(floor)
 
-    def test_mode3_radar_sync_23h(self):
-        """Режим 3: Синхронизация с 23-часовым окном radar_synergy."""
-        sync_cfg = {
-            "rotation_window_hours": 23.0,
-            "pre_rotation_lead_minutes": 45.0,
-            "daily_target_quant_mult": 1.5,
-            "quant_base_usdt": 10.0
+        # При нулевом профите также не закрываемся
+        should_close_zero, floor_zero, _, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=0.0,
+            iter_age_hours=2.0,
+            ratchet_cfg=self.ratchet_cfg,
+            state=state,
+            toxicity_score=0.95,
+            delta_recovery=0.80,
+            scale_factor=1.0,
+        )
+        self.assertFalse(should_close_zero)
+        self.assertIsNone(floor_zero)
+
+    def test_mode2_toxicity_adaptive_moderate_and_relaxed(self):
+        """Способ 2: Проверка умеренной (0.35 <= S < 0.70) и легкой (S < 0.35) фиксации прибыли."""
+        state = {}
+        # 1. Умеренная токсичность: S = 0.50, R_delta = 0.30, целевой фикс = 8.0 USDT
+        # При Net = 6.0 USDT (< 8.0) не закрываемся
+        sc_mod_low, _, _, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=6.0, iter_age_hours=2.0, ratchet_cfg=self.ratchet_cfg, state=state,
+            toxicity_score=0.50, delta_recovery=0.30, scale_factor=1.0
+        )
+        self.assertFalse(sc_mod_low)
+
+        # При Net = 8.5 USDT (>= 8.0) фиксируем умеренный тейк без трейлинга
+        sc_mod_hit, fl_mod, info_mod, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=8.5, iter_age_hours=2.0, ratchet_cfg=self.ratchet_cfg, state=state,
+            toxicity_score=0.50, delta_recovery=0.30, scale_factor=1.0
+        )
+        self.assertTrue(sc_mod_hit)
+        self.assertEqual(fl_mod, 8.0)
+        self.assertIn("TOXICITY MODERATE FIX", info_mod)
+
+        # 2. Легкая токсичность: S = 0.20 (инвентарь свободен), целевой фикс = 15.0 USDT
+        # При Net = 12.0 USDT (< 15.0) не закрываемся
+        sc_light_low, _, _, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=12.0, iter_age_hours=2.0, ratchet_cfg=self.ratchet_cfg, state=state,
+            toxicity_score=0.20, delta_recovery=0.90, scale_factor=1.0
+        )
+        self.assertFalse(sc_light_low)
+
+        # При Net = 15.5 USDT (>= 15.0) фиксируем легкий тейк
+        sc_light_hit, fl_light, info_light, _ = ToxicityEngine.evaluate_toxicity_adaptive(
+            iter_net=15.5, iter_age_hours=2.0, ratchet_cfg=self.ratchet_cfg, state=state,
+            toxicity_score=0.20, delta_recovery=0.90, scale_factor=1.0
+        )
+        self.assertTrue(sc_light_hit)
+        self.assertEqual(fl_light, 15.0)
+        self.assertIn("TOXICITY LIGHT FIX", info_light)
+
+    def test_mode4_fixed_net(self):
+        """Способ 3: Фиксация по прямому фиксированному значению Net профита итерации (Fixed Net)."""
+        fixed_cfg = {
+            "enabled": True,
+            "target_net_usdt": 15.0,
+            "scale_by_invest_size": False
         }
-        # 1. Возраст 10 часов (< 22.25ч) -> синхронизация не срабатывает
-        is_sync_early, _, _ = ToxicityEngine.evaluate_radar_sync(
-            iter_net=18.0, iter_age_hours=10.0, sync_cfg=sync_cfg, scale_factor=1.0
+        # 1. При Net = 14.5 USDT (< 15.0) -> не закрываемся
+        is_fixed, trig, info = ToxicityEngine.evaluate_fixed_net(
+            iter_net=14.5, fixed_cfg=fixed_cfg, scale_factor=1.0
         )
-        self.assertFalse(is_sync_early)
+        self.assertFalse(is_fixed)
+        self.assertIsNone(trig)
 
-        # 2. Возраст 22.5 часа (>= 22.25ч), но профит 10$ (< 15$) -> не закрываемся
-        is_sync_low_profit, _, _ = ToxicityEngine.evaluate_radar_sync(
-            iter_net=10.0, iter_age_hours=22.5, sync_cfg=sync_cfg, scale_factor=1.0
+        # 2. При Net = 15.2 USDT (>= 15.0) -> мгновенный сброс в кэш!
+        is_fixed_hit, trig_hit, info_hit = ToxicityEngine.evaluate_fixed_net(
+            iter_net=15.2, fixed_cfg=fixed_cfg, scale_factor=1.0
         )
-        self.assertFalse(is_sync_low_profit)
+        self.assertTrue(is_fixed_hit)
+        self.assertEqual(trig_hit, 15.0)
+        self.assertIn("FIXED NET PROFIT TARGET", info_hit)
 
-        # 3. Возраст 22.5 часа, профит 16.5$ (>= 15$) -> фиксируем прибыль перед ротацией!
-        is_sync_trigger, target, info = ToxicityEngine.evaluate_radar_sync(
-            iter_net=16.5, iter_age_hours=22.5, sync_cfg=sync_cfg, scale_factor=1.0
+        # 3. С масштабированием сайза 10x (цель 150.0 USDT)
+        fixed_cfg_scaled = {
+            "enabled": True,
+            "target_net_usdt": 15.0,
+            "scale_by_invest_size": True
+        }
+        is_scale_low, _, _ = ToxicityEngine.evaluate_fixed_net(
+            iter_net=120.0, fixed_cfg=fixed_cfg_scaled, scale_factor=10.0
         )
-        self.assertTrue(is_sync_trigger)
-        self.assertEqual(target, 15.0)
-        self.assertIn("RADAR 23H PRE-ROTATION HARVEST", info)
+        self.assertFalse(is_scale_low)
+
+        is_scale_hit, trig_scale, _ = ToxicityEngine.evaluate_fixed_net(
+            iter_net=155.0, fixed_cfg=fixed_cfg_scaled, scale_factor=10.0
+        )
+        self.assertTrue(is_scale_hit)
+        self.assertEqual(trig_scale, 150.0)
 
 
 if __name__ == "__main__":

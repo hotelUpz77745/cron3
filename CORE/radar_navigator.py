@@ -175,18 +175,18 @@ class RadarNavigator:
             )
             return
 
-        if self.on_stagnation and not is_stagnation:
-            logger.info(f"[RadarNavigator][{strat_id}] Закрытие не по стагнации. Ротация пропущена.")
-            return
-
         # Разрешение настроек ротации из автоклозера стратегии (radar_rotation_on_close)
-        strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+        strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") and hasattr(self.bot_core.strategy_registry, "active_strategies") and isinstance(self.bot_core.strategy_registry.active_strategies, dict) else None
         strat_ac = {}
         if strat_cfg and hasattr(strat_cfg, "auto_closing_cfg") and isinstance(strat_cfg.auto_closing_cfg, dict):
             strat_ac = strat_cfg.auto_closing_cfg
         rot_close_cfg = strat_ac.get("positive", {}).get("radar_rotation_on_close", {}) if isinstance(strat_ac.get("positive"), dict) else {}
-        if isinstance(rot_close_cfg, dict) and rot_close_cfg and not rot_close_cfg.get("enabled", True):
-            logger.info(f"[RadarNavigator][{strat_id}] radar_rotation_on_close выключен в автоклозере стратегии. Обойма сохраняется.")
+        if isinstance(rot_close_cfg, dict) and rot_close_cfg:
+            if not rot_close_cfg.get("enabled", False):
+                logger.info(f"[RadarNavigator][{strat_id}] radar_rotation_on_close выключен в автоклозере стратегии. Обойма сохраняется.")
+                return
+        elif self.on_stagnation and not is_stagnation:
+            logger.info(f"[RadarNavigator][{strat_id}] Закрытие не по стагнации. Ротация пропущена.")
             return
 
         selector_type = (rot_close_cfg.get("selector_type") if isinstance(rot_close_cfg, dict) else None) or self.selector_type
@@ -194,15 +194,39 @@ class RadarNavigator:
         min_lead_pct = float(rot_close_cfg.get("min_score_lead_pct") if isinstance(rot_close_cfg, dict) and "min_score_lead_pct" in rot_close_cfg else self.min_lead_pct)
 
         now_ts = time.time()
-        last_rot = self.last_rotation_ts_by_strat.get(strat_id, 0.0)
-        min_interval_hours = float(rot_close_cfg.get("min_rotation_interval_hours", 0.0)) if isinstance(rot_close_cfg, dict) else 0.0
+        raw_last_rot = self.last_rotation_ts_by_strat.get(strat_id, 0.0)
+        last_rot = float(raw_last_rot) if isinstance(raw_last_rot, (int, float)) else 0.0
+
+        raw_interval = rot_close_cfg.get("min_universe_age_hours", rot_close_cfg.get("min_rotation_interval_hours", 0.0)) if isinstance(rot_close_cfg, dict) else 0.0
+        try:
+            min_interval_hours = float(raw_interval)
+        except (TypeError, ValueError):
+            min_interval_hours = 0.0
+
+        if last_rot == 0.0:
+            start_t = getattr(strat_cfg, "start_timestamp", None)
+            if not isinstance(start_t, (int, float)):
+                start_t = None
+            if start_t is None:
+                stat_file = DATA_DIR / "ANALYTICS" / "STATS" / f"analytics_{strat_id}.json"
+                if stat_file.exists():
+                    try:
+                        st_data = json.loads(stat_file.read_text(encoding="utf-8"))
+                        ft = st_data.get("first_trade_ts") or st_data.get("iteration_start_ts")
+                        if isinstance(ft, (int, float)):
+                            start_t = ft / 1000.0 if ft > 1e11 else ft
+                    except Exception:
+                        pass
+            last_rot = float(start_t) if isinstance(start_t, (int, float)) else (now_ts - 3600.0)
+            self.last_rotation_ts_by_strat[strat_id] = last_rot
+
         if min_interval_hours > 0.0:
             min_interval_sec = min_interval_hours * 3600.0
             if (now_ts - last_rot) < min_interval_sec:
-                elapsed_h = (now_ts - last_rot) / 3600.0
+                elapsed_h = max(0.0, (now_ts - last_rot) / 3600.0)
                 logger.info(
-                    f"[RadarNavigator][{strat_id}] Храповик закрыт ({matched_rule}), но окно ротации "
-                    f"({elapsed_h:.1f}ч < {min_interval_hours}ч) еще активно. Обойма сохраняется."
+                    f"[RadarNavigator][{strat_id}] Храповик закрыт ({matched_rule}), но время непрерывной работы обоймы "
+                    f"({elapsed_h:.1f}ч < {min_interval_hours:.1f}ч) еще не достигло маст-хэв порога. Обойма сохраняется."
                 )
                 return
 
