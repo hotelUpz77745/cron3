@@ -256,7 +256,7 @@ class TestStrategySystem(unittest.TestCase):
             # Проверяем, что auto_closing унаследовал базовый шаблон из app.json
             self.assertTrue(strat.auto_closing_cfg.get("positive", {}).get("enabled"))
             ratchet_levels = strat.auto_closing_cfg.get("positive", {}).get("trailing_ratchet", {}).get("levels", [])
-            self.assertEqual(len(ratchet_levels), 8)
+            self.assertEqual(len(ratchet_levels), 6)
 
     def test_auto_closing_custom_override(self):
         """Проверка, что кастомный auto_closing переопределяет базовый шаблон из app.json."""

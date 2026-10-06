@@ -121,6 +121,95 @@ class RiskCalculatingUtils:
         active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
         return str(max(active_levels)) if active_levels else "0"
 
+
+class TakeProfitConfigResolver:
+    """
+    Полиморфный резолвер конфигурации уровня Take-Profit.
+    Поддерживает:
+    1. Новую унифицированную сигнатуру с явным разделением на usual_ и atr_:
+       {
+         "usual_": {"enabled": true, "indent": 1.5, "fallback_indent": 2.0, "activation": ...},
+         "atr_": {"enabled": false, "mult": null, "fallback_indent": null}
+       }
+    2. Классическую плоскую сигнатуру:
+       {
+         "indent": 1.5, "fallback_indent": 2.0, "activation": ...
+       }
+    """
+    @staticmethod
+    def resolve_level(lvl_cfg: dict) -> dict:
+        if not isinstance(lvl_cfg, dict):
+            return {
+                "is_atr": False,
+                "atr_mult": None,
+                "indent": None,
+                "fallback_indent": None,
+                "activation": None,
+                "min_floor": None,
+                "max_ceil": None,
+                "fallback_atr_pct": None,
+                "raw": {},
+            }
+
+        # Если задана новая сигнатура usual_ / atr_
+        if "usual_" in lvl_cfg or "atr_" in lvl_cfg:
+            atr_block = lvl_cfg.get("atr_") if isinstance(lvl_cfg.get("atr_"), dict) else {}
+            usual_block = lvl_cfg.get("usual_") if isinstance(lvl_cfg.get("usual_"), dict) else {}
+
+            is_atr_active = bool(atr_block.get("enabled", False))
+            is_usual_active = bool(usual_block.get("enabled", False))
+
+            if is_atr_active:
+                return {
+                    "is_atr": True,
+                    "atr_mult": atr_block.get("mult"),
+                    "indent": None,
+                    "fallback_indent": atr_block.get("fallback_indent", lvl_cfg.get("fallback_indent")),
+                    "activation": atr_block.get("activation", lvl_cfg.get("activation")),
+                    "min_floor": atr_block.get("min_guaranteed_floor_pct"),
+                    "max_ceil": atr_block.get("max_ceiling_pct"),
+                    "fallback_atr_pct": atr_block.get("fallback_atr_pct"),
+                    "raw": lvl_cfg,
+                }
+            elif is_usual_active:
+                return {
+                    "is_atr": False,
+                    "atr_mult": None,
+                    "indent": usual_block.get("indent"),
+                    "fallback_indent": usual_block.get("fallback_indent", lvl_cfg.get("fallback_indent")),
+                    "activation": usual_block.get("activation", lvl_cfg.get("activation")),
+                    "min_floor": None,
+                    "max_ceil": None,
+                    "fallback_atr_pct": None,
+                    "raw": lvl_cfg,
+                }
+            else:
+                return {
+                    "is_atr": False,
+                    "atr_mult": None,
+                    "indent": usual_block.get("indent", lvl_cfg.get("indent")),
+                    "fallback_indent": usual_block.get("fallback_indent", atr_block.get("fallback_indent", lvl_cfg.get("fallback_indent"))),
+                    "activation": usual_block.get("activation", lvl_cfg.get("activation")),
+                    "min_floor": None,
+                    "max_ceil": None,
+                    "fallback_atr_pct": None,
+                    "raw": lvl_cfg,
+                }
+
+        # Классическая плоская сигнатура
+        return {
+            "is_atr": bool(lvl_cfg.get("atr_mult") is not None),
+            "atr_mult": lvl_cfg.get("atr_mult"),
+            "indent": lvl_cfg.get("indent"),
+            "fallback_indent": lvl_cfg.get("fallback_indent"),
+            "activation": lvl_cfg.get("activation"),
+            "min_floor": lvl_cfg.get("min_guaranteed_floor_pct"),
+            "max_ceil": lvl_cfg.get("max_ceiling_pct"),
+            "fallback_atr_pct": lvl_cfg.get("fallback_atr_pct"),
+            "raw": lvl_cfg,
+        }
+
+
 class SpecManager:
     """
     Управляет периодическим обновлением спецификаций инструментов (exchangeInfo).

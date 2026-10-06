@@ -182,19 +182,40 @@ DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or {
     },
     "positive": {
         "enabled": True,
-        "mode": "trailing_ratchet",
-        "_desc_mode": "Ступенчатый Трейлинг-Храповик по чистому Net (Фибо-лестница)",
+        "mode": "toxicity_adaptive",
+        "_desc_mode": "Режимы автоклозера: 'toxicity_adaptive' (Режим 2 - Рекомендуемый: инвентарный скор токсичности и эвакуация), 'iter_net_classic' (Режим 1: чистый Net Фибо-храповик 13$..89$), 'radar_sync_23h' (Режим 3: фиксация за 45 мин до ротации монет radar_synergy)",
+        "quant_base_usdt": 10.0,
+        "quant_reference_size": 600.0,
+        "toxicity_weights": {
+            "margin_load": 0.35,
+            "grid_depth": 0.30,
+            "float_ratio": 0.25,
+            "delta_recovery": 0.15
+        },
+        "toxicity_adaptive": {
+            "panic_toxicity_threshold": 0.70,
+            "emergency_exit_floor_mult": 0.30,
+            "min_panic_recovery": 0.40,
+            "relaxed_toxicity_threshold": 0.35,
+            "relaxed_min_level_idx": 1
+        },
+        "radar_sync_23h": {
+            "enabled": True,
+            "rotation_window_hours": 23.0,
+            "pre_rotation_lead_minutes": 45.0,
+            "daily_target_quant_mult": 1.5
+        },
         "trailing_ratchet": {
             "enabled": True,
+            "quant_base_usdt": 10.0,
+            "quant_reference_size": 600.0,
             "levels": [
-                {"activation": 5.0, "floor": 3.8, "min_age_hours": 24.0, "enabled": True, "_desc": "Выныривание из ямы"},
-                {"activation": 7.5, "floor": 5.5, "min_age_hours": 0.0, "enabled": True, "_desc": "Локальный отскок"},
-                {"activation": 11.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Уверенное движение (Фибо 8.0)"},
-                {"activation": 17.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Импульсный пробой (Фибо 13.0)"},
-                {"activation": 27.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Тренд средней силы (Фибо 21.0)"},
-                {"activation": 44.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Мощный тренд (Фибо 34.0)"},
-                {"activation": 72.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Экстраординарный памп (Фибо 55.0)"},
-                {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "Мега-ралли (Фибо 89.0)"}
+                {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True, "_desc": "L0: Затяжная стагнация (24h+)"},
+                {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L1: Институциональный старт (Фибо 13.0)"},
+                {"activation": 24.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L2: Уверенное Фибо-движение (Фибо 21.0)"},
+                {"activation": 39.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L3: Сильный тренд (Фибо 34.0)"},
+                {"activation": 63.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L4: Импульсный памп (Фибо 55.0)"},
+                {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L5: Мега-ралли (Фибо 89.0)"}
             ]
         }
     }
