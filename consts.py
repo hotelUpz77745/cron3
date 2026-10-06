@@ -205,21 +205,33 @@ DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or {
             "pre_rotation_lead_minutes": 45.0,
             "daily_target_quant_mult": 1.5
         },
-        "trailing_ratchet": {
-            "enabled": True,
-            "quant_base_usdt": 10.0,
-            "quant_reference_size": 600.0,
-            "levels": [
-                {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True, "_desc": "L0: Затяжная стагнация (24h+)"},
-                {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L1: Институциональный старт (Фибо 13.0)"},
-                {"activation": 24.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L2: Уверенное Фибо-движение (Фибо 21.0)"},
-                {"activation": 39.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L3: Сильный тренд (Фибо 34.0)"},
-                {"activation": 63.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L4: Импульсный памп (Фибо 55.0)"},
-                {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L5: Мега-ралли (Фибо 89.0)"}
-            ]
+            "radar_rotation_on_close": {
+                "enabled": True,
+                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш.",
+                "selector_type": "samsonov_funnel",
+                "_desc_selector_type": "'samsonov_funnel' (по телеметрии Радара) или 'alpha_coin_selector' (по свечам волатильности).",
+                "target_coins_count": 4,
+                "_desc_target_coins_count": "Целевое количество монет в обойме стратегии.",
+                "min_score_lead_pct": 35.0,
+                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%.",
+                "quant_base_usdt": 10.0,
+                "quant_reference_size": 600.0
+            },
+            "trailing_ratchet": {
+                "enabled": True,
+                "quant_base_usdt": 10.0,
+                "quant_reference_size": 600.0,
+                "levels": [
+                    {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True, "_desc": "L0: Затяжная стагнация (24h+)"},
+                    {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L1: Институциональный старт (Фибо 13.0)"},
+                    {"activation": 24.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L2: Уверенное Фибо-движение (Фибо 21.0)"},
+                    {"activation": 39.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L3: Сильный тренд (Фибо 34.0)"},
+                    {"activation": 63.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L4: Импульсный памп (Фибо 55.0)"},
+                    {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L5: Мега-ралли (Фибо 89.0)"}
+                ]
+            }
         }
     }
-}
 
 # ============================================================
 # LOGGING

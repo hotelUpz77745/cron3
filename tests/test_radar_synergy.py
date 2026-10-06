@@ -435,17 +435,9 @@ class TestRadarSynergy(unittest.TestCase):
 
         asyncio.run(run_test())
 
-    def test_warmup_init_truncates_to_exact_target_count(self):
-        """Проверка: если радар вернул больше монет чем target_count, обойма строго обрезается до target_count."""
-        nav = self._create_navigator({"radar_synergy": {"min_radar_warmup_hours": 0.01, "target_coins_count": 4}})
-        nav.get_radar_runtime_hours = MagicMock(return_value=1.0)
-        # Радар выдал 6 кандидатов
-        nav.selector.get_funnel_stages = MagicMock(return_value={
-            "final_targets": [
-                {"symbol": "C1"}, {"symbol": "C2"}, {"symbol": "C3"},
-                {"symbol": "C4"}, {"symbol": "C5"}, {"symbol": "C6"}
-            ]
-        })
+    def test_warmup_init_preserves_operator_configured_symbols(self):
+        """Инвариант: wait_radar_warmup_and_init НЕ перезаписывает монеты оператора при старте."""
+        nav = self._create_navigator({"radar_synergy": {"target_coins_count": 4}})
 
         async def run_test():
             with patch("CORE.radar_navigator.DATA_DIR", self.root):
@@ -461,8 +453,7 @@ class TestRadarSynergy(unittest.TestCase):
                 await nav.wait_radar_warmup_and_init()
                 after_data = json.loads(app_path.read_text(encoding="utf-8"))
                 new_symbols = after_data["active_strategies"]["u9_omni_zenith_apex"]["symbols"]
-                self.assertEqual(len(new_symbols), 4)
-                self.assertEqual(new_symbols, ["C1", "C2", "C3", "C4"])
+                self.assertEqual(new_symbols, ["GRASSUSDT", "ARXUSDT", "ZROUSDT", "XPLUSDT"])
 
         asyncio.run(run_test())
 
@@ -585,17 +576,19 @@ class TestRadarSynergy(unittest.TestCase):
         nav = self._create_navigator({"radar_synergy": {"mode": "disabled"}})
         self.assertFalse(nav.is_enabled())
 
-    def test_immature_radar_runtime_blocks_rotation(self):
-        """Проверка: если радар еще не наработал min_radar_warmup_hours, ротация при храповике отклоняется."""
-        nav = self._create_navigator({"radar_synergy": {"min_radar_warmup_hours": 10.0}})
-        nav.get_radar_runtime_hours = MagicMock(return_value=3.5)  # 3.5ч < 10.0ч
-        nav.selector.calculate_coin_metrics = MagicMock()
+    def test_ratchet_rotation_executes_immediately_without_warmup_blocking(self):
+        """Инвариант: блокирующий прогрев удален, ротация при закрытии срабатывает немедленно."""
+        nav = self._create_navigator()
+        mock_metrics = [
+            {"symbol": "GRASSUSDT", "samsonov_score": 50.0},
+            {"symbol": "ARXUSDT", "samsonov_score": 10.0},
+            {"symbol": "0GUSDT", "samsonov_score": 80.0},
+        ]
+        nav.selector.calculate_coin_metrics = MagicMock(return_value=mock_metrics)
 
         async def run_test():
             await nav.on_ratchet_closed("u9_omni_zenith_apex", "<=2.0%", is_stagnation=True)
-            # Расчет метрик не должен вызываться
-            nav.selector.calculate_coin_metrics.assert_not_called()
-            self.assertEqual(len(nav.pending_rotations), 0)
+            nav.selector.calculate_coin_metrics.assert_called_once_with(universe_id="u9_omni_zenith_apex")
 
         asyncio.run(run_test())
 
@@ -741,9 +734,7 @@ class TestRadarSynergy(unittest.TestCase):
                 await nav_3.wait_radar_warmup_and_init()
                 after_data = json.loads(app_path.read_text(encoding="utf-8"))
                 new_symbols = after_data["active_strategies"]["u9_omni_zenith_apex"]["symbols"]
-                # Должно быть ровно 3 монеты (первые 3 из 5)
-                self.assertEqual(len(new_symbols), 3)
-                self.assertEqual(new_symbols, ["C1", "C2", "C3"])
+                self.assertEqual(new_symbols, ["GRASSUSDT", "ARXUSDT", "ZROUSDT"])
 
                 # Ротация при target_coins_count = 3
                 await nav_3.apply_rotation("u9_omni_zenith_apex", "C3", "NEWCOIN")

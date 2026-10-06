@@ -47,16 +47,15 @@ class RadarNavigator:
         self.radar_stats_dir: Path = self.radar_dir / "ANALYTICS" / "STATS"
         self.radar_cfg_path: Path = self.radar_dir / "CFG" / "universes.json"
 
-        # Если min_radar_warmup_hours равен None / null — первичная инициализация пропускается
-        raw_warmup = synergy_cfg.get("min_radar_warmup_hours")
-        self.min_warmup_hours: Optional[float] = float(raw_warmup) if raw_warmup is not None else None
-
-        self.poll_interval_sec: float = float(synergy_cfg.get("warmup_poll_interval_sec", 5.0))
-        self.target_count: int = int(synergy_cfg["target_coins_count"])
+        # Инвариант: блокирующий холостой ход и автокомплит при старте удалены.
+        # Монеты задаются строго вручную оператором в app.json.
+        self.min_warmup_hours: Optional[float] = None
+        self.poll_interval_sec: float = 0.0
+        self.target_count: int = int(synergy_cfg.get("target_coins_count", 4))
         self.min_rotation_interval_hours: float = float(synergy_cfg.get("min_rotation_interval_hours", 0.0))
 
         hyst_cfg = synergy_cfg.get("hysteresis", {})
-        self.min_lead_pct: float = float(hyst_cfg.get("min_score_lead_pct", 20.0))
+        self.min_lead_pct: float = float(hyst_cfg.get("min_score_lead_pct", 35.0))
 
         rot_triggers = synergy_cfg.get("rotation_triggers", {})
         self.on_stagnation: bool = bool(rot_triggers.get("on_stagnation_ratchet", True))
@@ -135,9 +134,10 @@ class RadarNavigator:
 
     async def wait_radar_warmup_and_init(self) -> None:
         """
-        Холостой ход и начальная инициализация.
-        Если min_radar_warmup_hours равен None — холостой ход пропускается,
-        и бот сразу торгует на текущих монетах до первого храповика.
+        Проверка стратегий при старте.
+        ИНВАРИАНТ: Стартовый пул монет задается СТРОГО ВРУЧНУЮ оператором в app.json.
+        Никакого автокомплита, никакого «прогрева Радара», никаких ожиданий при старте бота.
+        Бот стартует немедленно с тем, что прописано в конфиге.
         """
         if not self.is_enabled():
             return
@@ -146,113 +146,23 @@ class RadarNavigator:
         if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
             active_strats = list(self.bot_core.strategy_registry.active_strategies.keys())
         if not active_strats:
-            app_data = _CFG["active_strategies"]
+            app_data = _CFG.get("active_strategies", {})
             active_strats = [sid for sid, scfg in app_data.items() if scfg.get("enabled", False)]
 
         # 1. Строгая проверка стратегий в Радаре (Fail-Fast)
-        self.validate_strategies_in_radar(active_strats)
+        if active_strats:
+            self.validate_strategies_in_radar(active_strats)
 
-        # 2. Проверка: требуется ли холостой ход разгона?
-        if self.min_warmup_hours is None:
-            logger.info(
-                "[RadarNavigator] min_radar_warmup_hours=null -> Холостой ход и первичная инициализация пропущены. "
-                "Боевой бот стартует на текущих монетах и ожидает первого закрытия по храповику."
-            )
-            return
-
-        # Холостой ход: ожидание набора статистики Радаром
-        logger.info(f"[RadarNavigator] Старт ожидания разгона Радара (цель: {self.min_warmup_hours}ч)...")
-        while self.bot_core.is_running:
-            all_warmed = True
-            min_current_runtime = 999999.0
-
-            for sid in active_strats:
-                rt = self.get_radar_runtime_hours(sid)
-                if rt < min_current_runtime:
-                    min_current_runtime = rt
-                if rt < self.min_warmup_hours:
-                    all_warmed = False
-
-            if all_warmed and min_current_runtime >= self.min_warmup_hours:
-                logger.info(
-                    f"🟢 [RadarNavigator] Радар полностью прогрет! "
-                    f"Минимальный рантайм: {min_current_runtime:.2f}ч >= {self.min_warmup_hours}ч."
-                )
-                break
-
-            logger.info(
-                f"⏳ [RadarNavigator] Радар на разгоне: {min_current_runtime:.2f}ч / {self.min_warmup_hours}ч. "
-                f"Боевой бот в холостом режиме..."
-            )
-            if hasattr(self.bot_core, "watchdog"):
-                self.bot_core._last_tick = time.time()
-            await asyncio.sleep(self.poll_interval_sec)
-
-        # 3. Первичная инициализация пула монет (Автокомплит)
-        logger.info("[RadarNavigator] Запуск первичного автокомплита монет по алгоритму Самсонова...")
-        app_json_path = DATA_DIR / "app.json"
-        app_data = json.loads(app_json_path.read_text(encoding="utf-8"))
-        needs_reload = False
-
-        for sid in active_strats:
-            stages = self.selector.get_funnel_stages(universe_id=sid, target_count=self.target_count)
-            top_coins = [c["symbol"] for c in stages.get("final_targets", []) if c.get("symbol")]
-
-            if not top_coins:
-                current_syms = app_data["active_strategies"][sid].get("symbols", [])
-                logger.warning(
-                    f"⚠️ [RadarNavigator][{sid}] Радар вернул пустой список кандидатов (нет монет, прошедших критерии воронки Самсонова). "
-                    f"Автокомплит отменен во избежание пустого пула. Текущая боевая обойма сохранена без изменений: {current_syms}"
-                )
-                continue
-
-            # Инициализация пула: наполняем лидерами воронки Самсонова (до target_coins_count)
-            # При нехватке монет дополняем текущими боевыми монетами во избежание обрезания пула
-            if len(top_coins) < self.target_count:
-                current_syms = app_data["active_strategies"][sid].get("symbols", [])
-                for s in current_syms:
-                    if s not in top_coins and len(top_coins) < self.target_count:
-                        top_coins.append(s)
-                logger.info(
-                    f"[RadarNavigator][{sid}] Кандидаты дополнены текущими боевыми монетами "
-                    f"(всего {len(top_coins)} из макс {self.target_count}): {top_coins}"
-                )
-
-            # Если монет больше целевого размера — ограничиваем до target_coins_count
-            if len(top_coins) > self.target_count:
-                top_coins = top_coins[:self.target_count]
-
-            if not top_coins:
-                current_syms = app_data["active_strategies"][sid].get("symbols", [])
-                logger.warning(
-                    f"⚠️ [RadarNavigator][{sid}] Итоговый пул пуст. Автокомплит отклонен. "
-                    f"Сохранен текущий боевой пул: {current_syms}"
-                )
-                continue
-
-            logger.info(f"🏆 [RadarNavigator][{sid}] Отобран первичный пул монет Самсонова ({len(top_coins)} из макс {self.target_count}): {top_coins}")
-            app_data["active_strategies"][sid]["symbols"] = top_coins
-            needs_reload = True
-
-            if getattr(self.bot_core, "notifier", None):
-                coins_str = ", ".join(top_coins)
-                await self.bot_core.notifier.send_alert(
-                    f"🚀 <b>ШТУРМАН: ПЕРВИЧНАЯ ИНИЦИАЛИЗАЦИЯ [{sid}]</b>\n"
-                    f"Радар набрал зрелую статистику ({self.min_warmup_hours}ч).\n"
-                    f"Боевая обойма заряжена лидерами воронки Самсонова:\n<b>{coins_str}</b>\n"
-                    f"Боевой бот начинает торги!"
-                )
-
-        if needs_reload:
-            from c_utils import Utils
-            Utils.write_json_file(app_json_path, app_data)
-            self.bot_core.strategy_registry.reload(app_data["active_strategies"])
-            self.bot_core.symbols = self.bot_core.strategy_registry.get_all_active_symbols()
+        logger.info(
+            "[RadarNavigator] Инвариант соблюден: стартовый пул монет задан вручную оператором. "
+            "Прогрев Радара не блокирует старт. Боевой бот немедленно приступает к торгам."
+        )
 
     async def on_ratchet_closed(self, strat_id: str, matched_rule: str, is_stagnation: bool) -> None:
         """
-        Хук срабатывания храповика auto_closer.
+        Хук срабатывания автоклозера (auto_closer).
         Позиции уже сброшены в 100% кэш. Зависших позиций нет.
+        Ротация вызывается немедленно при закрытии итерации.
         """
         if not self.is_enabled():
             return
@@ -269,75 +179,101 @@ class RadarNavigator:
             logger.info(f"[RadarNavigator][{strat_id}] Закрытие не по стагнации. Ротация пропущена.")
             return
 
-        # Проверка зрелости Радара (если min_radar_warmup_hours задан явно)
-        if self.min_warmup_hours is not None:
-            runtime = self.get_radar_runtime_hours(strat_id)
-            if runtime < self.min_warmup_hours:
+        # Разрешение настроек ротации из автоклозера стратегии (radar_rotation_on_close)
+        strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+        strat_ac = {}
+        if strat_cfg and hasattr(strat_cfg, "auto_closing_cfg") and isinstance(strat_cfg.auto_closing_cfg, dict):
+            strat_ac = strat_cfg.auto_closing_cfg
+        rot_close_cfg = strat_ac.get("positive", {}).get("radar_rotation_on_close", {}) if isinstance(strat_ac.get("positive"), dict) else {}
+        if isinstance(rot_close_cfg, dict) and rot_close_cfg and not rot_close_cfg.get("enabled", True):
+            logger.info(f"[RadarNavigator][{strat_id}] radar_rotation_on_close выключен в автоклозере стратегии. Обойма сохраняется.")
+            return
+
+        selector_type = (rot_close_cfg.get("selector_type") if isinstance(rot_close_cfg, dict) else None) or self.selector_type
+        target_count = int(rot_close_cfg.get("target_coins_count") if isinstance(rot_close_cfg, dict) and "target_coins_count" in rot_close_cfg else self.target_count)
+        min_lead_pct = float(rot_close_cfg.get("min_score_lead_pct") if isinstance(rot_close_cfg, dict) and "min_score_lead_pct" in rot_close_cfg else self.min_lead_pct)
+
+        now_ts = time.time()
+        last_rot = self.last_rotation_ts_by_strat.get(strat_id, 0.0)
+        min_interval_hours = float(rot_close_cfg.get("min_rotation_interval_hours", 0.0)) if isinstance(rot_close_cfg, dict) else 0.0
+        if min_interval_hours > 0.0:
+            min_interval_sec = min_interval_hours * 3600.0
+            if (now_ts - last_rot) < min_interval_sec:
+                elapsed_h = (now_ts - last_rot) / 3600.0
                 logger.info(
-                    f"[RadarNavigator][{strat_id}] Радар еще на разгоне ({runtime:.2f}ч < {self.min_warmup_hours}ч). "
-                    f"Ротация отклонена, обойма сохраняется."
+                    f"[RadarNavigator][{strat_id}] Храповик закрыт ({matched_rule}), но окно ротации "
+                    f"({elapsed_h:.1f}ч < {min_interval_hours}ч) еще активно. Обойма сохраняется."
                 )
                 return
 
-        # 2. Суточное окно ротации: проверяем, что с прошлой ротации прошло >= min_rotation_interval_hours
-        now_ts = time.time()
-        last_rot = self.last_rotation_ts_by_strat.get(strat_id, 0.0)
-        min_interval_sec = self.min_rotation_interval_hours * 3600.0
-        if (now_ts - last_rot) < min_interval_sec:
-            elapsed_h = (now_ts - last_rot) / 3600.0
-            logger.info(
-                f"[RadarNavigator][{strat_id}] Храповик закрыт ({matched_rule}), но окно ротации "
-                f"({elapsed_h:.1f}ч < {self.min_rotation_interval_hours}ч) еще активно. Обойма сохраняется."
-            )
+        current_symbols = list(strat_cfg.symbols) if strat_cfg else []
+        if not current_symbols:
+            logger.warning(f"[RadarNavigator][{strat_id}] Текущий боевой пул стратегии пуст. Ротация невозможна.")
             return
 
         # 3. ВЕТКА АЛЬФА-СЕЛЕКТОРА (Динамический Wiggle/NATR отбор)
-        if self.selector_type == "alpha_coin_selector":
+        if selector_type == "alpha_coin_selector":
             logger.info(f"[RadarNavigator][{strat_id}] Запуск AlphaCoinSelector (NATR + Wiggle + Anti-Exhaustion)...")
-            strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
-            current_symbols = strat_cfg.symbols if strat_cfg else []
 
-            top_info = await self.alpha_selector.select_top_coins(target_count=self.target_count)
-            if not top_info:
+            full_ranked = await self.alpha_selector.select_top_coins(target_count=target_count)
+            if not full_ranked:
                 logger.warning(f"[RadarNavigator][{strat_id}] Alpha-Селектор не вернул кандидатов. Пул сохранен.")
                 return
 
-            new_symbols = [x["symbol"] for x in top_info if x.get("eligible", True)][:self.target_count]
-            if not new_symbols:
-                logger.warning(f"[RadarNavigator][{strat_id}] Нет eligible монет по Alpha-фильтрам. Пул сохранен.")
-                return
+            metrics_by_sym = {x["symbol"]: x for x in full_ranked}
 
-            if set(new_symbols) == set(current_symbols):
-                logger.info(f"[RadarNavigator][{strat_id}] Лидеры Alpha-Селектора не изменились ({new_symbols}). Обойма сохранена.")
+            current_scores = []
+            for s in current_symbols:
+                m = metrics_by_sym.get(s, {})
+                sc = float(m.get("score", 0.0))
+                current_scores.append((s, sc, m))
+            current_scores.sort(key=lambda x: x[1])  # слабейшие первыми
+
+            ext_candidates = [
+                m for m in full_ranked
+                if m.get("symbol") and m["symbol"] not in current_symbols and float(m.get("score", 0.0)) > 0.0 and m.get("eligible", True)
+            ]
+            ext_candidates.sort(key=lambda x: float(x.get("score", 0.0)), reverse=True)
+
+            qualified_rotations = []
+            max_pairs = min(len(current_scores), len(ext_candidates))
+            for i in range(max_pairs):
+                weak_sym, weak_sc, weak_m = current_scores[i]
+                cand = ext_candidates[i]
+                cand_sym = cand["symbol"]
+                cand_sc = float(cand.get("score", 0.0))
+
+                if cand_sc <= weak_sc:
+                    break
+
+                denom = max(weak_sc, 0.001)
+                lead_pct = ((cand_sc - weak_sc) / denom) * 100.0
+                logger.info(
+                    f"[RadarNavigator][{strat_id}] Alpha пара #{i+1}: Кандидат {cand_sym} (Скор: {cand_sc:.4f}) "
+                    f"vs Слабейший {weak_sym} (Скор: {weak_sc:.4f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{min_lead_pct}%)"
+                )
+                if lead_pct < min_lead_pct:
+                    break
+
+                qualified_rotations.append({
+                    "old_symbol": weak_sym,
+                    "new_symbol": cand_sym,
+                    "old_score": weak_sc,
+                    "new_score": cand_sc,
+                    "lead_pct": lead_pct,
+                    "old_meta": weak_m,
+                    "new_meta": cand,
+                })
+
+            if not qualified_rotations:
+                logger.info(
+                    f"[RadarNavigator][{strat_id}] Ни один кандидат Alpha-Селектора не превысил порог гистерезиса (+{min_lead_pct}%). "
+                    f"Обойма сохраняется без изменений."
+                )
                 self.last_rotation_ts_by_strat[strat_id] = now_ts
                 return
 
-            to_remove = [s for s in current_symbols if s not in new_symbols]
-            to_add = [s for s in new_symbols if s not in current_symbols]
-            logger.info(f"[RadarNavigator][{strat_id}] Пакетная замена обоймы: удалить {to_remove}, добавить {to_add}")
-
-            for s in to_remove:
-                await self.bot_core.delete_symbol(s)
-            for s in to_add:
-                await self.bot_core.add_symbol(s, strat_id)
-
-            self.last_rotation_ts_by_strat[strat_id] = now_ts
-
-            if getattr(self.bot_core, "notifier", None):
-                meta_lines = [
-                    f"• 🟢 <b>{x['symbol']}</b> (Alpha: {x['score']}, NATR: {x['natr']}%, Wiggle: {x['wiggle']})"
-                    for x in top_info[:self.target_count]
-                ]
-                msg = (
-                    f"🧭 <b>ШТУРМАН: СУТОЧНАЯ АЛЬФА-РОТАЦИЯ [{strat_id}]</b>\n"
-                    f"Сброс цикла храповика ({matched_rule}).\n"
-                    f"Окно ротации: >= {self.min_rotation_interval_hours}ч.\n"
-                    f"Удалено: <code>{', '.join(to_remove) if to_remove else 'нет'}</code>\n"
-                    f"Добавлено: <code>{', '.join(to_add) if to_add else 'нет'}</code>\n\n"
-                    f"<b>Новая боевая обойма (Top-{self.target_count}):</b>\n"
-                    + "\n".join(meta_lines)
-                )
-                await self.bot_core.notifier.send_alert(msg)
+            await self._execute_rotations(strat_id, qualified_rotations, matched_rule, now_ts, min_lead_pct)
             return
 
         # 4. ВЕТКА ВОРОНКИ САМСОНОВА (Исторический квантовый фильтр Радара)
@@ -347,12 +283,6 @@ class RadarNavigator:
             return
 
         metrics_by_sym = {m["symbol"]: m for m in metrics}
-        strat_cfg = self.bot_core.strategy_registry.active_strategies.get(strat_id)
-        current_symbols = strat_cfg.symbols if strat_cfg else []
-
-        if not current_symbols:
-            logger.warning(f"[RadarNavigator][{strat_id}] Текущий боевой пул стратегии пуст. Ротация невозможна.")
-            return
 
         # Сортируем текущие монеты боевого пула по возрастанию скора (слабейшие первыми)
         current_scores = []
@@ -376,8 +306,7 @@ class RadarNavigator:
 
         candidates.sort(key=lambda x: float(x.get("samsonov_score", 0.0)), reverse=True)
 
-        # 4. Формируем пары ротации (слабейшие боевые W_i vs сильнейшие кандидаты C_i)
-        # Проверяем фильтр гистерезиса (+20%) для каждой пары
+        # Симметричное сравнение скоров с гистерезисом min_lead_pct
         qualified_rotations = []
         max_pairs = min(len(current_scores), len(candidates))
         for i in range(max_pairs):
@@ -393,11 +322,11 @@ class RadarNavigator:
             lead_pct = ((cand_score - weak_score) / denom) * 100.0
 
             logger.info(
-                f"[RadarNavigator][{strat_id}] Проверка пары #{i+1}: Кандидат {cand_sym} (Скор: {cand_score:.2f}) "
-                f"vs Слабейший {weak_sym} (Скор: {weak_score:.2f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{self.min_lead_pct}%)"
+                f"[RadarNavigator][{strat_id}] Samsonov пара #{i+1}: Кандидат {cand_sym} (Скор: {cand_score:.2f}) "
+                f"vs Слабейший {weak_sym} (Скор: {weak_score:.2f}) -> Дельта: {lead_pct:+.1f}% (Порог: +{min_lead_pct}%)"
             )
 
-            if lead_pct < self.min_lead_pct:
+            if lead_pct < min_lead_pct:
                 break
 
             qualified_rotations.append({
@@ -412,12 +341,22 @@ class RadarNavigator:
 
         if not qualified_rotations:
             logger.info(
-                f"[RadarNavigator][{strat_id}] Ни один кандидат не превысил порог гистерезиса (+{self.min_lead_pct}%). "
+                f"[RadarNavigator][{strat_id}] Ни один кандидат не превысил порог гистерезиса (+{min_lead_pct}%). "
                 f"Обойма сохраняется без изменений."
             )
             return
 
-        # 5. Исполнение решения (одиночная или множественная пакетная замена)
+        await self._execute_rotations(strat_id, qualified_rotations, matched_rule, now_ts, min_lead_pct)
+
+    async def _execute_rotations(
+        self,
+        strat_id: str,
+        qualified_rotations: List[Dict[str, Any]],
+        matched_rule: str,
+        now_ts: float,
+        min_lead_pct: float
+    ) -> None:
+        """Исполнение решений ротации (автопилот или advisory) и уведомление."""
         rot_data = {
             "strat_id": strat_id,
             "rotations": qualified_rotations,
@@ -427,7 +366,7 @@ class RadarNavigator:
             "new_score": qualified_rotations[0]["new_score"],
             "lead_pct": qualified_rotations[0]["lead_pct"],
             "matched_rule": matched_rule,
-            "timestamp": time.time(),
+            "timestamp": now_ts,
         }
 
         if self.mode == "auto":
@@ -454,9 +393,9 @@ class RadarNavigator:
             if getattr(self.bot_core, "notifier", None):
                 msg_auto = (
                     f"🔄 <b>АВТО-РОТАЦИЯ МОНЕТ [{strat_id}]</b>\n"
-                    f"Сброс цикла по стагнации ({matched_rule}). Замен: {len(qualified_rotations)}.\n"
+                    f"Сброс цикла по автоклозеру ({matched_rule}). Замен: {len(qualified_rotations)}.\n"
                     + "\n".join(alert_lines) + "\n"
-                    f"📈 Все кандидаты превысили порог гистерезиса >= +{self.min_lead_pct}%."
+                    f"📈 Все кандидаты превысили порог гистерезиса >= +{min_lead_pct:.1f}%."
                 )
                 await self.bot_core.notifier.send_alert(msg_auto)
         elif self.mode == "advisory":
@@ -465,7 +404,6 @@ class RadarNavigator:
             for rot in qualified_rotations:
                 self.symbols_pending_rotation.add(rot["old_symbol"])
 
-            # Фоновый НЕБЛОКИРУЮЩИЙ таймаут: основная лупа бота не прерывается ни на миллисекунду
             timeout_task = asyncio.create_task(self._advisory_timeout_worker(req_id))
             self.timeout_tasks[req_id] = timeout_task
 
@@ -480,7 +418,7 @@ class RadarNavigator:
 
                 msg = (
                     f"🧭 <b>ШТУРМАН: СИГНАЛ РОТАЦИИ МОНЕТ [{strat_id}]</b>\n"
-                    f"Сброс цикла по карте стагнации: <code>{matched_rule}</code>.\n"
+                    f"Сброс цикла по автоклозеру: <code>{matched_rule}</code>.\n"
                     f"Все позиции сброшены в кэш.\n\n"
                     f"Предлагается замена затухших активов ({len(qualified_rotations)}):\n"
                     + "\n".join(repl_lines) + "\n\n"

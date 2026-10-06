@@ -61,6 +61,18 @@
                 "pre_rotation_lead_minutes": 45.0,
                 "daily_target_quant_mult": 1.5
             },
+            "radar_rotation_on_close": {
+                "enabled": true,
+                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш.",
+                "selector_type": "samsonov_funnel",
+                "_desc_selector_type": "'samsonov_funnel' (по телеметрии Радара) или 'alpha_coin_selector' (по свечам волатильности).",
+                "target_coins_count": 4,
+                "_desc_target_coins_count": "Целевое количество монет в обойме стратегии.",
+                "min_score_lead_pct": 35.0,
+                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%.",
+                "quant_base_usdt": 10.0,
+                "quant_reference_size": 600.0
+            },
             "trailing_ratchet": {
                 "enabled": true,
                 "quant_base_usdt": 10.0,
@@ -263,11 +275,12 @@
         "min_rotation_interval_hours": 23.0,
         "_desc_min_rotation_interval_hours": "Минимальный интервал между ротациями боевой обоймы (строго не чаще раза в 23 часа при храповике).",
         "_comment_replacement_mode": "hard (при срабатывании храповика все позиции уже закрыты в 100% кэш, производится прямая замена выбывших монет на лидеров)",
+        "_comment_initial_coins": "ИНВАРИАНТ: Стартовый пул монет задается СТРОГО ВРУЧНУЮ оператором в active_strategies. Никакого автокомплита или блокирующего прогрева Радара при старте бота!",
         "target_coins_count": 4,
         "_desc_target_coins_count": "Целевое количество монет в боевой обойме.",
         "hysteresis": {
-            "min_score_lead_pct": 20.0,
-            "_desc_min_score_lead_pct": "Кандидат обязан опережать текущую монету минимум на 20% по скору (для воронки Самсонова)."
+            "min_score_lead_pct": 35.0,
+            "_desc_min_score_lead_pct": "Кандидат обязан опережать текущую монету минимум на 35% по скору."
         },
         "rotation_triggers": {
             "on_stagnation_ratchet": true,
