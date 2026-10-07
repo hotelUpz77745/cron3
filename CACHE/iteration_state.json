@@ -1,127 +1,88 @@
 {
+    "u96_omni_zenith_apex": {
+        "iteration_index": 2,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1791398731933,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1791398731933,
+        "historical_peak_net_profit_usdt": 0.0,
+        "historical_peak_net_ts": null,
+        "historical_max_drawdown_usdt": 0.0,
+        "updated_at": "2026-10-07 21:12:14 UTC"
+    },
+    "u96_omni_zenith_apex__off": {
+        "iteration_index": 2,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1791398731973,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1791398731973,
+        "historical_peak_net_profit_usdt": 0.0,
+        "historical_peak_net_ts": null,
+        "historical_max_drawdown_usdt": 0.0,
+        "updated_at": "2026-10-07 21:12:14 UTC"
+    },
     "u6_symbiosis_gamma_fortress35": {
-        "iteration_index": 1,
+        "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791048032162,
+        "iteration_start_ts": 1791398732057,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791048032162,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": 1791048032162,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 13:34:27 UTC"
-    },
-    "__global__": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_ts": 1791048032162,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791048032162,
-        "updated_at": "2026-10-03 17:20:32 UTC"
-    },
-    "u9_omni_zenith_apex__off": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791326355259,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791326355259,
+        "iteration_peak_ts": 1791398732057,
         "historical_peak_net_profit_usdt": 0.0,
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 09:06:29 UTC"
+        "updated_at": "2026-10-07 21:12:14 UTC"
     },
-    "u6_symbiosis_gamma_fortress35__off": {
-        "iteration_index": 1,
+    "u6_symbiosis_gamma_fortress35__classic": {
+        "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791326355259,
+        "iteration_start_ts": 1791398732097,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791326355259,
+        "iteration_peak_ts": 1791398732097,
         "historical_peak_net_profit_usdt": 0.0,
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 09:06:29 UTC"
-    },
-    "u16_titan_universal_alpha__off": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791361810047,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791361810047,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 09:06:29 UTC"
+        "updated_at": "2026-10-07 21:12:14 UTC"
     },
     "u16_titan_universal_alpha": {
-        "iteration_index": 1,
+        "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791364929199,
+        "iteration_start_ts": 1791398732128,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791364929199,
+        "iteration_peak_ts": 1791398732128,
         "historical_peak_net_profit_usdt": 0.0,
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 13:34:27 UTC"
+        "updated_at": "2026-10-07 21:12:14 UTC"
     },
-    "u16_titan_universal_alpha__fixed": {
-        "iteration_index": 1,
+    "u16_titan_universal_alpha__toxic": {
+        "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791364929199,
+        "iteration_start_ts": 1791398732161,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791364929199,
+        "iteration_peak_ts": 1791398732161,
         "historical_peak_net_profit_usdt": 0.0,
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 13:34:27 UTC"
+        "updated_at": "2026-10-07 21:12:14 UTC"
     },
-    "u6_symbiosis_gamma_fortress35__fixed": {
-        "iteration_index": 1,
+    "__global__": {
+        "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791364929199,
+        "iteration_start_ts": 1791398732215,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791364929199,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 13:34:27 UTC"
-    },
-    "u9_omni_zenith_apex": {
-        "iteration_index": 4,
-        "iteration_start_net_profit_usdt": 10.6091,
-        "iteration_start_realized_pnl_usdt": 62.8969,
-        "iteration_realized_pnl_usdt": -62.8969,
-        "iteration_start_ts": 1791047115730,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791047115730,
-        "historical_peak_net_profit_usdt": 29.7658,
-        "historical_peak_net_ts": 1790961768225,
-        "historical_max_drawdown_usdt": -29.7658,
-        "updated_at": "2026-10-07 13:34:27 UTC"
-    },
-    "u9_omni_zenith_apex__fixed": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1791364929199,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791364929199,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 13:34:27 UTC"
+        "iteration_peak_ts": 1791398732215,
+        "updated_at": "2026-10-07 18:45:32 UTC"
     }
 }

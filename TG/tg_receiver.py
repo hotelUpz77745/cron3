@@ -34,6 +34,7 @@ from zoneinfo import ZoneInfo
 from ANALYTICS.plotter import generate_coin_analytics, generate_equity_curve, generate_balance_curve
 from TG.universe_commands import setup_universe_handlers, get_user_universe_id, set_user_universe_id, render_universes_page
 import io
+from typing import Optional, List, Dict, Any, Tuple
 from consts import DATA_DIR, _CFG
 import subprocess
 logger = UnifiedLogger("TGReceiver")
@@ -104,7 +105,6 @@ class TelegramReceiver:
                 KeyboardButton(text="⏸️ Stop")
             ],
             [
-                KeyboardButton(text="🏆 Leaderboard"),
                 KeyboardButton(text="🌌 Set Universes"),
                 KeyboardButton(text="📊 Analytics")
             ],
@@ -131,8 +131,8 @@ class TelegramReceiver:
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
-    def _get_universe_analytics(self, user_id: int):
-        current_uid = get_user_universe_id(user_id, self.bot_core)
+    def _get_universe_analytics(self, user_id: int, target_uid: Optional[str] = None):
+        current_uid = target_uid or get_user_universe_id(user_id, self.bot_core)
         meta = self._get_strategy_meta(current_uid)
         univ_name = meta.get("name", current_uid)
 
@@ -231,6 +231,287 @@ class TelegramReceiver:
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+    def _get_portfolio_all_analytics_data(self) -> Tuple[dict, dict, str]:
+        """
+        Агрегирует сводные глобальные данные и данные per_coin со всех активных куполов/стратегий.
+        Возвращает: (agg_summary, agg_per_coin, last_trade_time_portfolio)
+        """
+        agg_summary = {
+            "start_balance_usdt": 0.0,
+            "cur_balance_usdt": 0.0,
+            "peak_balance_usdt": 0.0,
+            "min_balance_usdt": 0.0,
+            "net_profit_usdt": 0.0,
+            "realized_pnl_usdt": 0.0,
+            "realized_pnl_net_usdt": 0.0,
+            "unrealized_pnl_usdt": 0.0,
+            "total_commission_usdt": 0.0,
+            "total_funding_usdt": 0.0,
+            "max_drawdown_usdt": 0.0,
+            "performance_usdt": 0.0,
+            "total_trades": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "total_margin_used_usdt": 0.0,
+            "free_margin_usdt": 0.0,
+            "total_grid_size_usdt": 0.0,
+            "current_grid_load_usdt": 0.0,
+            "universes_count": 0,
+        }
+        agg_per_coin: Dict[str, dict] = {}
+        last_trade_dt_str = "Нет сделок"
+
+        active_uids = []
+        if hasattr(self.bot_core, "strategy_registry"):
+            active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else getattr(self.bot_core.strategy_registry, "active_strategies", {})
+            active_uids = list(active_strats.keys())
+
+        files_to_read = []
+        if active_uids:
+            for uid in active_uids:
+                p = ANALYTICS_STATS_DIR / f"analytics_{uid}.json"
+                if p.exists():
+                    files_to_read.append((uid, p))
+                else:
+                    matches = list(ANALYTICS_STATS_DIR.glob(f"analytics_{uid}*.json"))
+                    if matches:
+                        files_to_read.append((uid, sorted(matches)[0]))
+        if not files_to_read:
+            for p in ANALYTICS_STATS_DIR.glob("analytics_*.json"):
+                if p.name in ("analytics_all.json", "analytics.json"):
+                    continue
+                uid = p.stem.replace("analytics_", "")
+                files_to_read.append((uid, p))
+
+        agg_summary["universes_count"] = len(files_to_read)
+
+        for uid, p in files_to_read:
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                st_bal = float(data.get("start_balance_usdt", 0.0))
+                cu_bal = float(data.get("cur_balance_usdt", st_bal))
+                pk_bal = float(data.get("peak_balance_usdt", max(st_bal, cu_bal)))
+                mn_bal = float(data.get("min_balance_usdt", min(st_bal, cu_bal)))
+                net_p = float(data.get("net_profit_usdt", 0.0))
+                rl_p = float(data.get("realized_pnl_usdt", 0.0))
+                rl_net = float(data.get("realized_pnl_net_usdt", rl_p))
+                unrl = float(data.get("unrealized_pnl_usdt", 0.0))
+                comm = float(data.get("total_commission_usdt", 0.0))
+                fund = float(data.get("total_funding_usdt", 0.0))
+                dd = float(data.get("max_drawdown_usdt", 0.0))
+                perf = float(data.get("performance_usdt", 0.0))
+                tr_cnt = int(data.get("total_trades", 0))
+                w_cnt = int(data.get("winning_trades", 0))
+                l_cnt = int(data.get("losing_trades", 0))
+                m_used = float(data.get("total_margin_used_usdt", 0.0))
+                f_marg = float(data.get("free_margin_usdt", 0.0))
+                g_load = float(data.get("current_grid_load_usdt", 0.0))
+                g_size = float(data.get("total_grid_size_usdt", 0.0))
+
+                agg_summary["start_balance_usdt"] += st_bal
+                agg_summary["cur_balance_usdt"] += cu_bal
+                agg_summary["peak_balance_usdt"] += pk_bal
+                agg_summary["min_balance_usdt"] += mn_bal
+                agg_summary["net_profit_usdt"] += net_p
+                agg_summary["realized_pnl_usdt"] += rl_p
+                agg_summary["realized_pnl_net_usdt"] += rl_net
+                agg_summary["unrealized_pnl_usdt"] += unrl
+                agg_summary["total_commission_usdt"] += comm
+                agg_summary["total_funding_usdt"] += fund
+                agg_summary["max_drawdown_usdt"] += dd
+                agg_summary["performance_usdt"] += perf
+                agg_summary["total_trades"] += tr_cnt
+                agg_summary["winning_trades"] += w_cnt
+                agg_summary["losing_trades"] += l_cnt
+                agg_summary["total_margin_used_usdt"] += m_used
+                agg_summary["free_margin_usdt"] += f_marg
+                agg_summary["current_grid_load_usdt"] += g_load
+                agg_summary["total_grid_size_usdt"] += g_size
+
+                per_coin = data.get("per_coin", {})
+                for sym, cinfo in per_coin.items():
+                    if sym not in agg_per_coin:
+                        agg_per_coin[sym] = {
+                            "net_profit_usdt": 0.0,
+                            "realized_pnl_usdt": 0.0,
+                            "realized_pnl_net_usdt": 0.0,
+                            "commission_usdt": 0.0,
+                            "funding_usdt": 0.0,
+                            "total_trades": 0,
+                            "winning_trades": 0,
+                            "loss_trades": 0,
+                            "current_drawdown": 0.0,
+                            "max_drawdown": 0.0,
+                            "min_drawdown": 0.0,
+                            "universes_active": 0,
+                            "grid_capacity_usdt": 0.0,
+                            "current_grid_load_usdt": 0.0,
+                            "current_margin_usdt": 0.0,
+                            "peak_net_profit_usdt": 0.0,
+                            "max_drawdown_net_usdt": 0.0,
+                            "recovery_factor": 0.0,
+                            "abs_recovery_factor": 0.0,
+                            "risk_reward_ratio": 0.0,
+                        }
+                    coin_entry = agg_per_coin[sym]
+                    coin_entry["net_profit_usdt"] += float(cinfo.get("net_profit_usdt", 0.0))
+                    coin_entry["realized_pnl_usdt"] += float(cinfo.get("realized_pnl_usdt", 0.0))
+                    coin_entry["realized_pnl_net_usdt"] += float(cinfo.get("realized_pnl_net_usdt", 0.0))
+                    coin_entry["commission_usdt"] += float(cinfo.get("commission_usdt", 0.0))
+                    coin_entry["funding_usdt"] += float(cinfo.get("funding_usdt", 0.0))
+                    coin_entry["total_trades"] += int(cinfo.get("total_trades", cinfo.get("trades", 0)))
+                    coin_entry["winning_trades"] += int(cinfo.get("winning_trades", cinfo.get("win_count", 0)))
+                    coin_entry["loss_trades"] += int(cinfo.get("loss_trades", cinfo.get("loss_count", 0)))
+                    coin_entry["current_drawdown"] += float(cinfo.get("current_drawdown", 0.0))
+                    c_dd = float(cinfo.get("max_drawdown", 0.0))
+                    coin_entry["max_drawdown"] = min(coin_entry["max_drawdown"], c_dd)
+                    c_peak = float(cinfo.get("peak_net_profit_usdt", max(0.0, float(cinfo.get("net_profit_usdt", 0.0)))))
+                    coin_entry["peak_net_profit_usdt"] = round(coin_entry.get("peak_net_profit_usdt", 0.0) + c_peak, 4)
+                    c_dd_net = float(cinfo.get("max_drawdown_net_usdt", cinfo.get("max_drawdown", 0.0)))
+                    coin_entry["max_drawdown_net_usdt"] = min(coin_entry.get("max_drawdown_net_usdt", 0.0), c_dd_net)
+                    coin_entry["universes_active"] += 1
+                    coin_entry["grid_capacity_usdt"] += float(cinfo.get("grid_capacity_usdt", 0.0))
+                    coin_entry["current_grid_load_usdt"] += float(cinfo.get("current_grid_load_usdt", 0.0))
+                    coin_entry["current_margin_usdt"] += float(cinfo.get("current_margin_usdt", 0.0))
+                    if float(cinfo.get("risk_reward_ratio", 0.0)) != 0:
+                        coin_entry["risk_reward_ratio"] = round((coin_entry["risk_reward_ratio"] + float(cinfo.get("risk_reward_ratio", 0.0))) / 2.0, 4) if coin_entry["risk_reward_ratio"] != 0 else float(cinfo.get("risk_reward_ratio", 0.0))
+
+            except Exception as e:
+                logger.error(f"Error parsing {p}: {e}")
+
+        for sym, coin_entry in agg_per_coin.items():
+            abs_dd = abs(coin_entry.get("max_drawdown_net_usdt", coin_entry.get("max_drawdown", 0.0)))
+            if abs_dd > 0:
+                coin_entry["recovery_factor"] = round(coin_entry.get("net_profit_usdt", 0.0) / abs_dd, 2)
+                coin_entry["abs_recovery_factor"] = round(coin_entry.get("peak_net_profit_usdt", 0.0) / abs_dd, 2)
+            else:
+                coin_entry["recovery_factor"] = 0.0
+                coin_entry["abs_recovery_factor"] = 0.0
+
+        for ledger_file in ANALYTICS_LEDGERS_DIR.glob("trades_ledger_*.txt"):
+            try:
+                with open(ledger_file, 'r', encoding='utf-8') as f:
+                    r = csv.reader(f, delimiter=';')
+                    lines = list(r)
+                    if len(lines) > 1:
+                        row = lines[-1]
+                        dt_cols = [c.strip() for c in row if len(c.strip()) == 19 and c.strip()[4] == '-' and c.strip()[7] == '-']
+                        if dt_cols:
+                            t_str = dt_cols[-1]
+                            if t_str > last_trade_dt_str or last_trade_dt_str == "Нет сделок":
+                                last_trade_dt_str = t_str
+            except Exception:
+                pass
+
+        tot_tr = agg_summary["total_trades"]
+        win_tr = agg_summary["winning_trades"]
+        agg_summary["winrate_pct"] = round((win_tr / tot_tr * 100.0), 2) if tot_tr > 0 else 0.0
+        st_b = agg_summary["start_balance_usdt"]
+        np_b = agg_summary["net_profit_usdt"]
+        agg_summary["roi_pct"] = round((np_b / st_b * 100.0), 2) if st_b > 0 else 0.0
+        m_dd = agg_summary["max_drawdown_usdt"]
+        agg_summary["recovery_factor"] = round(np_b / abs(m_dd), 2) if m_dd < 0 else 0.0
+        
+        cur_b = agg_summary["cur_balance_usdt"]
+        m_used_tot = agg_summary["total_margin_used_usdt"]
+        agg_summary["margin_load_pct"] = round((m_used_tot / cur_b * 100.0), 2) if cur_b > 0 else 0.0
+        f_marg_tot = agg_summary["free_margin_usdt"]
+        agg_summary["free_margin_pct"] = round((f_marg_tot / cur_b * 100.0), 2) if cur_b > 0 else 0.0
+        tot_grid = agg_summary["total_grid_size_usdt"]
+        cur_grid = agg_summary["current_grid_load_usdt"]
+        agg_summary["grid_load_pct"] = round((cur_grid / tot_grid * 100.0), 2) if tot_grid > 0 else 0.0
+
+        return agg_summary, agg_per_coin, last_trade_dt_str
+
+    def _render_analytics_big_board(self, user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
+        """Рендерит портфельный Биг Борд с кумулятивными метриками по всем стратегиям и куполам."""
+        portfolio_summary = {}
+        engine = getattr(getattr(self.bot_core, "analytics", None), "leaderboard_engine", None)
+        if engine and hasattr(engine, "get_portfolio_summary"):
+            try:
+                active_strats = {}
+                if hasattr(self.bot_core, "strategy_registry"):
+                    active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
+                universes_meta = {
+                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                    for sid, scfg in active_strats.items()
+                }
+                entries = engine.generate_leaderboard(universes_meta)
+                portfolio_summary = engine.get_portfolio_summary(entries)
+            except Exception as e:
+                logger.error(f"Error getting portfolio summary from engine: {e}")
+
+        if not portfolio_summary:
+            try:
+                p_path = ANALYTICS_STATS_DIR / "analytics_all.json"
+                if p_path.exists():
+                    portfolio_summary = json.loads(p_path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+
+        current_uid, univ_name, _, _ = self._get_universe_analytics(user_id)
+        import html
+        clean_name = html.escape(univ_name)
+
+        start_bal = float(portfolio_summary.get("aggregate_start_balance_usdt", 0.0))
+        cur_bal = float(portfolio_summary.get("aggregate_cur_balance_usdt", start_bal))
+        peak_bal = float(portfolio_summary.get("aggregate_peak_balance_usdt", max(start_bal, cur_bal)))
+        min_bal = float(portfolio_summary.get("aggregate_min_balance_usdt", min(start_bal, cur_bal)))
+        net_profit = float(portfolio_summary.get("aggregate_net_profit_usdt", 0.0))
+        realized = float(portfolio_summary.get("aggregate_realized_pnl_usdt", 0.0))
+        unrealized = float(portfolio_summary.get("aggregate_unrealized_pnl_usdt", 0.0))
+        trades_cnt = int(portfolio_summary.get("aggregate_total_trades", 0))
+        active_count = int(portfolio_summary.get(
+            "total_universes_active",
+            len(getattr(self.bot_core.strategy_registry, "active_strategies", {})) if hasattr(self.bot_core, "strategy_registry") else 1
+        ))
+
+        roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
+        net_sign = "+" if net_profit > 0 else ""
+        roi_sign = "+" if roi_pct > 0 else ""
+        real_sign = "+" if realized > 0 else ""
+        unreal_sign = "+" if unrealized > 0 else ""
+
+        text = (
+            f"🏛️ <b>ПОРТФЕЛЬНЫЙ БИГ БОРД (КУМУЛЯТИВНЫЙ БАЛАНС)</b>\n"
+            f"🌐 <i>Агрегированная сводка по всем стратегиям ({active_count} куполов)</i>\n\n"
+            f"💰 <b>Капитал портфеля:</b>\n"
+            f"├ <b>Текущий баланс:</b> <code>{cur_bal:,.2f}$</code>\n"
+            f"├ <b>Начальный баланс:</b> <code>{start_bal:,.2f}$</code>\n"
+            f"├ <b>ATH (Пик баланса):</b> <code>{peak_bal:,.2f}$</code>\n"
+            f"└ <b>Дно (Минимум):</b> <code>{min_bal:,.2f}$</code>\n\n"
+            f"📊 <b>Совокупный PnL:</b>\n"
+            f"├ <b>Net Profit:</b> <b>{net_sign}{net_profit:,.2f}$</b> ({roi_sign}{roi_pct:.2f}%)\n"
+            f"├ <b>Realized:</b> <code>{real_sign}{realized:,.2f}$</code>\n"
+            f"├ <b>Floating (Нереализ.):</b> <code>{unreal_sign}{unrealized:,.2f}$</code>\n"
+            f"└ <b>Всего сделок:</b> <code>{trades_cnt}</code>\n\n"
+            f"🌌 <b>Текущий выбранный купол:</b>\n"
+            f"▶️ <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
+            f"<i>Выберите действие или перейдите в детальную аналитику купола:</i>"
+        )
+
+        short_uid = (current_uid[:18] + "..") if len(current_uid) > 18 else current_uid
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"🌌 Аналитика купола: {short_uid}", callback_data=f"analytics_dome:{current_uid}"),
+                InlineKeyboardButton(text="🔄 Сменить купол", callback_data="univ_page:1"),
+            ],
+            [
+                InlineKeyboardButton(text="🌍 Global Analytics (Портфель)", callback_data="analytics_bb_global"),
+            ],
+            [
+                InlineKeyboardButton(text="🪙 Аналитика по монетам (Портфель)", callback_data="analytics_bb_coins"),
+            ],
+            [
+                InlineKeyboardButton(text="🏆 Рейтинг монет (Портфель)", callback_data="analytics_bb_ranking"),
+            ],
+            [
+                InlineKeyboardButton(text="🏆 Лидерборд стратегий", callback_data="analytics_bb_leaderboard"),
+                InlineKeyboardButton(text="🔄 Обновить Биг Борд", callback_data="analytics_bb_refresh"),
+            ]
+        ])
+        return text, kb
 
     def _register_handlers(self):
         @self.dp.errors()
@@ -609,9 +890,9 @@ class TelegramReceiver:
             await state.clear()
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="📜 Get Logs", callback_data="logs_get_logs")],
-                [InlineKeyboardButton(text="📂 Get Backup.CFG", callback_data="logs_get_cfg")]
+                [InlineKeyboardButton(text="📦 Get Runtime Backup", callback_data="logs_get_runtime_backup")]
             ])
-            await message.answer("Выберите нужный лог/конфиг:", reply_markup=keyboard)
+            await message.answer("Выберите нужный лог или бэкап рантайма:", reply_markup=keyboard)
 
         @self.dp.callback_query(F.data == "logs_get_logs")
         async def on_get_logs(callback: CallbackQuery, state: FSMContext):
@@ -623,36 +904,26 @@ class TelegramReceiver:
             else:
                 await callback.message.answer("Global log file not found.")
 
-        @self.dp.callback_query(F.data == "logs_get_cfg")
-        async def on_get_cfg(callback: CallbackQuery, state: FSMContext):
+        @self.dp.callback_query(F.data == "logs_get_runtime_backup")
+        async def on_get_runtime_backup(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            
-            dump_data = {}
-            
-            # Read app.json
-            app_json = DATA_DIR / "app.json"
-            if app_json.exists():
-                dump_data["app.json"] = Utils.read_json_file(app_json)
-                
-            # Read _base.json
-            base_json = DATA_DIR / "_base.json"
-            if base_json.exists():
-                dump_data["_base.json"] = Utils.read_json_file(base_json)
-                
-            # Read runtimes
-            dump_data["runtime"] = {}
-            runtime_dir = DATA_DIR / "runtime"
-            if runtime_dir.exists():
-                for file_path in runtime_dir.glob("*.json"):
-                    dump_data["runtime"][file_path.name] = Utils.read_json_file(file_path)
-                    
-            dump_path = os.path.join("logs", "all_configs.json")
-            os.makedirs("logs", exist_ok=True)
-            with open(dump_path, "w", encoding="utf-8") as f:
-                json.dump(dump_data, f, indent=4)
-                
-            await callback.message.answer_document(FSInputFile(dump_path))
+            msg = await callback.message.answer("⏳ Создание рантайм-бэкапа из .pkl и упаковка в JSON...")
+            try:
+                from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
+                res = await RuntimeBackupService.export_and_send(bot_instance=self.bot_core, chat_ids=[callback.message.chat.id])
+                if res.get("status") == "success":
+                    await msg.edit_text(
+                        f"✅ Рантайм-бэкап сформирован и отправлен в чат!\n"
+                        f"📄 Файл: <code>{res.get('filename')}</code>\n"
+                        f"💾 Размер: {res.get('size_bytes') / 1024.0:.1f} KB",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await msg.edit_text(f"⚠️ Бэкап создан локально ({res.get('filename')}), но возникла заминка при отправке.")
+            except Exception as e:
+                logger.error(f"Error creating runtime backup: {e}")
+                await msg.edit_text(f"❌ Ошибка создания рантайм-бэкапа: {e}")
 
         @self.dp.callback_query(F.data == "analytics_reset")
         async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
@@ -708,53 +979,97 @@ class TelegramReceiver:
             await state.clear()
 
 
-        async def _show_universe_analytics_screen(target_msg, user_id: int, edit: bool = False):
+        async def _show_universe_analytics_screen(target_msg, user_id: int, edit: bool = False, target_uid: Optional[str] = None):
             try:
                 await self.bot_core.analytics.sync_lightweight_unrealized_pnl(self.bot_core.client)
             except Exception as e:
                 logger.error(f"Failed to sync lightweight unrealized pnl: {e}")
 
-            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(user_id)
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(user_id, target_uid=target_uid)
             import html
             clean_name = html.escape(univ_name)
 
-            net_str = "0.00$"
-            realized_str = "0.00$"
-            unrealized_str = "0.00$"
-            max_dd_str = "0.00$"
+            start_bal = 150.0
+            cur_bal = 150.0
+            peak_bal = 150.0
+            min_bal = 150.0
+            net_profit = 0.0
+            realized = 0.0
+            unrealized = 0.0
+            max_dd = 0.0
+            recovery = 0.0
             trades_cnt = 0
+            iter_idx = 1
+
             if analytics_path.exists():
                 try:
                     adata = json.loads(analytics_path.read_text(encoding="utf-8"))
-                    net_str = f"{float(adata.get('net_profit_usdt', 0)):+.2f}$"
-                    realized_str = f"{float(adata.get('realized_pnl_net_usdt', adata.get('realized_pnl_usdt', 0))):+.2f}$"
-                    unrealized_str = f"{float(adata.get('unrealized_pnl_usdt', 0)):+.2f}$"
-                    max_dd_str = f"{float(adata.get('max_drawdown_usdt', 0)):.2f}$"
-                    trades_cnt = int(adata.get('total_trades', 0))
+                    start_bal = float(adata.get("start_balance_usdt", 150.0))
+                    cur_bal = float(adata.get("cur_balance_usdt", start_bal))
+                    peak_bal = float(adata.get("peak_balance_usdt", max(start_bal, cur_bal)))
+                    min_bal = float(adata.get("min_balance_usdt", min(start_bal, cur_bal)))
+                    net_profit = float(adata.get("net_profit_usdt", 0.0))
+                    realized = float(adata.get("realized_pnl_net_usdt", adata.get("realized_pnl_usdt", 0.0)))
+                    unrealized = float(adata.get("unrealized_pnl_usdt", 0.0))
+                    max_dd = float(adata.get("max_drawdown_usdt", 0.0))
+                    recovery = float(adata.get("recovery_factor", 0.0))
+                    trades_cnt = int(adata.get("total_trades", 0))
+                    iter_idx = int(adata.get("iteration_index", 1))
                 except Exception:
                     pass
 
+            roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
+            net_sign = "+" if net_profit > 0 else ""
+            roi_sign = "+" if roi_pct > 0 else ""
+            real_sign = "+" if realized > 0 else ""
+            unreal_sign = "+" if unrealized > 0 else ""
+
             text = (
-                f"📊 <b>АНАЛИТИКА ВСЕЛЕННОЙ</b>\n"
+                f"📊 <b>АНАЛИТИКА КУПОЛА СТРАТЕГИИ</b>\n"
                 f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
-                f"├ <b>Net Profit:</b> <b>{net_str}</b>\n"
-                f"├ <b>Realized:</b> {realized_str} | <b>Floating:</b> {unrealized_str}\n"
-                f"├ <b>Max Drawdown:</b> {max_dd_str}\n"
-                f"└ <b>Trades:</b> {trades_cnt}\n\n"
-                f"Выберите раздел аналитики для текущей вселенной:"
+                f"💰 <b>Баланс и Пики купола:</b>\n"
+                f"├ <b>Текущий баланс:</b> <code>{cur_bal:,.2f}$</code>\n"
+                f"├ <b>Начальный баланс:</b> <code>{start_bal:,.2f}$</code>\n"
+                f"├ <b>ATH (Пик баланса):</b> <code>{peak_bal:,.2f}$</code>\n"
+                f"└ <b>Дно (Минимум):</b> <code>{min_bal:,.2f}$</code>\n\n"
+                f"📈 <b>Результаты купола:</b>\n"
+                f"├ <b>Net Profit:</b> <b>{net_sign}{net_profit:,.2f}$</b> ({roi_sign}{roi_pct:.2f}%)\n"
+                f"├ <b>Realized:</b> {real_sign}{realized:,.2f}$ | <b>Floating:</b> {unreal_sign}{unrealized:,.2f}$\n"
+                f"├ <b>Max Drawdown:</b> {max_dd:,.2f}$ | <b>Recovery:</b> {recovery:.2f}\n"
+                f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
+                f"<i>Выберите раздел аналитики:</i>"
             )
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔄 Сменить вселенную", callback_data="univ_page:1"),
-                 InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart")],
-                [InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data="analytics_coin_menu")],
-                [InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking")],
-                [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
-                [InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt"),
-                 InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report")],
-                [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")],
-                [InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="analytics_set_balance"),
-                 InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset")]
+                [
+                    InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global"),
+                ],
+                [
+                    InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data="analytics_coin_menu"),
+                ],
+                [
+                    InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking"),
+                ],
+                [
+                    InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart"),
+                ],
+                [
+                    InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt"),
+                ],
+                [
+                    InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report"),
+                ],
+                [
+                    InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet"),
+                ],
+                [
+                    InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="analytics_set_balance"),
+                    InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset"),
+                ],
+                [
+                    InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_bigboard"),
+                    InlineKeyboardButton(text="🔄 Сменить вселенную", callback_data="univ_page:1"),
+                ]
             ])
 
             if edit and isinstance(target_msg, CallbackQuery):
@@ -777,7 +1092,230 @@ class TelegramReceiver:
         @self.dp.message(F.text == "📊 Analytics")
         async def on_analytics(message: Message, state: FSMContext):
             await state.clear()
-            await _show_universe_analytics_screen(message, message.from_user.id)
+            text, kb = self._render_analytics_big_board(message.from_user.id)
+            await message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "analytics_bigboard")
+        async def cb_analytics_bigboard(callback: CallbackQuery):
+            await callback.answer()
+            text, kb = self._render_analytics_big_board(callback.from_user.id)
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except Exception:
+                await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "analytics_bb_refresh")
+        async def cb_analytics_bb_refresh(callback: CallbackQuery):
+            await callback.answer("🔄 Биг Борд обновлен")
+            text, kb = self._render_analytics_big_board(callback.from_user.id)
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except Exception:
+                pass
+
+        @self.dp.callback_query(F.data == "analytics_bb_leaderboard")
+        async def cb_analytics_bb_leaderboard(callback: CallbackQuery):
+            await callback.answer()
+            engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
+            if not engine:
+                await callback.message.answer("⚠️ LeaderboardEngine не инициализирован.")
+                return
+            data = self.bot_core.analytics._read_data()
+            self.bot_core.analytics._update_strategies_stats(data)
+            active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
+            universes_meta = {
+                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                for sid, scfg in active_strats.items()
+            }
+            entries = engine.generate_leaderboard(universes_meta)
+            evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
+            chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
+            total_chunks = len(chunks)
+            for i, chunk in enumerate(chunks, 1):
+                part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
+                response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
+                if len(response) <= 4000:
+                    await callback.message.answer(response, parse_mode="HTML")
+                else:
+                    for chunk_start in range(0, len(response), 3500):
+                        sub = response[chunk_start:chunk_start + 3500]
+                        await callback.message.answer(f"<pre>{sub}</pre>", parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "analytics_bb_global")
+        async def cb_analytics_bb_global(callback: CallbackQuery):
+            await callback.answer()
+            agg_summary, _, last_trade_time = self._get_portfolio_all_analytics_data()
+            active_cnt = agg_summary.get("universes_count", 0)
+            time_str = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
+
+            header = (
+                f"🌐 <b>ПОРТФЕЛЬ: ВСЕ СТРАТЕГИИ ({active_cnt} куполов)</b>\n"
+                f"<b>ℹ️ Расчет по состоянию на: {time_str}</b>\n"
+                f"<b>⏳ Последняя сделка: {last_trade_time}</b>\n\n"
+            )
+
+            msg = "<b>🌍 GLOBAL ANALYTICS (ПОРТФЕЛЬ)</b>\n\n"
+            msg += "<b>💰 Balances:</b>\n"
+            msg += f"▪️ Start: <b>{agg_summary['start_balance_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Current: <b>{agg_summary['cur_balance_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Peak: <b>{agg_summary['peak_balance_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Min (Bottom): <b>{agg_summary['min_balance_usdt']:,.2f}</b> USDT\n\n"
+
+            msg += "<b>📈 Performance:</b>\n"
+            msg += f"▪️ Net Profit: <b>{agg_summary['net_profit_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Realized PnL (Gross): <b>{agg_summary['realized_pnl_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Realized PnL (Net): <b>{agg_summary['realized_pnl_net_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Total Commission: <b>{agg_summary['total_commission_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Total Funding: <b>{agg_summary['total_funding_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Unrealized PnL: <b>{agg_summary['unrealized_pnl_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Max Drawdown: <b>{agg_summary['max_drawdown_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ Performance (Peak-Start): <b>{agg_summary['performance_usdt']:,.2f}</b> USDT\n"
+            msg += f"▪️ ROI: <b>{agg_summary['roi_pct']:.2f}%</b>\n"
+            msg += f"▪️ Grid Load: <b>{agg_summary['grid_load_pct']:.2f}%</b> ({agg_summary['current_grid_load_usdt']:,.2f}/{agg_summary['total_grid_size_usdt']:,.2f} USDT)\n"
+            msg += f"▪️ Margin Load: <b>{agg_summary['margin_load_pct']:.2f}%</b> (Used: <b>{agg_summary['total_margin_used_usdt']:,.2f}</b> USDT)\n"
+            msg += f"▪️ Free Margin: <b>{agg_summary['free_margin_usdt']:,.2f}</b> USDT ({agg_summary['free_margin_pct']:.2f}%)\n"
+            msg += f"▪️ Recovery Factor: <b>{agg_summary['recovery_factor']:.2f}</b>\n"
+            msg += f"▪️ Trades: <b>{agg_summary['total_trades']}</b> (Wins: <b>{agg_summary['winning_trades']}</b> | <b>{agg_summary['winrate_pct']:.1f}%</b>)\n"
+
+            await callback.message.answer(header + msg, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("analytics_bb_ranking"))
+        async def cb_analytics_bb_ranking(callback: CallbackQuery):
+            await callback.answer()
+            parts = callback.data.split(":")
+            criterion = parts[1] if len(parts) > 1 else "net"
+
+            _, agg_per_coin, _ = self._get_portfolio_all_analytics_data()
+            if not agg_per_coin:
+                await callback.message.answer("❌ Нет данных о монетах для портфельного рейтинга.")
+                return
+
+            def safe_flt(val, default=0.0):
+                try:
+                    return float(val) if val is not None else default
+                except (ValueError, TypeError):
+                    return default
+
+            if criterion == "rec":
+                sorted_coins = sorted(agg_per_coin.items(), key=lambda x: safe_flt(x[1].get("recovery_factor", -float('inf'))), reverse=True)
+                title = "по Recovery Factor (Тек) (больше = лучше)"
+            elif criterion == "abs_rec":
+                sorted_coins = sorted(agg_per_coin.items(), key=lambda x: safe_flt(x[1].get("abs_recovery_factor", -float('inf'))), reverse=True)
+                title = "по Abs Recovery (Пик/DD) (больше = лучше)"
+            else:
+                criterion = "net"
+                sorted_coins = sorted(agg_per_coin.items(), key=lambda x: safe_flt(x[1].get("net_profit_usdt", -float('inf'))), reverse=True)
+                title = "по Net Profit (больше = лучше)"
+
+            lines = [f"<b>🏆 Рейтинг монет [Портфель (Все купола)] ({title})</b>\n"]
+            for i, (sym, cdata) in enumerate(sorted_coins, 1):
+                if criterion == "rec":
+                    rec = safe_flt(cdata.get("recovery_factor", 0.0))
+                    net = safe_flt(cdata.get("net_profit_usdt", 0.0))
+                    dd = abs(safe_flt(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                    val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i>"
+                elif criterion == "abs_rec":
+                    abs_rec = safe_flt(cdata.get("abs_recovery_factor", 0.0))
+                    peak = safe_flt(cdata.get("peak_net_profit_usdt", max(0.0, safe_flt(cdata.get("net_profit_usdt", 0.0)))))
+                    dd = abs(safe_flt(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                    val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик: {peak:+.2f} / |DD|: {dd:.2f})</i>"
+                else:
+                    net_profit = round(safe_flt(cdata.get("net_profit_usdt", 0)), 2)
+                    realized_net = round(safe_flt(cdata.get("realized_pnl_net_usdt", 0)), 2)
+                    tr = cdata.get('total_trades', 0)
+                    val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
+
+                if i == 1:
+                    medal = "🥇"
+                elif i == 2:
+                    medal = "🥈"
+                elif i == 3:
+                    medal = "🥉"
+                else:
+                    medal = "▪️"
+                lines.append(f"{medal} <b>{sym}</b>: {val_str}")
+
+            switch_kb = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="Net Profit", callback_data="analytics_bb_ranking:net"),
+                    InlineKeyboardButton(text="Recovery (Тек)", callback_data="analytics_bb_ranking:rec"),
+                    InlineKeyboardButton(text="Abs Recovery", callback_data="analytics_bb_ranking:abs_rec")
+                ]
+            ])
+
+            messages = []
+            cur_buf = ""
+            for line in lines:
+                if len(cur_buf) + len(line) + 1 > 3800:
+                    messages.append(cur_buf)
+                    cur_buf = line + "\n"
+                else:
+                    cur_buf += line + "\n"
+            if cur_buf:
+                messages.append(cur_buf)
+
+            if len(parts) > 1 and len(messages) == 1:
+                try:
+                    await callback.message.edit_text(messages[0], parse_mode="HTML", reply_markup=switch_kb)
+                except Exception:
+                    pass
+            else:
+                for i, msg_text in enumerate(messages):
+                    rm = switch_kb if i == len(messages) - 1 else None
+                    await callback.message.answer(msg_text, parse_mode="HTML", reply_markup=rm)
+
+        @self.dp.callback_query(F.data == "analytics_bb_coins")
+        async def cb_analytics_bb_coins(callback: CallbackQuery):
+            await callback.answer()
+            _, agg_per_coin, _ = self._get_portfolio_all_analytics_data()
+            if not agg_per_coin:
+                await callback.message.answer("❌ Нет данных о монетах в портфеле.")
+                return
+
+            keyboard_buttons = []
+            for coin in sorted(agg_per_coin.keys()):
+                net = agg_per_coin[coin].get("net_profit_usdt", 0.0)
+                sign = "+" if net > 0 else ""
+                icon = "🟢" if net >= 0 else "🔴"
+                keyboard_buttons.append([InlineKeyboardButton(
+                    text=f"🪙 {coin} {icon} ({sign}{net:,.2f}$)",
+                    callback_data=f"analytics_bb_coin_{coin}"
+                )])
+
+            kb = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+            await callback.message.answer("🪙 <b>АНАЛИТИКА ПО МОНЕТАМ (ПОРТФЕЛЬ)</b>\n\nВыберите монету для просмотра сводных показателей по всем куполам:", reply_markup=kb, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("analytics_bb_coin_"))
+        async def cb_analytics_bb_coin_detail(callback: CallbackQuery):
+            await callback.answer()
+            symbol = callback.data.replace("analytics_bb_coin_", "")
+            _, agg_per_coin, _ = self._get_portfolio_all_analytics_data()
+            if symbol not in agg_per_coin:
+                await callback.message.answer(f"❌ Нет данных для {symbol}.")
+                return
+
+            cdata = agg_per_coin[symbol]
+            u_count = cdata.get("universes_active", 0)
+            msg_coins = f"<b>🪙 PORTFOLIO METRICS: {symbol}</b> (Все купола: {u_count})\n\n"
+            msg_coins += f"  • Trades: <b>{cdata.get('total_trades', 0)}</b> (Wins: <b>{cdata.get('winning_trades', 0)}</b>)\n"
+            msg_coins += f"  • Net Profit: <b>{cdata.get('net_profit_usdt', 0.0):,.2f}</b> USDT\n"
+            msg_coins += f"  • Realized (Net): <b>{cdata.get('realized_pnl_net_usdt', 0.0):,.2f}</b> USDT\n"
+            msg_coins += f"  • Fees: Comm <b>{cdata.get('commission_usdt', 0.0):,.2f}</b> / Fund <b>{cdata.get('funding_usdt', 0.0):,.2f}</b>\n"
+            msg_coins += f"  • Max Drawdown: <b>{cdata.get('max_drawdown', 0.0):,.2f}</b> USDT\n"
+            msg_coins += f"  • Rec: <b>{cdata.get('recovery_factor', 0)}</b> | Abs Rec: <b>{cdata.get('abs_recovery_factor', 0)}</b>\n"
+            msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
+            await callback.message.answer(msg_coins, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("analytics_dome:"))
+        async def cb_analytics_dome(callback: CallbackQuery):
+            await callback.answer()
+            target_uid = callback.data.split("analytics_dome:")[1]
+            await _show_universe_analytics_screen(callback, callback.from_user.id, edit=True, target_uid=target_uid)
+
+        @self.dp.callback_query(F.data == "analytics_dome")
+        async def cb_analytics_dome_current(callback: CallbackQuery):
+            await callback.answer()
+            await _show_universe_analytics_screen(callback, callback.from_user.id, edit=True)
 
         @self.dp.callback_query(F.data == "analytics_chart")
         async def process_analytics_chart(callback: CallbackQuery):
@@ -1146,6 +1684,7 @@ class TelegramReceiver:
                 "▪️ <b>margin_load_pct</b>: Margin Usage (%) → <i>Margin Used / Floating Balance * 100</i>\n"
                 "▪️ <b>free_margin_usdt</b>: Free Margin → <i>Floating Balance - Margin Used</i>\n"
                 "▪️ <b>recovery_factor</b>: Recovery Factor → <i>Net Profit / |Max Drawdown|</i>\n"
+                "▪️ <b>abs_recovery_factor</b>: Abs Recovery Factor → <i>Peak Net Profit / |Max Drawdown|</i>\n"
                 "▪️ <b>realized_pnl_usdt</b>: Total realized profit from all closed trades\n"
                 "▪️ <b>net_profit_usdt</b>: True mathematical growth → <i>Realized PnL + Unrealized PnL</i>\n"
                 "▪️ <b>cur_balance_usdt</b>: Current margin balance → <i>Start Balance + Net Profit</i>\n\n"
@@ -1153,8 +1692,7 @@ class TelegramReceiver:
                 "▪️ <b>avg_daily_profit</b>: Average profit per active day of trading\n"
                 "▪️ <b>max_position_size</b>: Max historical notional size actually reached (real volume * price)\n"
                 "▪️ <b>risk_reward_ratio</b>: <i>|Max Drawdown| / Avg Daily Profit</i>\n"
-                "▪️ <b>DRME</b> (Daily Return on Max Exposure): <i>Avg Daily Profit / Max Position Size</i>\n"
-                "▪️ <b>MDME</b> (Max Drawdown on Max Exposure): <i>|Max Drawdown| / Max Position Size</i>\n"
+                "▪️ <b>recovery_factor</b> / <b>abs_recovery_factor</b>: Current and absolute recovery factors\n"
                 "▪️ <b>max_drawdown</b> / <b>min_drawdown</b>: Max/Min historical floating drawdowns\n"
             )
             await callback.message.answer(help_str, parse_mode="HTML")
@@ -1180,53 +1718,35 @@ class TelegramReceiver:
                     return
                 
                 # Determine sorting logic and title
-                if criterion == "rr":
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("risk_reward_ratio", float('inf'))))
-                    title = "по Risk/Reward (меньше = лучше)"
-                elif criterion == "drme":
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("DRME", -float('inf'))), reverse=True)
-                    title = "по DRME (больше = лучше)"
-                elif criterion == "mdme":
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("MDME", float('inf'))))
-                    title = "по MDME (меньше = лучше)"
-                elif criterion == "nr":
-                    def nr_ratio(cdata):
-                        net = float(cdata.get("net_profit_usdt", 0))
-                        realized = float(cdata.get("realized_pnl_net_usdt", 0))
-                        if realized == 0:
-                            return 0
-                        val = abs(net / realized)
-                        if net < 0 or realized < 0:
-                            return -val
-                        return val
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: nr_ratio(x[1]), reverse=True)
-                    title = "по N/R (Net/Realized, больше = лучше)"
+                if criterion == "rec":
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("recovery_factor", -float('inf'))), reverse=True)
+                    title = "по Recovery Factor (Тек) (больше = лучше)"
+                elif criterion == "abs_rec":
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("abs_recovery_factor", -float('inf'))), reverse=True)
+                    title = "по Abs Recovery (Пик/DD) (больше = лучше)"
                 else: # Default net
+                    criterion = "net"
                     sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("net_profit_usdt", -float('inf'))), reverse=True)
-                    title = "по Net Profit"
+                    title = "по Net Profit (больше = лучше)"
                     
                 lines = [f"<b>🏆 Рейтинг монет ({title})</b>\n"]
                 for i, (sym, cdata) in enumerate(sorted_coins, 1):
                     val_str = ""
-                    if criterion == "rr":
-                        val_str = f"R/R: {cdata.get('risk_reward_ratio', 0)}"
-                    elif criterion == "drme":
-                        val_str = f"DRME: {cdata.get('DRME', 0)}"
-                    elif criterion == "mdme":
-                        val_str = f"MDME: {cdata.get('MDME', 0)}"
-                    elif criterion == "nr":
-                        net = float(cdata.get("net_profit_usdt", 0))
-                        realized = float(cdata.get("realized_pnl_net_usdt", 0))
-                        if realized == 0:
-                            ratio = 0
-                        else:
-                            val = abs(net / realized)
-                            ratio = round(-val if (net < 0 or realized < 0) else val, 4)
-                        val_str = f"N/R: {ratio}"
+                    if criterion == "rec":
+                        rec = float(cdata.get("recovery_factor", 0.0))
+                        net = float(cdata.get("net_profit_usdt", 0.0))
+                        dd = abs(float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                        val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i>"
+                    elif criterion == "abs_rec":
+                        abs_rec = float(cdata.get("abs_recovery_factor", 0.0))
+                        peak = float(cdata.get("peak_net_profit_usdt", max(0.0, float(cdata.get("net_profit_usdt", 0.0)))))
+                        dd = abs(float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                        val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик Net: {peak:+.2f} / |DD|: {dd:.2f})</i>"
                     else:
-                        net_profit = cdata.get("net_profit_usdt", 0)
-                        realized_net = cdata.get("realized_pnl_net_usdt", 0)
-                        val_str = f"{net_profit} USDT <i>(Realized: {realized_net})</i>"
+                        net_profit = round(float(cdata.get("net_profit_usdt", 0)), 2)
+                        realized_net = round(float(cdata.get("realized_pnl_net_usdt", 0)), 2)
+                        tr = cdata.get('total_trades', cdata.get('trades', 0))
+                        val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
                     
                     if i == 1:
                         medal = "🥇"
@@ -1243,12 +1763,8 @@ class TelegramReceiver:
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
                     [
                         InlineKeyboardButton(text="Net Profit", callback_data="analytics_ranking:net"),
-                        InlineKeyboardButton(text="Risk/Reward", callback_data="analytics_ranking:rr")
-                    ],
-                    [
-                        InlineKeyboardButton(text="DRME", callback_data="analytics_ranking:drme"),
-                        InlineKeyboardButton(text="MDME", callback_data="analytics_ranking:mdme"),
-                        InlineKeyboardButton(text="N/R", callback_data="analytics_ranking:nr")
+                        InlineKeyboardButton(text="Recovery (Тек)", callback_data="analytics_ranking:rec"),
+                        InlineKeyboardButton(text="Abs Recovery", callback_data="analytics_ranking:abs_rec")
                     ]
                 ])
                     
@@ -1366,8 +1882,7 @@ class TelegramReceiver:
                         lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
                         lines.append(f"  Recovery Factor: {cdata.get('recovery_factor', 0)}")
                         lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
-                        lines.append(f"  DRME: {cdata.get('DRME', 0)}")
-                        lines.append(f"  MDME: {cdata.get('MDME', 0)}\n")
+                        lines.append(f"  Abs Recovery Factor: {cdata.get('abs_recovery_factor', 0)}\n")
                 
                 report_path = ANALYTICS_DIR / "full_analytics_report.txt"
                 report_path.write_text("\n".join(lines), encoding="utf-8")

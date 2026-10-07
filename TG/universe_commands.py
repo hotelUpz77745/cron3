@@ -21,11 +21,15 @@ def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
     if uid:
         return uid
     if bot_core and hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-        active = bot_core.strategy_registry.get_active_strategies()
-        if active:
-            first_uid = next(iter(active.keys()))
-            _active_user_universe[user_id] = first_uid
-            return first_uid
+        try:
+            active = bot_core.strategy_registry.get_active_strategies() if callable(getattr(bot_core.strategy_registry, "get_active_strategies", None)) else getattr(bot_core.strategy_registry, "active_strategies", {})
+            if active:
+                first_uid = next(iter(active.keys()), None)
+                if first_uid:
+                    _active_user_universe[user_id] = first_uid
+                    return first_uid
+        except Exception:
+            pass
     return "u96_omni_zenith_apex"
 
 
@@ -135,8 +139,18 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
         except Exception:
             pass
 
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📊 Аналитика купола", callback_data=f"analytics_dome:{uid}"),
+                InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_bigboard")
+            ],
+            [
+                InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart")
+            ]
+        ])
         await callback.message.answer(
             f"✅ Контекст переключен на вселенную <code>{uid}</code>.\n"
             f"Теперь детальная аналитика и метрики относятся к этой стратегии.",
+            reply_markup=kb,
             parse_mode="HTML"
         )

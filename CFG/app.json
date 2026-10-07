@@ -1,7 +1,4 @@
 {
-    "modes": [
-        "fixed"
-    ],
     "app": {
         "time_zone": "UTC",
         "precision": 18,
@@ -14,7 +11,7 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": true
+        "auto_start": false
     },
     "paths": {
         "shared_api_dir": "../API",
@@ -43,35 +40,35 @@
             "quant_reference_size": 600.0,
             "radar_rotation_on_close": {
                 "enabled": false,
-                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш. В боевом режиме по умолчанию false (или активируется штурманом по расписанию/23h).",
+                "_desc_enabled": "Trigger coin rotation upon auto-closer liquidation to 100% cash. Default false in combat mode.",
                 "min_universe_age_hours": 23.0,
-                "_desc_min_universe_age_hours": "Маст-хэв требование: минимальное время непрерывной работы обоймы (23.0 часа) с момента старта или предыдущей ротации. Если автоклоз сработал раньше 23ч, корзина фиксирует прибыль в кэш, но монеты сохраняются.",
+                "_desc_min_universe_age_hours": "Minimum continuous runtime (23.0h) since start or last rotation before allowing rotation.",
                 "selector_type": "alpha_coin_selector",
-                "_desc_selector_type": "'alpha_coin_selector' (по свечам волатильности) или 'samsonov_funnel' (по телеметрии Радара).",
+                "_desc_selector_type": "'alpha_coin_selector' (volatility klines) or 'samsonov_funnel' (radar telemetry).",
                 "target_coins_count": 4,
-                "_desc_target_coins_count": "Целевое количество активных монет в обойме стратегии.",
+                "_desc_target_coins_count": "Target number of active coins in strategy pool.",
                 "min_score_lead_pct": 35.0,
-                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%."
+                "_desc_min_score_lead_pct": "Hysteresis threshold (+35%): candidate replaces worst coin only if score is at least 35% higher."
             },
             "fixed_net": {
-                "_desc": "Способ 3: Прямой плоский тейк корзины без ожидания отката трейлинга. При iter_net >= target_net_usdt все позиции немедленно сбрасываются в 100% кэш.",
+                "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
                 "target_net_usdt": 21.0,
-                "_desc_target_net_usdt": "Фиксированный целевой чистый Net профит итерации в USDT.",
+                "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
                 "scale_by_invest_size": false,
-                "_desc_scale_by_invest_size": "Если true, целевой порог масштабируется по формуле (invest_size / quant_reference_size) * target_net_usdt."
+                "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt."
             },
             "toxicity_adaptive": {
-                "_desc": "Способ 2: Динамические целевые фиксы с учетом скора токсичности инвентаря (загрузка маржи, глубина сетки, плавающий убыток, рассасывание ямы R_delta). Сброс корзины на отскоке ямы в чистый плюс.",
+                "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
                 "score_weights": {
                     "margin_load": 0.35,
                     "grid_depth": 0.3,
                     "float_ratio": 0.25,
                     "delta_recovery": 0.15
                 },
-                "_desc_score_weights": "Купол скор-метода: карта распределения весов второго алгоритма оценки инвентаря (загрузка маржи 35%, глубина сетки 30%, доля плавающего минуса 25%, снятие стресса просадки 15%). Сумма = 1.0.",
+                "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
                 "panic_toxicity_threshold": 0.7,
                 "emergency_exit_floor_usdt": 3.0,
-                "_desc_emergency_exit_floor_usdt": "Минимальный гарантированный чистый плюс при панике/навесе (S >= 0.70). В минус закрытие категорически запрещено.",
+                "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
                 "min_panic_recovery": 0.4,
                 "relaxed_toxicity_threshold": 0.35,
                 "moderate_exit_floor_usdt": 8.0,
@@ -79,60 +76,59 @@
                 "relaxed_exit_floor_usdt": 15.0
             },
             "trailing_ratchet": {
-                "_desc": "Способ 1 (Скелет реагирования): Чистая карта уровней лестницы Фибоначчи L0..L5. Курок взводится при достижении activation и закрывает корзину при откате к floor.",
-                "enabled": true,
+                "_desc": "Mode 1: Reacting skeleton. Pure Fibonacci ladder levels L0..L5. Triggers trailing stop and closes basket on pullback to floor.",
                 "levels": [
                     {
                         "activation": 8.0,
                         "floor": 5.5,
                         "min_age_hours": 24.0,
                         "enabled": true,
-                        "_desc": "L0: Затяжная стагнация (24h+)"
+                        "_desc": "L0: Prolonged stagnation (24h+)"
                     },
                     {
                         "activation": 15.5,
                         "floor": 13.0,
                         "min_age_hours": 0.0,
                         "enabled": true,
-                        "_desc": "L1: Институциональный старт (Фибо 13.0)"
+                        "_desc": "L1: Institutional start (Fibo 13.0)"
                     },
                     {
                         "activation": 24.5,
                         "floor": 21.0,
                         "min_age_hours": 0.0,
                         "enabled": true,
-                        "_desc": "L2: Уверенное Фибо-движение (Фибо 21.0)"
+                        "_desc": "L2: Confident Fibo move (Fibo 21.0)"
                     },
                     {
                         "activation": 39.0,
                         "floor": 34.0,
                         "min_age_hours": 0.0,
                         "enabled": true,
-                        "_desc": "L3: Сильный тренд (Фибо 34.0)"
+                        "_desc": "L3: Strong trend (Fibo 34.0)"
                     },
                     {
                         "activation": 63.5,
                         "floor": 55.0,
                         "min_age_hours": 0.0,
                         "enabled": true,
-                        "_desc": "L4: Импульсный памп (Фибо 55.0)"
+                        "_desc": "L4: Momentum pump (Fibo 55.0)"
                     },
                     {
                         "activation": 89.0,
                         "floor": 89.0,
                         "min_age_hours": 0.0,
                         "enabled": true,
-                        "_desc": "L5: Мега-ралли (Фибо 89.0)"
+                        "_desc": "L5: Mega rally (Fibo 89.0)"
                     }
                 ]
             }
         }
     },
-    "_available_suffixes_doc": "Доступные суффиксы режимов автоклозера: __off (режим 'руками не лапать', максимальный валовый профит), __classic (чистый трейлинг Фибо), __fixed (плоский фикс), __toxic (институциональный динамический сброс ямы)",
+    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit)",
     "active_strategies": {
         "u96_omni_zenith_apex": {
-            "_comment_alias": "⚡ [u96_omni_zenith_apex] Омен-96 (Omni Zenith Apex + Knife Blocker 1)",
-            "_comment_pros": "Ультра-скальпер выживания и пулемет кэша: микро-тейки 0.62%..1.0%, блокиратор ножей th=1, максимальная частота фиксаций без залипания маржи.",
+            "_comment_alias": "u96_omni_zenith_apex: Omni Zenith Apex + Knife Blocker 1",
+            "_comment_pros": "Survival ultra-scalper and cash gun: micro-takes 0.62%..1.0%, Knife Blocker th=1, high execution frequency without margin lock.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -148,8 +144,8 @@
             }
         },
         "u6_symbiosis_gamma_fortress35": {
-            "_comment_alias": "👑 [u6_symbiosis_gamma_fortress35] Медный Змей (Gamma Fortress 35)",
-            "_comment_pros": "Монарх Капитала и сборщик трендов: глубокая сетка до -89%, первый вход с -3.5%, Knife Blocker th=1, Panic Damper TP со сжатием к 0.50%, трейлинг Фибоначчи.",
+            "_comment_alias": "u6_symbiosis_gamma_fortress35: Copper Serpent (Gamma Fortress 35)",
+            "_comment_pros": "Capital Monarch and trend harvester: deep grid down to -89%, initial entry from -3.5%, Knife Blocker th=1, Panic Damper TP compressed to 0.50%, Fibonacci trailing.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -164,8 +160,8 @@
             }
         },
         "u16_titan_universal_alpha": {
-            "_comment_alias": "👑 [u16_titan_universal_alpha] Титан (Titan Universal Alpha)",
-            "_comment_pros": "Синтез абсолютной альфы: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker th=1, динамический сброс ямы токсичности.",
+            "_comment_alias": "u16_titan_universal_alpha: Titan Universal Alpha",
+            "_comment_pros": "Absolute alpha synthesis: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker th=1, dynamic toxicity exit.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -188,59 +184,59 @@
     },
     "volatility_scanner": {
         "enabled": true,
-        "_desc_enabled": "Мастер-тумблер сканера волатильности.",
+        "_desc_enabled": "Volatility scanner master toggle.",
         "strict_window": true,
-        "_desc_strict_window": "Строгий учет длины истории: отбрасывать молодые листинги, у которых свечей меньше окна.",
+        "_desc_strict_window": "Strict history length requirement: exclude young listings with fewer candles than window.",
         "min_dayly_vol_usdt": 3000000,
-        "_desc_min_dayly_vol_usdt": "Базовый фильтр ликвидности: минимальный суточный (24h) объем торгов в USDT.",
+        "_desc_min_dayly_vol_usdt": "Base liquidity filter: minimum 24h trading volume in USDT.",
         "atr_volatility_filter": {
             "enabled": true,
-            "_desc_enabled": "Фильтр долгосрочной свечной волатильности (ATR-диапазон).",
+            "_desc_enabled": "Long-term candle volatility filter (ATR range).",
             "timeframe": "1w",
-            "_desc_timeframe": "Таймфрейм свечей для ATR (например '1w').",
+            "_desc_timeframe": "Candle timeframe for ATR.",
             "window": 12,
-            "_desc_window": "Количество свечей для усреднения волатильности.",
+            "_desc_window": "Number of candles for volatility averaging.",
             "min_volatility_pct": 25.0,
-            "_desc_min_volatility_pct": "Минимальная средняя волатильность свечей (High/Low - 1)*100 в %.",
+            "_desc_min_volatility_pct": "Minimum average candle volatility (High/Low - 1)*100 in %.",
             "max_volatility_pct": 40.0,
-            "_desc_max_volatility_pct": "Максимальная средняя волатильность свечей в %."
+            "_desc_max_volatility_pct": "Maximum average candle volatility in %."
         },
         "rsi_filter": {
             "enabled": true,
-            "_desc_enabled": "Фильтр перекупленности/перепроданности RSI (отсев экстремальных пампов и дампов).",
+            "_desc_enabled": "RSI overbought/oversold filter.",
             "timeframe": "4h",
-            "_desc_timeframe": "Таймфрейм свечей для расчета RSI.",
+            "_desc_timeframe": "Candle timeframe for RSI calculation.",
             "period": 14,
-            "_desc_period": "Период индикатора RSI (классический 14).",
+            "_desc_period": "RSI indicator period.",
             "min_rsi": 35.0,
-            "_desc_min_rsi": "Нижняя допустимая граница RSI (защита от ножей/дампов).",
+            "_desc_min_rsi": "Lower acceptable RSI boundary.",
             "max_rsi": 65.0,
-            "_desc_max_rsi": "Верхняя допустимая граница RSI (защита от хаев/пампов)."
+            "_desc_max_rsi": "Upper acceptable RSI boundary."
         },
         "bollinger_width_filter": {
             "enabled": false,
-            "_desc_enabled": "Фильтр ширины канала Боллинджера (оценка чистой волатильности относительно нижней границы).",
+            "_desc_enabled": "Bollinger Bands width filter.",
             "timeframe": "4h",
-            "_desc_timeframe": "Таймфрейм свечей для расчета полос Боллинджера.",
+            "_desc_timeframe": "Candle timeframe for Bollinger Bands calculation.",
             "MA_type": "SMA",
-            "_desc_MA_type": "Тип средней линии: 'SMA' (простая скользящая) или 'EMA' (экспоненциальная).",
+            "_desc_MA_type": "Moving average type: SMA or EMA.",
             "period": 20,
-            "_desc_period": "Период скользящей средней для BB.",
+            "_desc_period": "Moving average period for BB.",
             "multiplier": 2.0,
-            "_desc_multiplier": "Множитель стандартного отклонения (сигм).",
+            "_desc_multiplier": "Standard deviation multiplier.",
             "min_width_pct": 8.0,
-            "_desc_min_width_pct": "Минимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
+            "_desc_min_width_pct": "Minimum channel width ((Upper/Lower) - 1)*100 in %.",
             "max_width_pct": 16.0,
-            "_desc_max_width_pct": "Максимальная ширина канала ((Upper/Lower) - 1)*100 в %.",
+            "_desc_max_width_pct": "Maximum channel width ((Upper/Lower) - 1)*100 in %.",
             "center_proximity_filter": {
                 "enabled": true,
-                "_desc_enabled": "Подфильтр близости к средней линии: гарантирует старт из сбалансированной зоны.",
+                "_desc_enabled": "Center proximity sub-filter: ensures entry from a balanced zone.",
                 "max_deviation_from_center_pct": 40.0,
-                "_desc_max_deviation_from_center_pct": "Максимальное отклонение цены от middleBB в % от ширины канала (|Price - middleBB| / (Upper - Lower) * 100).",
-                "_comment": "50% = цена на границе канала, 75% = цена не дальше 1.5x полуширины от центра."
+                "_desc_max_deviation_from_center_pct": "Maximum price deviation from middleBB in % of channel width.",
+                "_comment": "50% = price at channel boundary, 75% = price within 1.5x half-width from center."
             }
         },
-        "_comment_call": "Запуск в Telegram: команда /sonnik -> кнопка 'Run Scanner'"
+        "_comment_call": "Telegram trigger: /sonnik command -> 'Run Scanner' button"
     },
     "watchdog": {
         "timeout_sec": 60,
@@ -250,31 +246,31 @@
     },
     "backup": {
         "enabled": false,
-        "_desc_enabled": "Информационный переключатель: фоновый интервальный спам zip-архивами упразднен (муветон и лишняя нагрузка). Рантайм непрерывно и безопасно сохраняется в атомарный бинарный .pkl. Если флаг enabled выставлен в true — бот не спамит в Telegram, а выводит информационную подсветку в логи с напоминанием о вызовах On-Demand сервиса бэкапа.",
+        "_desc_enabled": "Informational toggle: background interval zip spam is deprecated. Runtime is continuously saved to atomic .pkl. When enabled, bot prints informational reminders for On-Demand backup service.",
         "debounce_sec": 10,
         "max_interval_sec": 300,
         "_on_demand_backup_service": {
             "cli_command": "python -m CORE.SERVICES.runtime_backup_service",
             "telegram_command": "/backup",
-            "telegram_button": "📦 JSON-бэкап рантайма",
+            "telegram_button": "Runtime JSON Backup",
             "cache_output_dir": "CACHE/backups",
-            "format": "JSON (санитизированный старый формат со всеми позициями и FSM)",
-            "_info_on_enabled_true": "При enabled=true бот выдает чисто информативную подсветку: напоминает команды /backup и CLI для экспорта рантайма в JSON."
+            "format": "JSON (sanitized runtime state with all positions and FSM)",
+            "_info_on_enabled_true": "When enabled=true, bot prints reminders for /backup and CLI export."
         }
     },
     "risk_system": {
         "enabled": false,
         "min_balance_threshold_usdt": null,
-        "_desc_min_balance_threshold_usdt": "Глобальный ручник: минимальный порог баланса в USDT (например 150.0). Если cur_balance_usdt падает ниже этого порога, бот экстренно закрывает все позиции по рынку, ожидает синхронизации аналитики, ставится на паузу и отправляет алерт в Telegram. null — отключен."
+        "_desc_min_balance_threshold_usdt": "Global risk handbrake: minimum balance threshold in USDT. If cur_balance_usdt falls below this, bot liquidates all positions at market, pauses and alerts Telegram. null = disabled."
     },
     "trade_velocity": {
         "enabled": true,
         "timeframe_hours": 6.0,
         "min_accumulation_hours": 1.0,
-        "_desc_min_accumulation_hours": "Минимальное время накопления истории в часах (вычитывается из ленты).",
+        "_desc_min_accumulation_hours": "Minimum history accumulation time in hours before sending alerts.",
         "benchmark_trades_per_coin": 10.0,
-        "_desc_benchmark_trades_per_coin": "Эталонное число сделок на 1 монету за указанный timeframe_hours.",
+        "_desc_benchmark_trades_per_coin": "Benchmark number of trades per coin for specified timeframe_hours.",
         "top_coins_slice": null,
-        "_desc_top_coins_slice": "Срез монет: null для всех монет (рекомендуется), либо целое число N для топ N монет."
+        "_desc_top_coins_slice": "Coin slice: null for all coins (recommended), or integer N for top N coins."
     }
 }

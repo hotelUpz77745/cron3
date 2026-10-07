@@ -182,6 +182,17 @@ class StrategyConfig:
                     base_ac[k] = v
         self.auto_closing_cfg: Dict[str, Any] = base_ac
 
+        # 5. Купол Режимов (Modes Dome): задается строго под куполом стратегии
+        modes_val = (
+            self.active_settings.get("modes")
+            or raw_meta.get("modes")
+            or self.overrides.get("modes")
+        )
+        if modes_val:
+            self.modes: List[str] = modes_val if isinstance(modes_val, list) else [str(modes_val)]
+        else:
+            self.modes: List[str] = ["off"]
+
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
         sg_cfg = raw_meta.get("smart_grace") or self.overrides.get("smart_grace")
@@ -556,6 +567,14 @@ class StrategyRegistry:
     def get_active_strategies(self) -> Dict[str, StrategyConfig]:
         """Возвращает словарь всех активно сконфигурированных стратегий из active_cfg."""
         return {sid: self.active_strategies[sid] for sid in self.active_cfg.keys() if sid in self.active_strategies}
+
+    def get_strategy(self, strategy_id: str) -> Optional[StrategyConfig]:
+        """Возвращает конфигурацию стратегии по ID или None."""
+        if strategy_id in self.active_strategies:
+            return self.active_strategies[strategy_id]
+        if hasattr(self, "universes_db") and strategy_id in self.universes_db:
+            return self.universes_db[strategy_id]
+        return None
 
     def reload(self, active_strategies_cfg: Optional[Dict[str, Any]] = None) -> None:
         """Перезагружает базу стратегий и пересобирает активные маппинги символов."""

@@ -8,7 +8,7 @@ from consts import DATA_DIR
 class AnalyticsMathEngine:
     """
     Движок для расчета всех математических показателей аналитики.
-    Содержит логику для ROI, DRME, MDME, Drawdowns и других метрик.
+    Содержит логику для ROI, Recovery Factor, Abs Recovery Factor, Drawdowns и других метрик.
     """
 
     @staticmethod
@@ -62,8 +62,7 @@ class AnalyticsMathEngine:
             "avg_daily_profit": "[Per-Coin] Average profit per active day of trading for this coin.",
             "max_position_size": "[Per-Coin] Max historical notional size actually reached (total volume * price).",
             "risk_reward_ratio": "[Per-Coin] abs(max_drawdown) / avg_daily_profit.",
-            "DRME": "[Per-Coin] Daily Return on Max Exposure: avg_daily_profit / max_position_size.",
-            "MDME": "[Per-Coin] Max Drawdown on Max Exposure: abs(max_drawdown) / max_position_size.",
+            "abs_recovery_factor": "[Per-Coin] Absolute Recovery Factor: peak_net_profit_usdt / abs(max_drawdown_net_usdt).",
             "max_net_profit": "[Per-Coin] Historical maximum of the coin's fixed net profit.",
             "min_net_profit": "[Per-Coin] Historical minimum of the coin's fixed net profit.",
             "max_drawdown": "[Per-Coin] Historical maximum floating drawdown for this coin.",
@@ -102,7 +101,7 @@ class AnalyticsMathEngine:
     @staticmethod
     def _calculate_per_coin_metrics(data: dict) -> None:
         """
-        Рассчитывает метрики для каждой монеты (DRME, MDME, Drawdowns).
+        Рассчитывает метрики для каждой монеты (Rec, Abs Rec, Drawdowns).
         """
         current_ts = int(time.time() * 1000)
         
@@ -146,11 +145,14 @@ class AnalyticsMathEngine:
             cdata["max_drawdown_net_usdt"] = max_net_dd
             
             # Recovery Factor (Rec) = Net Profit / abs(max DD of Net)
+            # Abs Recovery Factor = Peak Net Profit / abs(max DD of Net)
             abs_net_dd = abs(max_net_dd)
             if abs_net_dd > 0:
                 cdata["recovery_factor"] = round(net_profit / abs_net_dd, 2)
+                cdata["abs_recovery_factor"] = round(peak_net / abs_net_dd, 2)
             else:
                 cdata["recovery_factor"] = 0.0
+                cdata["abs_recovery_factor"] = 0.0
             
             avg_daily_profit = round(realized_net / days_active, 4)
             cdata["avg_daily_profit"] = avg_daily_profit
@@ -167,7 +169,10 @@ class AnalyticsMathEngine:
                 "avg_daily_return_pct", 
                 "cumulative_return_pct", 
                 "current_drawdown_pct", 
-                "max_drawdown_pct"
+                "max_drawdown_pct",
+                "epoch_state",
+                "DRME",
+                "MDME"
             ]
             for lk in legacy_keys:
                 if lk in cdata:
@@ -186,32 +191,3 @@ class AnalyticsMathEngine:
                     pass
                     
             cdata["max_position_size"] = round(float(cdata.get("max_grid_load_usdt", current_margin)), 4)
-            
-            safe_max = cdata["max_position_size"] if cdata["max_position_size"] > 0 else 1.0
-            global_drme = cdata.get("avg_daily_profit", 0.0) / safe_max
-            global_mdme = abs(cdata.get("max_drawdown", 0.0)) / safe_max
-            
-            if "epoch_state" in cdata:
-                est = cdata["epoch_state"]
-                current_profit = cdata.get("realized_pnl_net_usdt", 0.0) - est.get("pnl_at_start", 0.0)
-                current_duration = (int(time.time() * 1000) - est.get("start_ts", 0)) / 86400000
-                
-                active_count = est.get("closed_count", 0)
-                cur_drme = 0.0
-                cur_mdme = 0.0
-                
-                if current_duration >= 1.0:
-                    safe_sz = est.get("size", 1.0) if est.get("size", 0.0) > 0 else 1.0
-                    cur_drme = (current_profit / current_duration) / safe_sz
-                    cur_mdme = abs(est.get("max_dd", 0.0)) / safe_sz
-                    active_count += 1
-                
-                if active_count > 0:
-                    cdata["DRME"] = round((est.get("closed_drme_sum", 0.0) + cur_drme) / active_count, 4)
-                    cdata["MDME"] = round((est.get("closed_mdme_sum", 0.0) + cur_mdme) / active_count, 4)
-                else:
-                    cdata["DRME"] = round(global_drme, 4)
-                    cdata["MDME"] = round(global_mdme, 4)
-            else:
-                cdata["DRME"] = round(global_drme, 4)
-                cdata["MDME"] = round(global_mdme, 4)

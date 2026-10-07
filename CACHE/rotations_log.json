@@ -1,1 +1,26 @@
-[]
+[
+    {
+        "timestamp_utc": "2026-10-07 20:57:35 UTC",
+        "timestamp_ms": 1791406655222,
+        "strat_id": "u6_symbiosis_gamma_fortress35",
+        "old_symbol": "OLD1USDT",
+        "new_symbol": "NEW1USDT",
+        "old_score": 0.0,
+        "new_score": 95.0,
+        "lead_pct": 9500000.0,
+        "matched_rule": "<=2.0%",
+        "mode": "auto"
+    },
+    {
+        "timestamp_utc": "2026-10-07 20:57:35 UTC",
+        "timestamp_ms": 1791406655237,
+        "strat_id": "u6_symbiosis_gamma_fortress35",
+        "old_symbol": "OLD2USDT",
+        "new_symbol": "NEW2USDT",
+        "old_score": 0.0,
+        "new_score": 90.0,
+        "lead_pct": 9000000.0,
+        "matched_rule": "<=2.0%",
+        "mode": "auto"
+    }
+]

@@ -194,9 +194,9 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
             self.assertIn("⚙️ Set Coins", all_main_buttons)
             self.assertIn("🛡️ Risk System", all_main_buttons)
             self.assertIn("🌌 Set Universes", all_main_buttons)
-            self.assertIn("🏆 Leaderboard", all_main_buttons)
+            self.assertNotIn("🏆 Leaderboard", all_main_buttons)
             self.assertIn("📊 Analytics", all_main_buttons)
-            self.assertEqual(len(all_main_buttons), 10)
+            self.assertEqual(len(all_main_buttons), 9)
 
             set_coins_kb = tg._get_set_coins_keyboard()
             all_set_buttons = [btn.text for row in set_coins_kb.keyboard for btn in row]

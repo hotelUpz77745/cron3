@@ -256,3 +256,22 @@
    - Кнопки автозамены монет («📥 Применить») удалены из отчета селектора.
    - Селектор переведен в чисто информативный аналитический режим (как в полигоне Радара).
    - Метод `apply_coins_to_strategy` в `CoinSelectionService` защищен пре-валидацией пересечения монет и корректным вызовом `build_runtime_for_symbol`.
+
+---
+
+### 7.11. Ликвидация легаси-метрик DRME, MDME, epoch_state и гармонизация рейтингов и клавиатур Telegram
+- **Контекст**:
+  Метрики `DRME` (Daily Return on Max Exposure) и `MDME` (Max Drawdown on Max Exposure) требовали отслеживания эпох изменения маржи в `epoch_state` (`analytics.py`, `metrics.py`), создавали путаницу и неинформативные кнопки в Telegram.
+- **Решение**:
+  1. Сущности `DRME`, `MDME` и микросервис расчета эпох `epoch_state` полностью удалены с корнем из аналитического ядра (`analytics.py`, `metrics.py`) и интерфейсов Telegram (`tg_receiver.py`).
+  2. В `metrics.py` добавлена автоочистка старых полей (`legacy_keys` удаляет `epoch_state`, `DRME`, `MDME` при чтении сохраненных файлов).
+  3. В рейтингах монет оставлено строго **3 чистых фильтра** (для портфельного Биг Борда и для куполов):
+     - `net`: Чистый Net Profit (`net_profit_usdt`, больше = лучше)
+     - `rec`: Текущий фактор восстановления (`recovery_factor` = `net_profit_usdt / |max_drawdown|`, больше = лучше)
+     - `abs_rec`: Абсолютный фактор восстановления (`abs_recovery_factor` = `peak_net_profit_usdt / |max_drawdown|`, отношение абсолютного исторического пика профита к макс DD, больше = лучше)
+  4. Главное меню Telegram (`cron3` взят за временный эталон):
+     - Ряд 1: `[▶️ Start] [ℹ️ Status] [⏸️ Stop]`
+     - Ряд 2: `[🌌 Set Universes] [📊 Analytics]`
+     - Ряд 3: `[⚙️ Set Coins] [🛡️ Risk System] [📜 Logs]`
+     - Ряд 4: `[🚨 Close All]`
+     - Кнопка `🏆 Leaderboard` перемещена строго внутрь аналитики (в Биг Борд).

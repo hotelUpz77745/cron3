@@ -78,7 +78,8 @@ class LeaderboardEngine:
         winning_trades = int(data.get("winning_trades", 0))
 
         # Peak Net Profit (максимальный за историю Нет профит текущей отработки)
-        peak_bal = float(data.get("peak_balance_usdt", start_bal))
+        peak_bal = float(data.get("peak_balance_usdt", max(start_bal, cur_bal)))
+        min_bal = float(data.get("min_balance_usdt", min(start_bal, cur_bal)))
         perf_usdt = float(data.get("performance_usdt", 0.0))
         saved_peak_net = float(data.get("peak_net_profit_usdt", 0.0))
         peak_net_profit = max(net_profit, round(peak_bal - start_bal, 2), round(perf_usdt, 2), saved_peak_net)
@@ -143,6 +144,8 @@ class LeaderboardEngine:
             "status": "RUNNING" if meta.get("enabled", meta.get("is_active", True)) else "PAUSED",
             "start_balance_usdt": round(start_bal, 2),
             "cur_balance_usdt": round(cur_bal, 2),
+            "peak_balance_usdt": round(peak_bal, 2),
+            "min_balance_usdt": round(min_bal, 2),
             "net_profit_usdt": round(net_profit, 2),
             "iteration_index": iteration_index,
             "iteration_net_profit_usdt": iteration_net,
@@ -289,14 +292,40 @@ class LeaderboardEngine:
             table_text = self.format_table(entries, evaluated_coins_count=evaluated_coins_count)
             Utils.atomic_write_text(self.leaderboard_file, table_text)
 
-            # 2. JSON витрина
-            total_net = sum(x["net_profit_usdt"] for x in entries)
-            total_trades = sum(x["total_trades"] for x in entries)
+            # 2. JSON витрина с расчетом совокупных балансов портфеля
+            total_net = sum(x.get("net_profit_usdt", 0.0) for x in entries)
+            total_realized = sum(x.get("realized_pnl_usdt", 0.0) for x in entries)
+            total_unrealized = sum(x.get("unrealized_pnl_usdt", 0.0) for x in entries)
+            total_trades = sum(x.get("total_trades", 0) for x in entries)
+            total_start_bal = sum(x.get("start_balance_usdt", 0.0) for x in entries)
+            total_cur_bal = total_start_bal + total_net
+
+            prev_peak = total_cur_bal
+            prev_min = total_cur_bal
+            if self.portfolio_file.exists():
+                try:
+                    prev_data = json.loads(self.portfolio_file.read_text(encoding="utf-8"))
+                    if "aggregate_peak_balance_usdt" in prev_data:
+                        prev_peak = float(prev_data["aggregate_peak_balance_usdt"])
+                    if "aggregate_min_balance_usdt" in prev_data:
+                        prev_min = float(prev_data["aggregate_min_balance_usdt"])
+                except Exception:
+                    pass
+
+            agg_peak = max(prev_peak, total_cur_bal, total_start_bal)
+            agg_min = min(prev_min, total_cur_bal, total_start_bal)
+
             portfolio_payload = {
                 "updated_at_utc": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "total_universes_active": len(entries),
                 "evaluated_coins_count": evaluated_coins_count,
+                "aggregate_start_balance_usdt": round(total_start_bal, 2),
+                "aggregate_cur_balance_usdt": round(total_cur_bal, 2),
+                "aggregate_peak_balance_usdt": round(agg_peak, 2),
+                "aggregate_min_balance_usdt": round(agg_min, 2),
                 "aggregate_net_profit_usdt": round(total_net, 2),
+                "aggregate_realized_pnl_usdt": round(total_realized, 2),
+                "aggregate_unrealized_pnl_usdt": round(total_unrealized, 2),
                 "aggregate_total_trades": total_trades,
                 "leaderboard": entries,
             }
@@ -304,3 +333,51 @@ class LeaderboardEngine:
 
         except Exception as e:
             logger.error(f"Error saving portfolio leaderboard: {e}")
+
+    def get_portfolio_summary(self, entries: Optional[List[dict]] = None) -> dict:
+        """Возвращает сводные агрегированные метрики портфеля из кэша или по переданным стратегиям."""
+        if not entries and self.portfolio_file.exists():
+            try:
+                data = json.loads(self.portfolio_file.read_text(encoding="utf-8"))
+                if "aggregate_start_balance_usdt" in data and float(data.get("aggregate_start_balance_usdt", 0)) > 0:
+                    return data
+                if "leaderboard" in data:
+                    entries = data["leaderboard"]
+            except Exception:
+                pass
+
+        entries = entries or []
+        tot_start = sum(float(x.get("start_balance_usdt", 0.0)) for x in entries)
+        tot_net = sum(float(x.get("net_profit_usdt", 0.0)) for x in entries)
+        tot_real = sum(float(x.get("realized_pnl_usdt", 0.0)) for x in entries)
+        tot_unreal = sum(float(x.get("unrealized_pnl_usdt", 0.0)) for x in entries)
+        tot_trades = sum(int(x.get("total_trades", 0)) for x in entries)
+        tot_cur = tot_start + tot_net
+
+        prev_peak = tot_cur
+        prev_min = tot_cur
+        if self.portfolio_file.exists():
+            try:
+                prev_data = json.loads(self.portfolio_file.read_text(encoding="utf-8"))
+                if "aggregate_peak_balance_usdt" in prev_data:
+                    prev_peak = float(prev_data["aggregate_peak_balance_usdt"])
+                if "aggregate_min_balance_usdt" in prev_data:
+                    prev_min = float(prev_data["aggregate_min_balance_usdt"])
+            except Exception:
+                pass
+
+        agg_peak = max(prev_peak, tot_cur, tot_start)
+        agg_min = min(prev_min, tot_cur, tot_start)
+
+        return {
+            "total_universes_active": len(entries),
+            "aggregate_start_balance_usdt": round(tot_start, 2),
+            "aggregate_cur_balance_usdt": round(tot_cur, 2),
+            "aggregate_peak_balance_usdt": round(agg_peak, 2),
+            "aggregate_min_balance_usdt": round(agg_min, 2),
+            "aggregate_net_profit_usdt": round(tot_net, 2),
+            "aggregate_realized_pnl_usdt": round(tot_real, 2),
+            "aggregate_unrealized_pnl_usdt": round(tot_unreal, 2),
+            "aggregate_total_trades": tot_trades,
+            "leaderboard": entries,
+        }

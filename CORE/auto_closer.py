@@ -353,11 +353,15 @@ class AutoCloser:
             elif strat_id.endswith("__fixed"):
                 mode = "fixed"
             else:
-                raw_m = (
-                    (strat_auto_cfg or {}).get("mode")
-                    or ((strat_auto_cfg or {}).get("positive") or {}).get("mode")
-                    if isinstance(strat_auto_cfg, dict) else None
-                )
+                strat_modes = strat_app_cfg.get("modes") or getattr(strat_cfg, "modes", None)
+                if strat_modes and isinstance(strat_modes, list) and len(strat_modes) > 0:
+                    raw_m = strat_modes[0]
+                else:
+                    raw_m = (
+                        (strat_auto_cfg or {}).get("mode")
+                        or ((strat_auto_cfg or {}).get("positive") or {}).get("mode")
+                        if isinstance(strat_auto_cfg, dict) else None
+                    )
                 raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
                 if raw_m_str in ("classic", "iter_net_classic", "trailing_ratchet"):
                     mode = "classic"
@@ -406,7 +410,7 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 # РЕЖИМ 2: TOXICITY ADAPTIVE (Институциональный адаптивный скор)
                 # -------------------------------------------------------------
-                if mode == "toxicity_adaptive":
+                if mode in ("toxic", "toxicity_adaptive"):
                     margin_load, depth_ratio, f_ratio, d_rec = self.extract_toxicity_metrics(strat_cfg, strat_analytics, self.bot_core)
                     t_cfg = pos_cfg.get("toxicity_adaptive", {})
                     weights = t_cfg.get("score_weights") or pos_cfg.get("toxicity_weights")
@@ -437,7 +441,7 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 # РЕЖИМ 1: ITER NET CLASSIC / TRAILING RATCHET
                 # -------------------------------------------------------------
-                elif mode in ("iter_net_classic", "trailing_ratchet"):
+                elif mode in ("classic", "iter_net_classic", "trailing_ratchet"):
                     import copy
                     r_cfg_scaled = copy.deepcopy(r_cfg)
                     r_cfg_scaled["scale_factor"] = scale_factor
@@ -458,7 +462,7 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 # РЕЖИМ 3: FIXED NET (Прямой тейк корзины по фиксированному Net профиту)
                 # -------------------------------------------------------------
-                elif mode == "fixed_net":
+                elif mode in ("fixed", "fixed_net"):
                     fixed_cfg = pos_cfg.get("fixed_net", {})
                     is_fixed, trig_target, f_info = ToxicityEngine.evaluate_fixed_net(
                         iter_net=iter_net, fixed_cfg=fixed_cfg, scale_factor=scale_factor
