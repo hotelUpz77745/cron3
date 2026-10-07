@@ -167,14 +167,20 @@ class StrategyConfig:
             }
 
         # 4. Купол Авто-закрытия (Auto-closing Dome): берется из стратегии, либо базовый шаблон из app.json
-        ac_cfg = (
+        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из app.json с переопределениями стратегии
+        base_ac = copy.deepcopy(_CFG.get("auto_closing") or DEFAULT_AUTO_CLOSING)
+        override_ac = (
             self.active_settings.get("auto_closing")
             or raw_meta.get("auto_closing")
             or self.overrides.get("auto_closing")
-            or _CFG.get("auto_closing")
-            or DEFAULT_AUTO_CLOSING
         )
-        self.auto_closing_cfg: Dict[str, Any] = copy.deepcopy(ac_cfg)
+        if override_ac and isinstance(override_ac, dict):
+            for k, v in override_ac.items():
+                if k == "positive" and isinstance(v, dict) and "positive" in base_ac and isinstance(base_ac["positive"], dict):
+                    base_ac["positive"].update(v)
+                else:
+                    base_ac[k] = v
+        self.auto_closing_cfg: Dict[str, Any] = base_ac
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
@@ -294,15 +300,57 @@ class StrategyRegistry:
         self._resolve_and_validate()
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу шаблонов из universes.json."""
-        if not self.universes_path.exists():
+        """Загружает базу шаблонов: приоритет модульной папке CFG/universes/*.json, fallback на universes.json и полигон."""
+        data: Dict[str, Dict[str, Any]] = {}
+        universes_dir = self.universes_path.parent / "universes"
+        if universes_dir.exists() and universes_dir.is_dir():
+            for jf in sorted(universes_dir.glob("*.json")):
+                data[jf.stem] = Utils.read_json_file(jf)
+
+        # Fallback к universes.json (для обратной совместимости внешних утилит)
+        if self.universes_path.exists():
+            ujson = Utils.read_json_file(self.universes_path)
+            if isinstance(ujson, dict):
+                for k, v in ujson.items():
+                    if k not in data:
+                        data[k] = v
+
+
+
+        # Автоматическое размножение чистых шаблонов-архетипов на 4 режима автоклозера
+        expanded_variants: Dict[str, Dict[str, Any]] = {}
+        for uid, udata in list(data.items()):
+            # Проверяем, является ли шаблон чистым архетипом (без суффикса)
+            is_suffixed = any(uid.endswith(sfx) for sfx in ("__off", "__classic", "__fixed", "__toxic"))
+            if not is_suffixed:
+                clean_name = udata.get("name", uid)
+                modes = udata.get("modes") or ["off", "classic", "fixed", "toxic"]
+                for m in modes:
+                    m_key = m.lower().strip()
+                    variant_id = f"{uid}__{m_key}"
+                    if variant_id not in data and variant_id not in expanded_variants:
+                        v_copy = copy.deepcopy(udata)
+                        v_copy["auto_closing_mode"] = m_key
+                        v_copy["name"] = f"[{variant_id}] {clean_name} [{m_key.upper()}]"
+                        if m_key == "off":
+                            v_copy["auto_closing"] = {"enabled": False, "mode": "disabled"}
+                        else:
+                            v_copy["auto_closing"] = {"enabled": True, "mode": m_key}
+                        expanded_variants[variant_id] = v_copy
+            else:
+                # Если шаблон уже имеет суффикс, регистрируем базовый алиас
+                for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                    if uid.endswith(sfx):
+                        base_name = uid[:-len(sfx)]
+                        if base_name not in data and base_name not in expanded_variants:
+                            expanded_variants[base_name] = udata
+                        break
+
+        data.update(expanded_variants)
+
+        if not data:
             raise FileNotFoundError(
-                f"[StrategyRegistry] Критическая ошибка: файл шаблонов не найден по пути: {self.universes_path}"
-            )
-        data = Utils.read_json_file(self.universes_path)
-        if not data or not isinstance(data, dict):
-            raise ValueError(
-                f"[StrategyRegistry] Критическая ошибка: universes.json пуст или имеет неверный формат словаря!"
+                f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены!"
             )
         return data
 
@@ -319,6 +367,8 @@ class StrategyRegistry:
         account_symbols: Dict[str, Dict[str, str]] = {}
 
         for strat_id, strat_settings in self.active_cfg.items():
+            if strat_id.startswith("_") or not isinstance(strat_settings, dict):
+                continue
             # Прямое чтение флага активности (Правило 2)
             is_enabled = bool(strat_settings["enabled"])
             if not is_enabled:

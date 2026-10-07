@@ -1,0 +1,151 @@
+{
+  "name": "👑 Медный Змей (Gamma Fortress 35)",
+  "description": "Канонический Монарх Капитала. Первый вход на -3.5%, 9-уровневая сетка Фибоначчи строго до -89.0%, Panic Damper TP (2.2% -> 0.65%), максимальный денежный поток в режиме [OFF] (руками не лапать). Альтернативные режимы: __classic, __fixed, __toxic.",
+  "leverage": 20,
+  "tp_purpose": "self",
+  "super_grid": {
+    "enabled": false
+  },
+  "smart_grace": {
+    "start_period_sec": 57,
+    "shift_interval_sec": 13,
+    "eval_window_sec": 300,
+    "increments_card": {
+      "==1": 30,
+      "==2": 90,
+      "==3": 140,
+      ">=4": 170
+    }
+  },
+  "smart_size": {
+    "eval_window_sec": 300,
+    "profiting_size_weights": {
+      "<2": 1.0,
+      "==2": 1.15,
+      "==3": 0.85,
+      ">=4": 0.6
+    },
+    "knife_blocker_enabled": true,
+    "knife_blocker_threshold": 1
+  },
+  "LONG": {
+    "invest_size": 600.0,
+    "grid": {
+      "0": {
+        "indent": 0.0,
+        "volume": 7.36,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "1": {
+        "indent": -3.5,
+        "volume": 8.1,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "2": {
+        "indent": -5.5,
+        "volume": 8.91,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "3": {
+        "indent": -8.0,
+        "volume": 9.8,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "4": {
+        "indent": -13.0,
+        "volume": 10.78,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "5": {
+        "indent": -21.0,
+        "volume": 11.86,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "6": {
+        "indent": -34.0,
+        "volume": 13.05,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "7": {
+        "indent": -55.0,
+        "volume": 14.35,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      },
+      "8": {
+        "indent": -89.0,
+        "volume": 15.79,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null
+      }
+    },
+    "tp_map": {
+      "0": {
+        "indent": 2.2,
+        "fallback_indent": 3.0
+      },
+      "1": {
+        "indent": 1.6,
+        "fallback_indent": 2.4
+      },
+      "2": {
+        "indent": 1.2,
+        "fallback_indent": 1.9
+      },
+      "3": {
+        "indent": 1.0,
+        "fallback_indent": 1.6
+      },
+      "4": {
+        "indent": 0.8,
+        "fallback_indent": 1.3
+      },
+      "5": {
+        "indent": 0.65,
+        "fallback_indent": 1.1
+      },
+      "6": {
+        "indent": 0.65,
+        "fallback_indent": 1.05
+      },
+      "7": {
+        "indent": 0.65,
+        "fallback_indent": 1.0
+      },
+      "8": {
+        "indent": 0.65,
+        "fallback_indent": 0.95
+      }
+    }
+  },
+  "SHORT": {
+    "enabled": true,
+    "_inheritance_base_side": true
+  },
+  "auto_closing": {
+    "enabled": false,
+    "mode": "disabled"
+  },
+  "modes": [
+    "off",
+    "classic",
+    "fixed",
+    "toxic"
+  ]
+}
