@@ -130,25 +130,26 @@
     },
     "_available_suffixes_doc": "Доступные суффиксы режимов автоклозера: __off (режим 'руками не лапать', максимальный валовый профит), __classic (чистый трейлинг Фибо), __fixed (плоский фикс), __toxic (институциональный динамический сброс ямы)",
     "active_strategies": {
-        "u16_titan_universal_alpha": {
-            "_comment_alias": "👑 [u16_titan_universal_alpha] Титан (Titan Universal Alpha) [FIXED]",
-            "_comment_pros": "Синтез абсолютной альфы: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker >= 1 и Panic Damper TP. Единственный абсолютный чемпион с положительным Net Profit на всем полигоне.",
+        "u96_omni_zenith_apex": {
+            "_comment_alias": "⚡ [u96_omni_zenith_apex] Омен-96 (Omni Zenith Apex + Knife Blocker 1)",
+            "_comment_pros": "Ультра-скальпер выживания и пулемет кэша: микро-тейки 0.62%..1.0%, блокиратор ножей th=1, максимальная частота фиксаций без залипания маржи.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
             "symbols": [
-                "ZROUSDT"
+                "NEARUSDT",
+                "PUMPUSDT"
             ],
             "modes": [
-                "fixed"
+                "off"
             ],
             "analytics": {
                 "start_balance_usdt": 57
             }
         },
         "u6_symbiosis_gamma_fortress35": {
-            "_comment_alias": "👑 [u6_symbiosis_gamma_fortress35] Медный Змей (Gamma Fortress 35) [FIXED]",
-            "_comment_pros": "Монарх Капитала и сборщик трендов: глубокая сетка до -89%, первый вход с -3.5%, Panic Damper TP со сжатием к 0.50%, деэскалация сайза до 0.60x.",
+            "_comment_alias": "👑 [u6_symbiosis_gamma_fortress35] Медный Змей (Gamma Fortress 35)",
+            "_comment_pros": "Монарх Капитала и сборщик трендов: глубокая сетка до -89%, первый вход с -3.5%, Knife Blocker th=1, Panic Damper TP со сжатием к 0.50%, трейлинг Фибоначчи.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -156,25 +157,23 @@
                 "GRASSUSDT"
             ],
             "modes": [
-                "fixed"
+                "classic"
             ],
             "analytics": {
                 "start_balance_usdt": 57
             }
         },
-        "u9_omni_zenith_apex": {
-            "_comment_alias": "⚡ [u9_omni_zenith_apex] Омен-9 (Omni Zenith Apex) [FIXED]",
-            "_comment_pros": "Ультра-скальпер выживания и пулемет кэша: микро-тейки 0.62%..1.0%, широкие средние шаги сетки (-9%..-58%), максимальная частота фиксаций без залипания маржи.",
+        "u16_titan_universal_alpha": {
+            "_comment_alias": "👑 [u16_titan_universal_alpha] Титан (Titan Universal Alpha)",
+            "_comment_pros": "Синтез абсолютной альфы: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker th=1, динамический сброс ямы токсичности.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
             "symbols": [
-                "RAYSOLUSDT",
-                "PUMPUSDT",
-                "MYXUSDT"
+                "ZROUSDT"
             ],
             "modes": [
-                "fixed"
+                "toxic"
             ],
             "analytics": {
                 "start_balance_usdt": 57

@@ -27,10 +27,10 @@ class TestTGDomeButtons(unittest.TestCase):
         active = self.registry.active_strategies
         self.assertIn("u16_titan_universal_alpha", active)
         self.assertIn("u6_symbiosis_gamma_fortress35", active)
-        self.assertIn("u9_omni_zenith_apex", active)
-        self.assertIn("u16_titan_universal_alpha__fixed", active)
-        self.assertIn("u6_symbiosis_gamma_fortress35__fixed", active)
-        self.assertIn("u9_omni_zenith_apex__fixed", active)
+        self.assertIn("u96_omni_zenith_apex", active)
+        self.assertIn("u16_titan_universal_alpha__toxic", active)
+        self.assertIn("u6_symbiosis_gamma_fortress35__classic", active)
+        self.assertIn("u96_omni_zenith_apex__off", active)
 
     def test_close_all_dome_buttons(self):
         """Проверяет генерацию кнопок закрытия под каждым куполом."""
@@ -41,11 +41,11 @@ class TestTGDomeButtons(unittest.TestCase):
 
         self.assertIn("close_dome_u16_titan_universal_alpha", buttons)
         self.assertIn("close_dome_u6_symbiosis_gamma_fortress35", buttons)
-        self.assertIn("close_dome_u9_omni_zenith_apex", buttons)
+        self.assertIn("close_dome_u96_omni_zenith_apex", buttons)
 
     def test_strategy_meta_extraction(self):
         """Проверяет корректность метаданных куполов стратегий."""
-        for sid in ["u16_titan_universal_alpha", "u6_symbiosis_gamma_fortress35", "u9_omni_zenith_apex"]:
+        for sid in ["u16_titan_universal_alpha", "u6_symbiosis_gamma_fortress35", "u96_omni_zenith_apex"]:
             meta = self.tg._get_strategy_meta(sid)
             self.assertEqual(meta["strategy_id"], sid)
             self.assertTrue(len(meta["name"]) > 0)
@@ -58,7 +58,7 @@ class TestTGDomeButtons(unittest.TestCase):
         apply_cbs = [f"cb_selector_apply:{sid}" for sid in active_strats.keys()]
         self.assertIn("cb_selector_apply:u16_titan_universal_alpha", apply_cbs)
         self.assertIn("cb_selector_apply:u6_symbiosis_gamma_fortress35", apply_cbs)
-        self.assertIn("cb_selector_apply:u9_omni_zenith_apex", apply_cbs)
+        self.assertIn("cb_selector_apply:u96_omni_zenith_apex", apply_cbs)
 
     def test_symbol_strategy_assignment_callbacks(self):
         """Проверяет генерацию callback_data при добавлении монеты под конкретный купол."""
@@ -67,7 +67,7 @@ class TestTGDomeButtons(unittest.TestCase):
         callbacks = [f"add_pick_strat_{symbol}_{sid}" for sid in active_strats.keys()]
         self.assertIn(f"add_pick_strat_{symbol}_u16_titan_universal_alpha", callbacks)
         self.assertIn(f"add_pick_strat_{symbol}_u6_symbiosis_gamma_fortress35", callbacks)
-        self.assertIn(f"add_pick_strat_{symbol}_u9_omni_zenith_apex", callbacks)
+        self.assertIn(f"add_pick_strat_{symbol}_u96_omni_zenith_apex", callbacks)
 
 
 if __name__ == "__main__":
