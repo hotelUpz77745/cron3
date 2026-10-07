@@ -183,10 +183,10 @@ class TradeVelocityEngine:
             except Exception:
                 pass
 
-        all_symbols = configured_symbols if configured_symbols else list(per_coin_data.keys())
-        for s in per_coin_data:
-            if s not in all_symbols:
-                all_symbols.append(s)
+        if configured_symbols:
+            all_symbols = list(dict.fromkeys(configured_symbols))
+        else:
+            all_symbols = list(per_coin_data.keys())
 
         if self.top_slice and self.top_slice > 0:
             sorted_by_profit = sorted(
