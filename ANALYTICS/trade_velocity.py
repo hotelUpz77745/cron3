@@ -27,6 +27,7 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
+from API.BINANCE.public import is_valid_symbol
 
 logger = UnifiedLogger("TradeVelocity")
 
@@ -172,21 +173,34 @@ class TradeVelocityEngine:
         is_ready = history_span_sec >= min_acc_sec
 
         per_coin_data = analytics_data.get("per_coin", {})
-        configured_symbols = []
+        configured_symbols: List[str] = []
         app_path = DATA_DIR / "app.json"
         if app_path.exists():
             try:
                 ad = json.loads(app_path.read_text(encoding="utf-8"))
                 for sid, scfg in ad.get("active_strategies", {}).items():
-                    if scfg.get("enabled", True):
+                    if sid.startswith("_") or not isinstance(scfg, dict):
+                        continue
+                    if scfg.get("enabled") is True:
                         configured_symbols.extend(scfg.get("symbols", []))
             except Exception:
                 pass
 
+        if not configured_symbols:
+            try:
+                from consts import ACTIVE_SYMBOLS
+                configured_symbols = list(ACTIVE_SYMBOLS)
+            except Exception:
+                pass
+
         if configured_symbols:
-            all_symbols = list(dict.fromkeys(configured_symbols))
+            all_symbols = [s for s in dict.fromkeys(configured_symbols) if is_valid_symbol(s)]
         else:
-            all_symbols = list(per_coin_data.keys())
+            # Железобетонная защита: если конфиг недоступен/пуст, берем ТОЛЬКО монеты
+            # с реальными сделками в текущем активном окне ленты. Мертвый исторический
+            # хвост с нулями из per_coin_data ни при каких условиях не попадет в срез!
+            recent_trade_symbols = {sym for _, sym in self._trades_history}
+            all_symbols = [s for s in recent_trade_symbols if is_valid_symbol(s)]
 
         if self.top_slice and self.top_slice > 0:
             sorted_by_profit = sorted(
