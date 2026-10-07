@@ -683,11 +683,62 @@ class TelegramReceiver:
             await callback.answer()
             cdata = callback.data
             if cdata == "close_dome_cancel":
+                await state.clear()
                 await callback.message.edit_text("❌ Закрытие отменено.")
                 return
 
+            cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="close_dome_cancel")]
+            ])
+
             if cdata == "close_dome_all":
-                await callback.message.edit_text("⏳ Закрытие всех куполов и отмена лимитных ордеров...")
+                await state.set_state(TGStates.waiting_for_close_all_confirm)
+                await state.update_data(target_close_dome="all")
+                await callback.message.edit_text(
+                    "🚨 <b>ПОДТВЕРЖДЕНИЕ ЗАКРЫТИЯ ВСЕХ КУПОЛОВ</b>\n\n"
+                    "⚠️ <b>ВНИМАНИЕ!</b>\n"
+                    "Будут отменены все лимитные ордера и закрыты позиции по рынку <b>ВО ВСЕХ СТРАТЕГИЯХ</b> портфеля, а циклы перезапущены!\n\n"
+                    "👉 Для подтверждения отправьте текстовым сообщением слово:\n"
+                    "<b>ЗАКРЫТЬ</b>\n\n"
+                    "<i>Или нажмите «❌ Отмена» ниже для отмены операции.</i>",
+                    reply_markup=cancel_kb,
+                    parse_mode="HTML"
+                )
+                return
+
+            strat_id = cdata.replace("close_dome_", "")
+            strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+            strat_name = strat.name if strat else strat_id
+            symbols_str = ", ".join(strat.symbols) if (strat and strat.symbols) else "нет"
+
+            await state.set_state(TGStates.waiting_for_close_all_confirm)
+            await state.update_data(target_close_dome=strat_id)
+            await callback.message.edit_text(
+                f"⚠️ <b>ПОДТВЕРЖДЕНИЕ ЗАКРЫТИЯ КУПОЛА</b>\n\n"
+                f"🌌 Купол: <b>{strat_name}</b> (<code>{strat_id}</code>)\n"
+                f"🪙 Обойма монет: <b>{symbols_str}</b>\n\n"
+                f"Будут отменены все ордера, закрыты позиции по рынку только для монет этого купола и сброшен текущий цикл.\n"
+                f"<i>Остальные купола продолжат торговлю без изменений.</i>\n\n"
+                f"👉 Для подтверждения отправьте текстовым сообщением слово:\n"
+                f"<b>ЗАКРЫТЬ</b>\n\n"
+                f"<i>Или нажмите «❌ Отмена» ниже для отмены операции.</i>",
+                reply_markup=cancel_kb,
+                parse_mode="HTML"
+            )
+
+        @self.dp.message(StateFilter(TGStates.waiting_for_close_all_confirm))
+        async def process_close_all_confirm(message: Message, state: FSMContext):
+            data = await state.get_data()
+            target = data.get("target_close_dome")
+            await state.clear()
+
+            text_val = (message.text or "").strip().lower()
+            if text_val != "закрыть":
+                await message.answer("❌ Закрытие отменено.", reply_markup=self._get_main_keyboard())
+                return
+
+            if target == "all":
+                msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=self._get_main_keyboard())
                 try:
                     reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
                     lines = ["✅ <b>Все купола закрыты, лимитные ордера отменены!</b>"]
@@ -700,29 +751,30 @@ class TelegramReceiver:
                                 f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
                             )
                     lines.append("\n📊 <b>Лидерборд синхронизирован.</b>")
-                    await callback.message.edit_text("\n".join(lines), parse_mode="HTML")
+                    await msg.edit_text("\n".join(lines), parse_mode="HTML")
                 except Exception as e:
                     logger.error(f"Failed to Close All: {e}")
-                    await callback.message.edit_text(f"❌ Произошла ошибка при закрытии всех куполов: {e}")
-                return
-
-            strat_id = cdata.replace("close_dome_", "")
-            strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
-            strat_name = strat.name if strat else strat_id
-            await callback.message.edit_text(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", parse_mode="HTML")
-            try:
-                await self.bot_core.close_strategy_positions(strat_id)
-                info = await self.bot_core.reset_strategy_iteration(strat_id)
-                lines = [
-                    f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
-                    f"Позиции монет закрыты по рынку, ордера отменены.",
-                    f"🔄 Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)",
-                    "\n📊 Лидерборд и аналитика обновлены."
-                ]
-                await callback.message.edit_text("\n".join(lines), parse_mode="HTML")
-            except Exception as e:
-                logger.error(f"Failed to close strategy dome {strat_id}: {e}")
-                await callback.message.edit_text(f"❌ Ошибка закрытия купола {strat_name}: {e}")
+                    await msg.edit_text(f"❌ Произошла ошибка при закрытии всех куполов: {e}")
+            elif target:
+                strat_id = target
+                strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
+                strat_name = strat.name if strat else strat_id
+                msg = await message.answer(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+                try:
+                    await self.bot_core.close_strategy_positions(strat_id)
+                    info = await self.bot_core.reset_strategy_iteration(strat_id)
+                    lines = [
+                        f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
+                        f"Позиции монет закрыты по рынку, ордера отменены.",
+                        f"🔄 Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)",
+                        "\n📊 Лидерборд и аналитика обновлены."
+                    ]
+                    await msg.edit_text("\n".join(lines), parse_mode="HTML")
+                except Exception as e:
+                    logger.error(f"Failed to close strategy dome {strat_id}: {e}")
+                    await msg.edit_text(f"❌ Ошибка закрытия купола {strat_name}: {e}")
+            else:
+                await message.answer("❌ Купол для закрытия не найден.", reply_markup=self._get_main_keyboard())
 
         @self.dp.message(F.text == "▶️ Start")
         async def on_pre_start(message: Message, state: FSMContext):
@@ -929,7 +981,16 @@ class TelegramReceiver:
         async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            await callback.message.answer("⚠️ Вы уверены, что хотите полностью удалить историю аналитики?\n\nВведите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            await state.update_data(target_dome_uid=current_uid)
+            import html
+            clean_name = html.escape(univ_name)
+            await callback.message.answer(
+                f"⚠️ Вы уверены, что хотите полностью удалить историю аналитики для купола <b>{clean_name}</b> (<code>{current_uid}</code>)?\n\n"
+                f"Введите слово <b>СБРОС</b> для подтверждения или нажмите Back для отмены.",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
             await state.set_state(TGStates.waiting_for_reset_confirm)
 
         @self.dp.message(TGStates.waiting_for_reset_confirm)
@@ -940,19 +1001,48 @@ class TelegramReceiver:
                 return
                 
             if message.text.strip().upper() == "СБРОС":
+                st_data = await state.get_data()
+                target_uid = st_data.get("target_dome_uid") or get_user_universe_id(message.from_user.id, self.bot_core)
+                current_uid, univ_name, analytics_path, csv_path = self._get_universe_analytics(message.from_user.id, target_uid=target_uid)
                 await state.clear()
+                deleted_any = False
                 try:
-                    await self.bot_core.analytics.reset_analytics_state()
-                    await message.answer("✅ Файл аналитики успешно удален. Он будет создан заново при следующем обновлении.", reply_markup=self._get_main_keyboard())
+                    if analytics_path.exists():
+                        os.remove(analytics_path)
+                        deleted_any = True
+                    if csv_path.exists():
+                        os.remove(csv_path)
+                        deleted_any = True
+                    if deleted_any:
+                        await message.answer(
+                            f"✅ Файлы аналитики для купола <code>{current_uid}</code> успешно удалены. Они будут созданы заново при следующем обновлении.",
+                            reply_markup=self._get_main_keyboard(),
+                            parse_mode="HTML"
+                        )
+                    else:
+                        await message.answer(
+                            f"⚠️ Файлы аналитики для купола <code>{current_uid}</code> не найдены.",
+                            reply_markup=self._get_main_keyboard(),
+                            parse_mode="HTML"
+                        )
                 except Exception as e:
-                    await message.answer(f"❌ Ошибка при удалении файла аналитики: {e}", reply_markup=self._get_main_keyboard())
+                    await message.answer(f"❌ Ошибка при удалении файлов аналитики купола: {e}", reply_markup=self._get_main_keyboard())
             else:
                 await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
+
         @self.dp.callback_query(F.data == "analytics_set_balance")
         async def on_set_initial_balance(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            await callback.message.answer("Введите новый начальный баланс (start_balance_usdt) в USDT (например, 100.5):", reply_markup=self._get_back_keyboard())
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            await state.update_data(target_dome_uid=current_uid)
+            import html
+            clean_name = html.escape(univ_name)
+            await callback.message.answer(
+                f"Введите новый начальный баланс (start_balance_usdt) для купола <b>{clean_name}</b> (<code>{current_uid}</code>) в USDT (например, 57.0):",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
             await state.set_state(TGStates.waiting_for_initial_balance)
 
         @self.dp.message(TGStates.waiting_for_initial_balance)
@@ -967,16 +1057,50 @@ class TelegramReceiver:
                 if new_balance < 0:
                     raise ValueError("Баланс не может быть отрицательным.")
             except ValueError:
-                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.5) или нажмите Back:")
+                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 57.0) или нажмите Back:")
                 return
                 
-            try:
-                await self.bot_core.analytics.set_initial_balance(new_balance)
-                await message.answer(f"✅ Начальный баланс успешно установлен на {new_balance} USDT.", reply_markup=self._get_main_keyboard())
-            except Exception as e:
-                await message.answer(f"❌ Ошибка обновления файла аналитики: {e}", reply_markup=self._get_main_keyboard())
-                
+            st_data = await state.get_data()
+            target_uid = st_data.get("target_dome_uid") or get_user_universe_id(message.from_user.id, self.bot_core)
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(message.from_user.id, target_uid=target_uid)
             await state.clear()
+            
+            try:
+                app_path = DATA_DIR / "app.json"
+                if app_path.exists():
+                    app_data = Utils.read_json_file(app_path)
+                    if "active_strategies" in app_data and current_uid in app_data["active_strategies"]:
+                        app_data["active_strategies"][current_uid].setdefault("analytics", {})["start_balance_usdt"] = new_balance
+                        Utils.write_json_file(app_path, app_data)
+
+                if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    scfg = self.bot_core.strategy_registry.active_strategies.get(current_uid)
+                    if scfg:
+                        scfg.start_balance_usdt = new_balance
+                        scfg.analytics_cfg["start_balance_usdt"] = new_balance
+
+                if analytics_path.exists():
+                    sdata = json.loads(analytics_path.read_text(encoding="utf-8"))
+                    old_b = float(sdata.get("start_balance_usdt", new_balance))
+                    delta = round(new_balance - old_b, 4)
+                    sdata["start_balance_usdt"] = round(new_balance, 4)
+                    sdata["_rebased_start_balance_usdt"] = round(new_balance, 4)
+                    sdata["cur_balance_usdt"] = round(float(sdata.get("cur_balance_usdt", old_b)) + delta, 4)
+                    for k in ("peak_balance_usdt", "min_balance_usdt", "_current_trough_usdt"):
+                        if k in sdata and sdata[k] is not None:
+                            sdata[k] = round(float(sdata[k]) + delta, 4)
+                    Utils.atomic_write_json(analytics_path, sdata, indent=4)
+
+                import html
+                clean_name = html.escape(univ_name)
+                await message.answer(
+                    f"✅ Начальный баланс для купола <b>{clean_name}</b> (<code>{current_uid}</code>) успешно установлен на <b>{new_balance:,.2f} USDT</b>.",
+                    reply_markup=self._get_main_keyboard(),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error updating dome balance: {e}")
+                await message.answer(f"❌ Ошибка обновления баланса купола: {e}", reply_markup=self._get_main_keyboard())
 
 
         async def _show_universe_analytics_screen(target_msg, user_id: int, edit: bool = False, target_uid: Optional[str] = None):
@@ -1700,51 +1824,74 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data.startswith("analytics_ranking"))
         async def process_analytics_ranking(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
+            import html
+            clean_name = html.escape(univ_name)
             
             # Parse criterion
             parts = callback.data.split(":")
             criterion = parts[1] if len(parts) > 1 else "net"
             
-            analytics_path = ANALYTICS_DIR / "analytics.json"
             if not analytics_path.exists():
-                await callback.message.answer("Analytics JSON not found.")
+                await callback.message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
                 return
                 
             try:
                 data = json.loads(analytics_path.read_text(encoding="utf-8"))
                 per_coin = data.get("per_coin", {})
+                
+                # Если в per_coin пока нет монет (новый купол), подтягиваем активные монеты этой стратегии
+                if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    scfg = self.bot_core.strategy_registry.active_strategies.get(current_uid)
+                    if scfg and hasattr(scfg, "symbols"):
+                        for s_sym in scfg.symbols:
+                            per_coin.setdefault(s_sym, {
+                                "net_profit_usdt": 0.0,
+                                "realized_pnl_net_usdt": 0.0,
+                                "recovery_factor": 0.0,
+                                "abs_recovery_factor": 0.0,
+                                "total_trades": 0
+                            })
+
                 if not per_coin:
-                    await callback.message.answer("Нет данных по монетам.")
+                    await callback.message.answer(f"Нет данных по монетам для купола <code>{current_uid}</code>.", parse_mode="HTML")
                     return
                 
+                def safe_float(v, default=0.0):
+                    try:
+                        if v is None: return default
+                        return float(v)
+                    except (ValueError, TypeError):
+                        return default
+
                 # Determine sorting logic and title
                 if criterion == "rec":
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("recovery_factor", -float('inf'))), reverse=True)
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: safe_float(x[1].get("recovery_factor", -float('inf'))), reverse=True)
                     title = "по Recovery Factor (Тек) (больше = лучше)"
                 elif criterion == "abs_rec":
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("abs_recovery_factor", -float('inf'))), reverse=True)
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: safe_float(x[1].get("abs_recovery_factor", -float('inf'))), reverse=True)
                     title = "по Abs Recovery (Пик/DD) (больше = лучше)"
                 else: # Default net
                     criterion = "net"
-                    sorted_coins = sorted(per_coin.items(), key=lambda x: float(x[1].get("net_profit_usdt", -float('inf'))), reverse=True)
+                    sorted_coins = sorted(per_coin.items(), key=lambda x: safe_float(x[1].get("net_profit_usdt", -float('inf'))), reverse=True)
                     title = "по Net Profit (больше = лучше)"
                     
-                lines = [f"<b>🏆 Рейтинг монет ({title})</b>\n"]
+                lines = [f"<b>🏆 Рейтинг монет [Купол: {clean_name}] ({title})</b>\n"]
                 for i, (sym, cdata) in enumerate(sorted_coins, 1):
                     val_str = ""
                     if criterion == "rec":
-                        rec = float(cdata.get("recovery_factor", 0.0))
-                        net = float(cdata.get("net_profit_usdt", 0.0))
-                        dd = abs(float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                        rec = safe_float(cdata.get("recovery_factor", 0.0))
+                        net = safe_float(cdata.get("net_profit_usdt", 0.0))
+                        dd = abs(safe_float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
                         val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i>"
                     elif criterion == "abs_rec":
-                        abs_rec = float(cdata.get("abs_recovery_factor", 0.0))
-                        peak = float(cdata.get("peak_net_profit_usdt", max(0.0, float(cdata.get("net_profit_usdt", 0.0)))))
-                        dd = abs(float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
+                        abs_rec = safe_float(cdata.get("abs_recovery_factor", 0.0))
+                        peak = safe_float(cdata.get("peak_net_profit_usdt", max(0.0, safe_float(cdata.get("net_profit_usdt", 0.0)))))
+                        dd = abs(safe_float(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
                         val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик Net: {peak:+.2f} / |DD|: {dd:.2f})</i>"
                     else:
-                        net_profit = round(float(cdata.get("net_profit_usdt", 0)), 2)
-                        realized_net = round(float(cdata.get("realized_pnl_net_usdt", 0)), 2)
+                        net_profit = round(safe_float(cdata.get("net_profit_usdt", 0)), 2)
+                        realized_net = round(safe_float(cdata.get("realized_pnl_net_usdt", 0)), 2)
                         tr = cdata.get('total_trades', cdata.get('trades', 0))
                         val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
                     
@@ -1765,6 +1912,9 @@ class TelegramReceiver:
                         InlineKeyboardButton(text="Net Profit", callback_data="analytics_ranking:net"),
                         InlineKeyboardButton(text="Recovery (Тек)", callback_data="analytics_ranking:rec"),
                         InlineKeyboardButton(text="Abs Recovery", callback_data="analytics_ranking:abs_rec")
+                    ],
+                    [
+                        InlineKeyboardButton(text="🔙 Назад к аналитике купола", callback_data="analytics_back_to_univ")
                     ]
                 ])
                     
@@ -1796,24 +1946,28 @@ class TelegramReceiver:
                         rm = switch_kb if i == len(messages) - 1 else None
                         await callback.message.answer(msg, parse_mode="HTML", reply_markup=rm)
             except Exception as e:
-                logger.error(f"Error generating ranking: {e}")
+                logger.error(f"Error generating ranking for {current_uid}: {e}")
                 await callback.message.answer("Ошибка генерации рейтинга.")
 
         @self.dp.callback_query(F.data == "analytics_txt")
         async def process_analytics_txt(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            txt_path = ANALYTICS_DIR / "trades_ledger.txt"
-            if txt_path.exists():
-                await callback.message.answer_document(FSInputFile(str(txt_path)))
+            current_uid, univ_name, _, csv_path = self._get_universe_analytics(callback.from_user.id)
+            if csv_path.exists():
+                await callback.message.answer_document(
+                    FSInputFile(str(csv_path)),
+                    caption=f"📝 Лента сделок (TXT): <b>{univ_name}</b> (<code>{current_uid}</code>)",
+                    parse_mode="HTML"
+                )
             else:
-                await callback.message.answer("Trades ledger TXT not found.")
+                await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
 
         @self.dp.callback_query(F.data == "analytics_full_report")
         async def process_analytics_full_report(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            analytics_path = ANALYTICS_DIR / "analytics.json"
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
             if not analytics_path.exists():
-                await callback.message.answer("Analytics JSON not found.")
+                await callback.message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
                 return
                 
             try:
@@ -1821,40 +1975,40 @@ class TelegramReceiver:
                 
                 lines = []
                 lines.append("="*50)
-                lines.append("GLOBAL ANALYTICS REPORT")
+                lines.append(f"STRATEGY DOME ANALYTICS REPORT: {univ_name} ({current_uid})")
                 lines.append("="*50 + "\n")
                 
                 start_val = data.get('start_balance_usdt', 0)
-                cur_val = data.get('cur_balance_usdt', 0)
+                cur_val = data.get('cur_balance_usdt', start_val)
                 peak_val = data.get('peak_balance_usdt') if data.get('peak_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
                 min_val = data.get('min_balance_usdt') if data.get('min_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
                 
                 lines.append("Balances:")
-                lines.append(f"  Start: {start_val} USDT")
-                lines.append(f"  Current: {cur_val} USDT")
-                lines.append(f"  Peak: {peak_val} USDT")
-                lines.append(f"  Min (Bottom): {min_val} USDT\n")
+                lines.append(f"  Start: {start_val:,.2f} USDT")
+                lines.append(f"  Current: {cur_val:,.2f} USDT")
+                lines.append(f"  Peak: {peak_val:,.2f} USDT")
+                lines.append(f"  Min (Bottom): {min_val:,.2f} USDT\n")
                 
                 realized = float(data.get('realized_pnl_usdt', 0))
-                realized_net = float(data.get('realized_pnl_net_usdt', 0))
+                realized_net = float(data.get('realized_pnl_net_usdt', realized))
                 comm = float(data.get('total_commission_usdt', 0))
                 fund = float(data.get('total_funding_usdt', 0))
                 
                 lines.append("Performance:")
-                lines.append(f"  Net Profit: {data.get('net_profit_usdt', 0)} USDT")
-                lines.append(f"  Realized PnL (Gross): {realized} USDT")
-                lines.append(f"  Realized PnL (Net): {realized_net} USDT")
-                lines.append(f"  Total Commission: {comm} USDT")
-                lines.append(f"  Total Funding: {fund} USDT")
-                lines.append(f"  Unrealized PnL: {data.get('unrealized_pnl_usdt', 0)} USDT")
-                lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0)} USDT")
-                lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0)} USDT")
-                lines.append(f"  ROI: {data.get('roi_pct', 0)}%")
-                lines.append(f"  Grid Load: {data.get('grid_load_pct', 0)}% ({data.get('current_grid_load_usdt', 0)} / {data.get('total_grid_size_usdt', 0)} USDT | Max: {data.get('max_grid_load_pct', 0)}%)")
-                lines.append(f"  Margin Load: {data.get('margin_load_pct', 0)}% (Used: {data.get('total_margin_used_usdt', 0)} USDT | Max: {data.get('max_margin_load_pct', 0)}%)")
-                lines.append(f"  Free Margin: {data.get('free_margin_usdt', 0)} USDT ({data.get('free_margin_pct', 0)}% | Min: {data.get('min_free_margin_usdt', 0)} USDT)")
-                lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0)}")
-                lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0)}%)\n")
+                lines.append(f"  Net Profit: {data.get('net_profit_usdt', 0):,.2f} USDT")
+                lines.append(f"  Realized PnL (Gross): {realized:,.2f} USDT")
+                lines.append(f"  Realized PnL (Net): {realized_net:,.2f} USDT")
+                lines.append(f"  Total Commission: {comm:,.2f} USDT")
+                lines.append(f"  Total Funding: {fund:,.2f} USDT")
+                lines.append(f"  Unrealized PnL: {data.get('unrealized_pnl_usdt', 0):,.2f} USDT")
+                lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0):,.2f} USDT")
+                lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0):,.2f} USDT")
+                lines.append(f"  ROI: {data.get('roi_pct', 0):.2f}%")
+                lines.append(f"  Grid Load: {data.get('grid_load_pct', 0):.2f}% ({data.get('current_grid_load_usdt', 0):,.2f} / {data.get('total_grid_size_usdt', 0):,.2f} USDT | Max: {data.get('max_grid_load_pct', 0):.2f}%)")
+                lines.append(f"  Margin Load: {data.get('margin_load_pct', 0):.2f}% (Used: {data.get('total_margin_used_usdt', 0):,.2f} USDT | Max: {data.get('max_margin_load_pct', 0):.2f}%)")
+                lines.append(f"  Free Margin: {data.get('free_margin_usdt', 0):,.2f} USDT ({data.get('free_margin_pct', 0):.2f}% | Min: {data.get('min_free_margin_usdt', 0):,.2f} USDT)")
+                lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0):.2f}")
+                lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0):.1f}%)\n")
                 
                 if "per_coin" in data:
                     lines.append("="*50)
@@ -1863,104 +2017,119 @@ class TelegramReceiver:
                     
                     for sym, cdata in sorted(data["per_coin"].items()):
                         lines.append(f"--- {sym} ---")
-                        lines.append(f"  Trades: {cdata.get('total_trades', 0)} (Wins: {cdata.get('winning_trades', 0)} | {cdata.get('winrate_pct', 0)}%)")
+                        lines.append(f"  Trades: {cdata.get('total_trades', 0)} (Wins: {cdata.get('winning_trades', 0)} | {cdata.get('winrate_pct', 0):.1f}%)")
                         
                         crealized = float(cdata.get('realized_pnl_usdt', 0))
-                        crealized_net = float(cdata.get('realized_pnl_net_usdt', 0))
+                        crealized_net = float(cdata.get('realized_pnl_net_usdt', crealized))
                         ccomm = float(cdata.get('commission_usdt', 0))
                         cfund = float(cdata.get('funding_usdt', 0))
                         
-                        lines.append(f"  Net Profit: {cdata.get('net_profit_usdt', 0)} USDT")
-                        lines.append(f"  Realized (Gross): {crealized} USDT")
-                        lines.append(f"  Realized (Net): {crealized_net} USDT")
-                        lines.append(f"  Fees: Comm {ccomm} / Fund {cfund}")
-                        lines.append(f"  Unrealized PnL: {cdata.get('current_drawdown', 0)} USDT")
-                        lines.append(f"  Hist. Drawdown: Max {cdata.get('max_drawdown', 0)} / Min {cdata.get('min_drawdown', 0)}")
-                        lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0)} USDT")
-                        lines.append(f"  Grid Load: {cdata.get('current_grid_load_pct', 0)}% ({cdata.get('current_grid_load_usdt', 0)} / {cdata.get('grid_capacity_usdt', 0)} USDT | Max: {cdata.get('max_grid_load_pct', 0)}%)")
-                        lines.append(f"  Margin Used: {cdata.get('current_margin_usdt', 0)} USDT ({cdata.get('margin_load_pct', 0)}% balance | Max: {cdata.get('max_margin_usdt', 0)} USDT)")
-                        lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0)} USDT")
-                        lines.append(f"  Recovery Factor: {cdata.get('recovery_factor', 0)}")
-                        lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0)}")
-                        lines.append(f"  Abs Recovery Factor: {cdata.get('abs_recovery_factor', 0)}\n")
+                        lines.append(f"  Net Profit: {cdata.get('net_profit_usdt', 0):,.2f} USDT")
+                        lines.append(f"  Realized (Gross): {crealized:,.2f} USDT")
+                        lines.append(f"  Realized (Net): {crealized_net:,.2f} USDT")
+                        lines.append(f"  Fees: Comm {ccomm:,.2f} / Fund {cfund:,.2f}")
+                        lines.append(f"  Unrealized PnL: {cdata.get('current_drawdown', 0):,.2f} USDT")
+                        lines.append(f"  Hist. Drawdown: Max {cdata.get('max_drawdown', 0):,.2f} / Min {cdata.get('min_drawdown', 0):,.2f}")
+                        lines.append(f"  Avg Daily Profit (Net): {cdata.get('avg_daily_profit', 0):,.2f} USDT")
+                        lines.append(f"  Grid Load: {cdata.get('current_grid_load_pct', 0):.2f}% ({cdata.get('current_grid_load_usdt', 0):,.2f} / {cdata.get('grid_capacity_usdt', 0):,.2f} USDT | Max: {cdata.get('max_grid_load_pct', 0):.2f}%)")
+                        lines.append(f"  Margin Used: {cdata.get('current_margin_usdt', 0):,.2f} USDT ({cdata.get('margin_load_pct', 0):.2f}% balance | Max: {cdata.get('max_margin_usdt', 0):,.2f} USDT)")
+                        lines.append(f"  Max Position Size: {cdata.get('max_position_size', 0):,.2f} USDT")
+                        lines.append(f"  Recovery Factor: {cdata.get('recovery_factor', 0):.2f}")
+                        lines.append(f"  Risk/Reward Ratio: {cdata.get('risk_reward_ratio', 0):.2f}")
+                        lines.append(f"  Abs Recovery Factor: {cdata.get('abs_recovery_factor', 0):.2f}\n")
                 
-                report_path = ANALYTICS_DIR / "full_analytics_report.txt"
+                report_path = ANALYTICS_DIR / f"full_report_{current_uid}.txt"
                 report_path.write_text("\n".join(lines), encoding="utf-8")
                 
-                await callback.message.answer_document(FSInputFile(str(report_path)))
+                await callback.message.answer_document(
+                    FSInputFile(str(report_path)),
+                    caption=f"📄 Полный отчет (TXT): <b>{univ_name}</b> (<code>{current_uid}</code>)",
+                    parse_mode="HTML"
+                )
             except Exception as e:
-                logger.error(f"Error generating full report: {e}")
+                logger.error(f"Error generating full report for {current_uid}: {e}")
                 await callback.message.answer("Error generating report.")
 
         @self.dp.callback_query(F.data == "analytics_global")
         async def process_analytics_global(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             message = callback.message
+            current_uid, univ_name, analytics_path, csv_path = self._get_universe_analytics(callback.from_user.id)
+            import html
+            clean_name = html.escape(univ_name)
             
-            
-            analytics_path = ANALYTICS_DIR / "analytics.json"
             if analytics_path.exists():
                 text = analytics_path.read_text(encoding="utf-8")
                 
                 try:
                     data = json.loads(text)
                     ts = data.get("last_updated_ts")
+                    last_trade_time = "Нет сделок"
+                    if csv_path.exists():
+                        try:
+                            with open(csv_path, 'r', encoding='utf-8') as f:
+                                reader = csv.reader(f, delimiter=';')
+                                lines = list(reader)
+                                if len(lines) > 1:
+                                    row = lines[-1]
+                                    dt_cols = [c.strip() for c in row if len(c.strip()) == 19 and c.strip()[4] == '-' and c.strip()[7] == '-']
+                                    if dt_cols:
+                                        last_trade_time = dt_cols[-1]
+                                    else:
+                                        csv_header = lines[0]
+                                        close_idx = csv_header.index('Close Time') if 'Close Time' in csv_header and csv_header.index('Close Time') < len(row) else (3 if len(row) > 3 else -1)
+                                        last_trade_time = row[close_idx] if close_idx >= 0 else "N/A"
+                        except Exception:
+                            pass
+
                     if ts:
                         dt = datetime.fromtimestamp(ts / 1000.0, tz=timezone.utc)
                         time_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                        
-                        last_trade_time = "Нет сделок"
-                        csv_path = ANALYTICS_DIR / "trades_ledger.txt"
-                        if csv_path.exists():
-                            try:
-                                with open(csv_path, 'r', encoding='utf-8') as f:
-                                    reader = csv.reader(f, delimiter=';')
-                                    lines = list(reader)
-                                    if len(lines) > 1:
-                                        csv_header = lines[0]
-                                        close_idx = csv_header.index('Close Time') if 'Close Time' in csv_header else 3
-                                        last_trade_time = lines[-1][close_idx]
-                            except Exception:
-                                pass
-                                
-                        header = f"<b>ℹ️ Расчет по состоянию на: {time_str}</b>\n"
-                        header += f"<b>⏳ Последняя сделка: {last_trade_time}</b>\n\n"
+                        header = (
+                            f"🌌 <b>КУПОЛ: {clean_name}</b> (<code>{current_uid}</code>)\n"
+                            f"<b>ℹ️ Расчет по состоянию на: {time_str}</b>\n"
+                            f"<b>⏳ Последняя сделка: {last_trade_time}</b>\n\n"
+                        )
                     else:
-                        header = "<b>ℹ️ Аналитика рассчитана по состоянию на: [неизвестно]</b>\n\n"
+                        header = (
+                            f"🌌 <b>КУПОЛ: {clean_name}</b> (<code>{current_uid}</code>)\n"
+                            f"<b>ℹ️ Аналитика рассчитана по состоянию на: [неизвестно]</b>\n"
+                            f"<b>⏳ Последняя сделка: {last_trade_time}</b>\n\n"
+                        )
                         
-                    msg = "<b>🌍 GLOBAL ANALYTICS</b>\n\n"
+                    msg = f"<b>🌍 GLOBAL ANALYTICS [Купол: {clean_name}]</b>\n\n"
                     
                     start_val = data.get('start_balance_usdt', 0)
-                    cur_val = data.get('cur_balance_usdt', 0)
+                    cur_val = data.get('cur_balance_usdt', start_val)
                     peak_val = data.get('peak_balance_usdt') if data.get('peak_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
                     min_val = data.get('min_balance_usdt') if data.get('min_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
 
                     msg += "<b>💰 Balances:</b>\n"
-                    msg += f"▪️ Start: <b>{start_val}</b> USDT\n"
-                    msg += f"▪️ Current: <b>{cur_val}</b> USDT\n"
-                    msg += f"▪️ Peak: <b>{peak_val}</b> USDT\n"
-                    msg += f"▪️ Min (Bottom): <b>{min_val}</b> USDT\n\n"
+                    msg += f"▪️ Start: <b>{start_val:,.2f}</b> USDT\n"
+                    msg += f"▪️ Current: <b>{cur_val:,.2f}</b> USDT\n"
+                    msg += f"▪️ Peak: <b>{peak_val:,.2f}</b> USDT\n"
+                    msg += f"▪️ Min (Bottom): <b>{min_val:,.2f}</b> USDT\n\n"
                     
                     realized = float(data.get('realized_pnl_usdt') or 0.0)
-                    realized_net = float(data.get('realized_pnl_net_usdt') or 0.0)
+                    realized_net = float(data.get('realized_pnl_net_usdt') or realized)
                     comm = float(data.get('total_commission_usdt') or 0.0)
                     fund = float(data.get('total_funding_usdt') or 0.0)
                     
                     msg += "<b>📈 Performance:</b>\n"
-                    msg += f"▪️ Net Profit: <b>{data.get('net_profit_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Realized PnL (Gross): <b>{realized}</b> USDT\n"
-                    msg += f"▪️ Realized PnL (Net): <b>{realized_net}</b> USDT\n"
-                    msg += f"▪️ Total Commission: <b>{comm}</b> USDT\n"
-                    msg += f"▪️ Total Funding: <b>{fund}</b> USDT\n"
-                    msg += f"▪️ Unrealized PnL: <b>{data.get('unrealized_pnl_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Max Drawdown: <b>{data.get('max_drawdown_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ Performance (Peak-Start): <b>{data.get('performance_usdt', 0)}</b> USDT\n"
-                    msg += f"▪️ ROI: <b>{data.get('roi_pct', 0)}%</b>\n"
-                    msg += f"▪️ Grid Load: <b>{data.get('grid_load_pct', 0)}%</b> ({data.get('current_grid_load_usdt', 0)}/{data.get('total_grid_size_usdt', 0)} USDT | Max: <b>{data.get('max_grid_load_pct', 0)}%</b>)\n"
-                    msg += f"▪️ Margin Load: <b>{data.get('margin_load_pct', 0)}%</b> (Used: <b>{data.get('total_margin_used_usdt', 0)}</b> USDT | Max: <b>{data.get('max_margin_load_pct', 0)}%</b>)\n"
-                    msg += f"▪️ Free Margin: <b>{data.get('free_margin_usdt', 0)}</b> USDT ({data.get('free_margin_pct', 0)}% | Min: <b>{data.get('min_free_margin_usdt', 0)}</b> USDT)\n"
-                    msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0)}</b>\n"
-                    msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0)}%</b>)\n"
+                    msg += f"▪️ Net Profit: <b>{data.get('net_profit_usdt', 0):,.2f}</b> USDT\n"
+                    msg += f"▪️ Realized PnL (Gross): <b>{realized:,.2f}</b> USDT\n"
+                    msg += f"▪️ Realized PnL (Net): <b>{realized_net:,.2f}</b> USDT\n"
+                    msg += f"▪️ Total Commission: <b>{comm:,.2f}</b> USDT\n"
+                    msg += f"▪️ Total Funding: <b>{fund:,.2f}</b> USDT\n"
+                    msg += f"▪️ Unrealized PnL: <b>{data.get('unrealized_pnl_usdt', 0):,.2f}</b> USDT\n"
+                    msg += f"▪️ Max Drawdown: <b>{data.get('max_drawdown_usdt', 0):,.2f}</b> USDT\n"
+                    msg += f"▪️ Performance (Peak-Start): <b>{data.get('performance_usdt', 0):,.2f}</b> USDT\n"
+                    msg += f"▪️ ROI: <b>{data.get('roi_pct', 0):.2f}%</b>\n"
+                    msg += f"▪️ Grid Load: <b>{data.get('grid_load_pct', 0):.2f}%</b> ({data.get('current_grid_load_usdt', 0):,.2f}/{data.get('total_grid_size_usdt', 0):,.2f} USDT | Max: <b>{data.get('max_grid_load_pct', 0):.2f}%</b>)\n"
+                    msg += f"▪️ Margin Load: <b>{data.get('margin_load_pct', 0):.2f}%</b> (Used: <b>{data.get('total_margin_used_usdt', 0):,.2f}</b> USDT | Max: <b>{data.get('max_margin_load_pct', 0):.2f}%</b>)\n"
+                    msg += f"▪️ Free Margin: <b>{data.get('free_margin_usdt', 0):,.2f}</b> USDT ({data.get('free_margin_pct', 0):.2f}% | Min: <b>{data.get('min_free_margin_usdt', 0):,.2f}</b> USDT)\n"
+                    msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0):.2f}</b>\n"
+                    msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0):.1f}%</b>)\n"
                     
                     vel_dict = data.get("trade_velocity", {})
                     if vel_dict:
@@ -1970,17 +2139,17 @@ class TelegramReceiver:
                         if vel_dict.get("avg_effective_speed") is None:
                             acc_h = vel_dict.get("accumulation_hours", 0.0)
                             min_h = vel_dict.get("min_accumulation_hours", 1.0)
-                            msg += f"▪️ Trade Velocity: <b>Накопление</b> ({acc_h}ч / {min_h}ч)\n"
+                            msg += f"▪️ Trade Velocity: <b>Накопление</b> ({acc_h:.1f}ч / {min_h:.1f}ч)\n"
                         else:
                             msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
                     msg += "\n"
                     
                     await message.answer(header + msg, parse_mode="HTML")
                 except Exception as e:
-                    logger.error(f"Error formatting analytics text: {e}")
+                    logger.error(f"Error formatting analytics text for {current_uid}: {e}")
                     await message.answer("Error formatting analytics data.")
             else:
-                await message.answer("Analytics JSON not found in ANALYTICS_DIR.")
+                await message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
 
         @self.dp.callback_query(F.data == "analytics_coin_menu")
         async def process_analytics_coin_menu(callback: CallbackQuery, state: FSMContext):

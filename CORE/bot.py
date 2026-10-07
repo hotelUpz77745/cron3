@@ -1296,7 +1296,7 @@ class BotCore:
         return reset_report
 
     async def close_strategy_positions(self, strategy_id: str):
-        """Экстренное закрытие позиций и отмена ордеров СТРОГО для монет одной конкретной стратегии."""
+        """Штатное закрытие позиций и отмена ордеров СТРОГО для монет одной конкретной стратегии."""
         if not hasattr(self, "strategy_registry"):
             return
         strat = self.strategy_registry.active_strategies.get(strategy_id)
@@ -1304,7 +1304,7 @@ class BotCore:
             return
 
         symbols_set = {s.upper() for s in strat.symbols}
-        logger.warning(f"[{strategy_id}] Emergency closing positions for strategy symbols: {symbols_set}")
+        logger.info(f"[{strategy_id}] Closing positions and orders for strategy symbols: {symbols_set}")
 
         async with self._close_lock:
             self._closing_strategies.add(strategy_id)
@@ -1317,13 +1317,6 @@ class BotCore:
                         for s_side in ("LONG", "SHORT"):
                             if s_side in self.fsm_states[sym]:
                                 self.fsm_states[sym][s_side].is_closing = True
-
-            now = time.time()
-            tf = getattr(strat, "timeframe", "5m") if strat else "5m"
-            interval = self.time_control.interval_to_seconds(tf) if hasattr(self.time_control, "interval_to_seconds") else 300
-            self.entry_blocked = True
-            self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), ((now // interval) + 1) * interval + 60.0, now + interval)
-            logger.warning(f"🛑 [{strategy_id}][CLOSE_STRATEGY] Immediate entry block activated until timestamp {self.block_until_timestamp}.")
 
             try:
                 # 2. Отмена ордеров только для монет этой стратегии
@@ -1347,7 +1340,7 @@ class BotCore:
                             pos_side = p.get("positionSide")
                             side = "SELL" if pos_side == "LONG" else "BUY"
                             async with self._get_symbol_lock(sym):
-                                logger.warning(f"[{strategy_id}][{sym}] Emergency closing {pos_side} pos. Qty: {abs(amt)}")
+                                logger.info(f"[{strategy_id}][{sym}] Closing {pos_side} pos. Qty: {abs(amt)}")
                                 await self.client.make_order(
                                     symbol=sym,
                                     qty=abs(amt),
@@ -1371,7 +1364,7 @@ class BotCore:
                             pos_side = p.get("positionSide")
                             side = "SELL" if pos_side == "LONG" else "BUY"
                             async with self._get_symbol_lock(sym):
-                                logger.critical(f"[{strategy_id}][{sym}] [RE-CHECK] Emergency closing hanging {pos_side} pos! Qty: {abs(amt)}")
+                                logger.info(f"[{strategy_id}][{sym}] [RE-CHECK] Closing remaining {pos_side} pos. Qty: {abs(amt)}")
                                 await self.client.make_order(
                                     symbol=sym,
                                     qty=abs(amt),
@@ -1396,8 +1389,6 @@ class BotCore:
             finally:
                 self._closing_symbols.difference_update(symbols_set)
                 self._closing_strategies.discard(strategy_id)
-                if not getattr(self, "is_paused", False):
-                    self.entry_blocked = False
 
     async def shutdown(self):
         """Гарантированное сохранение рантайма (последний чих) и закрытие сессий."""

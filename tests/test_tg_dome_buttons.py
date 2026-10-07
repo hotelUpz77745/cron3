@@ -70,5 +70,35 @@ class TestTGDomeButtons(unittest.TestCase):
         self.assertIn(f"add_pick_strat_{symbol}_u96_omni_zenith_apex", callbacks)
 
 
+    def test_close_strategy_positions_no_entry_block(self):
+        """Проверяет, что закрытие позиций стратегии НЕ активирует глобальный entry block."""
+        import asyncio
+        from CORE.bot import BotCore
+
+        mock_bot = MagicMock()
+        mock_bot.strategy_registry = self.registry
+        mock_bot._close_lock = asyncio.Lock()
+        mock_bot._closing_strategies = set()
+        mock_bot._closing_symbols = set()
+        mock_bot.fsm_states = {}
+        mock_bot.entry_blocked = False
+        mock_bot.block_until_timestamp = 0
+        mock_bot.client = MagicMock()
+        mock_bot.client.cancel_all_orders = AsyncMock()
+        mock_bot.client.fetch_positions = AsyncMock(return_value=[])
+
+        # Вызываем штатный close_strategy_positions
+        asyncio.run(BotCore.close_strategy_positions(mock_bot, "u96_omni_zenith_apex"))
+
+        # Блокировка входов НЕ должна быть активирована
+        self.assertFalse(mock_bot.entry_blocked)
+        self.assertEqual(mock_bot.block_until_timestamp, 0)
+
+    def test_close_all_confirm_state_exists(self):
+        """Проверяет наличие стейта ожидания подтверждения закрытия."""
+        from TG.tg_receiver import TGStates
+        self.assertTrue(hasattr(TGStates, "waiting_for_close_all_confirm"))
+
+
 if __name__ == "__main__":
     unittest.main()
