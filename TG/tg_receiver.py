@@ -142,7 +142,12 @@ class TelegramReceiver:
             if matches:
                 analytics_path = sorted(matches)[0]
             else:
-                analytics_path = ANALYTICS_STATS_DIR / "analytics.json"
+                pure_id = current_uid.split("__")[0]
+                pure_matches = list(ANALYTICS_STATS_DIR.glob(f"analytics_{pure_id}*.json"))
+                if pure_matches:
+                    analytics_path = sorted(pure_matches)[0]
+                else:
+                    analytics_path = ANALYTICS_STATS_DIR / f"analytics_{current_uid}.json"
 
         csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
         if not csv_path.exists():
@@ -150,26 +155,43 @@ class TelegramReceiver:
             if matches_csv:
                 csv_path = sorted(matches_csv)[0]
             else:
-                csv_path = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                pure_id = current_uid.split("__")[0]
+                pure_csv_matches = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{pure_id}*.txt"))
+                if pure_csv_matches:
+                    csv_path = sorted(pure_csv_matches)[0]
+                else:
+                    csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
 
         return current_uid, univ_name, analytics_path, csv_path
 
     def _get_strategy_meta(self, strat_id: str) -> dict:
-        if hasattr(self, "bot") and getattr(self.bot, "strategy_registry", None):
-            u_meta = self.bot.strategy_registry.universes_db.get(strat_id, {})
+        if hasattr(self, "bot_core") and getattr(self.bot_core, "strategy_registry", None):
+            strat = self.bot_core.strategy_registry.get_strategy(strat_id)
+            if strat and isinstance(getattr(strat, "name", None), str):
+                return {
+                    "strategy_id": strat_id,
+                    "name": strat.name,
+                    "description": strat.description or "Пользовательская стратегия",
+                    "invest_size": strat.invest_size,
+                    "leverage": strat.leverage,
+                    "super_grid": getattr(strat, "super_grid_enabled", False),
+                    "super_grid_cfg": getattr(strat, "super_grid_cfg", {}),
+                    "tp_summary": "Настроен",
+                    "start_balance_usdt": getattr(strat, "start_balance_usdt", 57.0)
+                }
+
+        univ_dir = DATA_DIR / "universes"
+        pure_id = strat_id
+        for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+            if pure_id.endswith(sfx):
+                pure_id = pure_id[:-len(sfx)]
+                break
+        jf = univ_dir / f"{pure_id}.json"
+        if jf.exists():
+            u_meta = Utils.read_json_file(jf)
         else:
-            univ_dir = DATA_DIR / "universes"
-            pure_id = strat_id
-            for sfx in ("__off", "__classic", "__fixed", "__toxic"):
-                if pure_id.endswith(sfx):
-                    pure_id = pure_id[:-len(sfx)]
-                    break
-            jf = univ_dir / f"{pure_id}.json"
-            if jf.exists():
-                u_meta = Utils.read_json_file(jf)
-            else:
-                univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
-                u_meta = univ_data.get(strat_id, {})
+            univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+            u_meta = univ_data.get(strat_id, {})
         app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
         active_strats = app_data.get("active_strategies", {})
         strat_app = active_strats.get(strat_id, {})
@@ -182,6 +204,7 @@ class TelegramReceiver:
             or u_meta.get("invest_size", 400.0)
         )
         leverage = u_meta.get("leverage", 20)
+        start_bal = float((strat_app.get("analytics") or {}).get("start_balance_usdt", u_meta.get("start_balance_usdt", 57.0)))
         
         sg_cfg = strat_app.get("super_grid") or u_meta.get("super_grid") or u_meta.get("overrides", {}).get("super_grid", {})
         sg_enabled = sg_cfg.get("enabled", u_meta.get("super_grid_enabled", False))
@@ -209,7 +232,8 @@ class TelegramReceiver:
             "leverage": leverage,
             "super_grid": sg_enabled,
             "super_grid_cfg": sg_cfg,
-            "tp_summary": tp_summary
+            "tp_summary": tp_summary,
+            "start_balance_usdt": start_bal
         }
 
     def _get_confirm_start_keyboard(self):
@@ -977,11 +1001,14 @@ class TelegramReceiver:
                 logger.error(f"Error creating runtime backup: {e}")
                 await msg.edit_text(f"❌ Ошибка создания рантайм-бэкапа: {e}")
 
-        @self.dp.callback_query(F.data == "analytics_reset")
+        @self.dp.callback_query(F.data.startswith("analytics_reset"))
         async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             await state.update_data(target_dome_uid=current_uid)
             import html
             clean_name = html.escape(univ_name)
@@ -1030,11 +1057,14 @@ class TelegramReceiver:
             else:
                 await message.answer("❌ Неверное слово подтверждения. Введите <b>СБРОС</b> или нажмите Back.", parse_mode="HTML")
 
-        @self.dp.callback_query(F.data == "analytics_set_balance")
+        @self.dp.callback_query(F.data.startswith("analytics_set_balance"))
         async def on_set_initial_balance(callback: CallbackQuery, state: FSMContext):
             await state.clear()
             await callback.answer()
-            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             await state.update_data(target_dome_uid=current_uid)
             import html
             clean_name = html.escape(univ_name)
@@ -1110,6 +1140,7 @@ class TelegramReceiver:
                 logger.error(f"Failed to sync lightweight unrealized pnl: {e}")
 
             current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(user_id, target_uid=target_uid)
+            set_user_universe_id(user_id, current_uid)
             import html
             clean_name = html.escape(univ_name)
 
@@ -1166,29 +1197,29 @@ class TelegramReceiver:
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global"),
+                    InlineKeyboardButton(text="🌍 Global Analytics", callback_data=f"analytics_global:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data="analytics_coin_menu"),
+                    InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data=f"analytics_coin_menu:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking"),
+                    InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data=f"analytics_ranking:net:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart"),
+                    InlineKeyboardButton(text="📈 График эквити", callback_data=f"analytics_chart:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt"),
+                    InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data=f"analytics_txt:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report"),
+                    InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data=f"analytics_full_report:{current_uid}"),
                 ],
                 [
                     InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet"),
                 ],
                 [
-                    InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="analytics_set_balance"),
-                    InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset"),
+                    InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data=f"analytics_set_balance:{current_uid}"),
+                    InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data=f"analytics_reset:{current_uid}"),
                 ],
                 [
                     InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_bigboard"),
@@ -1434,6 +1465,7 @@ class TelegramReceiver:
         async def cb_analytics_dome(callback: CallbackQuery):
             await callback.answer()
             target_uid = callback.data.split("analytics_dome:")[1]
+            set_user_universe_id(callback.from_user.id, target_uid)
             await _show_universe_analytics_screen(callback, callback.from_user.id, edit=True, target_uid=target_uid)
 
         @self.dp.callback_query(F.data == "analytics_dome")
@@ -1441,10 +1473,13 @@ class TelegramReceiver:
             await callback.answer()
             await _show_universe_analytics_screen(callback, callback.from_user.id, edit=True)
 
-        @self.dp.callback_query(F.data == "analytics_chart")
+        @self.dp.callback_query(F.data.startswith("analytics_chart"))
         async def process_analytics_chart(callback: CallbackQuery):
             await callback.answer()
-            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             msg = await callback.message.answer(f"⏳ Генерация графика эквити для <code>{current_uid}</code>...", parse_mode="HTML")
             try:
                 plot_path = generate_equity_curve(universe_id=current_uid)
@@ -1824,13 +1859,14 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data.startswith("analytics_ranking"))
         async def process_analytics_ranking(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
+            # analytics_ranking[:criterion[:target_uid]]
+            parts = callback.data.split(":")
+            criterion = parts[1] if len(parts) > 1 and parts[1] else "net"
+            target_uid = parts[2] if len(parts) > 2 and parts[2] else None
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             import html
             clean_name = html.escape(univ_name)
-            
-            # Parse criterion
-            parts = callback.data.split(":")
-            criterion = parts[1] if len(parts) > 1 else "net"
             
             if not analytics_path.exists():
                 await callback.message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
@@ -1909,12 +1945,12 @@ class TelegramReceiver:
                 # Add inline keyboard to switch criterion
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="Net Profit", callback_data="analytics_ranking:net"),
-                        InlineKeyboardButton(text="Recovery (Тек)", callback_data="analytics_ranking:rec"),
-                        InlineKeyboardButton(text="Abs Recovery", callback_data="analytics_ranking:abs_rec")
+                        InlineKeyboardButton(text="Net Profit", callback_data=f"analytics_ranking:net:{current_uid}"),
+                        InlineKeyboardButton(text="Recovery (Тек)", callback_data=f"analytics_ranking:rec:{current_uid}"),
+                        InlineKeyboardButton(text="Abs Recovery", callback_data=f"analytics_ranking:abs_rec:{current_uid}")
                     ],
                     [
-                        InlineKeyboardButton(text="🔙 Назад к аналитике купола", callback_data="analytics_back_to_univ")
+                        InlineKeyboardButton(text="🔙 Назад", callback_data=f"analytics_dome:{current_uid}")
                     ]
                 ])
                     
@@ -1949,10 +1985,13 @@ class TelegramReceiver:
                 logger.error(f"Error generating ranking for {current_uid}: {e}")
                 await callback.message.answer("Ошибка генерации рейтинга.")
 
-        @self.dp.callback_query(F.data == "analytics_txt")
+        @self.dp.callback_query(F.data.startswith("analytics_txt"))
         async def process_analytics_txt(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            current_uid, univ_name, _, csv_path = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, _, csv_path = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             if csv_path.exists():
                 await callback.message.answer_document(
                     FSInputFile(str(csv_path)),
@@ -1962,10 +2001,13 @@ class TelegramReceiver:
             else:
                 await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
 
-        @self.dp.callback_query(F.data == "analytics_full_report")
+        @self.dp.callback_query(F.data.startswith("analytics_full_report"))
         async def process_analytics_full_report(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             if not analytics_path.exists():
                 await callback.message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
                 return
@@ -2050,11 +2092,14 @@ class TelegramReceiver:
                 logger.error(f"Error generating full report for {current_uid}: {e}")
                 await callback.message.answer("Error generating report.")
 
-        @self.dp.callback_query(F.data == "analytics_global")
+        @self.dp.callback_query(F.data.startswith("analytics_global"))
         async def process_analytics_global(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             message = callback.message
-            current_uid, univ_name, analytics_path, csv_path = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, analytics_path, csv_path = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             import html
             clean_name = html.escape(univ_name)
             
@@ -2099,7 +2144,7 @@ class TelegramReceiver:
                         
                     msg = f"<b>🌍 GLOBAL ANALYTICS [Купол: {clean_name}]</b>\n\n"
                     
-                    start_val = data.get('start_balance_usdt', 0)
+                    start_val = data.get('start_balance_usdt', self._get_strategy_meta(current_uid).get('start_balance_usdt', 0))
                     cur_val = data.get('cur_balance_usdt', start_val)
                     peak_val = data.get('peak_balance_usdt') if data.get('peak_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
                     min_val = data.get('min_balance_usdt') if data.get('min_balance_usdt') is not None else (cur_val if cur_val is not None else start_val)
@@ -2144,17 +2189,23 @@ class TelegramReceiver:
                             msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
                     msg += "\n"
                     
-                    await message.answer(header + msg, parse_mode="HTML")
+                    back_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                        InlineKeyboardButton(text="🔙 Назад", callback_data=f"analytics_dome:{current_uid}")
+                    ]])
+                    await message.answer(header + msg, parse_mode="HTML", reply_markup=back_kb)
                 except Exception as e:
                     logger.error(f"Error formatting analytics text for {current_uid}: {e}")
                     await message.answer("Error formatting analytics data.")
             else:
                 await message.answer(f"Analytics JSON для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
 
-        @self.dp.callback_query(F.data == "analytics_coin_menu")
+        @self.dp.callback_query(F.data.startswith("analytics_coin_menu"))
         async def process_analytics_coin_menu(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
+            parts = callback.data.split(":", 1)
+            target_uid = parts[1] if len(parts) > 1 and parts[1] else None
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             
             universe_coins = set()
             if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
@@ -2179,13 +2230,13 @@ class TelegramReceiver:
             for coin in sorted(universe_coins):
                 is_active = coin in self.bot_core.symbols
                 status_icon = "🟢" if is_active else "🔴"
-                row.append(InlineKeyboardButton(text=f"🪙 {coin} {status_icon}", callback_data=f"analytics_coin_{coin}"))
+                row.append(InlineKeyboardButton(text=f"🪙 {coin} {status_icon}", callback_data=f"analytics_coin:{coin}:{current_uid}"))
                 if len(row) == 2:
                     keyboard_buttons.append(row)
                     row = []
             if row:
                 keyboard_buttons.append(row)
-            keyboard_buttons.append([InlineKeyboardButton(text="🔙 Назад к аналитике", callback_data="analytics_back_to_univ")])
+            keyboard_buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data=f"analytics_dome:{current_uid}")])
                 
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
             await callback.message.answer(
@@ -2195,11 +2246,18 @@ class TelegramReceiver:
                 parse_mode="HTML"
             )
 
-        @self.dp.callback_query(F.data.startswith("analytics_coin_"))
+        @self.dp.callback_query(F.data.startswith("analytics_coin:") | (F.data.startswith("analytics_coin_") & ~F.data.startswith("analytics_coin_menu")))
         async def process_analytics_coin_select(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            symbol = callback.data.replace("analytics_coin_", "")
-            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
+            if callback.data.startswith("analytics_coin:"):
+                c_parts = callback.data.split(":")
+                symbol = c_parts[1]
+                target_uid = c_parts[2] if len(c_parts) > 2 and c_parts[2] else None
+            else:
+                symbol = callback.data.replace("analytics_coin_", "")
+                target_uid = None
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
+            set_user_universe_id(callback.from_user.id, current_uid)
             
             is_active = symbol in self.bot_core.symbols
             status_text = "🟢 Активна" if is_active else "🔴 Отключена"
