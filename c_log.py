@@ -20,10 +20,10 @@ import logging
 import traceback
 from pathlib import Path
 
-from consts import LOG_TO_CONSOLE, LOG_TO_FILE
+from consts import LOG_TO_CONSOLE, LOG_TO_FILE, LOG_DIR
 import time
 
-DEFAULT_LOG_DIR = str(Path(__file__).resolve().parent / "logs")
+DEFAULT_LOG_DIR = str(LOG_DIR)
 class UnlockedRotatingFileHandler(RotatingFileHandler):
     """
     Кастомный RotatingFileHandler, который не держит файл постоянно открытым.

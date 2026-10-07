@@ -16,8 +16,40 @@ from typing import Any, Dict
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "CFG"
+
+# ------------------------------------------------------------------
+# SANDBOX (только для тестов): если задана CRON3_SANDBOX_DIR, все изменяемые
+# данные (CFG / CACHE / ANALYTICS / logs) берутся из временной копии, а боевые
+# файлы не трогаются. В проде переменная не задана -> поведение не меняется.
+# ------------------------------------------------------------------
+SANDBOX_DIR: Path | None = (
+    Path(os.environ["CRON3_SANDBOX_DIR"]).resolve() if os.environ.get("CRON3_SANDBOX_DIR") else None
+)
+
+
+def _prepare_sandbox(root: Path) -> None:
+    import shutil
+    root.mkdir(parents=True, exist_ok=True)
+    plan = {
+        "CFG": shutil.ignore_patterns("runtime", "__pycache__"),
+        "CACHE": shutil.ignore_patterns("backups", "__pycache__"),
+        "ANALYTICS": shutil.ignore_patterns("BACKUP_SESSIONS", "images", "__pycache__", "*.py"),
+    }
+    for name, ignore in plan.items():
+        src, dst = BASE_DIR / name, root / name
+        if src.exists() and not dst.exists():
+            shutil.copytree(src, dst, ignore=ignore)
+
+
+if SANDBOX_DIR is not None:
+    _prepare_sandbox(SANDBOX_DIR)
+    _STATE_ROOT = SANDBOX_DIR
+else:
+    _STATE_ROOT = BASE_DIR
+
+DATA_DIR = _STATE_ROOT / "CFG"
 CFG_PATH = DATA_DIR / "app.json"
+LOG_DIR = _STATE_ROOT / "logs"
 
 load_dotenv(BASE_DIR / ".env")
 
@@ -56,10 +88,10 @@ _api_parent = str(SHARED_API_DIR.parent)
 if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 
-ANALYTICS_DIR = BASE_DIR / "ANALYTICS"
+ANALYTICS_DIR = _STATE_ROOT / "ANALYTICS"
 ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"
 ANALYTICS_LEDGERS_DIR = ANALYTICS_DIR / "LEDGERS"
-CACHE_DIR = BASE_DIR / "CACHE"
+CACHE_DIR = _STATE_ROOT / "CACHE"
 RUNTIME_DIR = DATA_DIR / "runtime"
 
 # Создаем директории если их нет
