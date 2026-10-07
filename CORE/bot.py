@@ -31,15 +31,13 @@ from c_utils import Utils
 
 from c_log import UnifiedLogger
 from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
-from consts import BACKUP_ENABLED, BACKUP_DEBOUNCE_SEC, BACKUP_MAX_INTERVAL_SEC
-from CORE.runtime_backup import RuntimeBackupManager
 from CORE.notifier import NotifierManager
 from CORE.TP.tp_manager import TakeProfitManager
 from CORE.GRID.avg_manager import AverageManager
 from CORE.TP.fallback_tp_manager import FallbackTpManager
 from CORE._utils import SpecManager
 from ANALYTICS.analytics import AnalyticsManager
-from consts import TG_ENABLED
+from consts import TG_ENABLED, BACKUP_ENABLED
 from consts import API_KEY, API_SECRET
 from watchdog import LoopWatchdog
 from consts import (
@@ -103,16 +101,13 @@ class BotCore:
         self.spec_manager = SpecManager(self)
         
         self.analytics = AnalyticsManager(strategy_registry=self.strategy_registry)
-        
+        self.backup_manager = None
         if BACKUP_ENABLED:
-            self.backup_manager = RuntimeBackupManager(
-                debounce_sec=BACKUP_DEBOUNCE_SEC,
-                max_interval_sec=BACKUP_MAX_INTERVAL_SEC
+            logger.info(
+                "ℹ️ [BACKUP] Информационная подсветка (backup.enabled=true): "
+                "Фоновый спам zip-архивами упразднен в архитектуре под корень. Рантайм непрерывно пишется в быстрый бинарный .pkl с нулевой нагрузкой. "
+                "Для экспорта рантайма в JSON используйте On-Demand сервис: команда /backup в Telegram или CLI 'python -m CORE.SERVICES.runtime_backup_service'."
             )
-            self.runtime_manager.backup_manager = self.backup_manager
-            self.analytics.backup_manager = self.backup_manager
-        else:
-            self.backup_manager = None
             
 
         
@@ -126,8 +121,8 @@ class BotCore:
             
         self.entry_blocked = False
         
-        spec_cache_path = DATA_DIR / "CACHE" / "specifications.json"
-        self.spec_data = Utils.read_json_file(spec_cache_path)
+        spec_cache_path = CACHE_DIR / "specifications.json"
+        self.spec_data = Utils.read_json_file(spec_cache_path) if spec_cache_path.exists() else {}
         
 
         self.client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
@@ -970,9 +965,6 @@ class BotCore:
                 
                 # Синхронизация рантаймов при изменениях в PositionState (постоянный контроль)
                 await self.runtime_manager.sync_with_fsm(self.fsm_states)
-
-                if getattr(self, 'backup_manager', None):
-                    await self.backup_manager.check_and_backup()
                 
 
 
@@ -1280,7 +1272,7 @@ class BotCore:
             try:
                 if hasattr(self, "analytics") and hasattr(self.analytics, "leaderboard_engine") and hasattr(self, "strategy_registry"):
                     universes_meta = {
-                        sid: {"name": scfg.name, "enabled": True}
+                        sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
                         for sid, scfg in self.strategy_registry.active_strategies.items()
                     }
                     entries = self.analytics.leaderboard_engine.generate_leaderboard(universes_meta)
@@ -1402,6 +1394,18 @@ class BotCore:
         self.is_running = False
         if hasattr(self, 'watchdog'):
             self.watchdog.stop()
+            try:
+                await self.watchdog.aclose()
+            except Exception:
+                pass
+        if hasattr(self, 'pos_stream') and self.pos_stream:
+            self.pos_stream._external_stop = True
+            try:
+                await self.pos_stream.stop()
+            except Exception:
+                pass
+        if hasattr(self, '_pos_task') and self._pos_task:
+            self._pos_task.cancel()
         try:
             # Принудительно дампим стейты
             if hasattr(self, 'fsm_states') and hasattr(self, 'runtime_manager'):

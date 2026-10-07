@@ -22,6 +22,22 @@ class LeaderboardEngine:
     Рассчитывает сравнительную эффективность (Net Profit, Max DD, Recovery Factor, Winrate).
     """
 
+    MODE_BADGES = {
+        "toxicity_adaptive": "[TOXIC]",
+        "toxic": "[TOXIC]",
+        "iter_net_classic": "[CLASSIC]",
+        "classic": "[CLASSIC]",
+        "trailing_ratchet": "[CLASSIC]",
+        "fixed_net": "[FIXED]",
+        "fixed": "[FIXED]",
+        "alpha_rotation": "[ALPHA]",
+        "alpha": "[ALPHA]",
+        "disabled": "[OFF]",
+        "off": "[OFF]",
+        "no_autoclose": "[OFF]",
+        "none": "[OFF]",
+    }
+
     def __init__(self, analytics_dir: Optional[Path] = None, stats_dir: Optional[Path] = None):
         self.analytics_dir = analytics_dir or ANALYTICS_DIR
         self.stats_dir = stats_dir or ANALYTICS_STATS_DIR
@@ -83,6 +99,43 @@ class LeaderboardEngine:
         iteration_net = round(float(data.get("iteration_net_profit_usdt", net_profit)), 2)
         iteration_realized = round(float(data.get("iteration_realized_pnl_usdt", realized_pnl)), 2)
 
+        # Определение режима автозакрытия стратегии (4 режима: classic, toxic, fixed, off)
+        # Суффикс имени вселенной является высшим приоритетом
+        if universe_id.endswith("__off"):
+            mode = "off"
+            mode_badge = "[OFF]"
+        elif universe_id.endswith("__classic"):
+            mode = "classic"
+            mode_badge = "[CLASSIC]"
+        elif universe_id.endswith("__toxic"):
+            mode = "toxic"
+            mode_badge = "[TOXIC]"
+        elif universe_id.endswith("__fixed"):
+            mode = "fixed"
+            mode_badge = "[FIXED]"
+        else:
+            # Чтение режима из конфигурации стратегии (без скрытых дефолтов в toxic)
+            raw_mode = (
+                meta.get("auto_closing_mode")
+                or (meta.get("auto_closing") or {}).get("mode")
+                or ((meta.get("auto_closing") or {}).get("positive") or {}).get("mode")
+                or (meta.get("overrides", {}).get("auto_closing") or {}).get("mode")
+                or ((meta.get("overrides", {}).get("auto_closing") or {}).get("positive") or {}).get("mode")
+            )
+            raw_mode_str = str(raw_mode).lower().strip() if raw_mode else "off"
+            if raw_mode_str in ("classic", "iter_net_classic", "trailing_ratchet"):
+                mode = "classic"
+                mode_badge = "[CLASSIC]"
+            elif raw_mode_str in ("toxic", "toxicity_adaptive"):
+                mode = "toxic"
+                mode_badge = "[TOXIC]"
+            elif raw_mode_str in ("fixed", "fixed_net"):
+                mode = "fixed"
+                mode_badge = "[FIXED]"
+            else:
+                mode = "off"
+                mode_badge = "[OFF]"
+
         return {
             "universe_id": universe_id,
             "name": meta.get("name", universe_id),
@@ -106,6 +159,8 @@ class LeaderboardEngine:
             "winning_trades": winning_trades,
             "winrate_pct": winrate_pct,
             "roi_pct": roi_pct,
+            "mode": mode,
+            "mode_badge": mode_badge,
         }
 
     def generate_leaderboard(
@@ -124,17 +179,18 @@ class LeaderboardEngine:
         return entries
 
     def format_table(
-        self, entries: List[dict], evaluated_coins_count: int = 0, start_rank: int = 1
+        self, entries: List[dict], evaluated_coins_count: int = 0, start_rank: int = 1, title_suffix: str = ""
     ) -> str:
-        """Форматирует ASCII таблицу Leaderboard по чистому кумулятивному Net Profit."""
+        """Форматирует ASCII таблицу Leaderboard с колонкой Mode (160 симв)."""
         active_count = len(entries)
+        title = f"STRATEGIES LEADERBOARD{title_suffix} (Active: {active_count} | Coins: {evaluated_coins_count})"
         header = (
-            "=" * 148 + "\n"
-            f"STRATEGIES LEADERBOARD (Active: {active_count} | Coins: {evaluated_coins_count})\n"
+            "=" * 160 + "\n"
+            f"{title}\n"
             f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-            + "=" * 148 + "\n"
-            f"{'#':<3} {'Strategy / Universe ID':<35} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
-            + "-" * 148
+            + "=" * 160 + "\n"
+            f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
+            + "-" * 160
         )
 
         rows = []
@@ -151,19 +207,20 @@ class LeaderboardEngine:
             peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
             dd_str = f"{item['max_drawdown_usdt']:.2f} $"
             rec_str = f"{item['recovery_factor']:.2f}"
-            uid_short = item['universe_id'][:34]
+            uid_short = item['universe_id'][:42]
+            mode_badge = item.get("mode_badge", "[OFF]")
 
             row = (
-                f"{idx:<3} {uid_short:<35} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
+                f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
                 f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
             )
             rows.append(row)
 
-        footer = "=" * 148
+        footer = "=" * 160
         return "\n".join([header] + rows + [footer])
 
     def format_table_chunks(
-        self, entries: List[dict], evaluated_coins_count: int = 0, chunk_size: int = 20
+        self, entries: List[dict], evaluated_coins_count: int = 0, chunk_size: int = 12, title_suffix: str = ""
     ) -> List[str]:
         """
         Разбивает таблицу лидерборда на порции (чанки) с сохранением заголовков колонок
@@ -174,7 +231,9 @@ class LeaderboardEngine:
 
         total_entries = len(entries)
         if total_entries <= chunk_size:
-            return [self.format_table(entries, evaluated_coins_count=evaluated_coins_count, start_rank=1)]
+            tbl = self.format_table(entries, evaluated_coins_count=evaluated_coins_count, start_rank=1, title_suffix=title_suffix)
+            if len(tbl) <= 3500:
+                return [tbl]
 
         chunks = []
         num_chunks = (total_entries + chunk_size - 1) // chunk_size
@@ -187,12 +246,12 @@ class LeaderboardEngine:
             end_rank = end_i
 
             header = (
-                "=" * 148 + "\n"
-                f"STRATEGIES LEADERBOARD (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
-                f"Ranked strictly by Cumulative Net Profit USDT\n"
-                + "=" * 148 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<35} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
-                + "-" * 148
+                "=" * 160 + "\n"
+                f"STRATEGIES LEADERBOARD{title_suffix} (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
+                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
+                + "=" * 160 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
+                + "-" * 160
             )
 
             rows = []
@@ -209,15 +268,16 @@ class LeaderboardEngine:
                 peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
                 dd_str = f"{item['max_drawdown_usdt']:.2f} $"
                 rec_str = f"{item['recovery_factor']:.2f}"
-                uid_short = item['universe_id'][:34]
+                uid_short = item['universe_id'][:42]
+                mode_badge = item.get("mode_badge", "[OFF]")
 
                 row = (
-                    f"{idx:<3} {uid_short:<35} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
+                    f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
                     f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
                 )
                 rows.append(row)
 
-            footer = "=" * 148
+            footer = "=" * 160
             chunks.append("\n".join([header] + rows + [footer]))
 
         return chunks

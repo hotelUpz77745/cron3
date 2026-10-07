@@ -340,9 +340,35 @@ class AutoCloser:
             if now_sec - self._last_close_ts.get(strat_id, 0.0) < CLOSE_COOLDOWN_SEC:
                 continue
 
+            # Определение режима автозакрытия (4 режима: classic, toxic, fixed, off)
             strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
-            strat_auto_cfg = strat_app_cfg.get("auto_closing") or strat_cfg.auto_closing_cfg
-            if not strat_auto_cfg or not strat_auto_cfg.get("enabled", True):
+            strat_auto_cfg = strat_app_cfg.get("auto_closing") or getattr(strat_cfg, "auto_closing_cfg", {})
+
+            if strat_id.endswith("__off"):
+                mode = "off"
+            elif strat_id.endswith("__classic"):
+                mode = "classic"
+            elif strat_id.endswith("__toxic"):
+                mode = "toxic"
+            elif strat_id.endswith("__fixed"):
+                mode = "fixed"
+            else:
+                raw_m = (
+                    (strat_auto_cfg or {}).get("mode")
+                    or ((strat_auto_cfg or {}).get("positive") or {}).get("mode")
+                    if isinstance(strat_auto_cfg, dict) else None
+                )
+                raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
+                if raw_m_str in ("classic", "iter_net_classic", "trailing_ratchet"):
+                    mode = "classic"
+                elif raw_m_str in ("toxic", "toxicity_adaptive"):
+                    mode = "toxic"
+                elif raw_m_str in ("fixed", "fixed_net"):
+                    mode = "fixed"
+                else:
+                    mode = "off"
+
+            if mode == "off":
                 continue
 
             strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strat_id}.json"
@@ -355,18 +381,16 @@ class AutoCloser:
             iter_start_net = float(strat_analytics.get("iteration_start_net_profit_usdt", 0.0))
             iter_net = float(strat_analytics.get("iteration_net_profit_usdt", round(strat_net - iter_start_net, 4)))
 
-            pos_cfg = strat_auto_cfg.get("positive", {})
-            neg_cfg = strat_auto_cfg.get("negative", {})
+            pos_cfg = strat_auto_cfg.get("positive", {}) if isinstance(strat_auto_cfg, dict) else {}
+            neg_cfg = strat_auto_cfg.get("negative", {}) if isinstance(strat_auto_cfg, dict) else {}
 
             strat_triggered = False
             strat_msg = ""
             is_stagnation = False
             next_iter_idx = iter_idx + 1
 
-            # Positive Auto-Closing Check (Three Modes: iter_net_classic, toxicity_adaptive, radar_sync_23h)
-            pos_enabled = pos_cfg.get("enabled", True)
-            if pos_enabled:
-                mode = pos_cfg.get("mode", "toxicity_adaptive")
+            # Исполнение выбранного режима автозакрытия
+            if mode != "off":
                 r_cfg = pos_cfg.get("trailing_ratchet") or {}
                 invest_size = float(getattr(strat_cfg, "invest_size", 600.0))
                 quant_ref = float(pos_cfg.get("quant_reference_size", 600.0))

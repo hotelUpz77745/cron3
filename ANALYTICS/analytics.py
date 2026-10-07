@@ -1300,7 +1300,12 @@ class AnalyticsManager:
         # Update Leaderboard & portfolio analytics_all.json
         try:
             universes_meta = {
-                sid: {"name": scfg.name, "enabled": True}
+                sid: {
+                    **getattr(scfg, "raw_meta", {}),
+                    "name": scfg.name,
+                    "enabled": True,
+                    "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))
+                }
                 for sid, scfg in self.strategy_registry.active_strategies.items()
             }
             entries = self.leaderboard_engine.generate_leaderboard(universes_meta)
