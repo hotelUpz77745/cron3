@@ -137,15 +137,5 @@
   "SHORT": {
     "enabled": true,
     "_inheritance_base_side": true
-  },
-  "auto_closing": {
-    "enabled": false,
-    "mode": "disabled"
-  },
-  "modes": [
-    "off",
-    "classic",
-    "fixed",
-    "toxic"
-  ]
+  }
 }

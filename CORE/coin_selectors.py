@@ -176,8 +176,12 @@ class SamsonovFunnelSelector:
 
         file_path = self.radar_stats_dir / f"analytics_{universe_id}.json"
         if not file_path.exists():
-            logger.warning(f"[SamsonovSelector] Universe stats not found: {file_path}")
-            return None
+            matches = list(self.radar_stats_dir.glob(f"analytics_{universe_id}__*.json"))
+            if matches:
+                file_path = sorted(matches)[0]
+            else:
+                logger.warning(f"[SamsonovSelector] Universe stats not found: {file_path}")
+                return None
 
         try:
             with open(file_path, "r", encoding="utf-8") as f:

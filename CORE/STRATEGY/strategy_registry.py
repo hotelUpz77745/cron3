@@ -281,9 +281,11 @@ class StrategyRegistry:
     def __init__(
         self,
         active_strategies_cfg: Optional[Dict[str, Any]] = None,
-        universes_path: Optional[Path] = None
+        universes_path: Optional[Path] = None,
+        modes: Optional[List[str]] = None
     ):
         self.universes_path: Path = universes_path or (DATA_DIR / "universes.json")
+        self.modes: List[str] = modes or _CFG.get("modes") or ["off"]
         self.universes_db: Dict[str, Dict[str, Any]] = self._load_universes_db()
 
         # Чтение конфигурации активных стратегий строго напрямую (Правило 2)
@@ -299,8 +301,77 @@ class StrategyRegistry:
 
         self._resolve_and_validate()
 
+    def _build_mode_auto_closing(self, mode: str) -> Dict[str, Any]:
+        """Формирует конфигурацию auto_closing строго для целевого режима."""
+        mode = mode.lower().strip()
+        base_ac = _CFG.get("auto_closing") or copy.deepcopy(DEFAULT_AUTO_CLOSING)
+        if mode == "off":
+            return {
+                "enabled": False,
+                "mode": "disabled",
+                "positive": {"enabled": False, "mode": "disabled"},
+                "negative": {"enabled": False, "threshold": None, "threshold_increment": None}
+            }
+        elif mode == "fixed":
+            pos_cfg = {
+                "enabled": True,
+                "mode": "fixed_net",
+                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
+                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
+                "fixed_net": base_ac.get("positive", {}).get("fixed_net") or {
+                    "target_net_usdt": 21.0,
+                    "scale_by_invest_size": False
+                }
+            }
+            return {
+                "enabled": True,
+                "mode": "fixed_net",
+                "positive": pos_cfg,
+                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+            }
+        elif mode == "toxic":
+            pos_cfg = {
+                "enabled": True,
+                "mode": "toxicity_adaptive",
+                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
+                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
+                "toxicity_adaptive": base_ac.get("positive", {}).get("toxicity_adaptive") or {}
+            }
+            return {
+                "enabled": True,
+                "mode": "toxicity_adaptive",
+                "positive": pos_cfg,
+                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+            }
+        elif mode == "classic":
+            pos_cfg = {
+                "enabled": True,
+                "mode": "iter_net_classic",
+                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
+                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
+                "trailing_ratchet": base_ac.get("positive", {}).get("trailing_ratchet") or {
+                    "enabled": True,
+                    "levels": [
+                        {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True},
+                        {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True},
+                        {"activation": 23.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True},
+                        {"activation": 36.5, "floor": 34.0, "min_age_hours": 0.0, "enabled": True},
+                        {"activation": 57.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True},
+                        {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True}
+                    ]
+                }
+            }
+            return {
+                "enabled": True,
+                "mode": "iter_net_classic",
+                "positive": pos_cfg,
+                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+            }
+        else:
+            return {"enabled": False, "mode": "disabled"}
+
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу шаблонов: приоритет модульной папке CFG/universes/*.json, fallback на universes.json и полигон."""
+        """Загружает базу шаблонов: модульная папка CFG/universes/*.json."""
         data: Dict[str, Dict[str, Any]] = {}
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
@@ -308,37 +379,33 @@ class StrategyRegistry:
                 data[jf.stem] = Utils.read_json_file(jf)
 
         # Fallback к universes.json (для обратной совместимости внешних утилит)
-        if self.universes_path.exists():
+        if not data and self.universes_path.exists():
             ujson = Utils.read_json_file(self.universes_path)
             if isinstance(ujson, dict):
                 for k, v in ujson.items():
                     if k not in data:
                         data[k] = v
 
-
-
-        # Автоматическое размножение чистых шаблонов-архетипов на 4 режима автоклозера
+        # Автоматическое размножение чистых шаблонов-архетипов на режимы автоклозера (внешне из app.json)
         expanded_variants: Dict[str, Dict[str, Any]] = {}
+        all_candidate_modes = ["fixed", "off", "classic", "toxic"]
         for uid, udata in list(data.items()):
             # Проверяем, является ли шаблон чистым архетипом (без суффикса)
             is_suffixed = any(uid.endswith(sfx) for sfx in ("__off", "__classic", "__fixed", "__toxic"))
             if not is_suffixed:
                 clean_name = udata.get("name", uid)
-                modes = udata.get("modes") or ["off", "classic", "fixed", "toxic"]
-                for m in modes:
+                for m in all_candidate_modes:
                     m_key = m.lower().strip()
                     variant_id = f"{uid}__{m_key}"
                     if variant_id not in data and variant_id not in expanded_variants:
                         v_copy = copy.deepcopy(udata)
+                        v_copy.pop("modes", None)
                         v_copy["auto_closing_mode"] = m_key
                         v_copy["name"] = f"[{variant_id}] {clean_name} [{m_key.upper()}]"
-                        if m_key == "off":
-                            v_copy["auto_closing"] = {"enabled": False, "mode": "disabled"}
-                        else:
-                            v_copy["auto_closing"] = {"enabled": True, "mode": m_key}
+                        ac_block = self._build_mode_auto_closing(m_key)
+                        v_copy["auto_closing"] = ac_block
                         expanded_variants[variant_id] = v_copy
             else:
-                # Если шаблон уже имеет суффикс, регистрируем базовый алиас
                 for sfx in ("__off", "__classic", "__fixed", "__toxic"):
                     if uid.endswith(sfx):
                         base_name = uid[:-len(sfx)]
@@ -350,7 +417,7 @@ class StrategyRegistry:
 
         if not data:
             raise FileNotFoundError(
-                f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены!"
+                f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены в {universes_dir}!"
             )
         return data
 
@@ -369,18 +436,41 @@ class StrategyRegistry:
         for strat_id, strat_settings in self.active_cfg.items():
             if strat_id.startswith("_") or not isinstance(strat_settings, dict):
                 continue
-            # Прямое чтение флага активности (Правило 2)
             is_enabled = bool(strat_settings["enabled"])
             if not is_enabled:
                 continue
 
-            if strat_id not in self.universes_db:
+            # Извлекаем чистое имя стратегии и определяем целевой режим
+            clean_id = strat_id
+            suffix_mode = None
+            for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                if clean_id.endswith(sfx):
+                    suffix_mode = sfx[2:]
+                    clean_id = clean_id[:-len(sfx)]
+                    break
+
+            strat_modes = strat_settings.get("modes") or ([suffix_mode] if suffix_mode else None) or getattr(self, "modes", None) or ["fixed"]
+            target_mode = (strat_modes[0] if isinstance(strat_modes, list) and strat_modes else str(strat_modes)).lower().strip()
+
+            variant_key = f"{clean_id}__{target_mode}"
+            if variant_key in self.universes_db:
+                raw_meta = copy.deepcopy(self.universes_db[variant_key])
+            elif strat_id in self.universes_db:
+                raw_meta = copy.deepcopy(self.universes_db[strat_id])
+            elif clean_id in self.universes_db:
+                raw_meta = copy.deepcopy(self.universes_db[clean_id])
+                ac_block = self._build_mode_auto_closing(target_mode)
+                raw_meta["auto_closing"] = ac_block
+                raw_meta["auto_closing_mode"] = target_mode
+                if "overrides" not in raw_meta or not isinstance(raw_meta["overrides"], dict):
+                    raw_meta["overrides"] = {}
+                raw_meta["overrides"]["auto_closing"] = ac_block
+            else:
                 raise KeyError(
-                    f"[StrategyRegistry] Стратегия '{strat_id}', указанная в active_strategies, "
-                    f"отсутствует в базе шаблонов {self.universes_path.name}!"
+                    f"[StrategyRegistry] Стратегия '{strat_id}' (или '{clean_id}') "
+                    f"отсутствует в базе шаблонов CFG/universes/*.json!"
                 )
 
-            raw_meta = self.universes_db[strat_id]
             # Прямое чтение списка монет (Правило 2)
             raw_symbols: List[str] = strat_settings["symbols"]
             strat_symbols = [s.upper().strip() for s in raw_symbols if s and s.strip()]
@@ -391,7 +481,15 @@ class StrategyRegistry:
                 symbols=strat_symbols,
                 active_settings=strat_settings
             )
+            strat_config.auto_closing_mode = target_mode
             self.active_strategies[strat_id] = strat_config
+
+            # Регистрируем алиасы для взаимной однозначности в TG/утилитах
+            if strat_id != variant_key and variant_key not in self.active_strategies:
+                self.active_strategies[variant_key] = strat_config
+            if strat_id != clean_id and clean_id not in self.active_strategies:
+                self.active_strategies[clean_id] = strat_config
+
             acc_id = strat_config.get_account_id()
             if acc_id not in account_symbols:
                 account_symbols[acc_id] = {}
@@ -423,7 +521,7 @@ class StrategyRegistry:
 
         self.all_active_symbols = resolved_symbols
         logger.info(
-            f"[StrategyRegistry] Loaded {len(self.active_strategies)} active strategies. "
+            f"[StrategyRegistry] Loaded {len(self.active_strategies)} active strategies (including mode aliases). "
             f"Active trading pool: {len(self.all_active_symbols)} symbols {self.all_active_symbols}."
         )
 
@@ -456,8 +554,8 @@ class StrategyRegistry:
         return list(self.all_active_symbols)
 
     def get_active_strategies(self) -> Dict[str, StrategyConfig]:
-        """Возвращает словарь всех активных объектов StrategyConfig."""
-        return dict(self.active_strategies)
+        """Возвращает словарь всех активно сконфигурированных стратегий из active_cfg."""
+        return {sid: self.active_strategies[sid] for sid in self.active_cfg.keys() if sid in self.active_strategies}
 
     def reload(self, active_strategies_cfg: Optional[Dict[str, Any]] = None) -> None:
         """Перезагружает базу стратегий и пересобирает активные маппинги символов."""

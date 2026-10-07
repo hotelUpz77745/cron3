@@ -255,9 +255,11 @@ class BotCore:
                 active_strategies[target_strat].setdefault("symbols", []).append(symbol)
                 active_strategies[target_strat]["enabled"] = True
             else:
-                univ_path = DATA_DIR / "universes.json"
-                univ_data = Utils.read_json_file(univ_path) or {}
-                u_meta = univ_data.get(target_strat, {})
+                if hasattr(self, "strategy_registry") and self.strategy_registry:
+                    u_meta = self.strategy_registry.universes_db.get(target_strat, {})
+                else:
+                    univ_path = DATA_DIR / "universes" / f"{target_strat}.json"
+                    u_meta = Utils.read_json_file(univ_path) if univ_path.exists() else {}
                 active_strategies[target_strat] = {
                     "enabled": True,
                     "symbols": [symbol],

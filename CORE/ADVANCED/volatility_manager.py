@@ -10,6 +10,7 @@
 import asyncio
 import time
 import json
+import pickle
 from pathlib import Path
 from c_log import UnifiedLogger
 from consts import DATA_DIR, _CFG
@@ -138,22 +139,30 @@ class VolatilityManager:
                     logger.info(f"[VolatilityManager] [{symbol}] Игнор: Расчитанная волатильность {adjusted_vol:.2f}% выше или равна максимуму {max_volatility_pct}%. Возвращаемся к использованию стандартных настроек индента.")
                     is_advanced = False
 
-            # Resolve runtime path under strategy dome
+            # Resolve runtime path under strategy dome (.pkl prioritized)
             if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "get_runtime_path"):
                 runtime_path = self.bot_core.runtime_manager.get_runtime_path(symbol)
             elif strat:
-                runtime_path = DATA_DIR / "runtime" / strat.strategy_id / f"{symbol.lower()}.json"
+                runtime_path = DATA_DIR / "runtime" / strat.strategy_id / f"{symbol.lower()}.pkl"
                 if not runtime_path.exists():
-                    runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
+                    runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.pkl"
             else:
-                runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
+                runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.pkl"
 
             if not runtime_path.exists():
-                continue
+                cand_json = runtime_path.with_suffix(".json")
+                if cand_json.exists():
+                    runtime_path = cand_json
+                else:
+                    continue
                 
             try:
-                with open(runtime_path, 'r', encoding='utf-8') as f:
-                    rt_data = json.load(f)
+                if str(runtime_path).endswith(".pkl"):
+                    with open(runtime_path, 'rb') as f:
+                        rt_data = pickle.load(f)
+                else:
+                    with open(runtime_path, 'r', encoding='utf-8') as f:
+                        rt_data = json.load(f)
                     
                 modified = False
                 for side in ["LONG", "SHORT"]:
@@ -188,8 +197,17 @@ class VolatilityManager:
                         modified = True
                         
                 if modified:
-                    with open(runtime_path, 'w', encoding='utf-8') as f:
-                        json.dump(rt_data, f, indent=4)
+                    target_save = runtime_path.with_suffix(".pkl")
+                    Utils.atomic_write_pickle(target_save, rt_data)
+                    legacy_json = runtime_path.with_suffix(".json")
+                    if legacy_json.exists():
+                        try:
+                            legacy_json.unlink()
+                        except Exception:
+                            pass
+                    if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "caches"):
+                        if symbol in self.bot_core.runtime_manager.caches:
+                            self.bot_core.runtime_manager.caches[symbol] = rt_data
                         
                     if is_advanced:
                         logger.info(f"[VolatilityManager] [{symbol}] Переход на Super Grid настройки. Волатильность={adjusted_vol:.2f}%. Коэффициент={ratio:.4f}. Сетка обновлена (super_indent).")

@@ -39,11 +39,7 @@
       ">=4": 0.6
     },
     "knife_blocker_enabled": true,
-    "knife_blocker_threshold": 2,
-    "knife_blocker": {
-      "enabled": true,
-      "threshold": 2
-    }
+    "knife_blocker_threshold": 2
   },
   "smart_tp": {
     "eval_window_sec": 300,
@@ -162,15 +158,5 @@
   "SHORT": {
     "enabled": true,
     "_inheritance_base_side": true
-  },
-  "auto_closing": {
-    "enabled": false,
-    "mode": "disabled"
-  },
-  "modes": [
-    "off",
-    "classic",
-    "fixed",
-    "toxic"
-  ]
+  }
 }

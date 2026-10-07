@@ -32,7 +32,7 @@ class TestCloseAllSyncAndRuntimeIsolation(unittest.TestCase):
         rm.runtime_dir = self.runtime_dir
 
         path = rm.get_runtime_path("GRASSUSDT")
-        expected_path = self.runtime_dir / "u9_omni_zenith_apex" / "grassusdt.json"
+        expected_path = self.runtime_dir / "u9_omni_zenith_apex" / "grassusdt.pkl"
         self.assertEqual(path, expected_path)
 
         rm.caches["GRASSUSDT"] = {"LONG": {"invest_size": 400.0}}
@@ -41,7 +41,7 @@ class TestCloseAllSyncAndRuntimeIsolation(unittest.TestCase):
         # Файл под куполом должен существовать
         self.assertTrue(expected_path.exists())
         # В корне runtime/ файла быть НЕ ДОЛЖНО (никакого дублирования)
-        root_file = self.runtime_dir / "grassusdt.json"
+        root_file = self.runtime_dir / "grassusdt.pkl"
         self.assertFalse(root_file.exists(), "В корне runtime/ не должно быть дубликатов файлов монет!")
 
     def test_template_manager_does_not_mirror_to_root(self):

@@ -109,10 +109,11 @@ class TelegramReceiver:
             ],
             [
                 KeyboardButton(text="⚙️ Set Coins"),
-                KeyboardButton(text="🎯 Selector"),
-                KeyboardButton(text="🚨 Close All")
+                KeyboardButton(text="🌌 Strategies"),
+                KeyboardButton(text="🎯 Selector")
             ],
             [
+                KeyboardButton(text="🚨 Close All"),
                 KeyboardButton(text="🛡️ Risk System")
             ]
         ]
@@ -122,26 +123,40 @@ class TelegramReceiver:
         keyboard = [
             [
                 KeyboardButton(text="🎯 Selector"),
-                KeyboardButton(text="➕ Add"),
-                KeyboardButton(text="🗑️ Del")
+                KeyboardButton(text="🌌 Strategies"),
+                KeyboardButton(text="➕ Add")
             ],
             [
+                KeyboardButton(text="🗑️ Del"),
                 KeyboardButton(text="✏️ Edit"),
-                KeyboardButton(text="📄 _base"),
-                KeyboardButton(text="❓ Help")
+                KeyboardButton(text="📄 _base")
             ],
             [
+                KeyboardButton(text="❓ Help"),
                 KeyboardButton(text="🔙 Back")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
     def _get_strategy_meta(self, strat_id: str) -> dict:
-        univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+        if hasattr(self, "bot") and getattr(self.bot, "strategy_registry", None):
+            u_meta = self.bot.strategy_registry.universes_db.get(strat_id, {})
+        else:
+            univ_dir = DATA_DIR / "universes"
+            pure_id = strat_id
+            for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                if pure_id.endswith(sfx):
+                    pure_id = pure_id[:-len(sfx)]
+                    break
+            jf = univ_dir / f"{pure_id}.json"
+            if jf.exists():
+                u_meta = Utils.read_json_file(jf)
+            else:
+                univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+                u_meta = univ_data.get(strat_id, {})
         app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
         active_strats = app_data.get("active_strategies", {})
         strat_app = active_strats.get(strat_id, {})
-        u_meta = univ_data.get(strat_id, {})
         
         name = u_meta.get("name", strat_id)
         description = u_meta.get("description", "Пользовательская стратегия")
@@ -256,6 +271,20 @@ class TelegramReceiver:
             report = nav.generate_telemetry_report()
             await message.answer(report, parse_mode="HTML")
 
+        @self.dp.message(Command("backup"))
+        async def backup_cmd(message: Message):
+            msg = await message.answer("⏳ Создание рантайм-бэкапа из .pkl и упаковка в JSON...")
+            try:
+                from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
+                res = await RuntimeBackupService.export_and_send(bot_instance=self.bot_core, chat_ids=[message.chat.id])
+                if res.get("status") == "success":
+                    await msg.edit_text(f"✅ Рантайм-бэкап сформирован и отправлен в чат!\n📄 Файл: <code>{res.get('filename')}</code>\n💾 Размер: {res.get('size_bytes') / 1024.0:.1f} KB", parse_mode="HTML")
+                else:
+                    await msg.edit_text(f"⚠️ Бэкап создан локально ({res.get('filename')}), но возникла заминка при отправке.")
+            except Exception as e:
+                logger.error(f"Backup command error: {e}")
+                await msg.edit_text(f"❌ Ошибка создания бэкапа: {e}")
+
         @self.dp.callback_query(F.data.startswith("rot_accept:"))
         async def on_rot_accept(callback: CallbackQuery):
             await callback.answer()
@@ -326,7 +355,7 @@ class TelegramReceiver:
             await state.clear()
             active_strats = {}
             if hasattr(self.bot_core, "strategy_registry"):
-                active_strats = self.bot_core.strategy_registry.active_strategies
+                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
 
             buttons = []
             for sid, scfg in active_strats.items():
@@ -409,8 +438,13 @@ class TelegramReceiver:
                 runtime_path = self.template_manager.get_runtime_path(sym)
                 if runtime_path.exists():
                     try:
-                        with open(runtime_path, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
+                        if str(runtime_path).endswith(".pkl"):
+                            import pickle
+                            with open(runtime_path, 'rb') as f:
+                                data = pickle.load(f)
+                        else:
+                            with open(runtime_path, 'r', encoding='utf-8') as f:
+                                data = json.load(f)
                             
                         lines = [f"<b>{sym} Settings:</b>"]
                         for side in ["LONG", "SHORT"]:
@@ -509,7 +543,8 @@ class TelegramReceiver:
             # Active strategies and coins info
             strat_info = []
             if hasattr(self.bot_core, "strategy_registry"):
-                for sid, scfg in self.bot_core.strategy_registry.active_strategies.items():
+                strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
+                for sid, scfg in strats.items():
                     strat_info.append(f"• <b>{scfg.name}</b>: <code>{', '.join(scfg.symbols)}</code>")
             strat_block = "\n".join(strat_info) if strat_info else "<i>Нет активных стратегий</i>"
 
@@ -519,17 +554,17 @@ class TelegramReceiver:
                 try:
                     data = self.bot_core.analytics._read_data()
                     vel_data = self.bot_core.analytics.velocity_engine.calculate_velocity(data)
-                    eff_speed = vel_data.get("avg_effective_speed", 0.0)
-                    speed_ratio = vel_data.get("speed_ratio", 1.0)
-                    status_desc = vel_data.get("status_desc", "NORMAL")
+                    eff_speed = float(vel_data.get("avg_effective_speed") or 0.0)
+                    speed_ratio = float(vel_data.get("speed_ratio") or 1.0)
+                    status_desc = str(vel_data.get("status_desc") or "NORMAL")
                     vel_text = f"\n\n⚡ <b>Trade Velocity</b>: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})"
                     
                     per_coin = vel_data.get("per_coin", {})
                     if per_coin:
                         vel_text += "\n<i>Скорость по монетам:</i>"
                         for sym, c_info in per_coin.items():
-                            c_speed = c_info.get("effective_speed", 0.0)
-                            c_ratio = c_info.get("speed_ratio", 1.0)
+                            c_speed = float(c_info.get("effective_speed") or 0.0)
+                            c_ratio = float(c_info.get("speed_ratio") or 1.0)
                             vel_text += f"\n  - <b>{sym}</b>: {c_speed:.2f} сд/ч (x{c_ratio:.2f})"
                 except Exception as e:
                     logger.error(f"Error calculating velocity for status: {e}")
@@ -691,19 +726,39 @@ class TelegramReceiver:
                 data = self.bot_core.analytics._read_data()
                 self.bot_core.analytics._update_strategies_stats(data)
                 
+                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
                 universes_meta = {
-                    sid: {"name": scfg.name, "enabled": True}
-                    for sid, scfg in self.bot_core.strategy_registry.active_strategies.items()
+                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                    for sid, scfg in active_strats.items()
                 }
                 entries = engine.generate_leaderboard(universes_meta)
                 evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=20)
+                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
                 total_chunks = len(chunks)
 
                 for i, chunk in enumerate(chunks, 1):
                     part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
                     response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
-                    await message.answer(response, parse_mode="HTML")
+                    if len(response) <= 4000:
+                        await message.answer(response, parse_mode="HTML")
+                    else:
+                        sub_lines = chunk.splitlines()
+                        sub_buf = []
+                        sub_len = 0
+                        sub_idx = 1
+                        for line in sub_lines:
+                            if sub_len + len(line) + 1 > 3500:
+                                sub_text = "\n".join(sub_buf)
+                                await message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+                                sub_buf = [line]
+                                sub_len = len(line)
+                                sub_idx += 1
+                            else:
+                                sub_buf.append(line)
+                                sub_len += len(line) + 1
+                        if sub_buf:
+                            sub_text = "\n".join(sub_buf)
+                            await message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
             except Exception as e:
                 logger.error(f"Error in cmd_leaderboard: {e}")
                 await message.answer(f"❌ Ошибка формирования лидерборда: {e}")
@@ -719,95 +774,254 @@ class TelegramReceiver:
                 data = self.bot_core.analytics._read_data()
                 self.bot_core.analytics._update_strategies_stats(data)
                 
+                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
                 universes_meta = {
-                    sid: {"name": scfg.name, "enabled": True}
-                    for sid, scfg in self.bot_core.strategy_registry.active_strategies.items()
+                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                    for sid, scfg in active_strats.items()
                 }
                 entries = engine.generate_leaderboard(universes_meta)
                 evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=20)
+                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
                 total_chunks = len(chunks)
 
                 for i, chunk in enumerate(chunks, 1):
                     part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
                     response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
-                    await callback.message.answer(response, parse_mode="HTML")
+                    if len(response) <= 4000:
+                        await callback.message.answer(response, parse_mode="HTML")
+                    else:
+                        sub_lines = chunk.splitlines()
+                        sub_buf = []
+                        sub_len = 0
+                        sub_idx = 1
+                        for line in sub_lines:
+                            if sub_len + len(line) + 1 > 3500:
+                                sub_text = "\n".join(sub_buf)
+                                await callback.message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+                                sub_buf = [line]
+                                sub_len = len(line)
+                                sub_idx += 1
+                            else:
+                                sub_buf.append(line)
+                                sub_len += len(line) + 1
+                        if sub_buf:
+                            sub_text = "\n".join(sub_buf)
+                            await callback.message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
             except Exception as e:
                 logger.error(f"Error in cb_analytics_leaderboard: {e}")
                 await callback.message.answer(f"❌ Ошибка формирования лидерборда: {e}")
 
+        async def _render_strategies_menu(target_msg_or_cb):
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            all_strats = app_data.get("active_strategies", {})
+            if not all_strats:
+                text = "ℹ️ В app.json нет сконфигурированных стратегий."
+                if isinstance(target_msg_or_cb, CallbackQuery):
+                    await target_msg_or_cb.message.answer(text)
+                else:
+                    await target_msg_or_cb.answer(text)
+                return
+
+            buttons = []
+            for sid, sdata in all_strats.items():
+                if sid.startswith("_") or not isinstance(sdata, dict):
+                    continue
+                is_en = sdata.get("enabled", False)
+                status_icon = "🟢" if is_en else "🔴"
+                meta = self._get_strategy_meta(sid)
+                sname = meta.get("name", sid)
+                clean_name = sname.encode("ascii", "ignore").decode("ascii").strip() or sid
+                sym_cnt = len(sdata.get("symbols", []))
+                btn_txt = f"{status_icon} {clean_name[:28]} ({sym_cnt}м)"
+                buttons.append([InlineKeyboardButton(text=btn_txt, callback_data=f"strat_analytics:{sid}")])
+
+            buttons.append([InlineKeyboardButton(text="🔙 Главное меню", callback_data="analytics_global")])
+            text = (
+                "🌌 <b>Управление стратегиями (Купола):</b>\n\n"
+                "🟢 — Включена в торги (Active)\n"
+                "🔴 — Отключена (На паузе)\n\n"
+                "<i>Нажмите на стратегию для просмотра детальной аналитики и переключения тумблера:</i>"
+            )
+            keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+            if isinstance(target_msg_or_cb, CallbackQuery):
+                await target_msg_or_cb.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            else:
+                await target_msg_or_cb.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        async def _render_strategy_details(callback: CallbackQuery, strat_id: str):
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            sdata = app_data.get("active_strategies", {}).get(strat_id, {})
+            is_enabled = sdata.get("enabled", False)
+            coins_list = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+            coins_str = ", ".join(coins_list) if coins_list else "—"
+
+            meta = self._get_strategy_meta(strat_id)
+            strat_name = meta.get("name", strat_id)
+
+            strat_file = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
+            analytics_data = {}
+            if strat_file.exists():
+                try:
+                    analytics_data = json.loads(strat_file.read_text(encoding="utf-8"))
+                except Exception as e:
+                    logger.warning(f"Failed to read analytics file for {strat_id}: {e}")
+
+            net = float(analytics_data.get("net_profit_usdt", 0.0))
+            real = float(analytics_data.get("realized_pnl_usdt", 0.0))
+            unreal = float(analytics_data.get("unrealized_pnl_usdt", 0.0))
+            dd = float(analytics_data.get("max_drawdown_usdt", 0.0))
+            rf = float(analytics_data.get("recovery_factor", 0.0))
+            trades = int(analytics_data.get("total_trades", 0))
+            wins = int(analytics_data.get("winning_trades", 0))
+            wr = float(analytics_data.get("winrate_pct", 0.0))
+            cur_bal = float(analytics_data.get("cur_balance_usdt", sdata.get("analytics", {}).get("start_balance_usdt", 57.0)))
+            start_bal = float(analytics_data.get("start_balance_usdt", sdata.get("analytics", {}).get("start_balance_usdt", 57.0)))
+
+            iter_idx = int(analytics_data.get("iteration_index", 1))
+            iter_net = float(analytics_data.get("iteration_net_profit_usdt", net))
+            iter_start_net = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
+            iter_real = float(analytics_data.get("iteration_realized_pnl_usdt", real))
+            iter_vel = float(analytics_data.get("iteration_net_velocity", 0.0))
+            peak_net = float(analytics_data.get("peak_net_profit_usdt", max(0.0, cur_bal - start_bal)))
+            peak_age = float(analytics_data.get("peak_age_hours", 0.0))
+
+            status_str = "🟢 <b>ВКЛЮЧЕНА (В работе)</b>" if is_enabled else "🔴 <b>ВЫКЛЮЧЕНА (На паузе)</b>"
+            toggle_btn_text = "🔘 Тумблер: 🟢 ВКЛ (Нажмите для ВЫКЛ)" if is_enabled else "🔘 Тумблер: 🔴 ВЫКЛ (Нажмите для ВКЛ)"
+
+            text = (
+                f"🌌 <b>СТРАТЕГИЯ: {strat_name}</b>\n"
+                f"ID: <code>{strat_id}</code>\n"
+                f"Состояние: {status_str}\n"
+                f"🪙 Монеты ({len(coins_list)}): <b>{coins_str}</b>\n\n"
+                f"🔄 <b>Текущий Цикл: #{iter_idx}</b>\n"
+                f"├ Net цикла: <b>{iter_net:+.2f} USDT</b> (База: {iter_start_net:+.2f} $)\n"
+                f"├ Realized цикла: <b>{iter_real:+.2f} $</b>\n"
+                f"└ Скорость цикла: <b>{iter_vel:.2f} $/ч</b>\n\n"
+                f"💰 Баланс: <b>{cur_bal:+.2f} $</b> (Старт: {start_bal:.2f} $)\n"
+                f"📈 Кумулятивный Net: <b>{net:+.2f} USDT</b>\n"
+                f"├ Realized (сумм): <b>{real:+.2f} $</b>\n"
+                f"└ Floating: <b>{unreal:+.2f} $</b>\n\n"
+                f"🏔️ Peak Net: <b>+{peak_net:.2f} $</b> ({peak_age:.1f}h)\n"
+                f"📉 Max Drawdown: <b>{dd:.2f} $</b>\n"
+                f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
+                f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"
+            )
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=toggle_btn_text, callback_data=f"toggle_strat:{strat_id}")],
+                [InlineKeyboardButton(text="📝 Леджер стратегии (TXT)", callback_data=f"strat_ledger:{strat_id}")],
+                [InlineKeyboardButton(text="🔙 К списку стратегий", callback_data="analytics_strats_menu")]
+            ])
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+
+        @self.dp.message(Command("strategies"))
+        @self.dp.message(Command("strats"))
+        @self.dp.message(F.text == "🌌 Strategies")
+        @self.dp.message(F.text == "🌌 Стратегии")
+        async def on_strategies_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            await _render_strategies_menu(message)
+
         @self.dp.callback_query(F.data == "analytics_strats_menu")
         async def cb_analytics_strats_menu(callback: CallbackQuery):
             await callback.answer()
-            strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
-            if not strats:
-                await callback.message.answer("Нет активных стратегий.")
-                return
-            buttons = []
-            for sid, scfg in strats.items():
-                safe_name = scfg.name.encode("ascii", "ignore").decode("ascii").strip() or sid
-                buttons.append([InlineKeyboardButton(text=f"🌌 {safe_name}"[:40], callback_data=f"strat_analytics:{sid}")])
-            buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_global")])
-            await callback.message.answer("🌌 <b>Выберите стратегию (вселенную):</b>", reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+            await _render_strategies_menu(callback)
 
         @self.dp.callback_query(F.data.startswith("strat_analytics:"))
         async def cb_strat_analytics(callback: CallbackQuery):
             await callback.answer()
             strat_id = callback.data.split("strat_analytics:")[1]
-            strat_file = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
-            if not strat_file.exists():
-                await callback.message.answer(f"Файл аналитики для стратегии {strat_id} не найден.")
-                return
             try:
-                data = json.loads(strat_file.read_text(encoding="utf-8"))
-                name = data.get("name", strat_id)
-                net = data.get("net_profit_usdt", 0.0)
-                real = data.get("realized_pnl_usdt", 0.0)
-                unreal = data.get("unrealized_pnl_usdt", 0.0)
-                dd = data.get("max_drawdown_usdt", 0.0)
-                rf = data.get("recovery_factor", 0.0)
-                trades = data.get("total_trades", 0)
-                wins = data.get("winning_trades", 0)
-                wr = data.get("winrate_pct", 0.0)
-                cur_bal = data.get("cur_balance_usdt", 0.0)
-                start_bal = data.get("start_balance_usdt", 0.0)
-
-                coins_list = list(data.get("per_coin", {}).keys())
-                coins_str = ", ".join(coins_list) if coins_list else "—"
-
-                iter_idx = int(data.get("iteration_index", 1))
-                iter_net = float(data.get("iteration_net_profit_usdt", net))
-                iter_start_net = float(data.get("iteration_start_net_profit_usdt", 0.0))
-                iter_real = float(data.get("iteration_realized_pnl_usdt", real))
-                iter_vel = float(data.get("iteration_net_velocity", 0.0))
-                peak_net = float(data.get("peak_net_profit_usdt", max(0.0, cur_bal - start_bal)))
-                peak_age = float(data.get("peak_age_hours", 0.0))
-
-                text = (
-                    f"🌌 <b>СТРАТЕГИЯ: {name}</b>\n"
-                    f"ID: <code>{strat_id}</code>\n"
-                    f"🪙 Монеты: <b>{coins_str}</b>\n\n"
-                    f"🔄 <b>Текущий Цикл: #{iter_idx}</b>\n"
-                    f"├ Net цикла: <b>{iter_net:+.2f} USDT</b> (База: {iter_start_net:+.2f} $)\n"
-                    f"├ Realized цикла: <b>{iter_real:+.2f} $</b>\n"
-                    f"└ Скорость цикла: <b>{iter_vel:.2f} $/ч</b>\n\n"
-                    f"💰 Баланс: <b>{cur_bal:+.2f} $</b> (Старт: {start_bal:.2f} $)\n"
-                    f"📈 Кумулятивный Net: <b>{net:+.2f} USDT</b>\n"
-                    f"├ Realized (сумм): <b>{real:+.2f} $</b>\n"
-                    f"└ Floating: <b>{unreal:+.2f} $</b>\n\n"
-                    f"🏔️ Peak Net: <b>+{peak_net:.2f} $</b> ({peak_age:.1f}h)\n"
-                    f"📉 Max Drawdown: <b>{dd:.2f} $</b>\n"
-                    f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
-                    f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"
-                )
-                kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="📝 Леджер стратегии (TXT)", callback_data=f"strat_ledger:{strat_id}")],
-                    [InlineKeyboardButton(text="🔙 К списку стратегий", callback_data="analytics_strats_menu")]
-                ])
-                await callback.message.answer(text, reply_markup=kb, parse_mode="HTML")
+                await _render_strategy_details(callback, strat_id)
             except Exception as e:
-                logger.error(f"Error viewing strategy analytics: {e}")
-                await callback.message.answer(f"Ошибка загрузки аналитики стратегии: {e}")
+                logger.error(f"Error viewing strategy details: {e}")
+                await callback.message.answer(f"Ошибка загрузки карточки стратегии: {e}")
+
+        @self.dp.callback_query(F.data.startswith("toggle_strat:"))
+        async def cb_toggle_strat(callback: CallbackQuery):
+            strat_id = callback.data.split("toggle_strat:")[1]
+            app_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_path) or {}
+            active_strats = app_data.get("active_strategies", {})
+            if strat_id not in active_strats:
+                await callback.answer(f"⚠️ Стратегия {strat_id} не найдена в app.json!", show_alert=True)
+                return
+
+            sdata = active_strats[strat_id]
+            cur_en = sdata.get("enabled", False)
+
+            # 1. ЗАЩИТА ПРИ ОТКЛЮЧЕНИИ: проверяем открытые позиции
+            if cur_en:
+                strat_symbols = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+                open_positions = []
+                if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "caches"):
+                    for sym in strat_symbols:
+                        c = self.bot_core.runtime_manager.caches.get(sym, {})
+                        for side in ("LONG", "SHORT"):
+                            side_st = c.get(side)
+                            if side_st and (getattr(side_st, "in_position", False) or getattr(side_st, "position_amt", 0) != 0):
+                                amt = getattr(side_st, "position_amt", 0)
+                                open_positions.append(f"{sym} {side} (объем: {amt})")
+
+                if open_positions:
+                    pos_list_str = "\n".join([f"• {p}" for p in open_positions])
+                    err_alert = (
+                        f"⛔ <b>БЛОКИРОВКА БЕЗОПАСНОСТИ!</b>\n\n"
+                        f"Нельзя отключить стратегию <code>{strat_id}</code>: обнаружены открытые позиции на бирже:\n"
+                        f"{pos_list_str}\n\n"
+                        f"Отключение стратегии оставит открытые позиции без сопровождения сетки и тейк-профита!\n"
+                        f"Сначала закройте позиции в кэш через 🚨 <b>Close All</b> или дождитесь закрытия тейка."
+                    )
+                    await callback.answer(f"⛔ Запрещено: есть открытые позиции ({len(open_positions)} шт)!", show_alert=True)
+                    await callback.message.answer(err_alert, parse_mode="HTML")
+                    return
+
+            # 2. ЗАЩИТА ПРИ ВКЛЮЧЕНИИ: проверяем конфликты дублирования монет на одном аккаунте
+            else:
+                my_acc = str(sdata.get("api_key_name") or "API_KEY").strip()
+                my_symbols = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+                conflicts = []
+                for other_id, other_data in active_strats.items():
+                    if other_id == strat_id or not isinstance(other_data, dict):
+                        continue
+                    if not other_data.get("enabled", False):
+                        continue
+                    other_acc = str(other_data.get("api_key_name") or "API_KEY").strip()
+                    if other_acc == my_acc:
+                        other_symbols = [str(s).upper().strip() for s in other_data.get("symbols", [])]
+                        intersect = set(my_symbols) & set(other_symbols)
+                        if intersect:
+                            conflicts.append((other_id, list(intersect)))
+
+                if conflicts:
+                    conflict_lines = "\n".join([f"• Монеты <code>{', '.join(c_syms)}</code> уже активны в <code>{o_id}</code>" for o_id, c_syms in conflicts])
+                    err_alert = (
+                        f"⛔ <b>БЛОКИРОВКА БЕЗОПАСНОСТИ!</b>\n\n"
+                        f"Нельзя включить стратегию <code>{strat_id}</code> на аккаунте <code>{my_acc}</code>:\n"
+                        f"{conflict_lines}\n\n"
+                        f"На одном биржевом счете Binance монеты между активными стратегиями обязаны быть строго уникальными!\n"
+                        f"Устраните дублирование монет перед включением."
+                    )
+                    await callback.answer(f"⛔ Конфликт: монеты уже активны в другой стратегии!", show_alert=True)
+                    await callback.message.answer(err_alert, parse_mode="HTML")
+                    return
+
+            # 3. Применение изменения
+            new_en = not cur_en
+            sdata["enabled"] = new_en
+            Utils.write_json_file(app_path, app_data)
+
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                try:
+                    self.bot_core.strategy_registry.reload(active_strats)
+                    if hasattr(self.bot_core, "_init_clients"):
+                        self.bot_core._init_clients()
+                    self.bot_core.symbols = self.bot_core.strategy_registry.get_all_active_symbols()
+                except Exception as e:
+                    logger.error(f"Error reloading StrategyRegistry on toggle: {e}")
+
+            action_str = "ВКЛЮЧЕНА 🟢" if new_en else "ВЫКЛЮЧЕНА 🔴"
+            await callback.answer(f"✅ Стратегия {strat_id} {action_str}!", show_alert=True)
+            await _render_strategy_details(callback, strat_id)
 
         @self.dp.callback_query(F.data.startswith("strat_ledger:"))
         async def cb_strat_ledger(callback: CallbackQuery):
@@ -1486,7 +1700,14 @@ class TelegramReceiver:
         async def process_add_catalog(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             symbol = callback.data.replace("add_catalog_", "")
-            univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
+            if hasattr(self, "bot") and getattr(self.bot, "strategy_registry", None):
+                univ_data = self.bot.strategy_registry.universes_db
+            else:
+                univ_dir = DATA_DIR / "universes"
+                if univ_dir.exists():
+                    univ_data = {jf.stem: Utils.read_json_file(jf) for jf in sorted(univ_dir.glob("*.json"))}
+                else:
+                    univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
 
             buttons = []
             for uid, udata in list(univ_data.items())[:12]:
@@ -2463,8 +2684,8 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🎯 Selector")
         async def on_selector_cmd(message: Message, state: FSMContext):
             await state.clear()
-            target_count = _CFG["radar_synergy"]["target_coins_count"]
-            configured_type = _CFG["radar_synergy"]["selector_type"]
+            target_count = _CFG["auto_closing"]["positive"]["radar_rotation_on_close"]["target_coins_count"]
+            configured_type = _CFG["auto_closing"]["positive"]["radar_rotation_on_close"]["selector_type"]
             text = (
                 f"🎯 <b>Coin Selection Service (On-Demand)</b>\n\n"
                 f"⚙️ <b>Текущий конфиг app.json:</b>\n"
@@ -2507,19 +2728,10 @@ class TelegramReceiver:
 
                 report_text = service.format_telegram_report(results, selector_type, target_count)
 
-                inline_buttons = []
-                app_cfg = Utils.read_json_file(DATA_DIR / "app.json") or {}
-                for strat_id, sdata in (app_cfg.get("active_strategies") or {}).items():
-                    inline_buttons.append([
-                        InlineKeyboardButton(
-                            text=f"📥 Применить в {strat_id}",
-                            callback_data=f"cb_selector_apply:{strat_id}"
-                        )
-                    ])
-
-                inline_buttons.append([
-                    InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")
-                ])
+                inline_buttons = [
+                    [InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")],
+                    [InlineKeyboardButton(text="🔙 Закрыть", callback_data="del_cancel")]
+                ]
 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=inline_buttons)
                 await status_msg.edit_text(report_text, reply_markup=keyboard, parse_mode="HTML")
@@ -2530,31 +2742,11 @@ class TelegramReceiver:
 
         @self.dp.callback_query(F.data.startswith("cb_selector_apply:"))
         async def process_cb_selector_apply(callback: CallbackQuery, state: FSMContext):
-            strat_id = callback.data.split(":", 1)[1]
-            symbols = getattr(self, "_last_selector_results", None)
-            if not symbols:
-                await callback.answer("⚠️ Срез монет устарел или не найден. Запустите селектор снова.", show_alert=True)
-                return
-
-            await callback.answer("Применяю монеты под купол...")
-            try:
-                from CORE.SELECTOR.coin_selection_service import CoinSelectionService
-                service = CoinSelectionService(bot_core=self.bot_core)
-                ok = await service.apply_coins_to_strategy(strat_id, symbols)
-                if ok:
-                    text = (
-                        f"✅ <b>Обойма стратегии <code>{strat_id}</code> успешно обновлена!</b>\n\n"
-                        f"🎯 <b>Новые монеты ({len(symbols)}):</b>\n"
-                        f"<code>{', '.join(symbols)}</code>\n\n"
-                        f"📦 Рантайм-конфиги пересобраны через StrategyApplicator.\n"
-                        f"🔄 StrategyRegistry и клиенты биржи синхронизированы."
-                    )
-                    await callback.message.answer(text, parse_mode="HTML")
-                else:
-                    await callback.message.answer(f"❌ Не удалось применить монеты в стратегию <code>{strat_id}</code>.")
-            except Exception as e:
-                logger.error(f"Error in selector apply: {e}", exc_info=True)
-                await callback.message.answer(f"❌ Ошибка применения монет: {e}")
+            await callback.answer(
+                "ℹ️ Прямое применение монет из селектора отключено в целях безопасности баланса.\n"
+                "Селектор носит сугубо информационный характер. Для добавления монет используйте меню 'Set Coins' или команды стратегий.",
+                show_alert=True
+            )
 
         # =========================================================
         # /sonnik - VOLATILITY SCANNER
@@ -2745,7 +2937,7 @@ class TelegramReceiver:
                 )
             else:
                 text = "<b>🔔 Уведомления по куполам стратегий:</b>\n\n"
-                strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
+                strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core, "strategy_registry") and hasattr(self.bot_core.strategy_registry, "get_active_strategies") else (self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {})
                 for sid, scfg in strats.items():
                     sn_cfg = scfg.notifications_cfg
                     en_str = "✅" if sn_cfg.get("enabled", True) else "❌"
@@ -2862,7 +3054,7 @@ class TelegramReceiver:
                 ])
             else:
                 text = "<b>🛑 Авто-Закрытие по куполам стратегий:</b>\n\n"
-                strats = self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {}
+                strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core, "strategy_registry") and hasattr(self.bot_core.strategy_registry, "get_active_strategies") else (self.bot_core.strategy_registry.active_strategies if hasattr(self.bot_core, "strategy_registry") else {})
                 for sid, scfg in strats.items():
                     sac = scfg.auto_closing_cfg
                     pos_th = sac.get("positive", {}).get("threshold")
@@ -3117,7 +3309,21 @@ class TelegramReceiver:
 
     async def start(self):
         logger.info("Starting Telegram Receiver...")
-        await self.dp.start_polling(self.bot)
+        try:
+            await self.dp.start_polling(self.bot)
+        finally:
+            await self.stop()
+
+    async def stop(self):
+        try:
+            await self.dp.stop_polling()
+        except Exception:
+            pass
+        try:
+            if self.bot and hasattr(self.bot, "session") and self.bot.session:
+                await self.bot.session.close()
+        except Exception:
+            pass
 
 
 def build_rotation_inline_keyboard(req_id: str, count: int = 1) -> dict:

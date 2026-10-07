@@ -29,36 +29,70 @@ class RuntimeFsmManager:
         self.backup_manager = None
         self.strategy_registry = strategy_registry
 
-    def get_runtime_path(self, symbol: str) -> Path:
+    def get_runtime_path(self, symbol: str, default_ext: str = ".pkl") -> Path:
         """
         Возвращает путь к рантайм-файлу позиции под куполом назначенной стратегии.
-        Пример: CFG/runtime/u9_omni_zenith_apex/zrousdt.json
+        Приоритет: .pkl (ультрабыстрый бинарный рантайм), fallback: .json (обратная совместимость).
+        Пример: CFG/runtime/u9_omni_zenith_apex/zrousdt.pkl
         """
         sym_lower = symbol.lower()
         if self.strategy_registry:
             strat_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
             if strat_id:
-                return self.runtime_dir / strat_id / f"{sym_lower}.json"
+                cand_pkl = self.runtime_dir / strat_id / f"{sym_lower}.pkl"
+                cand_json = self.runtime_dir / strat_id / f"{sym_lower}.json"
+                if cand_pkl.exists():
+                    return cand_pkl
+                if cand_json.exists():
+                    return cand_json
+                return self.runtime_dir / strat_id / f"{sym_lower}{default_ext}"
 
         # Поиск по подпапкам стратегий
         if self.runtime_dir.exists():
             for sub in self.runtime_dir.iterdir():
                 if sub.is_dir():
-                    candidate = sub / f"{sym_lower}.json"
-                    if candidate.exists():
-                        return candidate
+                    cand_pkl = sub / f"{sym_lower}.pkl"
+                    cand_json = sub / f"{sym_lower}.json"
+                    if cand_pkl.exists():
+                        return cand_pkl
+                    if cand_json.exists():
+                        return cand_json
 
-        return self.runtime_dir / f"{sym_lower}.json"
+        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
+        cand_root_json = self.runtime_dir / f"{sym_lower}.json"
+        if cand_root_pkl.exists():
+            return cand_root_pkl
+        if cand_root_json.exists():
+            return cand_root_json
+
+        return self.runtime_dir / f"{sym_lower}{default_ext}"
 
     def load_initial_caches(self, symbols: List[str]):
         """
-        Изначально грузим и фиксируем кеш рантайма из папки стратегии.
+        Изначально грузим и фиксируем кеш рантайма из папки стратегии (.pkl или .json).
         Здесь же проводим базовую валидацию конфигурации.
         """
+        import pickle
         for sym in symbols:
             path = self.get_runtime_path(sym)
             if path.exists():
-                data = Utils.read_json_file(path)
+                if str(path).endswith(".pkl"):
+                    try:
+                        with open(path, "rb") as fp:
+                            data = pickle.load(fp)
+                    except Exception as e:
+                        logger.error(f"[{sym}] Failed to load .pkl runtime: {e}, attempting json fallback")
+                        json_path = path.with_suffix(".json")
+                        data = Utils.read_json_file(json_path) if json_path.exists() else {}
+                else:
+                    data = Utils.read_json_file(path)
+                    # Миграция: сразу сохраняем в бинарный .pkl и удаляем старый .json
+                    pkl_target = path.with_suffix(".pkl")
+                    Utils.atomic_write_pickle(pkl_target, data)
+                    try:
+                        path.unlink()
+                    except Exception:
+                        pass
                 
                 # Валидация на совпадение количества усреднений и тейков
                 for side in ["LONG", "SHORT"]:
@@ -183,15 +217,22 @@ class RuntimeFsmManager:
         logger.debug(f"[{symbol}] {side} FSM state reset to default (kept custom config).")
 
     async def save_cache(self, symbol: str):
-        """Конкурентно-безопасное сохранение in-memory кеша на диск под куполом стратегии."""
+        """Конкурентно-безопасное сохранение in-memory кеша на диск под куполом стратегии (в .pkl)."""
         if symbol not in self.locks:
             self.locks[symbol] = asyncio.Lock()
             
         async with self.locks[symbol]:
             if symbol in self.caches:
-                path = self.get_runtime_path(symbol)
+                path = self.get_runtime_path(symbol, default_ext=".pkl").with_suffix(".pkl")
                 path.parent.mkdir(parents=True, exist_ok=True)
-                Utils.write_json_file(path, self.caches[symbol])
+                Utils.atomic_write_pickle(path, self.caches[symbol])
+                # Удаляем устаревший .json, если остался
+                json_path = path.with_suffix(".json")
+                if json_path.exists():
+                    try:
+                        json_path.unlink()
+                    except Exception:
+                        pass
                 if self.backup_manager:
                     self.backup_manager.mark_changed()
 

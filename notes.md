@@ -1118,3 +1118,23 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
    - Отсутствие умного грейса, трейлинга, деэскалации и рециркуляции превращает классический DCA в «пылесос ядовитого объема». На дистанции 14+ дней более $90\%$ всей заработанной прибыли окажется заморожено в нереализованном убытке.
 
 --- -->
+
+
+
+
+
+
+
+
+<!-- ,
+        "u16_titan_universal_alpha__off": {
+            "_comment_alias": "🛡️ [u16_titan_universal_alpha__off] Titan Universal Alpha [OFF]",
+            "_comment_pros": "Синтез абсолютной альфы: LIFO Subgrid Peeler L3..L8, Panic Damper TP (2.2% -> 0.65%), Cross-Side Recycling (50% прибыли сжигает просадку) и Knife Blocker 3.5%..89%.",
+            "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
+            "symbols": [],
+            "analytics": {
+                "start_balance_usdt": 171.92
+            }
+        } -->

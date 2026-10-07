@@ -27,7 +27,7 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
                 "symbols": ["GRASSUSDT", "ZROUSDT"],
                 "analytics": {"start_balance_usdt": 171.92}
             },
-            "u14_subgrid_level_recycler": {
+            "u16_titan_universal_alpha": {
                 "enabled": True,
                 "api_key_name": "API_KEY_ACCOUNT_2",
                 "api_secret_name": "API_SECRET_ACCOUNT_2",
@@ -108,15 +108,15 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
 
                 # Проверяем, что создано 2 независимых клиента под два разных аккаунта
                 self.assertIn("u6_symbiosis_gamma_fortress35", bot.clients)
-                self.assertIn("u14_subgrid_level_recycler", bot.clients)
+                self.assertIn("u16_titan_universal_alpha", bot.clients)
                 
                 client_u6 = bot.get_client_for_strategy("u6_symbiosis_gamma_fortress35")
-                client_u14 = bot.get_client_for_strategy("u14_subgrid_level_recycler")
-                self.assertNotEqual(client_u6, client_u14)
+                client_u16 = bot.get_client_for_strategy("u16_titan_universal_alpha")
+                self.assertNotEqual(client_u6, client_u16)
 
                 # Проверяем get_client_for_symbol
                 self.assertEqual(bot.get_client_for_symbol("GRASSUSDT"), client_u6)
-                self.assertEqual(bot.get_client_for_symbol("BTCUSDT"), client_u14)
+                self.assertEqual(bot.get_client_for_symbol("BTCUSDT"), client_u16)
 
     # ============================================================
     # 2. ТЕСТЫ COIN SELECTION SERVICE

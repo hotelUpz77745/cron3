@@ -34,14 +34,20 @@ class RadarNavigator:
     def __init__(self, bot_core: "BotCore"):
         self.bot_core = bot_core
 
-        # Строгое чтение конфигов через [''] без скрытых дефолтов
-        synergy_cfg = _CFG["radar_synergy"]
-        self.enabled: bool = synergy_cfg["enabled"]
-        self.mode: str = synergy_cfg["mode"]  # 'advisory', 'auto', 'disabled'
-        self.selector_type: str = synergy_cfg.get("selector_type", "samsonov_funnel")
+        # Чтение конфигурации ротации монет на уровне автозакрытия (как в полигоне)
+        if "radar_synergy" in _CFG:
+            rot_cfg = _CFG["radar_synergy"]
+            default_selector = "samsonov_funnel"
+        else:
+            rot_cfg = _CFG["auto_closing"]["positive"]["radar_rotation_on_close"]
+            default_selector = "alpha_coin_selector"
 
-        paths_cfg = _CFG["paths"]
-        radar_raw_path: str = paths_cfg["radar_dir"]
+        self.enabled: bool = bool(rot_cfg.get("enabled", False))
+        self.mode: str = rot_cfg.get("mode", "auto" if self.enabled else "disabled")
+        self.selector_type: str = str(rot_cfg.get("selector_type", default_selector))
+
+        paths_cfg = _CFG.get("paths", {})
+        radar_raw_path: str = paths_cfg.get("radar_dir", "../cron3PapperUniverses")
         p = Path(radar_raw_path)
         self.radar_dir: Path = (BASE_DIR / p).resolve() if not p.is_absolute() else p
         self.radar_stats_dir: Path = self.radar_dir / "ANALYTICS" / "STATS"
@@ -51,17 +57,17 @@ class RadarNavigator:
         # Монеты задаются строго вручную оператором в app.json.
         self.min_warmup_hours: Optional[float] = None
         self.poll_interval_sec: float = 0.0
-        self.target_count: int = int(synergy_cfg.get("target_coins_count", 4))
-        self.min_rotation_interval_hours: float = float(synergy_cfg.get("min_rotation_interval_hours", 0.0))
+        self.target_count: int = int(rot_cfg.get("target_coins_count", 4))
+        self.min_rotation_interval_hours: float = float(rot_cfg.get("min_universe_age_hours", rot_cfg.get("min_rotation_interval_hours", 23.0)))
 
-        hyst_cfg = synergy_cfg.get("hysteresis", {})
-        self.min_lead_pct: float = float(hyst_cfg.get("min_score_lead_pct", 35.0))
+        hyst_cfg = rot_cfg.get("hysteresis", {})
+        self.min_lead_pct: float = float(rot_cfg.get("min_score_lead_pct", hyst_cfg.get("min_score_lead_pct", 35.0)))
 
-        rot_triggers = synergy_cfg.get("rotation_triggers", {})
+        rot_triggers = rot_cfg.get("rotation_triggers", {})
         self.on_stagnation: bool = bool(rot_triggers.get("on_stagnation_ratchet", True))
         self.excluded_top_rule: str = str(rot_triggers.get("excluded_top_rule", ">5.0%"))
 
-        advisory_cfg = synergy_cfg.get("advisory", {})
+        advisory_cfg = rot_cfg.get("advisory", {})
         self.advisory_timeout_sec: float = float(advisory_cfg.get("timeout_sec", 120.0))
         self.advisory_timeout_action: str = str(advisory_cfg.get("timeout_action", "skip"))
 

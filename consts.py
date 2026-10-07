@@ -96,6 +96,8 @@ def _resolve_active_symbols() -> list[str]:
     active_syms: list[str] = []
     account_symbols: Dict[str, Dict[str, str]] = {}
     for strat_id, sdata in ACTIVE_STRATEGIES.items():
+        if strat_id.startswith("_") or not isinstance(sdata, dict):
+            continue
         if sdata.get("enabled", False):
             acc_id = str(sdata.get("api_key_name") or "API_KEY").strip()
             if acc_id not in account_symbols:
@@ -168,7 +170,7 @@ DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE.get("shift_interval_se
 DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
     "eval_window_sec": 300,
     "knife_blocker_enabled": False,
-    "knife_blocker": {"enabled": False, "threshold": 2},
+    "knife_blocker_threshold": 2,
     "profiting_size_weights": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
 DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {

@@ -92,26 +92,29 @@ class MomentumEngine:
     def is_knife_blocked(cls, opposite_closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> bool:
         """
         Проверяет правило Knife Blocker (Cross-Side Awareness).
-        Поддерживает форматы:
-        - 'knife_blocker_enabled': false / true
-        - 'knife_blocker': {'enabled': false / true, 'threshold': 2}
-        Если выключено, возвращает False.
+        Конфигурируется через единую плоскую сигнатуру:
+        - 'knife_blocker_enabled': bool
+        - 'knife_blocker_threshold': int (порог закрытых противоположных тейков)
+        Если выключено, всегда возвращает False.
         Если включено и opposite_closed_count >= threshold, блокирует вход в Шаг 0.
         """
         if not smart_size_cfg:
             return False
 
-        knife_cfg = smart_size_cfg.get("knife_blocker")
-        if isinstance(knife_cfg, dict):
-            if not knife_cfg.get("enabled", True):
-                return False
-            threshold = int(knife_cfg.get("threshold", 2))
-        else:
-            if not smart_size_cfg.get("knife_blocker_enabled", True):
-                return False
-            threshold = int(smart_size_cfg.get("knife_blocker_threshold", 2))
+        is_enabled = smart_size_cfg.get("knife_blocker_enabled")
+        if is_enabled is None and "knife_blocker" in smart_size_cfg:
+            kb = smart_size_cfg["knife_blocker"]
+            is_enabled = kb.get("enabled", False) if isinstance(kb, dict) else bool(kb)
 
-        return opposite_closed_count >= threshold
+        if not is_enabled:
+            return False
+
+        threshold = smart_size_cfg.get("knife_blocker_threshold")
+        if threshold is None and "knife_blocker" in smart_size_cfg:
+            kb = smart_size_cfg["knife_blocker"]
+            threshold = kb.get("threshold", 2) if isinstance(kb, dict) else 2
+
+        return opposite_closed_count >= int(threshold if threshold is not None else 2)
 
     @classmethod
     def calculate_smart_tp_multiplier(cls, closed_count: int, smart_tp_cfg: Optional[Dict[str, Any]]) -> float:

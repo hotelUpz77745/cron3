@@ -28,21 +28,46 @@ class TemplateManager:
         if strategy_id:
             strat_dir = self.runtime_dir / strategy_id
             strat_dir.mkdir(parents=True, exist_ok=True)
-            return strat_dir / f"{sym_lower}.json"
+            cand_pkl = strat_dir / f"{sym_lower}.pkl"
+            if cand_pkl.exists():
+                return cand_pkl
+            cand_json = strat_dir / f"{sym_lower}.json"
+            if cand_json.exists():
+                return cand_json
+            return cand_pkl
         if self.bot_core and hasattr(self.bot_core, "runtime_manager"):
             return self.bot_core.runtime_manager.get_runtime_path(symbol)
         if self.runtime_dir.exists():
             for sub in self.runtime_dir.iterdir():
-                if sub.is_dir() and (sub / f"{sym_lower}.json").exists():
-                    return sub / f"{sym_lower}.json"
-        return self.runtime_dir / f"{sym_lower}.json"
+                if sub.is_dir():
+                    cand_pkl = sub / f"{sym_lower}.pkl"
+                    if cand_pkl.exists():
+                        return cand_pkl
+                    cand_json = sub / f"{sym_lower}.json"
+                    if cand_json.exists():
+                        return cand_json
+        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
+        if cand_root_pkl.exists():
+            return cand_root_pkl
+        cand_root_json = self.runtime_dir / f"{sym_lower}.json"
+        if cand_root_json.exists():
+            return cand_root_json
+        return cand_root_pkl
 
     def generate_tg_template(self, symbol: str, strategy_id: Optional[str] = None) -> str:
         """Создает JSON шаблон для отправки в Telegram (чистые настройки)."""
         symbol = symbol.upper()
         target_file = self.get_runtime_path(symbol, strategy_id)
         if target_file.exists():
-            rt_data = Utils.read_json_file(target_file)
+            if str(target_file).endswith(".pkl"):
+                import pickle
+                try:
+                    with open(target_file, "rb") as fp:
+                        rt_data = pickle.load(fp)
+                except Exception:
+                    rt_data = {}
+            else:
+                rt_data = Utils.read_json_file(target_file)
             if rt_data:
                 resolved_strat = strategy_id
                 if not resolved_strat and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:

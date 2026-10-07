@@ -34,17 +34,26 @@ from typing import *
 
 
 async def run_app(bot, logger):
-    tasks = [bot.start()]
-    
+    tg_bot = None
     if TG_ENABLED:
         try:
             tg_bot = TelegramReceiver(bot)
-            tasks.append(tg_bot.start())
             logger.info("TGReceiver will be started alongside BotCore.")
         except Exception as e:
             logger.error(f"Failed to initialize TGReceiver: {e}")
-            
-    await asyncio.gather(*tasks)
+
+    tasks = [bot.start()]
+    if tg_bot:
+        tasks.append(tg_bot.start())
+
+    try:
+        await asyncio.gather(*tasks)
+    finally:
+        if tg_bot:
+            try:
+                await tg_bot.stop()
+            except Exception:
+                pass
 
 def send_telegram_fatal(msg: str):
     if not TG_TOKEN or not TG_ALLOWED_USERS:

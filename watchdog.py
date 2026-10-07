@@ -26,6 +26,27 @@ class WatchdogTGAdapter:
         self._chat_ids = chat_ids
         self._heartbeat_msg_id = None
         self._heartbeat_msg_time = 0
+        self._session: Optional[aiohttp.ClientSession] = None
+        self._session_lock: Optional[asyncio.Lock] = None
+
+    async def _get_session(self) -> aiohttp.ClientSession:
+        if self._session is not None and not self._session.closed:
+            return self._session
+        if self._session_lock is None:
+            self._session_lock = asyncio.Lock()
+        async with self._session_lock:
+            if self._session is not None and not self._session.closed:
+                return self._session
+            self._session = aiohttp.ClientSession()
+            return self._session
+
+    async def aclose(self):
+        if self._session is not None and not self._session.closed:
+            try:
+                await self._session.close()
+            except Exception:
+                pass
+        self._session = None
 
     def _get_chat_ids(self) -> list[int | str]:
         if self._chat_ids:
@@ -61,7 +82,8 @@ class WatchdogTGAdapter:
             return
 
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        async with aiohttp.ClientSession() as session:
+        try:
+            session = await self._get_session()
             for chat_id in chat_ids:
                 try:
                     payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
@@ -70,6 +92,9 @@ class WatchdogTGAdapter:
                 except Exception as e:
                     if logger:
                         logger.error(f"[WATCHDOG] Failed to send admin alert to {chat_id}: {e}")
+        except Exception as e:
+            if logger:
+                logger.error(f"[WATCHDOG] Session error sending alert: {e}")
 
     async def send_or_update_heartbeat(self, server_name: str, autodelete_sec: int = 180, logger=None):
         token = self.token or os.getenv("TG_TOKEN")
@@ -96,35 +121,35 @@ class WatchdogTGAdapter:
                 f"🕒 {time_utc_str}"
             )
 
-            async with aiohttp.ClientSession() as session:
-                if self._heartbeat_msg_id and (now - self._heartbeat_msg_time) >= autodelete_sec:
-                    delete_url = f"https://api.telegram.org/bot{token}/deleteMessage"
-                    payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id}
-                    try:
-                        async with session.post(delete_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)):
-                            pass
-                    except Exception:
+            session = await self._get_session()
+            if self._heartbeat_msg_id and (now - self._heartbeat_msg_time) >= autodelete_sec:
+                delete_url = f"https://api.telegram.org/bot{token}/deleteMessage"
+                payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id}
+                try:
+                    async with session.post(delete_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)):
                         pass
+                except Exception:
+                    pass
 
-                    self._heartbeat_msg_id = None
-                    self._heartbeat_msg_time = 0
+                self._heartbeat_msg_id = None
+                self._heartbeat_msg_time = 0
 
-                if self._heartbeat_msg_id:
-                    url = f"https://api.telegram.org/bot{token}/editMessageText"
-                    payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id, "text": msg, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                        res = await resp.json()
-                        if not res.get("ok"):
-                            self._heartbeat_msg_id = None
+            if self._heartbeat_msg_id:
+                url = f"https://api.telegram.org/bot{token}/editMessageText"
+                payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id, "text": msg, "parse_mode": "HTML"}
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    res = await resp.json()
+                    if not res.get("ok"):
+                        self._heartbeat_msg_id = None
 
-                if not self._heartbeat_msg_id:
-                    url = f"https://api.telegram.org/bot{token}/sendMessage"
-                    payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                        res = await resp.json()
-                        if res.get("ok"):
-                            self._heartbeat_msg_id = res["result"]["message_id"]
-                            self._heartbeat_msg_time = now
+            if not self._heartbeat_msg_id:
+                url = f"https://api.telegram.org/bot{token}/sendMessage"
+                payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
+                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                    res = await resp.json()
+                    if res.get("ok"):
+                        self._heartbeat_msg_id = res["result"]["message_id"]
+                        self._heartbeat_msg_time = now
 
         except Exception as e:
             if logger:
@@ -225,3 +250,8 @@ class LoopWatchdog:
 
     def stop(self):
         self.is_running = False
+
+    async def aclose(self):
+        self.stop()
+        if hasattr(self, "tg_adapter") and hasattr(self.tg_adapter, "aclose"):
+            await self.tg_adapter.aclose()

@@ -10,7 +10,7 @@ import copy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from consts import DATA_DIR, _CFG
+from consts import BASE_DIR, DATA_DIR, _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.SELECTOR.alpha_coin_selector import AlphaCoinSelector
@@ -38,18 +38,23 @@ class CoinSelectionService:
         else:
             # Прямое чтение пути к радару из app.json
             radar_rel = _CFG["paths"]["radar_dir"]
-            self.radar_stats_dir = (DATA_DIR / radar_rel / "ANALYTICS" / "STATS").resolve()
+            p = Path(radar_rel)
+            if not p.is_absolute():
+                p = (BASE_DIR / p).resolve()
+            self.radar_stats_dir = p / "ANALYTICS" / "STATS"
 
     def get_configured_target_count(self) -> int:
-        """Читает target_coins_count строго напрямую из CFG['radar_synergy']['target_coins_count']."""
-        val = _CFG["radar_synergy"]["target_coins_count"]
+        """Читает target_coins_count строго из auto_closing.positive.radar_rotation_on_close (с поддержкой radar_synergy для тестов)."""
+        rot_cfg = _CFG.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close") or _CFG.get("radar_synergy", {})
+        val = rot_cfg.get("target_coins_count", 4)
         if val is None:
             raise ValueError("[CoinSelectionService] target_coins_count в app.json не может быть None!")
         return int(val)
 
     def get_configured_selector_type(self) -> str:
-        """Читает selector_type строго напрямую из CFG['radar_synergy']['selector_type']."""
-        val = _CFG["radar_synergy"]["selector_type"]
+        """Читает selector_type строго из auto_closing.positive.radar_rotation_on_close (с поддержкой radar_synergy для тестов)."""
+        rot_cfg = _CFG.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close") or _CFG.get("radar_synergy", {})
+        val = rot_cfg.get("selector_type", "alpha_coin_selector")
         if val is None:
             raise ValueError("[CoinSelectionService] selector_type в app.json не может быть None!")
         return str(val)
@@ -80,12 +85,13 @@ class CoinSelectionService:
         limit = target_count if target_count is not None else self.get_configured_target_count()
         target_universe = universe_id
         if target_universe is None:
-            # Выбираем первую активную стратегию или дефолтную u6
             if self.bot_core and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
                 active_strats = list(self.bot_core.strategy_registry.active_strategies.keys())
-                target_universe = active_strats[0] if active_strats else "u6_symbiosis_gamma_fortress35"
+                target_universe = active_strats[0] if active_strats else "u6_symbiosis_gamma_fortress35__off"
             else:
-                target_universe = "u6_symbiosis_gamma_fortress35"
+                app_data = _CFG.get("active_strategies", {})
+                active_strats = [sid for sid, scfg in app_data.items() if isinstance(scfg, dict) and scfg.get("enabled", False)]
+                target_universe = active_strats[0] if active_strats else "u6_symbiosis_gamma_fortress35__off"
 
         selector = SamsonovFunnelSelector(radar_stats_dir=self.radar_stats_dir)
         funnel_data = selector.get_funnel_stages(universe_id=target_universe, target_count=limit)
@@ -139,6 +145,8 @@ class CoinSelectionService:
             # Читаем напрямую из app.json
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json") or {}
             for sid, sdata in (app_cfg.get("active_strategies") or {}).items():
+                if sid.startswith("_") or not isinstance(sdata, dict):
+                    continue
                 if sdata.get("enabled", False):
                     for sym in sdata.get("symbols", []):
                         s_clean = sym.upper().strip()
@@ -152,23 +160,53 @@ class CoinSelectionService:
 
     async def apply_coins_to_strategy(self, strategy_id: str, symbols: List[str]) -> bool:
         """
-        Применяет выбранный срез монет под купол указанной стратегии:
-        1. Записывает список symbols в app.json для strategy_id.
-        2. Генерирует изолированные рантайм-конфиги через StrategyApplicator.
-        3. Перезагружает StrategyRegistry в bot_core и инициализирует клиенты.
+        Применяет выбранный срез монет под купол указанной стратегии с жесткой валидацией:
+        1. Проверяет отсутствие дублирования символов на одном аккаунте (api_key_name) ДО записи в app.json.
+        2. Безопасно обновляет app.json.
+        3. Пересобирает рантайм-конфиги через StrategyApplicator.build_runtime_for_symbol.
+        4. Синхронизирует StrategyRegistry и боевой пул символов BotCore.
         """
+        self.last_error = ""
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path)
         if not app_data or "active_strategies" not in app_data:
-            logger.error("[CoinSelectionService] Не удалось загрузить active_strategies из app.json!")
+            self.last_error = "Не удалось загрузить active_strategies из app.json"
+            logger.error(f"[CoinSelectionService] {self.last_error}")
             return False
 
         active_strategies = app_data["active_strategies"]
         if strategy_id not in active_strategies:
-            logger.error(f"[CoinSelectionService] Стратегия '{strategy_id}' не найдена в app.json!")
+            self.last_error = f"Стратегия '{strategy_id}' не найдена в app.json"
+            logger.error(f"[CoinSelectionService] {self.last_error}")
             return False
 
         clean_symbols = [s.upper().strip() for s in symbols if s and s.strip()]
+        if not clean_symbols:
+            self.last_error = f"Список монет пуст! Отмена применения для '{strategy_id}'."
+            logger.error(f"[CoinSelectionService] {self.last_error}")
+            return False
+
+        # ПРЕ-ВАЛИДАЦИЯ: Защита от дублей на одном аккаунте Binance
+        target_account = str(active_strategies[strategy_id].get("api_key_name") or "API_KEY").strip()
+        for other_id, other_data in active_strategies.items():
+            if other_id == strategy_id or not isinstance(other_data, dict):
+                continue
+            if not other_data.get("enabled", False):
+                continue
+            other_acc = str(other_data.get("api_key_name") or "API_KEY").strip()
+            if other_acc == target_account:
+                other_symbols = [str(s).upper().strip() for s in other_data.get("symbols", [])]
+                conflicts = set(clean_symbols) & set(other_symbols)
+                if conflicts:
+                    conflicts_str = ", ".join(sorted(conflicts))
+                    self.last_error = (
+                        f"КОНФЛИКТ НА АККАУНТЕ '{target_account}': "
+                        f"Монеты [{conflicts_str}] уже закреплены за активной стратегией '{other_id}'. "
+                        f"На одном биржевом счете Binance монеты обязаны быть строго уникальными!"
+                    )
+                    logger.error(f"[CoinSelectionService] {self.last_error}")
+                    return False
+
         active_strategies[strategy_id]["symbols"] = clean_symbols
         active_strategies[strategy_id]["enabled"] = True
 
@@ -177,27 +215,34 @@ class CoinSelectionService:
             f"[CoinSelectionService] Стратегия '{strategy_id}' обновлена новыми монетами: {clean_symbols}"
         )
 
+        # Перезагрузка реестра в боевом ядре
+        if self.bot_core and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            try:
+                self.bot_core.strategy_registry.reload(active_strategies)
+                if hasattr(self.bot_core, "_init_clients"):
+                    self.bot_core._init_clients()
+                self.bot_core.symbols = self.bot_core.strategy_registry.get_all_active_symbols()
+                logger.info(f"[CoinSelectionService] Боевое ядро синхронизировано. Активный пул: {self.bot_core.symbols}")
+            except Exception as e:
+                self.last_error = f"Ошибка перезагрузки StrategyRegistry: {e}"
+                logger.error(f"[CoinSelectionService] {self.last_error}")
+                return False
+
         # Пересборка рантайм-конфигов
         try:
             from CORE.STRATEGY.strategy_applicator import StrategyApplicator
             applicator = StrategyApplicator()
             for sym in clean_symbols:
-                applicator.apply_strategy_to_symbol(strategy_id, sym)
-            logger.info(f"[CoinSelectionService] Рантайм-конфиги для {clean_symbols} пересобраны.")
+                strat_cfg = None
+                if self.bot_core and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    strat_cfg = self.bot_core.strategy_registry.get_strategy_for_symbol(sym)
+                if strat_cfg:
+                    applicator.build_runtime_for_symbol(sym, strat_cfg)
+                else:
+                    applicator.apply_strategy_to_symbol(strategy_id, sym)
+            logger.info(f"[CoinSelectionService] Рантайм-конфиги для {clean_symbols} успешно пересобраны.")
         except Exception as e:
             logger.error(f"[CoinSelectionService] Ошибка сборки рантаймов: {e}")
-
-        # Перезагрузка реестра и пула клиентов в боевом ядре
-        if self.bot_core:
-            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
-                try:
-                    self.bot_core.strategy_registry.reload(active_strategies)
-                    if hasattr(self.bot_core, "_init_clients"):
-                        self.bot_core._init_clients()
-                    self.bot_core.symbols = self.bot_core.strategy_registry.get_all_active_symbols()
-                    logger.info(f"[CoinSelectionService] Боевое ядро синхронизировано. Активный пул: {self.bot_core.symbols}")
-                except Exception as e:
-                    logger.error(f"[CoinSelectionService] Ошибка синхронизации BotCore: {e}")
 
         return True
 

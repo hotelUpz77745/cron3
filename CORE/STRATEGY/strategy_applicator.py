@@ -22,7 +22,7 @@ class StrategyApplicator:
     """
     Применяет параметры и переопределения стратегии к базовой конфигурации _base.json,
     соблюдает инвариант минимального тейк-профита >= 0.50%
-    и генерирует изолированные рантайм-конфигурации в CFG/runtime/<symbol>.json.
+    и генерирует изолированные бинарные рантайм-конфигурации в CFG/runtime/<strategy_id>/<symbol>.pkl.
     """
 
     DEFAULT_FALLBACK_BASE: Dict[str, Any] = {
@@ -185,23 +185,39 @@ class StrategyApplicator:
         force: bool = False
     ) -> Path:
         """
-        Генерирует рантайм-файл CFG/runtime/<strategy_id>/<symbol>.json на основе стратегии.
+        Генерирует бинарный рантайм-файл CFG/runtime/<strategy_id>/<symbol>.pkl на основе стратегии.
         Обновляет статические параметры (invest_size, leverage, grid, tp_map)
         и безопасно сохраняет состояние FSM для активных позиций.
         """
         runtime_dir = target_dir or (DATA_DIR / "runtime" / strategy.strategy_id)
         runtime_dir.mkdir(parents=True, exist_ok=True)
-        target_file = runtime_dir / f"{symbol.lower()}.json"
+        target_file = runtime_dir / f"{symbol.lower()}.pkl"
+        target_json = runtime_dir / f"{symbol.lower()}.json"
 
         side_configs = self.build_side_configs(strategy)
 
         existing = {}
         if target_file.exists():
-            existing = Utils.read_json_file(target_file)
+            try:
+                import pickle
+                with open(target_file, "rb") as fp:
+                    existing = pickle.load(fp)
+            except Exception:
+                existing = Utils.read_json_file(target_json) if target_json.exists() else {}
+        elif target_json.exists():
+            existing = Utils.read_json_file(target_json)
         else:
-            legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+            legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
+            legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
             if legacy_file.exists():
-                existing = Utils.read_json_file(legacy_file)
+                try:
+                    import pickle
+                    with open(legacy_file, "rb") as fp:
+                        existing = pickle.load(fp)
+                except Exception:
+                    existing = Utils.read_json_file(legacy_json) if legacy_json.exists() else {}
+            elif legacy_json.exists():
+                existing = Utils.read_json_file(legacy_json)
 
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():
@@ -260,13 +276,25 @@ class StrategyApplicator:
 
             new_data[side] = new_side
 
-        Utils.atomic_write_json(target_file, new_data, indent=4)
-        # Mirror to root runtime folder for backwards compatibility
-        root_legacy = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
-        try:
-            Utils.atomic_write_json(root_legacy, new_data, indent=4)
-        except Exception:
-            pass
+        Utils.atomic_write_pickle(target_file, new_data)
+
+        # Удаляем устаревший .json под куполом, если остался
+        if target_json.exists():
+            try:
+                target_json.unlink()
+            except Exception:
+                pass
+
+        # Очищаем устаревшие дубликаты файлов в корне runtime/
+        if runtime_dir != (DATA_DIR / "runtime"):
+            root_legacy_pkl = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
+            root_legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+            for lp in [root_legacy_pkl, root_legacy_json]:
+                if lp.exists():
+                    try:
+                        lp.unlink()
+                    except Exception:
+                        pass
 
         safe_name = strategy.name.encode("ascii", "ignore").decode("ascii").strip()
         logger.info(
@@ -288,3 +316,22 @@ class StrategyApplicator:
             path = self.build_runtime_for_symbol(symbol, strat, target_dir=target_dir, force=force)
             results[symbol] = path
         return results
+
+    def apply_strategy_to_symbol(
+        self,
+        strategy_id: str,
+        symbol: str,
+        registry: Optional[StrategyRegistry] = None,
+        target_dir: Optional[Path] = None,
+        force: bool = False
+    ) -> Path:
+        """
+        Метод-алиас для построения и сохранения рантайма для монеты по ID стратегии.
+        """
+        reg = registry or StrategyRegistry()
+        strat = reg.active_strategies.get(strategy_id)
+        if not strat and reg.is_symbol_active(symbol):
+            strat = reg.get_strategy_for_symbol(symbol)
+        if not strat:
+            raise KeyError(f"[StrategyApplicator] Стратегия '{strategy_id}' не найдена в реестре!")
+        return self.build_runtime_for_symbol(symbol, strat, target_dir=target_dir, force=force)

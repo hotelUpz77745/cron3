@@ -1306,7 +1306,7 @@ class AnalyticsManager:
                     "enabled": True,
                     "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))
                 }
-                for sid, scfg in self.strategy_registry.active_strategies.items()
+                for sid, scfg in self.strategy_registry.get_active_strategies().items()
             }
             entries = self.leaderboard_engine.generate_leaderboard(universes_meta)
             evaluated_coins = len(self.strategy_registry.get_all_active_symbols())
