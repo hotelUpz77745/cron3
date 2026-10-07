@@ -18,7 +18,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from c_log import UnifiedLogger
-from API.BINANCE.public import BinancePublic
+from API.BINANCE.public import BinancePublic, is_valid_symbol
 
 logger = UnifiedLogger("AlphaCoinSelector")
 VALID_SYMBOL_REGEX = re.compile(r"^[A-Za-z0-9]+$")
@@ -191,6 +191,12 @@ class AlphaCoinSelector:
 
         if not candidates_to_fetch:
             candidates_to_fetch = ["NEARUSDT", "SOONUSDT", "PUMPUSDT", "GRASSUSDT", "SOLUSDT", "DOGEUSDT"]
+
+        # Только латиница/цифры: тикеры с иероглифами и прочим отсекаются
+        _rejected = [s for s in candidates_to_fetch if not is_valid_symbol(s)]
+        if _rejected:
+            logger.warning(f"[AlphaCoinSelector] Отсечены нелатинские тикеры: {_rejected}")
+            candidates_to_fetch = [s for s in candidates_to_fetch if is_valid_symbol(s)]
 
         sem = asyncio.Semaphore(10)
 
