@@ -241,6 +241,9 @@ class TelegramReceiver:
             if isinstance(event.exception, TelegramRetryAfter):
                 logger.warning(f"[TG] Rate Limit exceeded, retry after {event.exception.retry_after}s")
                 return True
+            if "message is not modified" in str(event.exception).lower():
+                logger.debug(f"[TG] Message not modified (suppressed): {event.exception}")
+                return True
             logger.error(f"[TG] Unhandled exception: {event.exception}")
             return False
 
@@ -755,9 +758,17 @@ class TelegramReceiver:
             ])
 
             if edit and isinstance(target_msg, CallbackQuery):
-                await target_msg.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                try:
+                    await target_msg.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                except Exception as e:
+                    if "message is not modified" not in str(e).lower():
+                        logger.error(f"Error editing universe analytics screen: {e}")
             elif edit and isinstance(target_msg, Message):
-                await target_msg.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                try:
+                    await target_msg.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+                except Exception as e:
+                    if "message is not modified" not in str(e).lower():
+                        logger.error(f"Error editing universe analytics screen: {e}")
             elif isinstance(target_msg, CallbackQuery):
                 await target_msg.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
             else:

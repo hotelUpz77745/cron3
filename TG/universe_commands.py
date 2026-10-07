@@ -117,7 +117,8 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
             text, kb = render_universes_page(callback.from_user.id, bot_core, page=page)
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
         except Exception as e:
-            logger.error(f"Error in cb_universe_page: {e}")
+            if "message is not modified" not in str(e).lower():
+                logger.error(f"Error in cb_universe_page: {e}")
         await callback.answer()
 
     @dp.callback_query(F.data.startswith("use_univ:"))
