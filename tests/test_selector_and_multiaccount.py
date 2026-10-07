@@ -184,7 +184,7 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
     # 3. ТЕСТЫ TELEGRAM КЛАВИАТУР
     # ============================================================
     def test_tg_keyboards_have_set_coins_and_selector(self):
-        """Проверка наличия кнопок Set Coins и Selector в клавиатурах Telegram."""
+        """Проверка наличия кнопок Set Coins, Risk System и Set Universes в клавиатурах Telegram."""
         mock_bot_core = MagicMock()
         mock_bot_core.is_paused = False
         with patch("aiogram.Bot"), patch("TG.template_manager.TemplateManager"):
@@ -192,13 +192,18 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
             main_kb = tg._get_main_keyboard()
             all_main_buttons = [btn.text for row in main_kb.keyboard for btn in row]
             self.assertIn("⚙️ Set Coins", all_main_buttons)
-            self.assertIn("🎯 Selector", all_main_buttons)
+            self.assertIn("🛡️ Risk System", all_main_buttons)
+            self.assertIn("🌌 Set Universes", all_main_buttons)
+            self.assertIn("🏆 Leaderboard", all_main_buttons)
+            self.assertIn("📊 Analytics", all_main_buttons)
+            self.assertEqual(len(all_main_buttons), 10)
 
             set_coins_kb = tg._get_set_coins_keyboard()
             all_set_buttons = [btn.text for row in set_coins_kb.keyboard for btn in row]
-            self.assertIn("🎯 Selector", all_set_buttons)
-            self.assertIn("➕ Add", all_set_buttons)
-            self.assertIn("🗑️ Del", all_set_buttons)
+            self.assertIn("➕ Добавить монету", all_set_buttons)
+            self.assertIn("🗑️ Удалить монету", all_set_buttons)
+            self.assertIn("🔙 Назад", all_set_buttons)
+            self.assertEqual(len(all_set_buttons), 3)
 
 
 if __name__ == "__main__":

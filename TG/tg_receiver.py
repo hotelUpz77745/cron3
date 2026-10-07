@@ -28,11 +28,11 @@ from consts import _CFG
 import json
 from consts import DATA_DIR
 from c_utils import Utils
-import json, time, csv
+import json, time, csv, re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
-import csv
-from ANALYTICS.plotter import generate_coin_analytics
+from ANALYTICS.plotter import generate_coin_analytics, generate_equity_curve, generate_balance_curve
+from TG.universe_commands import setup_universe_handlers, get_user_universe_id, set_user_universe_id, render_universes_page
 import io
 from consts import DATA_DIR, _CFG
 import subprocess
@@ -93,6 +93,7 @@ class TelegramReceiver:
                 return
             return await handler(event, data)
 
+        setup_universe_handlers(self.dp, self.bot_core)
         self._register_handlers()
 
     def _get_main_keyboard(self):
@@ -104,17 +105,16 @@ class TelegramReceiver:
             ],
             [
                 KeyboardButton(text="🏆 Leaderboard"),
-                KeyboardButton(text="📊 Analytics"),
-                KeyboardButton(text="📜 Logs")
+                KeyboardButton(text="🌌 Set Universes"),
+                KeyboardButton(text="📊 Analytics")
             ],
             [
                 KeyboardButton(text="⚙️ Set Coins"),
-                KeyboardButton(text="🌌 Strategies"),
-                KeyboardButton(text="🎯 Selector")
+                KeyboardButton(text="🛡️ Risk System"),
+                KeyboardButton(text="📜 Logs")
             ],
             [
-                KeyboardButton(text="🚨 Close All"),
-                KeyboardButton(text="🛡️ Risk System")
+                KeyboardButton(text="🚨 Close All")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -122,21 +122,37 @@ class TelegramReceiver:
     def _get_set_coins_keyboard(self):
         keyboard = [
             [
-                KeyboardButton(text="🎯 Selector"),
-                KeyboardButton(text="🌌 Strategies"),
-                KeyboardButton(text="➕ Add")
+                KeyboardButton(text="➕ Добавить монету"),
+                KeyboardButton(text="🗑️ Удалить монету")
             ],
             [
-                KeyboardButton(text="🗑️ Del"),
-                KeyboardButton(text="✏️ Edit"),
-                KeyboardButton(text="📄 _base")
-            ],
-            [
-                KeyboardButton(text="❓ Help"),
-                KeyboardButton(text="🔙 Back")
+                KeyboardButton(text="🔙 Назад")
             ]
         ]
         return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+    def _get_universe_analytics(self, user_id: int):
+        current_uid = get_user_universe_id(user_id, self.bot_core)
+        meta = self._get_strategy_meta(current_uid)
+        univ_name = meta.get("name", current_uid)
+
+        analytics_path = ANALYTICS_STATS_DIR / f"analytics_{current_uid}.json"
+        if not analytics_path.exists():
+            matches = list(ANALYTICS_STATS_DIR.glob(f"analytics_{current_uid}*.json"))
+            if matches:
+                analytics_path = sorted(matches)[0]
+            else:
+                analytics_path = ANALYTICS_STATS_DIR / "analytics.json"
+
+        csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
+        if not csv_path.exists():
+            matches_csv = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{current_uid}*.txt"))
+            if matches_csv:
+                csv_path = sorted(matches_csv)[0]
+            else:
+                csv_path = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+
+        return current_uid, univ_name, analytics_path, csv_path
 
     def _get_strategy_meta(self, strat_id: str) -> dict:
         if hasattr(self, "bot") and getattr(self.bot, "strategy_registry", None):
@@ -689,31 +705,93 @@ class TelegramReceiver:
             await state.clear()
 
 
-        @self.dp.message(F.text == "📊 Analytics")
-        async def on_analytics(message: Message, state: FSMContext):
-            await state.clear()
-            
-            # Level 2 Protection: Synchronized on-demand update without heavy deep sync
-            msg = await message.answer("⏳ Синхронизация с Binance...")
+        async def _show_universe_analytics_screen(target_msg, user_id: int, edit: bool = False):
             try:
                 await self.bot_core.analytics.sync_lightweight_unrealized_pnl(self.bot_core.client)
-                await msg.delete()
             except Exception as e:
                 logger.error(f"Failed to sync lightweight unrealized pnl: {e}")
-            
+
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(user_id)
+            import html
+            clean_name = html.escape(univ_name)
+
+            net_str = "0.00$"
+            realized_str = "0.00$"
+            unrealized_str = "0.00$"
+            max_dd_str = "0.00$"
+            trades_cnt = 0
+            if analytics_path.exists():
+                try:
+                    adata = json.loads(analytics_path.read_text(encoding="utf-8"))
+                    net_str = f"{float(adata.get('net_profit_usdt', 0)):+.2f}$"
+                    realized_str = f"{float(adata.get('realized_pnl_net_usdt', adata.get('realized_pnl_usdt', 0))):+.2f}$"
+                    unrealized_str = f"{float(adata.get('unrealized_pnl_usdt', 0)):+.2f}$"
+                    max_dd_str = f"{float(adata.get('max_drawdown_usdt', 0)):.2f}$"
+                    trades_cnt = int(adata.get('total_trades', 0))
+                except Exception:
+                    pass
+
+            text = (
+                f"📊 <b>АНАЛИТИКА ВСЕЛЕННОЙ</b>\n"
+                f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
+                f"├ <b>Net Profit:</b> <b>{net_str}</b>\n"
+                f"├ <b>Realized:</b> {realized_str} | <b>Floating:</b> {unrealized_str}\n"
+                f"├ <b>Max Drawdown:</b> {max_dd_str}\n"
+                f"└ <b>Trades:</b> {trades_cnt}\n\n"
+                f"Выберите раздел аналитики для текущей вселенной:"
+            )
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🏆 Leaderboard Стратегий", callback_data="analytics_leaderboard")],
-                [InlineKeyboardButton(text="🌌 Стратегии (Вселенные)", callback_data="analytics_strats_menu")],
-                [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
+                [InlineKeyboardButton(text="🔄 Сменить вселенную", callback_data="univ_page:1"),
+                 InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart")],
                 [InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data="analytics_coin_menu")],
                 [InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data="analytics_ranking")],
-                [InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt")],
-                [InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report")],
+                [InlineKeyboardButton(text="🌍 Global Analytics", callback_data="analytics_global")],
+                [InlineKeyboardButton(text="📝 Лента сделок (TXT)", callback_data="analytics_txt"),
+                 InlineKeyboardButton(text="📄 Выгрузить весь отчет (TXT)", callback_data="analytics_full_report")],
                 [InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet")],
                 [InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data="analytics_set_balance"),
                  InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data="analytics_reset")]
             ])
-            await message.answer("Выберите раздел аналитики:", reply_markup=keyboard)
+
+            if edit and isinstance(target_msg, CallbackQuery):
+                await target_msg.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            elif edit and isinstance(target_msg, Message):
+                await target_msg.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            elif isinstance(target_msg, CallbackQuery):
+                await target_msg.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            else:
+                await target_msg.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.message(F.text == "📊 Analytics")
+        async def on_analytics(message: Message, state: FSMContext):
+            await state.clear()
+            await _show_universe_analytics_screen(message, message.from_user.id)
+
+        @self.dp.callback_query(F.data == "analytics_chart")
+        async def process_analytics_chart(callback: CallbackQuery):
+            await callback.answer()
+            current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id)
+            msg = await callback.message.answer(f"⏳ Генерация графика эквити для <code>{current_uid}</code>...", parse_mode="HTML")
+            try:
+                plot_path = generate_equity_curve(universe_id=current_uid)
+                if plot_path and os.path.exists(plot_path):
+                    await msg.delete()
+                    await callback.message.answer_photo(
+                        FSInputFile(plot_path),
+                        caption=f"📈 <b>Кривая баланса и эквити</b>: <b>{univ_name}</b> (<code>{current_uid}</code>)",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await msg.edit_text(f"❌ Не удалось построить график эквити для {current_uid}.")
+            except Exception as e:
+                logger.error(f"Error generating equity curve: {e}")
+                await msg.edit_text(f"❌ Ошибка генерации графика: {e}")
+
+        @self.dp.callback_query(F.data == "analytics_back_to_univ")
+        async def cb_analytics_back_to_univ(callback: CallbackQuery):
+            await callback.answer()
+            await _show_universe_analytics_screen(callback, callback.from_user.id, edit=True)
 
         @self.dp.message(Command("leaderboard"))
         @self.dp.message(F.text == "🏆 Leaderboard")
@@ -835,12 +913,12 @@ class TelegramReceiver:
                 btn_txt = f"{status_icon} {clean_name[:28]} ({sym_cnt}м)"
                 buttons.append([InlineKeyboardButton(text=btn_txt, callback_data=f"strat_analytics:{sid}")])
 
-            buttons.append([InlineKeyboardButton(text="🔙 Главное меню", callback_data="analytics_global")])
+            buttons.append([InlineKeyboardButton(text="🔙 Назад", callback_data="univ_menu_back")])
             text = (
-                "🌌 <b>Управление стратегиями (Купола):</b>\n\n"
+                "🌌 <b>Управление вселенными (Купола):</b>\n\n"
                 "🟢 — Включена в торги (Active)\n"
                 "🔴 — Отключена (На паузе)\n\n"
-                "<i>Нажмите на стратегию для просмотра детальной аналитики и переключения тумблера:</i>"
+                "<i>Нажмите на вселенную для переключения тумблера или просмотра метрик:</i>"
             )
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             if isinstance(target_msg_or_cb, CallbackQuery):
@@ -889,7 +967,7 @@ class TelegramReceiver:
             toggle_btn_text = "🔘 Тумблер: 🟢 ВКЛ (Нажмите для ВЫКЛ)" if is_enabled else "🔘 Тумблер: 🔴 ВЫКЛ (Нажмите для ВКЛ)"
 
             text = (
-                f"🌌 <b>СТРАТЕГИЯ: {strat_name}</b>\n"
+                f"🌌 <b>ВСЕЛЕННАЯ: {strat_name}</b>\n"
                 f"ID: <code>{strat_id}</code>\n"
                 f"Состояние: {status_str}\n"
                 f"🪙 Монеты ({len(coins_list)}): <b>{coins_str}</b>\n\n"
@@ -908,21 +986,35 @@ class TelegramReceiver:
             )
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text=toggle_btn_text, callback_data=f"toggle_strat:{strat_id}")],
-                [InlineKeyboardButton(text="📝 Леджер стратегии (TXT)", callback_data=f"strat_ledger:{strat_id}")],
-                [InlineKeyboardButton(text="🔙 К списку стратегий", callback_data="analytics_strats_menu")]
+                [InlineKeyboardButton(text="📝 Леджер вселенной (TXT)", callback_data=f"strat_ledger:{strat_id}")],
+                [InlineKeyboardButton(text="🔙 К списку вселенных", callback_data="analytics_strats_menu")]
             ])
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
 
+        @self.dp.message(Command("universes"))
         @self.dp.message(Command("strategies"))
         @self.dp.message(Command("strats"))
+        @self.dp.message(F.text == "🌌 Set Universes")
         @self.dp.message(F.text == "🌌 Strategies")
         @self.dp.message(F.text == "🌌 Стратегии")
         async def on_strategies_cmd(message: Message, state: FSMContext):
             await state.clear()
             await _render_strategies_menu(message)
 
+        @self.dp.callback_query(F.data == "univ_menu_back")
+        async def cb_univ_menu_back(callback: CallbackQuery):
+            await callback.answer()
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+            await callback.message.answer(f"<b>Control Panel</b>\nСтатус бота: {status}", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+
         @self.dp.callback_query(F.data == "analytics_strats_menu")
         async def cb_analytics_strats_menu(callback: CallbackQuery):
+            await callback.answer()
+            await _render_strategies_menu(callback)
             await callback.answer()
             await _render_strategies_menu(callback)
 
@@ -1367,151 +1459,269 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data == "analytics_coin_menu")
         async def process_analytics_coin_menu(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            message = callback.message
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
             
-            all_coins = set(self.bot_core.symbols)
-            analytics_path = ANALYTICS_DIR / "analytics.json"
+            universe_coins = set()
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies()
+                if current_uid in active_strats:
+                    universe_coins.update(active_strats[current_uid].symbols)
+                    
             if analytics_path.exists():
                 try:
                     data = json.loads(analytics_path.read_text(encoding="utf-8"))
                     if "per_coin" in data:
-                        all_coins.update(data["per_coin"].keys())
+                        universe_coins.update(data["per_coin"].keys())
                 except Exception:
                     pass
             
-            if not all_coins:
-                await message.answer("❌ Нет данных о монетах для аналитики.")
+            if not universe_coins:
+                await callback.message.answer(f"❌ Нет данных о монетах для аналитики вселенной <code>{current_uid}</code>.", parse_mode="HTML")
                 return
                 
             keyboard_buttons = []
-            for coin in sorted(all_coins):
+            row = []
+            for coin in sorted(universe_coins):
                 is_active = coin in self.bot_core.symbols
                 status_icon = "🟢" if is_active else "🔴"
-                keyboard_buttons.append([InlineKeyboardButton(text=f"🪙 {coin} {status_icon}", callback_data=f"analytics_coin_{coin}")])
+                row.append(InlineKeyboardButton(text=f"🪙 {coin} {status_icon}", callback_data=f"analytics_coin_{coin}"))
+                if len(row) == 2:
+                    keyboard_buttons.append(row)
+                    row = []
+            if row:
+                keyboard_buttons.append(row)
+            keyboard_buttons.append([InlineKeyboardButton(text="🔙 Назад к аналитике", callback_data="analytics_back_to_univ")])
                 
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-            await message.answer("Выберите монету для детальной аналитики:", reply_markup=keyboard)
+            await callback.message.answer(
+                f"🪙 <b>Монеты вселенной:</b> {univ_name} (<code>{current_uid}</code>)\n"
+                f"Выберите монету для детальной аналитики баланса:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
 
         @self.dp.callback_query(F.data.startswith("analytics_coin_"))
         async def process_analytics_coin_select(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
             symbol = callback.data.replace("analytics_coin_", "")
+            current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id)
             
             is_active = symbol in self.bot_core.symbols
             status_text = "🟢 Активна" if is_active else "🔴 Отключена"
             
-            analytics_path = ANALYTICS_DIR / "analytics.json"
             if analytics_path.exists():
                 try:
                     data = json.loads(analytics_path.read_text(encoding="utf-8"))
                     if "per_coin" in data and symbol in data["per_coin"]:
                         cdata = data["per_coin"][symbol]
-                        msg_coins = "<b>🪙 PER-COIN METRICS</b>\n\n"
-                        msg_coins += f"🔹 <b>{symbol}</b> ({status_text})\n"
-                        msg_coins += f"  • Trades: <b>{cdata.get('total_trades', 0)}</b> (Wins: <b>{cdata.get('winning_trades', 0)}</b> | <b>{cdata.get('winrate_pct', 0)}%</b>)\n"
-                        crealized = float(cdata.get('realized_pnl_usdt', 0))
-                        crealized_net = float(cdata.get('realized_pnl_net_usdt', 0))
-                        ccomm = float(cdata.get('commission_usdt', 0))
-                        cfund = float(cdata.get('funding_usdt', 0))
                         
-                        msg_coins += f"  • Net Profit: <b>{cdata.get('net_profit_usdt', 0)}</b> USDT\n"
-                        msg_coins += f"  • Realized (Gross): <b>{crealized}</b> USDT\n"
-                        msg_coins += f"  • Realized (Net): <b>{crealized_net}</b> USDT\n"
-                        msg_coins += f"  • Profit Range: Max <b>{cdata.get('max_net_profit', 0)}</b> / Min <b>{cdata.get('min_net_profit', 0)}</b>\n"
-                        msg_coins += f"  • Fees: Comm <b>{ccomm}</b> / Fund <b>{cfund}</b>\n"
-                        msg_coins += f"  • Unrealized PnL: <b>{cdata.get('current_drawdown', 0)}</b> USDT\n"
-                        msg_coins += f"  • Hist. Drawdown: Max <b>{cdata.get('max_drawdown', 0)}</b> / Min <b>{cdata.get('min_drawdown', 0)}</b>\n"
-                        msg_coins += f"  • Avg Daily Profit (Net): <b>{cdata.get('avg_daily_profit', 0)}</b> USDT\n"
-                        msg_coins += f"  • Grid Load: <b>{cdata.get('current_grid_load_pct', 0)}%</b> ({cdata.get('current_grid_load_usdt', 0)}/{cdata.get('grid_capacity_usdt', 0)} USDT | Max: <b>{cdata.get('max_grid_load_pct', 0)}%</b>)\n"
-                        msg_coins += f"  • Margin Used: <b>{cdata.get('current_margin_usdt', 0)}</b> USDT ({cdata.get('margin_load_pct', 0)}% balance | Max: <b>{cdata.get('max_margin_usdt', 0)}</b> USDT)\n"
-                        msg_coins += f"  • Max Position Size: <b>{cdata.get('max_position_size', 0)}</b> USDT\n"
-                        msg_coins += f"  • Recovery Factor: <b>{cdata.get('recovery_factor', 0)}</b>\n"
-                        msg_coins += f"  • Risk/Reward Ratio: <b>{cdata.get('risk_reward_ratio', 0)}</b>\n"
-                        msg_coins += f"  • DRME: <b>{cdata.get('DRME', 0)}</b>\n"
-                        msg_coins += f"  • MDME: <b>{cdata.get('MDME', 0)}</b>\n"
-                        vel_dict = data.get("trade_velocity", {})
-                        coin_vel = vel_dict.get("per_coin", {}).get(symbol, {})
-                        if coin_vel:
-                            c_speed = float(coin_vel.get("effective_speed") or 0.0)
-                            c_ratio = float(coin_vel.get("speed_ratio") or 1.0)
-                            c_stat = str(coin_vel.get("status_desc") or "NORMAL")
-                            msg_coins += f"  • Trade Velocity: <b>{c_speed:.2f} сд/ч</b> (x{c_ratio:.2f} | {c_stat})\n"
-                        msg_coins += "\n"
-                        await callback.message.answer(msg_coins, parse_mode="HTML")
+                        net_profit = float(cdata.get('net_profit_usdt', 0.0))
+                        realized = float(cdata.get('realized_pnl_usdt', 0.0))
+                        realized_net = float(cdata.get('realized_pnl_net_usdt', realized))
+                        max_np = float(cdata.get('max_net_profit', net_profit))
+                        min_np = float(cdata.get('min_net_profit', net_profit))
+                        cur_dd = float(cdata.get('current_drawdown', 0.0))
+                        max_dd = float(cdata.get('max_drawdown', 0.0))
+                        trades = int(cdata.get('total_trades', cdata.get('trades', 0)))
+                        wins = int(cdata.get('winning_trades', cdata.get('win_count', 0)))
+                        wr = float(cdata.get('winrate_pct', 0.0))
+                        comm = float(cdata.get('commission_usdt', 0.0))
+                        fund = float(cdata.get('funding_usdt', 0.0))
+                        gload = float(cdata.get('current_grid_load_pct', 0.0))
+                        mused = float(cdata.get('current_margin_usdt', 0.0))
+                        
+                        msg = (
+                            f"🪙 <b>ДЕТАЛИЗАЦИЯ БАЛАНСОВ: {symbol}</b> ({status_text})\n"
+                            f"🌌 <b>{univ_name}</b> (<code>{current_uid}</code>)\n\n"
+                            f"💰 <b>БАЛАНСЫ И PnL:</b>\n"
+                            f"  • <b>Текущий PnL (Floating):</b> <code>{cur_dd:+.2f} USDT</code>\n"
+                            f"  • <b>Пиковый Net Profit:</b> <code>{max_np:+.2f} USDT</code>\n"
+                            f"  • <b>Самый низкий Net Profit:</b> <code>{min_np:+.2f} USDT</code>\n"
+                            f"  • <b>Исторический Max Drawdown:</b> <code>{max_dd:.2f} USDT</code>\n"
+                            f"  • <b>Накопленный Net Profit:</b> <code>{net_profit:+.2f} USDT</code>\n"
+                            f"  • <b>Realized PnL (Net):</b> <code>{realized_net:+.2f} USDT</code> (Gross: <code>{realized:+.2f} $</code>)\n\n"
+                            f"📊 <b>ТОРГОВЫЕ МЕТРИКИ:</b>\n"
+                            f"  • Сделок: <b>{trades}</b> (Побед: {wins} | {wr:.1f}%)\n"
+                            f"  • Grid Load: <b>{gload:.1f}%</b> | Margin Used: <b>{mused:.2f} USDT</b>\n"
+                            f"  • Комиссии / Funding: Comm <b>{comm:.4f} $</b> | Fund <b>{fund:.4f} $</b>\n"
+                        )
+                        await callback.message.answer(msg, parse_mode="HTML")
                 except Exception as e:
                     logger.error(f"Error reading per_coin data for {symbol}: {e}")
 
+            # Автоматическая генерация и отправка графика движения баланса:
             try:
-                plot_path = generate_coin_analytics(symbol)
+                plot_path = generate_balance_curve(symbol, universe_id=current_uid)
                 if plot_path and os.path.exists(plot_path):
-                    await callback.message.answer_photo(FSInputFile(plot_path), caption=f"📈 Analytics: {symbol}")
+                    await callback.message.answer_photo(
+                        FSInputFile(plot_path),
+                        caption=f"📈 <b>Движение баланса</b>: <b>{symbol}</b> | {univ_name} (<code>{current_uid}</code>)",
+                        parse_mode="HTML"
+                    )
                 else:
-                    await callback.message.answer(f"❌ Не удалось сгенерировать график для {symbol}.")
+                    await callback.message.answer(f"❌ Не удалось сгенерировать график баланса для {symbol} ({current_uid}).")
             except Exception as e:
-                logger.error(f"Error generating coin analytics: {e}")
+                logger.error(f"Error generating coin balance plot: {e}")
                 await callback.message.answer(f"❌ Ошибка генерации графика для {symbol}: {e}")
 
         @self.dp.message(F.text == "⚙️ Set Coins")
         async def on_set_coins(message: Message, state: FSMContext):
             await state.clear()
-            await message.answer("<b>Управление монетами:</b>\nВыберите действие в меню.", reply_markup=self._get_set_coins_keyboard(), parse_mode="HTML")
+            active_strats = {}
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies()
+            else:
+                app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+                active_strats = app_data.get("active_strategies", {})
 
-        @self.dp.message(F.text == "🔙 Back")
-        async def on_back_from_coins(message: Message, state: FSMContext):
-            await state.clear()
-            status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
-            text = f"<b>Control Panel</b>\nCurrent Status: {status}"
-            await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+            if not active_strats:
+                await message.answer("⚠️ В системе нет активных куполов стратегий.", reply_markup=self._get_main_keyboard())
+                return
 
-        @self.dp.message(F.text == "❓ Help")
-        async def on_help_coins(message: Message, state: FSMContext):
-            help_text = (
-                "<b>Гайд по управлению монетами:</b>\n\n"
-                "➕ <b>Add</b>: Добавить новую монету. Бот возьмет шаблон из <code>_base.json</code> и сразу запустит монету в работу.\n"
-                "✏️ <b>Edit</b>: Редактировать настройки запущенной монеты. Бот пришлет текущий конфиг, вы его правите и отправляете обратно.\n"
-                "🗑️ <b>Del</b>: Удалить монету. Бот моментально удалит её из всех систем и перестанет следить за ней (ордера на бирже останутся).\n"
-                "📄 <b>_base</b>: Отредактировать глобальный шаблон (применяется при добавлении новых монет)."
+            buttons = []
+            for sid, scfg in active_strats.items():
+                if sid.startswith("_") or not isinstance(scfg, (dict, object)):
+                    continue
+                meta = self._get_strategy_meta(sid)
+                s_name = meta.get("name", sid)
+                clean_title = s_name.encode("ascii", "ignore").decode("ascii").strip() or sid
+                symbols = getattr(scfg, "symbols", []) if hasattr(scfg, "symbols") else (scfg.get("symbols", []) if isinstance(scfg, dict) else [])
+                cnt = len(symbols)
+                btn_text = f"🪐 {clean_title[:28]} ({cnt} мон.)"
+                buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_coins_dome:{sid}")])
+
+            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="set_coins_cancel")])
+            text = (
+                "⚙️ <b>Управление монетами куполов</b>\n\n"
+                "<b>Шаг 1: Выберите купол стратегии</b>, в котором хотите настроить список монет:"
             )
-            await message.answer(help_text, parse_mode="HTML")
+            await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "set_coins_cancel")
+        async def cb_set_coins_cancel(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            await state.clear()
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+            await callback.message.answer(f"<b>Control Panel</b>\nСтатус бота: {status}", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data.startswith("set_coins_dome:"))
+        async def process_set_coins_dome_select(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            sid = callback.data.split("set_coins_dome:")[1]
+            await state.update_data(selected_dome=sid)
+
+            meta = self._get_strategy_meta(sid)
+            s_name = meta.get("name", sid)
+
+            symbols = []
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies()
+                if sid in active_strats:
+                    symbols = list(active_strats[sid].symbols)
+            else:
+                app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+                symbols = list(app_data.get("active_strategies", {}).get(sid, {}).get("symbols", []))
+
+            symbols_str = ", ".join(sorted(symbols)) if symbols else "Нет монет"
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+
+            text = (
+                f"🌌 <b>Купол стратегии:</b> <code>{sid}</code>\n"
+                f"🏷️ <b>Название:</b> {s_name}\n"
+                f"🪙 <b>Текущие монеты:</b> {symbols_str}\n\n"
+                f"<i>Выберите действие в меню:</i>\n"
+                f"➕ <b>Добавить монету</b> — ввод тикера (старт на 1-м сигнале)\n"
+                f"🗑️ <b>Удалить монету</b> — удаление тикера из купола\n"
+                f"🔙 <b>Назад</b> — возврат в главное меню"
+            )
+            await callback.message.answer(text, reply_markup=self._get_set_coins_keyboard(), parse_mode="HTML")
 
         # =========================================================
         # ADD SYMBOL WITH STRATEGY ASSIGNMENT
         # =========================================================
-        @self.dp.message(F.text == "➕ Add")
+        @self.dp.message(F.text.in_({"➕ Добавить монету", "➕ Add"}))
         async def on_add_btn(message: Message, state: FSMContext):
-            await state.clear()
+            data = await state.get_data()
+            selected_dome = data.get("selected_dome")
+            if not selected_dome:
+                return await on_set_coins(message, state)
+
+            meta = self._get_strategy_meta(selected_dome)
+            s_name = meta.get("name", selected_dome)
+
+            await state.set_state(TGStates.waiting_for_add_symbol)
             await message.answer(
-                "➕ <b>Добавление новой монеты</b>\n\n"
-                "Введите символ монеты для добавления (например: <code>WIFUSDT</code>, <code>DOGEUSDT</code>):",
-                reply_markup=self._get_back_keyboard(),
+                f"➕ <b>Добавление монеты в купол</b> <code>{selected_dome}</code> ({s_name})\n\n"
+                f"✍️ Введите тикер монеты (например: <code>DOGEUSDT</code>):\n"
+                f"<i>Монета автоматически вступит в торговлю при получении первого сигнала.</i>",
+                reply_markup=self._get_set_coins_keyboard(),
                 parse_mode="HTML"
             )
-            await state.set_state(TGStates.waiting_for_add_symbol)
 
         @self.dp.message(TGStates.waiting_for_add_symbol)
         async def process_add_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Back":
-                return await on_set_coins(message, state)
-                
-            symbol = message.text.strip().upper()
-            if not symbol.endswith("USDT") or len(symbol) < 5:
-                await message.answer("❌ Символ должен заканчиваться на USDT (например: <code>WIFUSDT</code>). Попробуйте еще раз:", parse_mode="HTML")
+            if message.text in {"🔙 Назад", "🔙 Back"}:
+                await state.clear()
+                status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+                await message.answer(f"<b>Control Panel</b>\nСтатус бота: {status}", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
                 return
 
-            if symbol in self.bot_core.symbols:
-                strat_registry = getattr(self.bot_core, "strategy_registry", None)
-                sid = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else "активна"
+            raw_text = (message.text or "").strip()
+            symbol = raw_text.upper()
+
+            if not re.match(r'^[A-Z0-9]+USDT$', symbol) or len(symbol) < 5:
                 await message.answer(
-                    f"⚠️ Монета <b>{symbol}</b> уже запущена под стратегией <code>{sid}</code>!\n"
-                    f"Для изменения настроек используйте <b>Edit</b>.",
-                    reply_markup=self._get_set_coins_keyboard(),
+                    "❌ <b>Некорректный тикер!</b>\n"
+                    "Тикер должен содержать только латинские буквы/цифры и оканчиваться на USDT (например: <code>DOGEUSDT</code>).\n"
+                    "Попробуйте еще раз или нажмите <b>🔙 Назад</b>:",
                     parse_mode="HTML"
                 )
+                return
+
+            data = await state.get_data()
+            selected_dome = data.get("selected_dome")
+            if not selected_dome:
+                await message.answer("⚠️ Купол стратегии не выбран.", reply_markup=self._get_main_keyboard())
                 await state.clear()
                 return
 
-            await state.update_data(pending_symbol=symbol)
-            await _ask_strategy_for_symbol(message, state, symbol)
+            if symbol in self.bot_core.symbols:
+                await message.answer(
+                    f"⚠️ Монета <b>{symbol}</b> уже активна в системе!",
+                    reply_markup=self._get_set_coins_keyboard(),
+                    parse_mode="HTML"
+                )
+                return
+
+            try:
+                await self.bot_core.add_symbol(symbol, strategy_id=selected_dome)
+                symbols = []
+                if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    active_strats = self.bot_core.strategy_registry.get_active_strategies()
+                    if selected_dome in active_strats:
+                        symbols = list(active_strats[selected_dome].symbols)
+                symbols_str = ", ".join(sorted(symbols)) if symbols else symbol
+
+                await message.answer(
+                    f"✅ <b>Монета {symbol} успешно добавлена в купол <code>{selected_dome}</code>!</b>\n\n"
+                    f"⚡️ Рантайм инициализирован. Монета вступит в работу на 1-м сигнале.\n"
+                    f"🪙 <b>Текущие монеты купола:</b> {symbols_str}",
+                    reply_markup=self._get_set_coins_keyboard(),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error adding symbol {symbol} to {selected_dome}: {e}")
+                await message.answer(f"❌ Ошибка добавления монеты: {e}", reply_markup=self._get_set_coins_keyboard())
+
+            await state.set_state(None)
+            await state.update_data(selected_dome=selected_dome)
 
         async def _ask_strategy_for_symbol(msg_or_cb, state: FSMContext, symbol: str, edit_msg: bool = False):
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
@@ -1732,91 +1942,80 @@ class TelegramReceiver:
             )
 
         # =========================================================
-        # DEL SYMBOL
+        # УДАЛЕНИЕ МОНЕТЫ ИЗ ВЫБРАННОГО КУПОЛА
         # =========================================================
-        @self.dp.message(F.text == "🗑️ Del")
+        @self.dp.message(F.text.in_({"🗑️ Удалить монету", "🗑️ Del"}))
         async def on_del_btn(message: Message, state: FSMContext):
-            await state.clear()
-            active_coins = self.bot_core.symbols
-            if not active_coins:
-                await message.answer("Нет активных монет для удаления.", reply_markup=self._get_set_coins_keyboard())
+            data = await state.get_data()
+            selected_dome = data.get("selected_dome")
+            if not selected_dome:
+                return await on_set_coins(message, state)
+
+            symbols = []
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies()
+                if selected_dome in active_strats:
+                    symbols = list(active_strats[selected_dome].symbols)
+            else:
+                app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+                symbols = list(app_data.get("active_strategies", {}).get(selected_dome, {}).get("symbols", []))
+
+            if not symbols:
+                await message.answer(
+                    f"⚠️ В куполе <code>{selected_dome}</code> сейчас нет монет для удаления.",
+                    reply_markup=self._get_set_coins_keyboard(),
+                    parse_mode="HTML"
+                )
                 return
 
-            strat_registry = getattr(self.bot_core, "strategy_registry", None)
             buttons = []
             row = []
-            for coin in sorted(active_coins):
-                sid = strat_registry.get_strategy_id_for_symbol(coin) if strat_registry else ""
-                short_sid = sid.replace("u0_base_classic_", "").replace("u9_omni_", "")[:7] if sid else ""
-                tag = f" ({short_sid})" if short_sid else ""
-                row.append(InlineKeyboardButton(text=f"🗑️ {coin}{tag}", callback_data=f"del_pick_{coin}"))
+            for sym in sorted(symbols):
+                row.append(InlineKeyboardButton(text=f"❌ {sym}", callback_data=f"del_dome_coin:{selected_dome}:{sym}"))
                 if len(row) == 2:
                     buttons.append(row)
                     row = []
             if row:
                 buttons.append(row)
-            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="edit_side_cancel")])
+            buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="del_dome_coin_cancel")])
 
-            active_str = ", ".join(active_coins)
             await message.answer(
-                f"🗑️ <b>Удаление монеты</b>\n"
-                f"Активные монеты: <b>{active_str}</b>\n\n"
-                f"Нажмите на монету для удаления или введите символ сообщением:",
+                f"🗑️ <b>Удаление монеты из купола</b> <code>{selected_dome}</code>\n\n"
+                f"<i>Нажмите на монету для удаления:</i>",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
                 parse_mode="HTML"
             )
-            await state.set_state(TGStates.waiting_for_del_symbol)
 
-        @self.dp.callback_query(F.data.startswith("del_pick_"))
-        async def process_del_pick(callback: CallbackQuery, state: FSMContext):
+        @self.dp.callback_query(F.data.startswith("del_dome_coin:"))
+        async def process_del_dome_coin(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            symbol = callback.data.replace("del_pick_", "")
-            strat_registry = getattr(self.bot_core, "strategy_registry", None)
-            sid = strat_registry.get_strategy_id_for_symbol(symbol) if strat_registry else "—"
+            parts = callback.data.split(":")
+            dome_id = parts[1]
+            sym = parts[2]
+            try:
+                await self.bot_core.delete_symbol(sym)
+                await callback.message.edit_text(
+                    f"✅ Монета <b>{sym}</b> успешно удалена из купола <code>{dome_id}</code>.",
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Error deleting symbol {sym}: {e}")
+                await callback.message.edit_text(f"❌ Ошибка удаления монеты {sym}: {e}")
 
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text=f"🗑️ Да, удалить {symbol}", callback_data=f"del_confirm_{symbol}")],
-                [InlineKeyboardButton(text="❌ Отмена", callback_data="del_cancel")]
-            ])
-            await callback.message.edit_text(
-                f"⚠️ <b>Подтверждение удаления</b>\n\n"
-                f"Вы действительно хотите удалить <b>{symbol}</b> из стратегии <code>{sid}</code>?\n"
-                f"<i>(Ордера и открытая позиция на бирже останутся без изменений)</i>",
-                reply_markup=keyboard,
-                parse_mode="HTML"
-            )
-
-        @self.dp.callback_query(F.data.startswith("del_confirm_"))
-        async def process_del_confirm(callback: CallbackQuery, state: FSMContext):
+        @self.dp.callback_query(F.data == "del_dome_coin_cancel")
+        async def process_del_dome_coin_cancel(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            symbol = callback.data.replace("del_confirm_", "")
-            await self.bot_core.delete_symbol(symbol)
-            await callback.message.edit_text(
-                f"✅ Монета <b>{symbol}</b> успешно удалена из всех систем бота.",
-                parse_mode="HTML"
-            )
-            await state.clear()
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
 
-        @self.dp.callback_query(F.data == "del_cancel")
-        async def process_del_cancel(callback: CallbackQuery, state: FSMContext):
-            await callback.answer()
-            await callback.message.delete()
+        @self.dp.message(F.text.in_({"🔙 Назад", "🔙 Back"}))
+        async def on_back_from_coins(message: Message, state: FSMContext):
             await state.clear()
-
-        @self.dp.message(TGStates.waiting_for_del_symbol)
-        async def process_del_symbol(message: Message, state: FSMContext):
-            if message.text == "🔙 Back":
-                return await on_set_coins(message, state)
-                
-            symbol = message.text.strip().upper()
-            if symbol not in self.bot_core.symbols:
-                await message.answer(f"❌ Монета {symbol} не найдена в активных.", reply_markup=self._get_set_coins_keyboard())
-                await state.clear()
-                return
-
-            await self.bot_core.delete_symbol(symbol)
-            await message.answer(f"✅ Монета {symbol} успешно удалена из всех систем бота (ордера на бирже оставлены без изменений).", reply_markup=self._get_set_coins_keyboard())
-            await state.clear()
+            status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+            text = f"<b>Control Panel</b>\nСтатус бота: {status}"
+            await message.answer(text, reply_markup=self._get_main_keyboard(), parse_mode="HTML")
 
         # =========================================================
         # EDIT SYMBOL WITH STRATEGY GROUPING & REASSIGNMENT
