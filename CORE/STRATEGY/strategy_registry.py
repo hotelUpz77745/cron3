@@ -324,73 +324,71 @@ class StrategyRegistry:
         self._resolve_and_validate()
 
     def _build_mode_auto_closing(self, mode: str) -> Dict[str, Any]:
-        """Формирует конфигурацию auto_closing строго для целевого режима."""
+        """Формирует конфигурацию auto_closing строго для целевого режима напрямую из app.json."""
         mode = mode.lower().strip()
         base_ac = _CFG["auto_closing"]
+        neg_cfg = copy.deepcopy(base_ac["negative"])
+        pos_base = base_ac["positive"]
+        quant_base = pos_base["quant_base_usdt"]
+        quant_ref = pos_base["quant_reference_size"]
+
         if mode == "off":
             return {
                 "enabled": False,
                 "mode": "disabled",
                 "positive": {"enabled": False, "mode": "disabled"},
-                "negative": {"enabled": False, "threshold": None, "threshold_increment": None}
+                "negative": neg_cfg
             }
         elif mode == "fixed":
-            fixed_net_block = (base_ac.get("positive") or {}).get("fixed_net")
-            if not fixed_net_block or "target_net_usdt" not in fixed_net_block:
+            if "fixed_net" not in pos_base or "target_net_usdt" not in pos_base["fixed_net"]:
                 raise KeyError("[StrategyRegistry] В секции auto_closing.positive.fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
             pos_cfg = {
                 "enabled": True,
                 "mode": "fixed_net",
-                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
-                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
-                "fixed_net": copy.deepcopy(fixed_net_block)
+                "quant_base_usdt": quant_base,
+                "quant_reference_size": quant_ref,
+                "fixed_net": copy.deepcopy(pos_base["fixed_net"])
             }
             return {
                 "enabled": True,
                 "mode": "fixed_net",
                 "positive": pos_cfg,
-                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+                "negative": neg_cfg
             }
         elif mode == "toxic":
+            if "toxicity_adaptive" not in pos_base:
+                raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'toxicity_adaptive'!")
             pos_cfg = {
                 "enabled": True,
                 "mode": "toxicity_adaptive",
-                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
-                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
-                "toxicity_adaptive": base_ac.get("positive", {}).get("toxicity_adaptive") or {}
+                "quant_base_usdt": quant_base,
+                "quant_reference_size": quant_ref,
+                "toxicity_adaptive": copy.deepcopy(pos_base["toxicity_adaptive"])
             }
             return {
                 "enabled": True,
                 "mode": "toxicity_adaptive",
                 "positive": pos_cfg,
-                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+                "negative": neg_cfg
             }
         elif mode == "classic":
+            if "trailing_ratchet" not in pos_base:
+                raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'trailing_ratchet'!")
             pos_cfg = {
                 "enabled": True,
                 "mode": "iter_net_classic",
-                "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
-                "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
-                "trailing_ratchet": base_ac.get("positive", {}).get("trailing_ratchet") or {
-                    "enabled": True,
-                    "levels": [
-                        {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True},
-                        {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True},
-                        {"activation": 23.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True},
-                        {"activation": 36.5, "floor": 34.0, "min_age_hours": 0.0, "enabled": True},
-                        {"activation": 57.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True},
-                        {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True}
-                    ]
-                }
+                "quant_base_usdt": quant_base,
+                "quant_reference_size": quant_ref,
+                "trailing_ratchet": copy.deepcopy(pos_base["trailing_ratchet"])
             }
             return {
                 "enabled": True,
                 "mode": "iter_net_classic",
                 "positive": pos_cfg,
-                "negative": base_ac.get("negative") or {"threshold": None, "threshold_increment": None}
+                "negative": neg_cfg
             }
         else:
-            return {"enabled": False, "mode": "disabled"}
+            raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'fixed', 'classic', 'toxic', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
         """Загружает базу спецификаций стратегий из папки CFG/universes/*.json."""
