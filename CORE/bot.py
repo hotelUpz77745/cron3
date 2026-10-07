@@ -134,7 +134,16 @@ class BotCore:
         self._init_clients()
         
         # Кеш FSM-состояний в формате {symbol: {"LONG": PositionState, "SHORT": PositionState}}
-        self.fsm_states = {}
+        self.fsm_states = {
+            s: {
+                "LONG": PositionState(symbol=s, side="LONG"),
+                "SHORT": PositionState(symbol=s, side="SHORT")
+            } for s in self.symbols
+        }
+        if self.symbols:
+            self.runtime_manager.load_initial_caches(self.symbols)
+            self.runtime_configs = self.runtime_manager.caches
+            self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
         
         # Конкурентные локеры и флаги состояний закрытия
         self._closing_symbols: set[str] = set()
