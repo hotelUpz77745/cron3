@@ -1323,10 +1323,10 @@ class TelegramReceiver:
                     msg += f"▪️ Peak: <b>{peak_val}</b> USDT\n"
                     msg += f"▪️ Min (Bottom): <b>{min_val}</b> USDT\n\n"
                     
-                    realized = float(data.get('realized_pnl_usdt', 0))
-                    realized_net = float(data.get('realized_pnl_net_usdt', 0))
-                    comm = float(data.get('total_commission_usdt', 0))
-                    fund = float(data.get('total_funding_usdt', 0))
+                    realized = float(data.get('realized_pnl_usdt') or 0.0)
+                    realized_net = float(data.get('realized_pnl_net_usdt') or 0.0)
+                    comm = float(data.get('total_commission_usdt') or 0.0)
+                    fund = float(data.get('total_funding_usdt') or 0.0)
                     
                     msg += "<b>📈 Performance:</b>\n"
                     msg += f"▪️ Net Profit: <b>{data.get('net_profit_usdt', 0)}</b> USDT\n"
@@ -1346,10 +1346,15 @@ class TelegramReceiver:
                     
                     vel_dict = data.get("trade_velocity", {})
                     if vel_dict:
-                        eff_speed = vel_dict.get("avg_effective_speed", 0.0)
-                        speed_ratio = vel_dict.get("speed_ratio", 1.0)
-                        status_desc = vel_dict.get("status_desc", "NORMAL")
-                        msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
+                        eff_speed = float(vel_dict.get("avg_effective_speed") or 0.0)
+                        speed_ratio = float(vel_dict.get("speed_ratio") or 1.0)
+                        status_desc = str(vel_dict.get("status_desc") or "NORMAL")
+                        if vel_dict.get("avg_effective_speed") is None:
+                            acc_h = vel_dict.get("accumulation_hours", 0.0)
+                            min_h = vel_dict.get("min_accumulation_hours", 1.0)
+                            msg += f"▪️ Trade Velocity: <b>Накопление</b> ({acc_h}ч / {min_h}ч)\n"
+                        else:
+                            msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
                     msg += "\n"
                     
                     await message.answer(header + msg, parse_mode="HTML")
@@ -1427,9 +1432,9 @@ class TelegramReceiver:
                         vel_dict = data.get("trade_velocity", {})
                         coin_vel = vel_dict.get("per_coin", {}).get(symbol, {})
                         if coin_vel:
-                            c_speed = coin_vel.get("effective_speed", 0.0)
-                            c_ratio = coin_vel.get("speed_ratio", 1.0)
-                            c_stat = coin_vel.get("status_desc", "NORMAL")
+                            c_speed = float(coin_vel.get("effective_speed") or 0.0)
+                            c_ratio = float(coin_vel.get("speed_ratio") or 1.0)
+                            c_stat = str(coin_vel.get("status_desc") or "NORMAL")
                             msg_coins += f"  • Trade Velocity: <b>{c_speed:.2f} сд/ч</b> (x{c_ratio:.2f} | {c_stat})\n"
                         msg_coins += "\n"
                         await callback.message.answer(msg_coins, parse_mode="HTML")
