@@ -209,63 +209,7 @@ DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "eval_window_sec": 300,
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
-DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or {
-    "negative": {
-        "threshold": None,
-        "threshold_increment": None
-    },
-    "positive": {
-        "enabled": True,
-        "mode": "toxicity_adaptive",
-        "_desc_mode": "Режимы автоклозера: 'toxicity_adaptive' (Режим 2 - Рекомендуемый: инвентарный скор токсичности и эвакуация), 'iter_net_classic' (Режим 1: чистый Net Фибо-храповик 13$..89$), 'radar_sync_23h' (Режим 3: фиксация за 45 мин до ротации монет radar_synergy)",
-        "quant_base_usdt": 10.0,
-        "quant_reference_size": 600.0,
-        "toxicity_weights": {
-            "margin_load": 0.35,
-            "grid_depth": 0.30,
-            "float_ratio": 0.25,
-            "delta_recovery": 0.15
-        },
-        "toxicity_adaptive": {
-            "panic_toxicity_threshold": 0.70,
-            "emergency_exit_floor_mult": 0.30,
-            "min_panic_recovery": 0.40,
-            "relaxed_toxicity_threshold": 0.35,
-            "relaxed_min_level_idx": 1
-        },
-        "radar_sync_23h": {
-            "enabled": True,
-            "rotation_window_hours": 23.0,
-            "pre_rotation_lead_minutes": 45.0,
-            "daily_target_quant_mult": 1.5
-        },
-            "radar_rotation_on_close": {
-                "enabled": True,
-                "_desc_enabled": "Запуск ротации монет строго в момент сброса позиций автоклозером в 100% кэш.",
-                "selector_type": "samsonov_funnel",
-                "_desc_selector_type": "'samsonov_funnel' (по телеметрии Радара) или 'alpha_coin_selector' (по свечам волатильности).",
-                "target_coins_count": 4,
-                "_desc_target_coins_count": "Целевое количество монет в обойме стратегии.",
-                "min_score_lead_pct": 35.0,
-                "_desc_min_score_lead_pct": "Порог гистерезиса (+35%): кандидат заменяет худшую монету только если его скор выше минимум на 35%.",
-                "quant_base_usdt": 10.0,
-                "quant_reference_size": 600.0
-            },
-            "trailing_ratchet": {
-                "enabled": True,
-                "quant_base_usdt": 10.0,
-                "quant_reference_size": 600.0,
-                "levels": [
-                    {"activation": 8.0, "floor": 5.5, "min_age_hours": 24.0, "enabled": True, "_desc": "L0: Затяжная стагнация (24h+)"},
-                    {"activation": 15.5, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L1: Институциональный старт (Фибо 13.0)"},
-                    {"activation": 24.5, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L2: Уверенное Фибо-движение (Фибо 21.0)"},
-                    {"activation": 39.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L3: Сильный тренд (Фибо 34.0)"},
-                    {"activation": 63.5, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L4: Импульсный памп (Фибо 55.0)"},
-                    {"activation": 89.0, "floor": 89.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L5: Мега-ралли (Фибо 89.0)"}
-                ]
-            }
-        }
-    }
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG["auto_closing"]
 
 # ============================================================
 # LOGGING

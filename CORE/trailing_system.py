@@ -477,7 +477,9 @@ class ToxicityEngine:
         if not fixed_cfg.get("enabled", True):
             return False, None, ""
 
-        raw_target = float(fixed_cfg.get("target_net_usdt", 21.0))
+        if "target_net_usdt" not in fixed_cfg:
+            raise KeyError("[TrailingSystem] В конфигурации fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
+        raw_target = float(fixed_cfg["target_net_usdt"])
         if fixed_cfg.get("scale_by_invest_size", False):
             target_fixed = round(raw_target * scale_factor, 2)
         else:

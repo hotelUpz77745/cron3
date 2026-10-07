@@ -353,15 +353,14 @@ class AutoCloser:
             elif strat_id.endswith("__fixed"):
                 mode = "fixed"
             else:
-                strat_modes = strat_app_cfg.get("modes") or getattr(strat_cfg, "modes", None)
-                if strat_modes and isinstance(strat_modes, list) and len(strat_modes) > 0:
-                    raw_m = strat_modes[0]
-                else:
-                    raw_m = (
-                        (strat_auto_cfg or {}).get("mode")
-                        or ((strat_auto_cfg or {}).get("positive") or {}).get("mode")
-                        if isinstance(strat_auto_cfg, dict) else None
-                    )
+                raw_m = (
+                    strat_app_cfg.get("mode")
+                    or getattr(strat_cfg, "mode", None)
+                    or getattr(strat_cfg, "auto_closing_mode", None)
+                    or (strat_app_cfg.get("modes")[0] if isinstance(strat_app_cfg.get("modes"), list) and strat_app_cfg.get("modes") else None)
+                    or ((strat_auto_cfg or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
+                    or (((strat_auto_cfg or {}).get("positive") or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
+                )
                 raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
                 if raw_m_str in ("classic", "iter_net_classic", "trailing_ratchet"):
                     mode = "classic"

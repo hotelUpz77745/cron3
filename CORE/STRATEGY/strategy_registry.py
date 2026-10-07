@@ -168,7 +168,7 @@ class StrategyConfig:
 
         # 4. Купол Авто-закрытия (Auto-closing Dome): берется из стратегии, либо базовый шаблон из app.json
         # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из app.json с переопределениями стратегии
-        base_ac = copy.deepcopy(_CFG.get("auto_closing") or DEFAULT_AUTO_CLOSING)
+        base_ac = copy.deepcopy(_CFG["auto_closing"])
         override_ac = (
             self.active_settings.get("auto_closing")
             or raw_meta.get("auto_closing")
@@ -182,16 +182,22 @@ class StrategyConfig:
                     base_ac[k] = v
         self.auto_closing_cfg: Dict[str, Any] = base_ac
 
-        # 5. Купол Режимов (Modes Dome): задается строго под куполом стратегии
-        modes_val = (
-            self.active_settings.get("modes")
-            or raw_meta.get("modes")
-            or self.overrides.get("modes")
+        # 5. Купол Режима Автозакрытия (Mode Dome): строго строковый тип
+        mode_val = (
+            self.active_settings.get("mode")
+            or raw_meta.get("auto_closing_mode")
+            or raw_meta.get("mode")
+            or self.overrides.get("mode")
         )
-        if modes_val:
-            self.modes: List[str] = modes_val if isinstance(modes_val, list) else [str(modes_val)]
+        if not mode_val and self.active_settings.get("modes"):
+            legacy_m = self.active_settings.get("modes")
+            mode_val = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
+
+        if mode_val and isinstance(mode_val, str):
+            self.mode: str = mode_val.lower().strip()
         else:
-            self.modes: List[str] = ["off"]
+            self.mode = "off"
+        self.auto_closing_mode: str = self.mode
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
@@ -278,6 +284,11 @@ class StrategyConfig:
     def tp_map(self) -> Dict[str, Any]:
         return (self.raw_meta.get("LONG") or {}).get("tp_map") or (self.raw_meta.get("SHORT") or {}).get("tp_map") or self.overrides.get("tp_map", {})
 
+    @property
+    def modes(self) -> List[str]:
+        """Обратная совместимость: возвращает список с текущим строковым режимом."""
+        return [self.mode]
+
     def __repr__(self) -> str:
         return f"<StrategyConfig id='{self.strategy_id}' name='{self.name}' symbols={self.symbols}>"
 
@@ -315,7 +326,7 @@ class StrategyRegistry:
     def _build_mode_auto_closing(self, mode: str) -> Dict[str, Any]:
         """Формирует конфигурацию auto_closing строго для целевого режима."""
         mode = mode.lower().strip()
-        base_ac = _CFG.get("auto_closing") or copy.deepcopy(DEFAULT_AUTO_CLOSING)
+        base_ac = _CFG["auto_closing"]
         if mode == "off":
             return {
                 "enabled": False,
@@ -324,15 +335,15 @@ class StrategyRegistry:
                 "negative": {"enabled": False, "threshold": None, "threshold_increment": None}
             }
         elif mode == "fixed":
+            fixed_net_block = (base_ac.get("positive") or {}).get("fixed_net")
+            if not fixed_net_block or "target_net_usdt" not in fixed_net_block:
+                raise KeyError("[StrategyRegistry] В секции auto_closing.positive.fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
             pos_cfg = {
                 "enabled": True,
                 "mode": "fixed_net",
                 "quant_base_usdt": base_ac.get("positive", {}).get("quant_base_usdt", 10.0),
                 "quant_reference_size": base_ac.get("positive", {}).get("quant_reference_size", 600.0),
-                "fixed_net": base_ac.get("positive", {}).get("fixed_net") or {
-                    "target_net_usdt": 21.0,
-                    "scale_by_invest_size": False
-                }
+                "fixed_net": copy.deepcopy(fixed_net_block)
             }
             return {
                 "enabled": True,
@@ -382,7 +393,7 @@ class StrategyRegistry:
             return {"enabled": False, "mode": "disabled"}
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу шаблонов: модульная папка CFG/universes/*.json."""
+        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json."""
         data: Dict[str, Dict[str, Any]] = {}
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
@@ -397,35 +408,6 @@ class StrategyRegistry:
                     if k not in data:
                         data[k] = v
 
-        # Автоматическое размножение чистых шаблонов-архетипов на режимы автоклозера (внешне из app.json)
-        expanded_variants: Dict[str, Dict[str, Any]] = {}
-        all_candidate_modes = ["fixed", "off", "classic", "toxic"]
-        for uid, udata in list(data.items()):
-            # Проверяем, является ли шаблон чистым архетипом (без суффикса)
-            is_suffixed = any(uid.endswith(sfx) for sfx in ("__off", "__classic", "__fixed", "__toxic"))
-            if not is_suffixed:
-                clean_name = udata.get("name", uid)
-                for m in all_candidate_modes:
-                    m_key = m.lower().strip()
-                    variant_id = f"{uid}__{m_key}"
-                    if variant_id not in data and variant_id not in expanded_variants:
-                        v_copy = copy.deepcopy(udata)
-                        v_copy.pop("modes", None)
-                        v_copy["auto_closing_mode"] = m_key
-                        v_copy["name"] = f"[{variant_id}] {clean_name} [{m_key.upper()}]"
-                        ac_block = self._build_mode_auto_closing(m_key)
-                        v_copy["auto_closing"] = ac_block
-                        expanded_variants[variant_id] = v_copy
-            else:
-                for sfx in ("__off", "__classic", "__fixed", "__toxic"):
-                    if uid.endswith(sfx):
-                        base_name = uid[:-len(sfx)]
-                        if base_name not in data and base_name not in expanded_variants:
-                            expanded_variants[base_name] = udata
-                        break
-
-        data.update(expanded_variants)
-
         if not data:
             raise FileNotFoundError(
                 f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены в {universes_dir}!"
@@ -436,6 +418,8 @@ class StrategyRegistry:
         """
         Проверяет наличие объявленных стратегий в базе и регистрирует символы.
         Поддерживает мультистратегичность и торговлю одинаковыми монетами под разными куполами/аккаунтами.
+        Каждая активная стратегия имеет детерминированное имя с суффиксом режима (__classic, __toxic, __fixed, __off)
+        и строго изолированный набор монет symbols.
         """
         self.active_strategies.clear()
         self.symbol_to_strategy.clear()
@@ -447,7 +431,7 @@ class StrategyRegistry:
         for strat_id, strat_settings in self.active_cfg.items():
             if strat_id.startswith("_") or not isinstance(strat_settings, dict):
                 continue
-            is_enabled = bool(strat_settings["enabled"])
+            is_enabled = bool(strat_settings.get("enabled", False))
             if not is_enabled:
                 continue
 
@@ -460,30 +444,34 @@ class StrategyRegistry:
                     clean_id = clean_id[:-len(sfx)]
                     break
 
-            strat_modes = strat_settings.get("modes") or ([suffix_mode] if suffix_mode else None) or getattr(self, "modes", None) or ["fixed"]
-            target_mode = (strat_modes[0] if isinstance(strat_modes, list) and strat_modes else str(strat_modes)).lower().strip()
+            raw_mode = strat_settings.get("mode")
+            if raw_mode is None and "modes" in strat_settings:
+                legacy_m = strat_settings["modes"]
+                raw_mode = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
 
-            variant_key = f"{clean_id}__{target_mode}"
-            if variant_key in self.universes_db:
-                raw_meta = copy.deepcopy(self.universes_db[variant_key])
-            elif strat_id in self.universes_db:
+            target_mode = (str(raw_mode) if raw_mode else (suffix_mode or "off")).lower().strip()
+
+            # Поиск спецификации базовой стратегии
+            if strat_id in self.universes_db:
                 raw_meta = copy.deepcopy(self.universes_db[strat_id])
             elif clean_id in self.universes_db:
                 raw_meta = copy.deepcopy(self.universes_db[clean_id])
-                ac_block = self._build_mode_auto_closing(target_mode)
-                raw_meta["auto_closing"] = ac_block
-                raw_meta["auto_closing_mode"] = target_mode
-                if "overrides" not in raw_meta or not isinstance(raw_meta["overrides"], dict):
-                    raw_meta["overrides"] = {}
-                raw_meta["overrides"]["auto_closing"] = ac_block
             else:
                 raise KeyError(
-                    f"[StrategyRegistry] Стратегия '{strat_id}' (или '{clean_id}') "
-                    f"отсутствует в базе шаблонов CFG/universes/*.json!"
+                    f"[StrategyRegistry] Спецификация стратегии '{clean_id}' (для купола '{strat_id}') "
+                    f"отсутствует в CFG/universes/*.json!"
                 )
 
-            # Прямое чтение списка монет (Правило 2)
-            raw_symbols: List[str] = strat_settings["symbols"]
+            # Накладываем автозакрытие строго под целевой строковый режим
+            ac_block = self._build_mode_auto_closing(target_mode)
+            raw_meta["auto_closing"] = ac_block
+            raw_meta["auto_closing_mode"] = target_mode
+            if "overrides" not in raw_meta or not isinstance(raw_meta["overrides"], dict):
+                raw_meta["overrides"] = {}
+            raw_meta["overrides"]["auto_closing"] = ac_block
+
+            # Прямое чтение списка монет купола (Правило 2)
+            raw_symbols: List[str] = strat_settings.get("symbols", [])
             strat_symbols = [s.upper().strip() for s in raw_symbols if s and s.strip()]
 
             strat_config = StrategyConfig(
@@ -492,14 +480,9 @@ class StrategyRegistry:
                 symbols=strat_symbols,
                 active_settings=strat_settings
             )
+            strat_config.mode = target_mode
             strat_config.auto_closing_mode = target_mode
             self.active_strategies[strat_id] = strat_config
-
-            # Регистрируем алиасы для взаимной однозначности в TG/утилитах
-            if strat_id != variant_key and variant_key not in self.active_strategies:
-                self.active_strategies[variant_key] = strat_config
-            if strat_id != clean_id and clean_id not in self.active_strategies:
-                self.active_strategies[clean_id] = strat_config
 
             acc_id = strat_config.get_account_id()
             if acc_id not in account_symbols:
@@ -532,7 +515,7 @@ class StrategyRegistry:
 
         self.all_active_symbols = resolved_symbols
         logger.info(
-            f"[StrategyRegistry] Loaded {len(self.active_strategies)} active strategies (including mode aliases). "
+            f"[StrategyRegistry] Loaded {len(self.active_strategies)} active strategies: {list(self.active_strategies.keys())}. "
             f"Active trading pool: {len(self.all_active_symbols)} symbols {self.all_active_symbols}."
         )
 
@@ -572,6 +555,10 @@ class StrategyRegistry:
         """Возвращает конфигурацию стратегии по ID или None."""
         if strategy_id in self.active_strategies:
             return self.active_strategies[strategy_id]
+        # Безопасный поиск если передан базовый ID без суффикса
+        for sid, scfg in self.active_strategies.items():
+            if sid.startswith(f"{strategy_id}__") or strategy_id.startswith(f"{sid}__"):
+                return scfg
         if hasattr(self, "universes_db") and strategy_id in self.universes_db:
             return self.universes_db[strategy_id]
         return None

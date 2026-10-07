@@ -52,7 +52,7 @@
             },
             "fixed_net": {
                 "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
-                "target_net_usdt": 21.0,
+                "target_net_usdt": 60.0,
                 "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
                 "scale_by_invest_size": false,
                 "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt."
@@ -126,9 +126,9 @@
     },
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit)",
     "active_strategies": {
-        "u96_omni_zenith_apex": {
-            "_comment_alias": "u96_omni_zenith_apex: Omni Zenith Apex + Knife Blocker 1",
-            "_comment_pros": "Survival ultra-scalper and cash gun: micro-takes 0.62%..1.0%, Knife Blocker th=1, high execution frequency without margin lock.",
+        "u96_omni_zenith_apex__fixed": {
+            "_comment_alias": "u96_omni_zenith_apex__fixed: Omni Zenith Apex + Knife Blocker 1 [FIXED]",
+            "_comment_pros": "Survival ultra-scalper and cash gun: micro-takes 0.62%..1.0%, Knife Blocker th=1, high execution frequency without margin lock, fixed net exit.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -136,15 +136,13 @@
                 "NEARUSDT",
                 "PUMPUSDT"
             ],
-            "modes": [
-                "off"
-            ],
+            "mode": "fixed",
             "analytics": {
                 "start_balance_usdt": 57
             }
         },
-        "u6_symbiosis_gamma_fortress35": {
-            "_comment_alias": "u6_symbiosis_gamma_fortress35: Copper Serpent (Gamma Fortress 35)",
+        "u6_symbiosis_gamma_fortress35__classic": {
+            "_comment_alias": "u6_symbiosis_gamma_fortress35__classic: Copper Serpent (Gamma Fortress 35) [CLASSIC]",
             "_comment_pros": "Capital Monarch and trend harvester: deep grid down to -89%, initial entry from -3.5%, Knife Blocker th=1, Panic Damper TP compressed to 0.50%, Fibonacci trailing.",
             "enabled": true,
             "api_key_name": "API_KEY",
@@ -152,15 +150,13 @@
             "symbols": [
                 "GRASSUSDT"
             ],
-            "modes": [
-                "classic"
-            ],
+            "mode": "classic",
             "analytics": {
                 "start_balance_usdt": 57
             }
         },
-        "u16_titan_universal_alpha": {
-            "_comment_alias": "u16_titan_universal_alpha: Titan Universal Alpha",
+        "u16_titan_universal_alpha__toxic": {
+            "_comment_alias": "u16_titan_universal_alpha__toxic: Titan Universal Alpha [TOXIC]",
             "_comment_pros": "Absolute alpha synthesis: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker th=1, dynamic toxicity exit.",
             "enabled": true,
             "api_key_name": "API_KEY",
@@ -168,9 +164,7 @@
             "symbols": [
                 "ZROUSDT"
             ],
-            "modes": [
-                "toxic"
-            ],
+            "mode": "toxic",
             "analytics": {
                 "start_balance_usdt": 57
             }

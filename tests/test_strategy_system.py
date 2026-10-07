@@ -125,6 +125,32 @@ class TestStrategySystem(unittest.TestCase):
         self.assertIn("u6_symbiosis_gamma_fortress35", strats)
         self.assertIn("u9_omni_zenith_apex", strats)
 
+        # 3. Кастомные списки монет и строковый mode для разных модификаций одной стратегии
+        dual_mode_active = {
+            "u16_titan_universal_alpha__classic": {
+                "enabled": True,
+                "mode": "classic",
+                "api_key_name": "API_KEY_ACC1",
+                "symbols": ["NEARUSDT", "BTCUSDT"]
+            },
+            "u16_titan_universal_alpha__toxic": {
+                "enabled": True,
+                "mode": "toxic",
+                "api_key_name": "API_KEY_ACC2",
+                "symbols": ["ZROUSDT", "ETHUSDT"]
+            }
+        }
+        dual_reg = StrategyRegistry(active_strategies_cfg=dual_mode_active)
+        self.assertEqual(len(dual_reg.get_active_strategies()), 2)
+        strat_classic = dual_reg.active_strategies["u16_titan_universal_alpha__classic"]
+        strat_toxic = dual_reg.active_strategies["u16_titan_universal_alpha__toxic"]
+        self.assertEqual(strat_classic.mode, "classic")
+        self.assertEqual(strat_toxic.mode, "toxic")
+        self.assertEqual(strat_classic.symbols, ["NEARUSDT", "BTCUSDT"])
+        self.assertEqual(strat_toxic.symbols, ["ZROUSDT", "ETHUSDT"])
+        self.assertEqual(strat_classic.auto_closing_cfg["mode"], "iter_net_classic")
+        self.assertEqual(strat_toxic.auto_closing_cfg["mode"], "toxicity_adaptive")
+
     def test_strategy_applicator_rule11_min_tp(self):
         """Тестирование Инварианта 4 (Правило 11: TP строго >= 0.50%)."""
         applicator = StrategyApplicator()

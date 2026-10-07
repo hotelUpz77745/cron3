@@ -69,7 +69,7 @@
         2. `ANALYTICS/LEDGERS/rotations_ledger.txt` — персистентный аудиторский текстовый журнал (Timestamp UTC, Strategy, Old Symbol, Old Score, New Symbol, New Score, Lead %, Rule, Mode).
 
 
-<!--  -->
+
 <!-- 
 ### 7.5. Полный перенос эвристик полигона, LIFO Subgrid Peeler U14/U16, AlphaCoinSelector и суточная ротация Штурмана
 
@@ -236,7 +236,7 @@
    - Полный прогон `python -m unittest discover tests "test_*.py"`: **144 теста: 142 OK, 2 SKIPPED, 0 FAILED, 0 ERRORS. Полная зеленая зона 100%.**
  -->
 
----
+<!-- ---
 
 ### 7.10. Эмпирический прорыв Knife Blocker (th=1 vs th=2) и Безопасные Тумблеры Стратегий
 
@@ -274,4 +274,22 @@
      - Ряд 2: `[🌌 Set Universes] [📊 Analytics]`
      - Ряд 3: `[⚙️ Set Coins] [🛡️ Risk System] [📜 Logs]`
      - Ряд 4: `[🚨 Close All]`
-     - Кнопка `🏆 Leaderboard` перемещена строго внутрь аналитики (в Биг Борд).
+     - Кнопка `🏆 Leaderboard` перемещена строго внутрь аналитики (в Биг Борд). -->
+
+### 7.12. Ликвидация «фабрики клонов» и переход на детерминированные суффиксные стратегии
+- **Контекст проблемы**:
+  В боевой бот (`cron3`) из бумажного бота (`cron3PapperUniverses`) ошибочно перекочевала концепция «архетипов стратегий» и автоматическое размножение вселенных по списку способов автозакрытия (`modes: [...]`). В боевой торговле это архитектурно неприменимо: под каждую модификацию стратегии (например, `u16__classic` vs `u16__toxic`) необходим свой **независимый список монет** `symbols` и индивидуальное распределение по биржевым аккаунтам.
+- **Архитектурные решения**:
+  1. **Ликвидация термина «архетип»**: в боевом боте стратегии детерминированы в [CFG/universes/*.json](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/) по базовым спецификациям (сетки, плечи, smart_grace, smart_size).
+  2. **Суффиксные идентификаторы в [CFG/app.json](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json)**:
+     - Ключи `active_strategies` строго детерминированы с суффиксом режима: `u96_omni_zenith_apex__fixed`, `u6_symbiosis_gamma_fortress35__classic`, `u16_titan_universal_alpha__toxic`.
+     - Массив `modes` заменен на строго строковое поле `"mode": "fixed" | "classic" | "toxic" | "off"`.
+     - У каждого торгового купола собственный изолированный массив `symbols`.
+  3. **Устранение «фабрики клонов» в [CORE/STRATEGY/strategy_registry.py](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py)**:
+     - Из `_load_universes_db()` удален цикл автоматического синтетического размножения.
+     - `_resolve_and_validate()` разрешает базовую спецификацию стратегии, применяет автозакрытие строго под строковый `mode` и регистрирует купол по каноническому `strat_id`.
+   4. **Строгое соблюдение Правила 2 (Никаких магических дефолтов в коде)**:
+      - Значение `fixed_net.target_net_usdt` задается в одном месте — в [CFG/app.json](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json) и равно `60.0` USDT.
+      - В [trailing_system.py](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/trailing_system.py) и [strategy_registry.py](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/strategy_registry.py) полностью устранены скрытые фоллбэк-подмены. Параметры читаются строго напрямую: при отсутствии ключа выбрасывается фатальный `KeyError`.
+      - В [consts.py](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/consts.py) ликвидирован теневой хардкод-словарь: `DEFAULT_AUTO_CLOSING` читает напрямую `_CFG['auto_closing']`.
+   5. **100% покрытие тестами**: 159 тестов в песочнице проходят со статусом OK.
