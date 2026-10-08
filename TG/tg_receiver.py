@@ -3766,8 +3766,7 @@ class TelegramReceiver:
                 report_text = service.format_telegram_report(results, selector_type, target_count)
 
                 inline_buttons = [
-                    [InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")],
-                    [InlineKeyboardButton(text="🔙 Закрыть", callback_data="del_cancel")]
+                    [InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")]
                 ]
 
                 keyboard = InlineKeyboardMarkup(inline_keyboard=inline_buttons)

@@ -290,5 +290,5 @@ class CoinSelectionService:
                     f"   └ Сделок: <code>{trades}</code> | Resilience: <code>{resilience:.2f}</code>"
                 )
 
-        lines.append("\n💡 <i>Нажмите кнопку ниже, чтобы моментально применить этот срез под купол выбранной стратегии:</i>")
+        lines.append("\n💡 <i>Нажмите кнопку ниже для повторного сканирования:</i>")
         return "\n".join(lines)
