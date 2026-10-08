@@ -33,7 +33,7 @@
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_common.json.",
     "active_strategies": {
         "u16_titan_universal_alpha__fixed": {
-            "_comment_alias": "u16_titan_universal_alpha__fixed: Titan Universal Alpha (Кэш-Генератор №1) [FIXED]",
+            "_comment_alias": "u16_titan_universal_alpha__fixed: Тошиба (Кэш-Генератор №1) [FIXED]",
             "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, регулярная фиксация кэша в USDT при iter_net >= 60.0.",
             "enabled": true,
             "api_key_name": "API_KEY",
@@ -47,7 +47,7 @@
             }
         },
         "u16_titan_universal_alpha__fixed_b": {
-            "_comment_alias": "u16_titan_universal_alpha__fixed_b: Titan Universal Alpha (Кэш-Генератор №2) [FIXED]",
+            "_comment_alias": "u16_titan_universal_alpha__fixed_b: Тошиба (Кэш-Генератор №2) [FIXED B]",
             "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, плоская оборачиваемость Flat-7 и кастомный Fixed Net Take.",
             "template": "u16_titan_universal_alpha",
             "enabled": true,
@@ -61,7 +61,7 @@
                 "auto_closing": {
                     "positive": {
                         "fixed_net": {
-                            "target_net_usdt": 60.0
+                            "target_net_usdt": 120.0
                         }
                     }
                 }
@@ -71,7 +71,7 @@
             }
         },
         "u16_titan_universal_alpha__classic": {
-            "_comment_alias": "u16_titan_universal_alpha__classic: Titan Universal Alpha (Тренд-Харвестер) [CLASSIC]",
+            "_comment_alias": "u16_titan_universal_alpha__classic: Тошиба (Тренд-Харвестер) [CLASSIC]",
             "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, институциональный трейлинг пампов по сетке Фибоначчи L0..L5.",
             "enabled": true,
             "api_key_name": "API_KEY",
@@ -85,7 +85,7 @@
             }
         },
         "u16_titan_universal_alpha__toxic": {
-            "_comment_alias": "u16_titan_universal_alpha__toxic: Titan Universal Alpha (Хедж-Щит) [TOXIC]",
+            "_comment_alias": "u16_titan_universal_alpha__toxic: Тошиба (Хедж-Щит) [TOXIC]",
             "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, адаптивный выход при деградации инвентаря на токсичных трендах.",
             "enabled": true,
             "api_key_name": "API_KEY",

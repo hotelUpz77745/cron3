@@ -977,7 +977,20 @@ class TelegramReceiver:
             if hasattr(self.bot_core, "strategy_registry"):
                 strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
                 for sid, scfg in strats.items():
-                    strat_info.append(f"• <b>{scfg.name}</b>: <code>{', '.join(scfg.symbols)}</code>")
+                    mode_str = getattr(scfg, "mode", getattr(scfg, "auto_closing_mode", "off"))
+                    if mode_str == "fixed":
+                        pos_ac = getattr(scfg, "auto_closing_cfg", {}).get("positive", {})
+                        f_target = pos_ac.get("fixed_net", {}).get("target_net_usdt")
+                        badge = f"[FIXED ${float(f_target):g}]" if f_target else "[FIXED]"
+                    elif mode_str == "classic":
+                        badge = "[CLASSIC TRAILING]"
+                    elif mode_str == "toxic":
+                        badge = "[TOXIC ADAPTIVE]"
+                    elif mode_str == "off":
+                        badge = "[OFF]"
+                    else:
+                        badge = f"[{mode_str.upper()}]"
+                    strat_info.append(f"• <b>{scfg.name}</b> <code>{badge}</code>: <code>{', '.join(scfg.symbols)}</code>")
             strat_block = "\n".join(strat_info) if strat_info else "<i>Нет активных стратегий</i>"
 
             # Trade Velocity Engine

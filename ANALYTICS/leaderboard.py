@@ -67,8 +67,14 @@ class LeaderboardEngine:
         meta = meta or {}
         data = analytics_data if analytics_data is not None else (self.read_universe_analytics(universe_id) or {})
 
-        start_bal = float(data.get("start_balance_usdt", meta.get("start_balance_usdt", 150.0)))
-        cur_bal = float(data.get("cur_balance_usdt", start_bal))
+        meta_start = meta.get("start_balance_usdt")
+        total_trades_raw = int(data.get("total_trades", 0))
+        if meta_start is not None and (total_trades_raw == 0 or "start_balance_usdt" not in data):
+            start_bal = float(meta_start)
+            cur_bal = start_bal + float(data.get("net_profit_usdt", 0.0))
+        else:
+            start_bal = float(data.get("start_balance_usdt", meta_start or 150.0))
+            cur_bal = float(data.get("cur_balance_usdt", start_bal))
         net_profit = float(data.get("net_profit_usdt", 0.0))
         realized_pnl = float(data.get("realized_pnl_usdt", 0.0))
         unrealized_pnl = float(data.get("unrealized_pnl_usdt", 0.0))
@@ -113,7 +119,11 @@ class LeaderboardEngine:
             mode_badge = "[TOXIC]"
         elif universe_id.endswith("__fixed") or "__fixed" in universe_id:
             mode = "fixed"
-            mode_badge = "[FIXED]"
+            target_val = (
+                ((meta.get("auto_closing") or {}).get("positive") or {}).get("fixed_net", {}).get("target_net_usdt")
+                or ((meta.get("override") or meta.get("overrides") or {}).get("auto_closing", {}).get("positive", {}).get("fixed_net", {}).get("target_net_usdt"))
+            )
+            mode_badge = f"[FIXED ${float(target_val):g}]" if target_val else "[FIXED]"
         else:
             # Чтение режима из конфигурации стратегии (без скрытых дефолтов в toxic)
             raw_mode = (
@@ -132,7 +142,11 @@ class LeaderboardEngine:
                 mode_badge = "[TOXIC]"
             elif raw_mode_str in ("fixed", "fixed_net"):
                 mode = "fixed"
-                mode_badge = "[FIXED]"
+                target_val = (
+                    ((meta.get("auto_closing") or {}).get("positive") or {}).get("fixed_net", {}).get("target_net_usdt")
+                    or ((meta.get("override") or meta.get("overrides") or {}).get("auto_closing", {}).get("positive", {}).get("fixed_net", {}).get("target_net_usdt"))
+                )
+                mode_badge = f"[FIXED ${float(target_val):g}]" if target_val else "[FIXED]"
             else:
                 mode = "off"
                 mode_badge = "[OFF]"
@@ -313,8 +327,12 @@ class LeaderboardEngine:
                 except Exception:
                     pass
 
-            agg_peak = max(prev_peak, total_cur_bal, total_start_bal)
-            agg_min = min(prev_min, total_cur_bal, total_start_bal)
+            if total_trades == 0:
+                agg_peak = total_start_bal
+                agg_min = total_start_bal
+            else:
+                agg_peak = max(prev_peak, total_cur_bal, total_start_bal)
+                agg_min = min(prev_min, total_cur_bal, total_start_bal)
 
             # Портфельный расчет Trade Velocity
             port_vel = {}
@@ -379,8 +397,12 @@ class LeaderboardEngine:
             except Exception:
                 pass
 
-        agg_peak = max(prev_peak, tot_cur, tot_start)
-        agg_min = min(prev_min, tot_cur, tot_start)
+        if tot_trades == 0:
+            agg_peak = tot_start
+            agg_min = tot_start
+        else:
+            agg_peak = max(prev_peak, tot_cur, tot_start)
+            agg_min = min(prev_min, tot_cur, tot_start)
 
         return {
             "total_universes_active": len(entries),

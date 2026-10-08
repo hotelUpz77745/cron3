@@ -205,6 +205,19 @@ class AnalyticsManager:
                     "per_coin": {}
                 }
                 Utils.atomic_write_json(strat_json, strat_data, indent=4)
+            else:
+                try:
+                    existing_data = json.loads(strat_json.read_text(encoding="utf-8"))
+                    if int(existing_data.get("total_trades", 0)) == 0 and float(existing_data.get("start_balance_usdt", 0.0)) != strat_init_bal:
+                        existing_data["start_balance_usdt"] = strat_init_bal
+                        existing_data["_rebased_start_balance_usdt"] = strat_init_bal
+                        existing_data["cur_balance_usdt"] = strat_init_bal
+                        existing_data["peak_balance_usdt"] = strat_init_bal
+                        existing_data["min_balance_usdt"] = strat_init_bal
+                        existing_data["_current_trough_usdt"] = strat_init_bal
+                        Utils.atomic_write_json(strat_json, existing_data, indent=4)
+                except Exception:
+                    pass
 
             strat_txt = self.ledgers_dir / f"trades_ledger_{strat_id}.txt"
             if not strat_txt.exists():
