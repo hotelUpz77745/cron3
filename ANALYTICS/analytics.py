@@ -243,6 +243,28 @@ class AnalyticsManager:
         except Exception as e:
             logger.error(f"Error writing analytics file: {e}")
 
+    def get_trade_velocity(self, universe_id: str = "default") -> Dict[str, Any]:
+        """Возвращает метрики Trade Velocity для портфеля или конкретной вселенной."""
+        try:
+            if universe_id == "default":
+                if getattr(self, "velocity_engine", None):
+                    return self.velocity_engine.calculate_velocity(self._read_data() or {})
+                from ANALYTICS.trade_velocity import TradeVelocityEngine
+                return TradeVelocityEngine(universe_id="default", ledger_path=self.txt_file).calculate_velocity(self._read_data() or {})
+            else:
+                if not hasattr(self, "_strat_velocity_engines"):
+                    self._strat_velocity_engines = {}
+                if universe_id not in self._strat_velocity_engines:
+                    from ANALYTICS.trade_velocity import TradeVelocityEngine
+                    strat_ledger = self.ledgers_dir / f"trades_ledger_{universe_id}.txt"
+                    self._strat_velocity_engines[universe_id] = TradeVelocityEngine(universe_id=universe_id, ledger_path=strat_ledger)
+                strat_file = self.stats_dir / f"analytics_{universe_id}.json"
+                sdata = Utils.read_json_file(strat_file) if strat_file.exists() else {}
+                return self._strat_velocity_engines[universe_id].calculate_velocity(sdata)
+        except Exception as e:
+            logger.warning(f"[ANALYTICS] Failed to get trade velocity for {universe_id}: {e}")
+            return {}
+
     def _get_iteration_cache(self, strat_id: str) -> dict:
         try:
             cache_file = CACHE_DIR / "iteration_state.json"
@@ -1263,6 +1285,18 @@ class AnalyticsManager:
                 strat_data["recovery_factor"] = round(strat_data["net_profit_usdt"] / abs(strat_data["max_drawdown_usdt"]), 2)
             else:
                 strat_data["recovery_factor"] = round(strat_data["net_profit_usdt"] / 1.0, 2) if strat_data["net_profit_usdt"] > 0 else 0.0
+
+            # Расчет Trade Velocity для конкретного купола стратегии
+            try:
+                if not hasattr(self, "_strat_velocity_engines"):
+                    self._strat_velocity_engines = {}
+                if strat_id not in self._strat_velocity_engines:
+                    from ANALYTICS.trade_velocity import TradeVelocityEngine
+                    strat_ledger = self.ledgers_dir / f"trades_ledger_{strat_id}.txt"
+                    self._strat_velocity_engines[strat_id] = TradeVelocityEngine(universe_id=strat_id, ledger_path=strat_ledger)
+                strat_data["trade_velocity"] = self._strat_velocity_engines[strat_id].calculate_velocity(strat_data)
+            except Exception as sve:
+                logger.warning(f"[ANALYTICS] Error calculating trade velocity for {strat_id}: {sve}")
 
             Utils.atomic_write_json(strat_file, strat_data, indent=4)
 

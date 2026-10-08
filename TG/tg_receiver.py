@@ -448,6 +448,49 @@ class TelegramReceiver:
 
         return agg_summary, agg_per_coin, last_trade_dt_str
 
+    @staticmethod
+    def _format_trade_velocity_block(vel_dict: Optional[Dict[str, Any]], title: str = "Trade Velocity (Частота сделок)") -> str:
+        if not vel_dict:
+            return f"⚡ <b>{title}:</b>\n└ <code>Нет данных о скорости сделок</code>\n\n"
+
+        tf_h = float(vel_dict.get("timeframe_hours", 6.0))
+        acc_h = float(vel_dict.get("accumulation_hours", 0.0))
+        min_acc = float(vel_dict.get("min_accumulation_hours", 1.0))
+        benchmark = float(vel_dict.get("benchmark_speed", 10.0))
+        slice_trades = int(vel_dict.get("slice_trades_count", 0))
+        slice_coins = int(vel_dict.get("slice_coins_count", 0))
+        status_desc = str(vel_dict.get("status_desc", "NORMAL"))
+        status = str(vel_dict.get("status", "NORMAL"))
+
+        if status == "HIGH_VOLATILITY":
+            status_icon = "🔥"
+        elif status == "LOW_VOLATILITY":
+            status_icon = "❄️"
+        elif status == "ACCUMULATING":
+            status_icon = "⏳"
+        else:
+            status_icon = "🟢"
+
+        if not vel_dict.get("is_ready_for_alerts") or vel_dict.get("avg_effective_speed") is None:
+            return (
+                f"⚡ <b>{title}:</b>\n"
+                f"├ <b>Скорость:</b> ⏳ <i>Накопление ({acc_h:.1f}ч из {min_acc:.1f}ч)</i>\n"
+                f"├ <b>Сделок в окне:</b> <code>{slice_trades} сд.</code> ({slice_coins} монет)\n"
+                f"└ <b>Эталон:</b> <code>{benchmark:.1f} сд/монета за {tf_h:.1f}ч</code>\n\n"
+            )
+
+        eff_speed = float(vel_dict.get("avg_effective_speed", 0.0))
+        ratio = float(vel_dict.get("speed_ratio", 1.0))
+        dev_pct = float(vel_dict.get("deviation_pct", 0.0))
+        dev_sign = "+" if dev_pct > 0 else ""
+
+        return (
+            f"⚡ <b>{title}:</b>\n"
+            f"├ <b>Скорость:</b> <b>{eff_speed:.2f} сд/монета</b> ({status_icon} <b>{status_desc}</b>)\n"
+            f"├ <b>Активность:</b> <code>x{ratio:.2f}</code> ({dev_sign}{dev_pct:.1f}% к эталону {benchmark:.1f})\n"
+            f"└ <b>Окно ({tf_h:.1f}ч):</b> <code>{slice_trades} сд.</code> на {slice_coins} монет (накоплено <code>{acc_h:.1f}ч</code>)\n\n"
+        )
+
     def _render_analytics_big_board(self, user_id: int) -> Tuple[str, InlineKeyboardMarkup]:
         """Рендерит портфельный Биг Борд с кумулятивными метриками по всем стратегиям и куполам."""
         portfolio_summary = {}
@@ -497,6 +540,12 @@ class TelegramReceiver:
         real_sign = "+" if realized > 0 else ""
         unreal_sign = "+" if unrealized > 0 else ""
 
+        # Trade Velocity портфеля
+        port_vel = portfolio_summary.get("trade_velocity")
+        if not port_vel and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
+            port_vel = self.bot_core.analytics.get_trade_velocity("default")
+        vel_block = self._format_trade_velocity_block(port_vel, title="Trade Velocity (Частота сделок портфеля)")
+
         text = (
             f"🏛️ <b>ПОРТФЕЛЬНЫЙ БИГ БОРД (КУМУЛЯТИВНЫЙ БАЛАНС)</b>\n"
             f"🌐 <i>Агрегированная сводка по всем стратегиям ({active_count} куполов)</i>\n\n"
@@ -510,6 +559,7 @@ class TelegramReceiver:
             f"├ <b>Realized:</b> <code>{real_sign}{realized:,.2f}$</code>\n"
             f"├ <b>Floating (Нереализ.):</b> <code>{unreal_sign}{unrealized:,.2f}$</code>\n"
             f"└ <b>Всего сделок:</b> <code>{trades_cnt}</code>\n\n"
+            f"{vel_block}"
             f"🌌 <b>Текущий выбранный купол:</b>\n"
             f"▶️ <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
             f"<i>Выберите действие или перейдите в детальную аналитику купола:</i>"
@@ -1156,6 +1206,7 @@ class TelegramReceiver:
             trades_cnt = 0
             iter_idx = 1
 
+            dome_vel = None
             if analytics_path.exists():
                 try:
                     adata = json.loads(analytics_path.read_text(encoding="utf-8"))
@@ -1170,8 +1221,13 @@ class TelegramReceiver:
                     recovery = float(adata.get("recovery_factor", 0.0))
                     trades_cnt = int(adata.get("total_trades", 0))
                     iter_idx = int(adata.get("iteration_index", 1))
+                    dome_vel = adata.get("trade_velocity")
                 except Exception:
                     pass
+
+            if not dome_vel and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
+                dome_vel = self.bot_core.analytics.get_trade_velocity(current_uid)
+            vel_block = self._format_trade_velocity_block(dome_vel, title="⚡ Trade Velocity (Купол)")
 
             roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
             net_sign = "+" if net_profit > 0 else ""
@@ -1192,6 +1248,7 @@ class TelegramReceiver:
                 f"├ <b>Realized:</b> {real_sign}{realized:,.2f}$ | <b>Floating:</b> {unreal_sign}{unrealized:,.2f}$\n"
                 f"├ <b>Max Drawdown:</b> {max_dd:,.2f}$ | <b>Recovery:</b> {recovery:.2f}\n"
                 f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
+                f"{vel_block}\n\n"
                 f"<i>Выберите раздел аналитики:</i>"
             )
 
@@ -1222,8 +1279,7 @@ class TelegramReceiver:
                     InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data=f"analytics_reset:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_bigboard"),
-                    InlineKeyboardButton(text="🔄 Сменить вселенную", callback_data="univ_page:1"),
+                    InlineKeyboardButton(text="🔙 Назад к Биг Борду", callback_data="analytics_bigboard"),
                 ]
             ])
 
@@ -1330,7 +1386,13 @@ class TelegramReceiver:
             msg += f"▪️ Margin Load: <b>{agg_summary['margin_load_pct']:.2f}%</b> (Used: <b>{agg_summary['total_margin_used_usdt']:,.2f}</b> USDT)\n"
             msg += f"▪️ Free Margin: <b>{agg_summary['free_margin_usdt']:,.2f}</b> USDT ({agg_summary['free_margin_pct']:.2f}%)\n"
             msg += f"▪️ Recovery Factor: <b>{agg_summary['recovery_factor']:.2f}</b>\n"
-            msg += f"▪️ Trades: <b>{agg_summary['total_trades']}</b> (Wins: <b>{agg_summary['winning_trades']}</b> | <b>{agg_summary['winrate_pct']:.1f}%</b>)\n"
+            msg += f"▪️ Trades: <b>{agg_summary['total_trades']}</b> (Wins: <b>{agg_summary['winning_trades']}</b> | <b>{agg_summary['winrate_pct']:.1f}%</b>)\n\n"
+
+            port_vel = agg_summary.get("trade_velocity")
+            if not port_vel and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
+                port_vel = self.bot_core.analytics.get_trade_velocity("default")
+            vel_block = self._format_trade_velocity_block(port_vel, title="⚡ Trade Velocity (Портфель)")
+            msg += f"{vel_block}\n"
 
             await callback.message.answer(header + msg, parse_mode="HTML")
 
@@ -1692,6 +1754,11 @@ class TelegramReceiver:
                 f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
                 f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"
             )
+            strat_vel = analytics_data.get("trade_velocity")
+            if not strat_vel and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
+                strat_vel = self.bot_core.analytics.get_trade_velocity(strat_id)
+            vel_block = self._format_trade_velocity_block(strat_vel, title="⚡ Trade Velocity")
+            text += f"\n{vel_block}\n"
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text=toggle_btn_text, callback_data=f"toggle_strat:{strat_id}")],
                 [InlineKeyboardButton(text="📝 Леджер вселенной (TXT)", callback_data=f"strat_ledger:{strat_id}")],
@@ -2176,17 +2243,11 @@ class TelegramReceiver:
                     msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0):.2f}</b>\n"
                     msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0):.1f}%</b>)\n"
                     
-                    vel_dict = data.get("trade_velocity", {})
+                    vel_dict = data.get("trade_velocity")
+                    if not vel_dict and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
+                        vel_dict = self.bot_core.analytics.get_trade_velocity(current_uid)
                     if vel_dict:
-                        eff_speed = float(vel_dict.get("avg_effective_speed") or 0.0)
-                        speed_ratio = float(vel_dict.get("speed_ratio") or 1.0)
-                        status_desc = str(vel_dict.get("status_desc") or "NORMAL")
-                        if vel_dict.get("avg_effective_speed") is None:
-                            acc_h = vel_dict.get("accumulation_hours", 0.0)
-                            min_h = vel_dict.get("min_accumulation_hours", 1.0)
-                            msg += f"▪️ Trade Velocity: <b>Накопление</b> ({acc_h:.1f}ч / {min_h:.1f}ч)\n"
-                        else:
-                            msg += f"▪️ Trade Velocity: <b>{eff_speed:.2f} сд/ч</b> (x{speed_ratio:.2f} | {status_desc})\n"
+                        msg += "\n" + self._format_trade_velocity_block(vel_dict, title="⚡ Trade Velocity (Купол)")
                     msg += "\n"
                     
                     back_kb = InlineKeyboardMarkup(inline_keyboard=[[

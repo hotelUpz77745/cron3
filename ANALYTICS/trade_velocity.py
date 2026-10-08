@@ -146,11 +146,13 @@ class TradeVelocityEngine:
         except Exception as e:
             logger.error(f"[TRADE_VELOCITY:{self.universe_id}] Error reloading config: {e}")
 
-    def calculate_velocity(self, analytics_data: Dict[str, Any]) -> Dict[str, Any]:
+    def calculate_velocity(self, analytics_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Рассчитывает скорость сделок по выбранному срезу, коэффициент активности (Ratio),
         а также детализацию скорости по каждой отдельной монете.
         """
+        if analytics_data is None:
+            analytics_data = {}
         now_sec = time.time()
         if not hasattr(self, '_last_cfg_reload') or (now_sec - self._last_cfg_reload >= 60.0):
             self._last_cfg_reload = now_sec
@@ -178,13 +180,25 @@ class TradeVelocityEngine:
         if app_path.exists():
             try:
                 ad = json.loads(app_path.read_text(encoding="utf-8"))
-                for sid, scfg in ad.get("active_strategies", {}).items():
-                    if sid.startswith("_") or not isinstance(scfg, dict):
-                        continue
-                    if scfg.get("enabled") is True:
-                        configured_symbols.extend(scfg.get("symbols", []))
+                act_strats = ad.get("active_strategies", {})
+                if self.universe_id != "default" and self.universe_id in act_strats:
+                    scfg = act_strats[self.universe_id]
+                    if isinstance(scfg, dict) and scfg.get("enabled", True):
+                        configured_symbols = list(scfg.get("symbols", []))
+                else:
+                    for sid, scfg in act_strats.items():
+                        if sid.startswith("_") or not isinstance(scfg, dict):
+                            continue
+                        if scfg.get("enabled") is True:
+                            configured_symbols.extend(scfg.get("symbols", []))
             except Exception:
                 pass
+
+        if not configured_symbols and self.universe_id != "default":
+            if "symbols" in analytics_data:
+                configured_symbols = list(analytics_data["symbols"])
+            elif per_coin_data:
+                configured_symbols = list(per_coin_data.keys())
 
         if not configured_symbols:
             try:

@@ -131,7 +131,6 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
         uid = parts[1]
         current_page = int(parts[2]) if len(parts) > 2 else 1
         set_user_universe_id(callback.from_user.id, uid)
-        await callback.answer(f"Выбрана вселенная: {uid}")
 
         try:
             text, kb = render_universes_page(callback.from_user.id, bot_core, page=current_page)
@@ -139,18 +138,8 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
         except Exception:
             pass
 
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="📊 Аналитика купола", callback_data=f"analytics_dome:{uid}"),
-                InlineKeyboardButton(text="🔙 Назад", callback_data="analytics_bigboard")
-            ],
-            [
-                InlineKeyboardButton(text="📈 График эквити", callback_data="analytics_chart")
-            ]
-        ])
-        await callback.message.answer(
-            f"✅ Контекст переключен на вселенную <code>{uid}</code>.\n"
-            f"Теперь детальная аналитика и метрики относятся к этой стратегии.",
-            reply_markup=kb,
-            parse_mode="HTML"
+        alert_msg = (
+            f"✅ Контекст переключен на вселенную {uid}.\n"
+            f"Теперь детальная аналитика и метрики относятся к этой стратегии."
         )
+        await callback.answer(alert_msg, show_alert=True)

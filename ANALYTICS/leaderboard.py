@@ -164,6 +164,7 @@ class LeaderboardEngine:
             "roi_pct": roi_pct,
             "mode": mode,
             "mode_badge": mode_badge,
+            "trade_velocity": data.get("trade_velocity", {}),
         }
 
     def generate_leaderboard(
@@ -315,6 +316,17 @@ class LeaderboardEngine:
             agg_peak = max(prev_peak, total_cur_bal, total_start_bal)
             agg_min = min(prev_min, total_cur_bal, total_start_bal)
 
+            # Портфельный расчет Trade Velocity
+            port_vel = {}
+            try:
+                from ANALYTICS.trade_velocity import TradeVelocityEngine
+                from consts import ANALYTICS_LEDGERS_DIR
+                port_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                port_engine = TradeVelocityEngine(universe_id="default", ledger_path=port_ledger)
+                port_vel = port_engine.calculate_velocity({"per_coin": {}})
+            except Exception as pe:
+                logger.warning(f"[LEADERBOARD] Could not compute portfolio trade velocity: {pe}")
+
             portfolio_payload = {
                 "updated_at_utc": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime()),
                 "total_universes_active": len(entries),
@@ -327,6 +339,7 @@ class LeaderboardEngine:
                 "aggregate_realized_pnl_usdt": round(total_realized, 2),
                 "aggregate_unrealized_pnl_usdt": round(total_unrealized, 2),
                 "aggregate_total_trades": total_trades,
+                "trade_velocity": port_vel,
                 "leaderboard": entries,
             }
             Utils.atomic_write_json(self.portfolio_file, portfolio_payload)
