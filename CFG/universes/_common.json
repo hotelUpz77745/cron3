@@ -1,0 +1,97 @@
+{
+  "_comment": "Базовые параметры и шаблоны по умолчанию для всех вселенных",
+  "auto_closing": {
+    "negative": {
+      "threshold": null,
+      "threshold_increment": null
+    },
+    "positive": {
+      "quant_base_usdt": 10.0,
+      "quant_reference_size": 600.0,
+      "radar_rotation_on_close": {
+        "enabled": false,
+        "_desc_enabled": "Trigger coin rotation upon auto-closer liquidation to 100% cash. Default false in combat mode.",
+        "min_universe_age_hours": 23.0,
+        "_desc_min_universe_age_hours": "Minimum continuous runtime (23.0h) since start or last rotation before allowing rotation.",
+        "selector_type": "alpha_coin_selector",
+        "_desc_selector_type": "'alpha_coin_selector' (volatility klines) or 'samsonov_funnel' (radar telemetry).",
+        "target_coins_count": 4,
+        "_desc_target_coins_count": "Target number of active coins in strategy pool.",
+        "min_score_lead_pct": 35.0,
+        "_desc_min_score_lead_pct": "Hysteresis threshold (+35%): candidate replaces worst coin only if score is at least 35% higher."
+      },
+      "fixed_net": {
+        "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
+        "target_net_usdt": 60.0,
+        "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
+        "scale_by_invest_size": false,
+        "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt."
+      },
+      "toxicity_adaptive": {
+        "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
+        "score_weights": {
+          "margin_load": 0.35,
+          "grid_depth": 0.3,
+          "float_ratio": 0.25,
+          "delta_recovery": 0.15
+        },
+        "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
+        "panic_toxicity_threshold": 0.7,
+        "emergency_exit_floor_usdt": 3.0,
+        "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
+        "min_panic_recovery": 0.4,
+        "relaxed_toxicity_threshold": 0.35,
+        "moderate_exit_floor_usdt": 8.0,
+        "min_moderate_recovery": 0.2,
+        "relaxed_exit_floor_usdt": 15.0
+      },
+      "trailing_ratchet": {
+        "_desc": "Mode 1: Reacting skeleton. Pure Fibonacci ladder levels L0..L5. Triggers trailing stop and closes basket on pullback to floor.",
+        "levels": [
+          {
+            "activation": 8.0,
+            "floor": 5.5,
+            "min_age_hours": 24.0,
+            "enabled": true,
+            "_desc": "L0: Prolonged stagnation (24h+)"
+          },
+          {
+            "activation": 15.5,
+            "floor": 13.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L1: Institutional start (Fibo 13.0)"
+          },
+          {
+            "activation": 24.5,
+            "floor": 21.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L2: Confident Fibo move (Fibo 21.0)"
+          },
+          {
+            "activation": 39.0,
+            "floor": 34.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L3: Strong trend (Fibo 34.0)"
+          },
+          {
+            "activation": 63.5,
+            "floor": 55.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L4: Momentum pump (Fibo 55.0)"
+          },
+          {
+            "activation": 89.0,
+            "floor": 89.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L5: Mega rally (Fibo 89.0)"
+          }
+        ]
+      }
+    }
+  }
+}

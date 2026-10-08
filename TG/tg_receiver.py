@@ -181,20 +181,26 @@ class TelegramReceiver:
                 }
 
         univ_dir = DATA_DIR / "universes"
-        pure_id = strat_id
-        for sfx in ("__off", "__classic", "__fixed", "__toxic"):
-            if pure_id.endswith(sfx):
-                pure_id = pure_id[:-len(sfx)]
-                break
+        app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+        active_strats = app_data.get("active_strategies", {})
+        strat_app = active_strats.get(strat_id, {})
+
+        pure_id = strat_app.get("template") or strat_id
+        if not (univ_dir / f"{pure_id}.json").exists():
+            if "__" in pure_id:
+                pure_id = pure_id.split("__")[0]
+            else:
+                for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                    if pure_id.endswith(sfx):
+                        pure_id = pure_id[:-len(sfx)]
+                        break
+
         jf = univ_dir / f"{pure_id}.json"
         if jf.exists():
             u_meta = Utils.read_json_file(jf)
         else:
             univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
             u_meta = univ_data.get(strat_id, {})
-        app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
-        active_strats = app_data.get("active_strategies", {})
-        strat_app = active_strats.get(strat_id, {})
         
         name = u_meta.get("name", strat_id)
         description = u_meta.get("description", "Пользовательская стратегия")

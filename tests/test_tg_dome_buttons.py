@@ -25,9 +25,10 @@ class TestTGDomeButtons(unittest.TestCase):
 
     def test_active_strategies_loaded(self):
         active = self.registry.active_strategies
+        self.assertIn("u16_titan_universal_alpha__fixed", active)
+        self.assertIn("u16_titan_universal_alpha__fixed_b", active)
+        self.assertIn("u16_titan_universal_alpha__classic", active)
         self.assertIn("u16_titan_universal_alpha__toxic", active)
-        self.assertIn("u6_symbiosis_gamma_fortress35__classic", active)
-        self.assertIn("u96_omni_zenith_apex__fixed", active)
 
     def test_close_all_dome_buttons(self):
         """Проверяет генерацию кнопок закрытия под каждым куполом."""
@@ -36,13 +37,14 @@ class TestTGDomeButtons(unittest.TestCase):
         for sid, scfg in active_strats.items():
             buttons.append(f"close_dome_{sid}")
 
+        self.assertIn("close_dome_u16_titan_universal_alpha__fixed", buttons)
+        self.assertIn("close_dome_u16_titan_universal_alpha__fixed_b", buttons)
+        self.assertIn("close_dome_u16_titan_universal_alpha__classic", buttons)
         self.assertIn("close_dome_u16_titan_universal_alpha__toxic", buttons)
-        self.assertIn("close_dome_u6_symbiosis_gamma_fortress35__classic", buttons)
-        self.assertIn("close_dome_u96_omni_zenith_apex__fixed", buttons)
 
     def test_strategy_meta_extraction(self):
         """Проверяет корректность метаданных куполов стратегий."""
-        for sid in ["u16_titan_universal_alpha__toxic", "u6_symbiosis_gamma_fortress35__classic", "u96_omni_zenith_apex__fixed"]:
+        for sid in ["u16_titan_universal_alpha__fixed", "u16_titan_universal_alpha__fixed_b", "u16_titan_universal_alpha__classic", "u16_titan_universal_alpha__toxic"]:
             meta = self.tg._get_strategy_meta(sid)
             self.assertEqual(meta["strategy_id"], sid)
             self.assertTrue(len(meta["name"]) > 0)
@@ -53,18 +55,20 @@ class TestTGDomeButtons(unittest.TestCase):
         """Проверяет кнопки применения результатов селектора под каждый купол."""
         active_strats = self.registry.active_strategies
         apply_cbs = [f"cb_selector_apply:{sid}" for sid in active_strats.keys()]
+        self.assertIn("cb_selector_apply:u16_titan_universal_alpha__fixed", apply_cbs)
+        self.assertIn("cb_selector_apply:u16_titan_universal_alpha__fixed_b", apply_cbs)
+        self.assertIn("cb_selector_apply:u16_titan_universal_alpha__classic", apply_cbs)
         self.assertIn("cb_selector_apply:u16_titan_universal_alpha__toxic", apply_cbs)
-        self.assertIn("cb_selector_apply:u6_symbiosis_gamma_fortress35__classic", apply_cbs)
-        self.assertIn("cb_selector_apply:u96_omni_zenith_apex__fixed", apply_cbs)
 
     def test_symbol_strategy_assignment_callbacks(self):
         """Проверяет генерацию callback_data при добавлении монеты под конкретный купол."""
         symbol = "BTCUSDT"
         active_strats = self.registry.active_strategies
         callbacks = [f"add_pick_strat_{symbol}_{sid}" for sid in active_strats.keys()]
+        self.assertIn(f"add_pick_strat_{symbol}_u16_titan_universal_alpha__fixed", callbacks)
+        self.assertIn(f"add_pick_strat_{symbol}_u16_titan_universal_alpha__fixed_b", callbacks)
+        self.assertIn(f"add_pick_strat_{symbol}_u16_titan_universal_alpha__classic", callbacks)
         self.assertIn(f"add_pick_strat_{symbol}_u16_titan_universal_alpha__toxic", callbacks)
-        self.assertIn(f"add_pick_strat_{symbol}_u6_symbiosis_gamma_fortress35__classic", callbacks)
-        self.assertIn(f"add_pick_strat_{symbol}_u96_omni_zenith_apex__fixed", callbacks)
 
 
     def test_close_strategy_positions_no_entry_block(self):
@@ -85,7 +89,7 @@ class TestTGDomeButtons(unittest.TestCase):
         mock_bot.client.fetch_positions = AsyncMock(return_value=[])
 
         # Вызываем штатный close_strategy_positions
-        asyncio.run(BotCore.close_strategy_positions(mock_bot, "u96_omni_zenith_apex"))
+        asyncio.run(BotCore.close_strategy_positions(mock_bot, "u16_titan_universal_alpha__fixed"))
 
         # Блокировка входов НЕ должна быть активирована
         self.assertFalse(mock_bot.entry_blocked)

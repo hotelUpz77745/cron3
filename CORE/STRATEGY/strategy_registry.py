@@ -24,6 +24,17 @@ from c_utils import Utils
 logger = UnifiedLogger("StrategyRegistry")
 
 
+def deep_merge_dict(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
+    """Рекурсивно объединяет два словаря, переопределяя поля overlay над base."""
+    merged = copy.deepcopy(base)
+    for k, v in overlay.items():
+        if k in merged and isinstance(merged[k], dict) and isinstance(v, dict):
+            merged[k] = deep_merge_dict(merged[k], v)
+        else:
+            merged[k] = copy.deepcopy(v)
+    return merged
+
+
 class StrategyConfig:
     """Инкапсулирует конфигурацию и параметры переопределения одной торговой стратегии (купола)."""
 
@@ -166,20 +177,17 @@ class StrategyConfig:
                 "positive_threshold": 20.0
             }
 
-        # 4. Купол Авто-закрытия (Auto-closing Dome): берется из стратегии, либо базовый шаблон из app.json
-        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из app.json с переопределениями стратегии
-        base_ac = copy.deepcopy(_CFG["auto_closing"])
+        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из raw_meta / _common с переопределениями стратегии
+        raw_ac = raw_meta.get("auto_closing") or self.active_settings.get("auto_closing") or _CFG.get("auto_closing", {})
+        base_ac = copy.deepcopy(raw_ac)
         override_ac = (
-            self.active_settings.get("auto_closing")
-            or raw_meta.get("auto_closing")
+            self.active_settings.get("override", {}).get("auto_closing")
+            or self.active_settings.get("overrides", {}).get("auto_closing")
+            or self.active_settings.get("auto_closing")
             or self.overrides.get("auto_closing")
         )
-        if override_ac and isinstance(override_ac, dict):
-            for k, v in override_ac.items():
-                if k == "positive" and isinstance(v, dict) and "positive" in base_ac and isinstance(base_ac["positive"], dict):
-                    base_ac["positive"].update(v)
-                else:
-                    base_ac[k] = v
+        if override_ac and isinstance(override_ac, dict) and override_ac != base_ac:
+            base_ac = deep_merge_dict(base_ac, override_ac)
         self.auto_closing_cfg: Dict[str, Any] = base_ac
 
         # 5. Купол Режима Автозакрытия (Mode Dome): строго строковый тип
@@ -323,14 +331,18 @@ class StrategyRegistry:
 
         self._resolve_and_validate()
 
-    def _build_mode_auto_closing(self, mode: str) -> Dict[str, Any]:
-        """Формирует конфигурацию auto_closing строго для целевого режима напрямую из app.json."""
+    def _build_mode_auto_closing(self, mode: str, base_ac: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или _common.json)."""
         mode = mode.lower().strip()
-        base_ac = _CFG["auto_closing"]
-        neg_cfg = copy.deepcopy(base_ac["negative"])
-        pos_base = base_ac["positive"]
-        quant_base = pos_base["quant_base_usdt"]
-        quant_ref = pos_base["quant_reference_size"]
+        if base_ac is None:
+            base_ac = getattr(self, "common_defaults", {}).get("auto_closing") or _CFG.get("auto_closing", {})
+        if not base_ac or not isinstance(base_ac, dict):
+            raise KeyError("[StrategyRegistry] Отсутствует базовый шаблон auto_closing в _common.json или app.json!")
+
+        neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
+        pos_base = copy.deepcopy(base_ac.get("positive") or {})
+        quant_base = pos_base.get("quant_base_usdt", 10.0)
+        quant_ref = pos_base.get("quant_reference_size", 600.0)
 
         if mode == "off":
             return {
@@ -391,11 +403,19 @@ class StrategyRegistry:
             raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'fixed', 'classic', 'toxic', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json."""
+        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _common.json."""
         data: Dict[str, Dict[str, Any]] = {}
+        self.common_defaults: Dict[str, Any] = {}
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
+            common_file = universes_dir / "_common.json"
+            if common_file.exists():
+                self.common_defaults = Utils.read_json_file(common_file) or {}
             for jf in sorted(universes_dir.glob("*.json")):
+                if jf.name == "_common.json" or jf.stem.startswith("_"):
+                    if not self.common_defaults and jf.name == "_common.json":
+                        self.common_defaults = Utils.read_json_file(jf) or {}
+                    continue
                 data[jf.stem] = Utils.read_json_file(jf)
 
         # Fallback к universes.json (для обратной совместимости внешних утилит)
@@ -403,7 +423,7 @@ class StrategyRegistry:
             ujson = Utils.read_json_file(self.universes_path)
             if isinstance(ujson, dict):
                 for k, v in ujson.items():
-                    if k not in data:
+                    if k not in data and not k.startswith("_"):
                         data[k] = v
 
         if not data:
@@ -433,35 +453,67 @@ class StrategyRegistry:
             if not is_enabled:
                 continue
 
-            # Извлекаем чистое имя стратегии и определяем целевой режим
-            clean_id = strat_id
-            suffix_mode = None
-            for sfx in ("__off", "__classic", "__fixed", "__toxic"):
-                if clean_id.endswith(sfx):
-                    suffix_mode = sfx[2:]
-                    clean_id = clean_id[:-len(sfx)]
-                    break
+            # Поиск спецификации базового шаблона стратегии
+            template_id = strat_settings.get("template")
+            if not template_id:
+                if strat_id in self.universes_db:
+                    template_id = strat_id
+                elif "__" in strat_id and strat_id.split("__")[0] in self.universes_db:
+                    template_id = strat_id.split("__")[0]
+                else:
+                    clean_id = strat_id
+                    for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                        if clean_id.endswith(sfx):
+                            clean_id = clean_id[:-len(sfx)]
+                            break
+                    if clean_id in self.universes_db:
+                        template_id = clean_id
+                    else:
+                        raise KeyError(
+                            f"[StrategyRegistry] Спецификация стратегии '{clean_id}' (для купола '{strat_id}') "
+                            f"отсутствует в CFG/universes/*.json!"
+                        )
+            elif template_id not in self.universes_db:
+                raise KeyError(
+                    f"[StrategyRegistry] Указанный шаблон стратегии '{template_id}' (для купола '{strat_id}') "
+                    f"отсутствует в CFG/universes/*.json!"
+                )
 
+            # Определяем целевой строковый режим автозакрытия
             raw_mode = strat_settings.get("mode")
             if raw_mode is None and "modes" in strat_settings:
                 legacy_m = strat_settings["modes"]
                 raw_mode = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
 
-            target_mode = (str(raw_mode) if raw_mode else (suffix_mode or "off")).lower().strip()
-
-            # Поиск спецификации базовой стратегии
-            if strat_id in self.universes_db:
-                raw_meta = copy.deepcopy(self.universes_db[strat_id])
-            elif clean_id in self.universes_db:
-                raw_meta = copy.deepcopy(self.universes_db[clean_id])
+            if raw_mode:
+                target_mode = str(raw_mode).lower().strip()
+            elif "__fixed" in strat_id:
+                target_mode = "fixed"
+            elif "__classic" in strat_id:
+                target_mode = "classic"
+            elif "__toxic" in strat_id:
+                target_mode = "toxic"
+            elif "__off" in strat_id:
+                target_mode = "off"
             else:
-                raise KeyError(
-                    f"[StrategyRegistry] Спецификация стратегии '{clean_id}' (для купола '{strat_id}') "
-                    f"отсутствует в CFG/universes/*.json!"
-                )
+                target_mode = "off"
 
-            # Накладываем автозакрытие строго под целевой строковый режим
-            ac_block = self._build_mode_auto_closing(target_mode)
+            # Слияние метаданных: _common.json -> universes/<template>.json -> strat_settings (override)
+            base_meta = copy.deepcopy(getattr(self, "common_defaults", {}))
+            template_meta = copy.deepcopy(self.universes_db[template_id])
+            raw_meta = deep_merge_dict(base_meta, template_meta)
+
+            dome_override = strat_settings.get("override") or strat_settings.get("overrides") or {}
+            if dome_override and isinstance(dome_override, dict):
+                raw_meta = deep_merge_dict(raw_meta, dome_override)
+
+            # Накладываем автозакрытие строго под целевой строковый режим купола
+            ac_base = copy.deepcopy(
+                raw_meta.get("auto_closing")
+                or getattr(self, "common_defaults", {}).get("auto_closing")
+                or _CFG.get("auto_closing", {})
+            )
+            ac_block = self._build_mode_auto_closing(target_mode, base_ac=ac_base)
             raw_meta["auto_closing"] = ac_block
             raw_meta["auto_closing_mode"] = target_mode
             if "overrides" not in raw_meta or not isinstance(raw_meta["overrides"], dict):
@@ -480,6 +532,7 @@ class StrategyRegistry:
             )
             strat_config.mode = target_mode
             strat_config.auto_closing_mode = target_mode
+            strat_config.auto_closing_cfg = ac_block
             self.active_strategies[strat_id] = strat_config
 
             acc_id = strat_config.get_account_id()

@@ -30,7 +30,7 @@ def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
                     return first_uid
         except Exception:
             pass
-    return "u96_omni_zenith_apex"
+    return "u16_titan_universal_alpha__fixed"
 
 
 def set_user_universe_id(user_id: int, universe_id: str) -> None:

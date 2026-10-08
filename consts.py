@@ -209,7 +209,10 @@ DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "eval_window_sec": 300,
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
-DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG["auto_closing"]
+_COMMON_CFG: Dict[str, Any] = _read_json(DATA_DIR / "universes" / "_common.json")
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _COMMON_CFG.get("auto_closing") or _CFG.get("auto_closing", {})
+if "auto_closing" not in _CFG and DEFAULT_AUTO_CLOSING:
+    _CFG["auto_closing"] = DEFAULT_AUTO_CLOSING
 
 # ============================================================
 # LOGGING

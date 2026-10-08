@@ -30,120 +30,49 @@
         "log_to_console": true,
         "log_to_file": true
     },
-    "auto_closing": {
-        "negative": {
-            "threshold": null,
-            "threshold_increment": null
-        },
-        "positive": {
-            "quant_base_usdt": 10.0,
-            "quant_reference_size": 600.0,
-            "radar_rotation_on_close": {
-                "enabled": false,
-                "_desc_enabled": "Trigger coin rotation upon auto-closer liquidation to 100% cash. Default false in combat mode.",
-                "min_universe_age_hours": 23.0,
-                "_desc_min_universe_age_hours": "Minimum continuous runtime (23.0h) since start or last rotation before allowing rotation.",
-                "selector_type": "alpha_coin_selector",
-                "_desc_selector_type": "'alpha_coin_selector' (volatility klines) or 'samsonov_funnel' (radar telemetry).",
-                "target_coins_count": 4,
-                "_desc_target_coins_count": "Target number of active coins in strategy pool.",
-                "min_score_lead_pct": 35.0,
-                "_desc_min_score_lead_pct": "Hysteresis threshold (+35%): candidate replaces worst coin only if score is at least 35% higher."
-            },
-            "fixed_net": {
-                "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
-                "target_net_usdt": 60.0,
-                "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
-                "scale_by_invest_size": false,
-                "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt."
-            },
-            "toxicity_adaptive": {
-                "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
-                "score_weights": {
-                    "margin_load": 0.35,
-                    "grid_depth": 0.3,
-                    "float_ratio": 0.25,
-                    "delta_recovery": 0.15
-                },
-                "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
-                "panic_toxicity_threshold": 0.7,
-                "emergency_exit_floor_usdt": 3.0,
-                "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
-                "min_panic_recovery": 0.4,
-                "relaxed_toxicity_threshold": 0.35,
-                "moderate_exit_floor_usdt": 8.0,
-                "min_moderate_recovery": 0.2,
-                "relaxed_exit_floor_usdt": 15.0
-            },
-            "trailing_ratchet": {
-                "_desc": "Mode 1: Reacting skeleton. Pure Fibonacci ladder levels L0..L5. Triggers trailing stop and closes basket on pullback to floor.",
-                "levels": [
-                    {
-                        "activation": 8.0,
-                        "floor": 5.5,
-                        "min_age_hours": 24.0,
-                        "enabled": true,
-                        "_desc": "L0: Prolonged stagnation (24h+)"
-                    },
-                    {
-                        "activation": 15.5,
-                        "floor": 13.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L1: Institutional start (Fibo 13.0)"
-                    },
-                    {
-                        "activation": 24.5,
-                        "floor": 21.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L2: Confident Fibo move (Fibo 21.0)"
-                    },
-                    {
-                        "activation": 39.0,
-                        "floor": 34.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L3: Strong trend (Fibo 34.0)"
-                    },
-                    {
-                        "activation": 63.5,
-                        "floor": 55.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L4: Momentum pump (Fibo 55.0)"
-                    },
-                    {
-                        "activation": 89.0,
-                        "floor": 89.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L5: Mega rally (Fibo 89.0)"
-                    }
-                ]
-            }
-        }
-    },
-    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit)",
+    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_common.json.",
     "active_strategies": {
-        "u96_omni_zenith_apex__fixed": {
-            "_comment_alias": "u96_omni_zenith_apex__fixed: Omni Zenith Apex + Knife Blocker 1 [FIXED]",
-            "_comment_pros": "Survival ultra-scalper and cash gun: micro-takes 0.62%..1.0%, Knife Blocker th=1, high execution frequency without margin lock, fixed net exit.",
+        "u16_titan_universal_alpha__fixed": {
+            "_comment_alias": "u16_titan_universal_alpha__fixed: Titan Universal Alpha (Кэш-Генератор №1) [FIXED]",
+            "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, регулярная фиксация кэша в USDT при iter_net >= 60.0.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
             "symbols": [
-                "NEARUSDT",
-                "PUMPUSDT"
+                "NEARUSDT"
             ],
             "mode": "fixed",
             "analytics": {
-                "start_balance_usdt": 57
+                "start_balance_usdt": 42.75
             }
         },
-        "u6_symbiosis_gamma_fortress35__classic": {
-            "_comment_alias": "u6_symbiosis_gamma_fortress35__classic: Copper Serpent (Gamma Fortress 35) [CLASSIC]",
-            "_comment_pros": "Capital Monarch and trend harvester: deep grid down to -89%, initial entry from -3.5%, Knife Blocker th=1, Panic Damper TP compressed to 0.50%, Fibonacci trailing.",
+        "u16_titan_universal_alpha__fixed_b": {
+            "_comment_alias": "u16_titan_universal_alpha__fixed_b: Titan Universal Alpha (Кэш-Генератор №2) [FIXED]",
+            "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, плоская оборачиваемость Flat-7 и кастомный Fixed Net Take.",
+            "template": "u16_titan_universal_alpha",
+            "enabled": true,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
+            "symbols": [
+                "PUMPUSDT"
+            ],
+            "mode": "fixed",
+            "override": {
+                "auto_closing": {
+                    "positive": {
+                        "fixed_net": {
+                            "target_net_usdt": 60.0
+                        }
+                    }
+                }
+            },
+            "analytics": {
+                "start_balance_usdt": 42.75
+            }
+        },
+        "u16_titan_universal_alpha__classic": {
+            "_comment_alias": "u16_titan_universal_alpha__classic: Titan Universal Alpha (Тренд-Харвестер) [CLASSIC]",
+            "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, институциональный трейлинг пампов по сетке Фибоначчи L0..L5.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -152,12 +81,12 @@
             ],
             "mode": "classic",
             "analytics": {
-                "start_balance_usdt": 57
+                "start_balance_usdt": 42.75
             }
         },
         "u16_titan_universal_alpha__toxic": {
-            "_comment_alias": "u16_titan_universal_alpha__toxic: Titan Universal Alpha [TOXIC]",
-            "_comment_pros": "Absolute alpha synthesis: LIFO Subgrid Peeler L3..L8 (+1.2%/+1.4%), Cross-Side Recycling 50%, Knife Blocker th=1, dynamic toxicity exit.",
+            "_comment_alias": "u16_titan_universal_alpha__toxic: Titan Universal Alpha (Хедж-Щит) [TOXIC]",
+            "_comment_pros": "LIFO Peeler L3..L8, Cross-Recycling 50%, Knife Blocker th=1, адаптивный выход при деградации инвентаря на токсичных трендах.",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -166,7 +95,7 @@
             ],
             "mode": "toxic",
             "analytics": {
-                "start_balance_usdt": 57
+                "start_balance_usdt": 42.75
             }
         }
     },

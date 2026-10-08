@@ -102,16 +102,16 @@ class LeaderboardEngine:
 
         # Определение режима автозакрытия стратегии (4 режима: classic, toxic, fixed, off)
         # Суффикс имени вселенной является высшим приоритетом
-        if universe_id.endswith("__off"):
+        if universe_id.endswith("__off") or "__off" in universe_id:
             mode = "off"
             mode_badge = "[OFF]"
-        elif universe_id.endswith("__classic"):
+        elif universe_id.endswith("__classic") or "__classic" in universe_id:
             mode = "classic"
             mode_badge = "[CLASSIC]"
-        elif universe_id.endswith("__toxic"):
+        elif universe_id.endswith("__toxic") or "__toxic" in universe_id:
             mode = "toxic"
             mode_badge = "[TOXIC]"
-        elif universe_id.endswith("__fixed"):
+        elif universe_id.endswith("__fixed") or "__fixed" in universe_id:
             mode = "fixed"
             mode_badge = "[FIXED]"
         else:

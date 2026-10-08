@@ -344,13 +344,13 @@ class AutoCloser:
             strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
             strat_auto_cfg = strat_app_cfg.get("auto_closing") or getattr(strat_cfg, "auto_closing_cfg", {})
 
-            if strat_id.endswith("__off"):
+            if strat_id.endswith("__off") or "__off" in strat_id:
                 mode = "off"
-            elif strat_id.endswith("__classic"):
+            elif strat_id.endswith("__classic") or "__classic" in strat_id:
                 mode = "classic"
-            elif strat_id.endswith("__toxic"):
+            elif strat_id.endswith("__toxic") or "__toxic" in strat_id:
                 mode = "toxic"
-            elif strat_id.endswith("__fixed"):
+            elif strat_id.endswith("__fixed") or "__fixed" in strat_id:
                 mode = "fixed"
             else:
                 raw_m = (
