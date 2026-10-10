@@ -82,17 +82,20 @@ class BotCore:
         self.pos_stream_synced = asyncio.Event()
         self.price_stream_synced = asyncio.Event()
         
-        # Получаем таймфрейм из стратегий или дефолтный 5m
+        # Получаем таймфрейм/хартбит из стратегий или дефолтный 5m
         timeframe = DEFAULT_TIMEFRAME
-        if hasattr(self, "strategy_registry") and self.strategy_registry and self.strategy_registry.active_strategies:
-            first_strat = next(iter(self.strategy_registry.active_strategies.values()))
-            timeframe = getattr(first_strat, "timeframe", DEFAULT_TIMEFRAME)
+        if hasattr(self, "strategy_registry") and self.strategy_registry and getattr(self.strategy_registry, "active_strategies", None):
+            first_strat = next(iter(self.strategy_registry.active_strategies.values()), None)
+            if first_strat:
+                timeframe = getattr(first_strat, "heartbeat_tfr", getattr(first_strat, "timeframe", DEFAULT_TIMEFRAME))
         self.time_control = TimeControl(interval=timeframe)
         
         # 2. Менеджеры
         self.leverage_manager = LeverageManager()
         
         self.tp_manager = TakeProfitManager(self.runtime_manager)
+        from CORE.TP.take_profit_restorer import TakeProfitRestorer
+        self.tp_restorer = TakeProfitRestorer(self)
         
         self.avg_manager = AverageManager()
         
@@ -240,6 +243,15 @@ class BotCore:
         else:
             self.price_stream = None
             self._price_task = None
+
+    async def _reconcile_open_orders(self, force: bool = False) -> Dict[str, int]:
+        """
+        Гарантирует наличие Take Profit ордеров на бирже для всех открытых позиций.
+        Если биржа потеряла ордер или бот перезагрузился в позиции без TP, немедленно выставляет ордер.
+        """
+        if hasattr(self, "tp_restorer") and self.tp_restorer:
+            return await self.tp_restorer.verify_and_restore_all(force=force)
+        return {"checked": 0, "confirmed": 0, "restored": 0, "mismatch": 0}
 
     async def add_symbol(self, symbol: str, strategy_id: Optional[str] = None):
         symbol = symbol.upper()
@@ -489,8 +501,18 @@ class BotCore:
             await self.leverage_manager.set_leverage_and_margin(sym_client, symbol, side_cfg)
 
             # 1.5. Открытие позиции по маркету
-            invest_size = float(side_cfg["invest_size"])
+            base_invest = float(side_cfg["invest_size"])
             strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+            if strat and getattr(strat, "sizing_mode", "dyn_bb") == "dyn_bb" and getattr(strat, "trend_size_cfg", {}).get("enabled"):
+                from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
+                eff = await TrendSizeDepender.get_effective_invest_size(
+                    sym_client, symbol, side, base_invest, strat.trend_size_cfg
+                )
+                if eff > 0:
+                    base_invest = eff
+            state.eff_invest = base_invest
+            invest_size = base_invest
+
             if strat and strat.smart_size_cfg:
                 closed_count = len(state.recent_closes)
                 size_mult = MomentumEngine.calculate_smart_size_multiplier(closed_count, strat.smart_size_cfg)
@@ -586,6 +608,9 @@ class BotCore:
             # ВСЕГДА сбрасываем временный флаг защиты от двойного входа
             state.in_position_papper = False
             # 3. Сохраняем стейт в рантайм кэш
+            if hasattr(self, "runtime_manager") and self.runtime_manager:
+                if symbol in self.runtime_manager.caches and side in self.runtime_manager.caches[symbol]:
+                    self.runtime_manager.caches[symbol][side]["eff_invest"] = getattr(state, "eff_invest", 0.0)
             await self.runtime_manager.save_cache(symbol)
 
     async def _check_and_reset_finished_positions(self, symbol: str, states: dict, runtime_cfg: dict):
@@ -675,7 +700,7 @@ class BotCore:
             if isinstance(price_data, tuple):
                 p, ts = price_data
                 # We trust the pre-flight bulk fetch to have refreshed it if needed
-                if time.time() - ts < 5.0:  # PRICE_STALE_SEC
+                if time.time() - ts < 15.0:  # PRICE_STALE_SEC
                     current_price = p
             else:
                 current_price = price_data  # safe fallback
@@ -924,6 +949,9 @@ class BotCore:
                 except Exception as e:
                     logger.warning(f"[{sym}] Leverage pre-warm warning: {e}")
 
+        # Первоначальный аудит и гарантированное восстановление TP ордеров сразу после синхронизации FSM
+        await self._reconcile_open_orders(force=True)
+
         # Запуск фонового контроллера Watchdog
         # Запускаем Notifier
         await self.notifier.start()
@@ -950,32 +978,40 @@ class BotCore:
                     await asyncio.sleep(1.0)
                     continue
 
-                # Pre-flight bulk price update
+                # Pre-flight bulk price update & Stream Watchdog
                 stale_symbols = []
                 now = time.time()
                 for sym in self.symbols:
                     price_data = self.prices.get(sym)
-                    if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 300.0):
+                    if not price_data or not isinstance(price_data, tuple) or (now - price_data[1] > 10.0):
                         stale_symbols.append(sym)
                 
-                if stale_symbols and (now - getattr(self, "_last_bulk_price_fetch", 0.0) >= 60.0):
+                if stale_symbols and (now - getattr(self, "_last_bulk_price_fetch", 0.0) >= 5.0):
                     self._last_bulk_price_fetch = now
-                    logger.warning(
-                        f"[REST_FAILSAFE] Abnormal situation: Stale or missing prices for {len(stale_symbols)}/{len(self.symbols)} symbols: "
-                        f"{stale_symbols[:5]}... Executing single bulk REST fallback."
-                    )
                     try:
                         bulk_prices = await BinancePublic.get_prices_bulk(stale_symbols)
+                        fetch_now = time.time()
                         for sym, p in bulk_prices.items():
-                            self.prices[sym] = (p, time.time())
+                            self.prices[sym] = (p, fetch_now)
                     except Exception as e:
                         logger.warning(f"[REST_FAILSAFE] Bulk price fetch failed: {e}")
+
+                # Автоматический перезапуск стрима цен при полной стагнации WS (> 25s)
+                if len(stale_symbols) == len(self.symbols) and len(self.symbols) > 0:
+                    oldest_ts = min([self.prices[s][1] for s in self.symbols if s in self.prices and isinstance(self.prices[s], tuple)] or [0.0])
+                    if now - oldest_ts > 25.0 and (now - getattr(self, "_last_stream_restart_ts", 0.0) >= 30.0):
+                        self._last_stream_restart_ts = now
+                        logger.warning(f"[STREAM_WATCHDOG] All {len(self.symbols)} symbol prices stale for {now - oldest_ts:.1f}s! Auto-restarting price stream...")
+                        asyncio.create_task(self._restart_price_stream())
 
                 tasks = [self._process_symbol_loop(symbol) for symbol in self.symbols]
                 await asyncio.gather(*tasks)
                 
                 # Синхронизация рантаймов при изменениях в PositionState (постоянный контроль)
                 await self.runtime_manager.sync_with_fsm(self.fsm_states)
+
+                # Периодический аудит и восстановление потерянных TP ордеров
+                await self._reconcile_open_orders()
                 
 
 

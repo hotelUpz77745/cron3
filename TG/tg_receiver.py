@@ -65,6 +65,7 @@ class TGStates(StatesGroup):
     waiting_for_autoclose_neg_inc = State()
     waiting_for_risk_roi = State()
     waiting_for_risk_threshold = State()
+    waiting_for_risk_max_threshold = State()
 
 class TelegramReceiver:
     def __init__(self, bot_core):
@@ -1018,8 +1019,17 @@ class TelegramReceiver:
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
             risk_cfg = app_data.get("risk_system") or app_data.get("stop_bot_rirk_system") or {}
             risk_en = risk_cfg.get("enabled", False)
-            thresh = risk_cfg.get("min_balance_threshold_usdt")
-            risk_str = f"🟢 Включен (порог: {thresh:.2f} USDT)" if (risk_en and thresh is not None) else ("⚠️ Включен, но порог не задан" if risk_en else "🔴 Выключен")
+            min_th = risk_cfg.get("min_balance_threshold_usdt")
+            max_th = risk_cfg.get("max_balance_threshold_usdt")
+            th_parts = []
+            if min_th is not None:
+                th_parts.append(f"стоп: {float(min_th):.2f}$")
+            if max_th is not None:
+                th_parts.append(f"тейк: {float(max_th):.2f}$")
+            if risk_en:
+                risk_str = f"🟢 Включен ({', '.join(th_parts)})" if th_parts else "⚠️ Включен, но пороги не заданы"
+            else:
+                risk_str = "🔴 Выключен"
 
             text = (
                 f"<b>Control Panel</b>\n"
@@ -1343,33 +1353,84 @@ class TelegramReceiver:
             except Exception:
                 pass
 
-        @self.dp.callback_query(F.data == "analytics_bb_leaderboard")
-        async def cb_analytics_bb_leaderboard(callback: CallbackQuery):
-            await callback.answer()
+        async def _send_leaderboard(target, is_callback: bool = False):
+            if is_callback:
+                await target.answer()
+                msg_target = target.message
+            else:
+                msg_target = target
+
             engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
             if not engine:
-                await callback.message.answer("⚠️ LeaderboardEngine не инициализирован.")
+                await msg_target.answer("⚠️ LeaderboardEngine не инициализирован.")
                 return
+
             data = self.bot_core.analytics._read_data()
             self.bot_core.analytics._update_strategies_stats(data)
-            active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
-            universes_meta = {
-                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
-                for sid, scfg in active_strats.items()
-            }
-            entries = engine.generate_leaderboard(universes_meta)
-            evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-            chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
+
+            # Проверяем витрину Радара (Полигон 288 куполов)
+            radar_entries = []
+            radar_coins = 0
+            try:
+                paths_cfg = getattr(self.bot_core, "config", {}).get("paths", {})
+                radar_dir_str = paths_cfg.get("radar_dir", "../cron3PapperUniverses")
+                r_dir = (BASE_DIR / radar_dir_str).resolve() if not Path(radar_dir_str).is_absolute() else Path(radar_dir_str)
+                radar_file = r_dir / "ANALYTICS" / "LEADERBOARDS" / "leaderboard_all.json"
+                if radar_file.exists():
+                    r_data = json.loads(radar_file.read_text(encoding="utf-8"))
+                    radar_entries = r_data.get("leaderboard", [])
+                    radar_coins = r_data.get("evaluated_coins_count", 0)
+            except Exception as re:
+                logger.warning(f"[TG] Could not read radar leaderboard: {re}")
+
+            if radar_entries:
+                entries = radar_entries
+                evaluated_coins = radar_coins or len(self.bot_core.strategy_registry.get_all_active_symbols())
+                title_prefix = "🏆 <b>ЛИДЕРБОРД ВСЕЛЕННЫХ (ТОП-32 NET PROFIT)</b>"
+            else:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
+                universes_meta = {
+                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                    for sid, scfg in active_strats.items()
+                }
+                entries = engine.generate_leaderboard(universes_meta)
+                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
+                title_prefix = "🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT)</b>"
+
+            chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=11, top_limit=32)
             total_chunks = len(chunks)
+
             for i, chunk in enumerate(chunks, 1):
                 part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
-                response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
+                response = f"{title_prefix}{part_title}\n\n<pre>{chunk}</pre>"
                 if len(response) <= 4000:
-                    await callback.message.answer(response, parse_mode="HTML")
+                    await msg_target.answer(response, parse_mode="HTML")
                 else:
-                    for chunk_start in range(0, len(response), 3500):
-                        sub = response[chunk_start:chunk_start + 3500]
-                        await callback.message.answer(f"<pre>{sub}</pre>", parse_mode="HTML")
+                    sub_lines = chunk.splitlines()
+                    sub_buf = []
+                    sub_len = 0
+                    sub_idx = 1
+                    for line in sub_lines:
+                        if sub_len + len(line) + 1 > 3500:
+                            sub_text = "\n".join(sub_buf)
+                            await msg_target.answer(f"{title_prefix}{part_title}.{sub_idx}\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+                            sub_buf = [line]
+                            sub_len = len(line)
+                            sub_idx += 1
+                        else:
+                            sub_buf.append(line)
+                            sub_len += len(line) + 1
+                    if sub_buf:
+                        sub_text = "\n".join(sub_buf)
+                        await msg_target.answer(f"{title_prefix}{part_title}.{sub_idx}\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "analytics_bb_leaderboard")
+        async def cb_analytics_bb_leaderboard(callback: CallbackQuery):
+            try:
+                await _send_leaderboard(callback, is_callback=True)
+            except Exception as e:
+                logger.error(f"Error in cb_analytics_bb_leaderboard: {e}")
+                await callback.message.answer(f"❌ Ошибка лидерборда: {e}")
 
         @self.dp.callback_query(F.data == "analytics_bb_global")
         async def cb_analytics_bb_global(callback: CallbackQuery):
@@ -1586,94 +1647,15 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🏆 Leaderboard")
         async def cmd_leaderboard(message: Message):
             try:
-                engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
-                if not engine:
-                    await message.answer("⚠️ LeaderboardEngine не инициализирован.")
-                    return
-                data = self.bot_core.analytics._read_data()
-                self.bot_core.analytics._update_strategies_stats(data)
-                
-                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
-                universes_meta = {
-                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
-                    for sid, scfg in active_strats.items()
-                }
-                entries = engine.generate_leaderboard(universes_meta)
-                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
-                total_chunks = len(chunks)
-
-                for i, chunk in enumerate(chunks, 1):
-                    part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
-                    response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
-                    if len(response) <= 4000:
-                        await message.answer(response, parse_mode="HTML")
-                    else:
-                        sub_lines = chunk.splitlines()
-                        sub_buf = []
-                        sub_len = 0
-                        sub_idx = 1
-                        for line in sub_lines:
-                            if sub_len + len(line) + 1 > 3500:
-                                sub_text = "\n".join(sub_buf)
-                                await message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
-                                sub_buf = [line]
-                                sub_len = len(line)
-                                sub_idx += 1
-                            else:
-                                sub_buf.append(line)
-                                sub_len += len(line) + 1
-                        if sub_buf:
-                            sub_text = "\n".join(sub_buf)
-                            await message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+                await _send_leaderboard(message, is_callback=False)
             except Exception as e:
                 logger.error(f"Error in cmd_leaderboard: {e}")
                 await message.answer(f"❌ Ошибка формирования лидерборда: {e}")
 
         @self.dp.callback_query(F.data == "analytics_leaderboard")
         async def cb_analytics_leaderboard(callback: CallbackQuery):
-            await callback.answer()
             try:
-                engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
-                if not engine:
-                    await callback.message.answer("⚠️ LeaderboardEngine не инициализирован.")
-                    return
-                data = self.bot_core.analytics._read_data()
-                self.bot_core.analytics._update_strategies_stats(data)
-                
-                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
-                universes_meta = {
-                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
-                    for sid, scfg in active_strats.items()
-                }
-                entries = engine.generate_leaderboard(universes_meta)
-                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-                chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=12)
-                total_chunks = len(chunks)
-
-                for i, chunk in enumerate(chunks, 1):
-                    part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
-                    response = f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT){part_title}</b>\n\n<pre>{chunk}</pre>"
-                    if len(response) <= 4000:
-                        await callback.message.answer(response, parse_mode="HTML")
-                    else:
-                        sub_lines = chunk.splitlines()
-                        sub_buf = []
-                        sub_len = 0
-                        sub_idx = 1
-                        for line in sub_lines:
-                            if sub_len + len(line) + 1 > 3500:
-                                sub_text = "\n".join(sub_buf)
-                                await callback.message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
-                                sub_buf = [line]
-                                sub_len = len(line)
-                                sub_idx += 1
-                            else:
-                                sub_buf.append(line)
-                                sub_len += len(line) + 1
-                        if sub_buf:
-                            sub_text = "\n".join(sub_buf)
-                            await callback.message.answer(f"🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ{part_title}.{sub_idx}</b>\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+                await _send_leaderboard(callback, is_callback=True)
             except Exception as e:
                 logger.error(f"Error in cb_analytics_leaderboard: {e}")
                 await callback.message.answer(f"❌ Ошибка формирования лидерборда: {e}")
@@ -4167,7 +4149,8 @@ class TelegramReceiver:
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
             risk_cfg = app_data.get("risk_system") or app_data.get("stop_bot_rirk_system") or {}
             enabled = risk_cfg.get("enabled", False)
-            thresh = risk_cfg.get("min_balance_threshold_usdt")
+            min_thresh = risk_cfg.get("min_balance_threshold_usdt")
+            max_thresh = risk_cfg.get("max_balance_threshold_usdt")
             
             analytics_path = ANALYTICS_DIR / "analytics.json"
             cur_bal = 0.0
@@ -4179,22 +4162,27 @@ class TelegramReceiver:
                     pass
 
             status_str = "🟢 Включен" if enabled else "🔴 Выключен"
-            thresh_str = f"<b>{thresh:.2f} USDT</b>" if thresh is not None else "<i>Отключен (null)</i>"
+            min_str = f"<b>{min_thresh:.2f} USDT</b>" if min_thresh is not None else "<i>Отключен (null)</i>"
+            max_str = f"<b>{max_thresh:.2f} USDT</b>" if max_thresh is not None else "<i>Отключен (null)</i>"
 
             text = (
-                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System & Miami Take)</b>\n\n"
                 f"Статус защиты: <b>{status_str}</b>\n"
-                f"Минимальный порог баланса: {thresh_str}\n"
+                f"📉 Минимальный порог (Стоп-лосс): {min_str}\n"
+                f"🌴 Максимальный порог (Профицит Miami): {max_str}\n"
                 f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
-                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
-                "закрывает все позиции по рынку, снимает лимитные ордера, "
-                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+                "<i>💡 Если баланс упадет ниже минимального порога (просадка) или превысит максимальный (тейк-профицит), "
+                "бот немедленно блокирует открытие сделок, закрывает все позиции по рынку в 100% кэш, "
+                "снимает лимитные ордера, ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
             )
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔴 Выключить" if enabled else "🟢 Включить", callback_data="risk_toggle")],
-                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
-                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
+                [
+                    InlineKeyboardButton(text="📉 Стоп-лосс ($)", callback_data="risk_set_threshold"),
+                    InlineKeyboardButton(text="🌴 Профицит ($)", callback_data="risk_set_max_threshold")
+                ],
+                [InlineKeyboardButton(text="❌ Сбросить пороги (null)", callback_data="risk_clear_threshold")]
             ])
             await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -4218,8 +4206,10 @@ class TelegramReceiver:
             
             await callback.answer(f"Risk System {'включена' if enabled else 'выключена'}!")
             
-            thresh = app_data["risk_system"].get("min_balance_threshold_usdt")
-            thresh_str = f"<b>{thresh:.2f} USDT</b>" if thresh is not None else "<i>Отключен (null)</i>"
+            min_thresh = app_data["risk_system"].get("min_balance_threshold_usdt")
+            max_thresh = app_data["risk_system"].get("max_balance_threshold_usdt")
+            min_str = f"<b>{min_thresh:.2f} USDT</b>" if min_thresh is not None else "<i>Отключен (null)</i>"
+            max_str = f"<b>{max_thresh:.2f} USDT</b>" if max_thresh is not None else "<i>Отключен (null)</i>"
             status_str = "🟢 Включен" if enabled else "🔴 Выключен"
             
             cur_bal = 0.0
@@ -4232,18 +4222,22 @@ class TelegramReceiver:
                     pass
 
             text = (
-                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System & Miami Take)</b>\n\n"
                 f"Статус защиты: <b>{status_str}</b>\n"
-                f"Минимальный порог баланса: {thresh_str}\n"
+                f"📉 Минимальный порог (Стоп-лосс): {min_str}\n"
+                f"🌴 Максимальный порог (Профицит Miami): {max_str}\n"
                 f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
-                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
-                "закрывает все позиции по рынку, снимает лимитные ордера, "
-                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+                "<i>💡 Если баланс упадет ниже минимального порога (просадка) или превысит максимальный (тейк-профицит), "
+                "бот немедленно блокирует открытие сделок, закрывает все позиции по рынку в 100% кэш, "
+                "снимает лимитные ордера, ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
             )
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔴 Выключить" if enabled else "🟢 Включить", callback_data="risk_toggle")],
-                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
-                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
+                [
+                    InlineKeyboardButton(text="📉 Стоп-лосс ($)", callback_data="risk_set_threshold"),
+                    InlineKeyboardButton(text="🌴 Профицит ($)", callback_data="risk_set_max_threshold")
+                ],
+                [InlineKeyboardButton(text="❌ Сбросить пороги (null)", callback_data="risk_clear_threshold")]
             ])
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -4254,12 +4248,15 @@ class TelegramReceiver:
             app_data = Utils.read_json_file(app_json_path) or {}
             if "risk_system" in app_data:
                 app_data["risk_system"]["min_balance_threshold_usdt"] = None
+                app_data["risk_system"]["max_balance_threshold_usdt"] = None
             if "stop_bot_rirk_system" in app_data:
                 app_data["stop_bot_rirk_system"]["min_balance_threshold_usdt"] = None
+                app_data["stop_bot_rirk_system"]["max_balance_threshold_usdt"] = None
             Utils.write_json_file(app_json_path, app_data)
-            await callback.answer("Порог сброшен на null")
+            await callback.answer("Пороги сброшены на null")
             
-            thresh_str = "<i>Отключен (null)</i>"
+            min_str = "<i>Отключен (null)</i>"
+            max_str = "<i>Отключен (null)</i>"
             status_str = "🟢 Включен" if app_data.get("risk_system", {}).get("enabled") else "🔴 Выключен"
             cur_bal = 0.0
             analytics_path = ANALYTICS_DIR / "analytics.json"
@@ -4271,18 +4268,22 @@ class TelegramReceiver:
                     pass
 
             text = (
-                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System)</b>\n\n"
+                "<b>🛡️ ГЛОБАЛЬНЫЙ РУЧНИК (Risk System & Miami Take)</b>\n\n"
                 f"Статус защиты: <b>{status_str}</b>\n"
-                f"Минимальный порог баланса: {thresh_str}\n"
+                f"📉 Минимальный порог (Стоп-лосс): {min_str}\n"
+                f"🌴 Максимальный порог (Профицит Miami): {max_str}\n"
                 f"Текущий баланс кошелька: <b>{cur_bal:.2f} USDT</b>\n\n"
-                "<i>💡 Если баланс упадет ниже порога, бот немедленно блокирует открытие сделок, "
-                "закрывает все позиции по рынку, снимает лимитные ордера, "
-                "ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
+                "<i>💡 Если баланс упадет ниже минимального порога (просадка) или превысит максимальный (тейк-профицит), "
+                "бот немедленно блокирует открытие сделок, закрывает все позиции по рынку в 100% кэш, "
+                "снимает лимитные ордера, ожидает синхронизации аналитики и останавливает торговлю (Pause).</i>"
             )
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔴 Выключить" if app_data.get("risk_system", {}).get("enabled") else "🟢 Включить", callback_data="risk_toggle")],
-                [InlineKeyboardButton(text="💵 Задать порог в $", callback_data="risk_set_threshold")],
-                [InlineKeyboardButton(text="❌ Сбросить порог (null)", callback_data="risk_clear_threshold")]
+                [
+                    InlineKeyboardButton(text="📉 Стоп-лосс ($)", callback_data="risk_set_threshold"),
+                    InlineKeyboardButton(text="🌴 Профицит ($)", callback_data="risk_set_max_threshold")
+                ],
+                [InlineKeyboardButton(text="❌ Сбросить пороги (null)", callback_data="risk_clear_threshold")]
             ])
             await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
@@ -4291,7 +4292,7 @@ class TelegramReceiver:
             await state.clear()
             await callback.answer()
             await callback.message.answer(
-                "Введите минимальный порог баланса в USDT (например: <code>160.0</code> или <code>150</code>):\n\n"
+                "Введите минимальный порог баланса (стоп-лосс) в USDT (например: <code>100.0</code> или <code>80</code>):\n\n"
                 "Для отключения порога введите <code>null</code> или нажмите 🔙 Back:",
                 reply_markup=self._get_back_keyboard(),
                 parse_mode="HTML"
@@ -4316,7 +4317,7 @@ class TelegramReceiver:
                 if "stop_bot_rirk_system" in app_data:
                     app_data["stop_bot_rirk_system"]["min_balance_threshold_usdt"] = None
                 Utils.write_json_file(app_json_path, app_data)
-                await message.answer("✅ Порог баланса отключен (установлен в <b>null</b>).", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+                await message.answer("✅ Порог стоп-лосса отключен (установлен в <b>null</b>).", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
                 await state.clear()
                 return
 
@@ -4325,7 +4326,7 @@ class TelegramReceiver:
                 if new_val <= 0:
                     raise ValueError()
             except ValueError:
-                await message.answer("❌ Введите корректное положительное число в $ (например: 160.5) или <code>null</code>:")
+                await message.answer("❌ Введите корректное положительное число в $ (например: 100.0) или <code>null</code>:")
                 return
 
             app_data["risk_system"]["min_balance_threshold_usdt"] = new_val
@@ -4336,7 +4337,64 @@ class TelegramReceiver:
             Utils.write_json_file(app_json_path, app_data)
 
             await message.answer(
-                f"✅ Минимальный порог баланса установлен на <b>{new_val:.2f} USDT</b>!\n"
+                f"✅ Минимальный порог (стоп-лосс) установлен на <b>{new_val:.2f} USDT</b>!\n"
+                f"Система защиты автоматически <b>активирована</b>.",
+                reply_markup=self._get_main_keyboard(),
+                parse_mode="HTML"
+            )
+            await state.clear()
+
+        @self.dp.callback_query(F.data == "risk_set_max_threshold")
+        async def on_risk_set_max_threshold(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            await callback.answer()
+            await callback.message.answer(
+                "Введите максимальный целевой порог (профицит / Miami Take) в USDT (например: <code>300.0</code> или <code>500</code>):\n\n"
+                "Для отключения порога введите <code>null</code> или нажмите 🔙 Back:",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await state.set_state(TGStates.waiting_for_risk_max_threshold)
+
+        @self.dp.message(StateFilter(TGStates.waiting_for_risk_max_threshold))
+        async def process_risk_max_threshold(message: Message, state: FSMContext):
+            if message.text == "🔙 Back":
+                await state.clear()
+                await message.answer("Изменение порога отменено.", reply_markup=self._get_main_keyboard())
+                return
+            
+            raw = (message.text or "").strip().lower().replace(",", ".")
+            app_json_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(app_json_path) or {}
+            if "risk_system" not in app_data:
+                app_data["risk_system"] = {}
+
+            if raw in ["null", "none", "off", "0", "сброс"]:
+                app_data["risk_system"]["max_balance_threshold_usdt"] = None
+                if "stop_bot_rirk_system" in app_data:
+                    app_data["stop_bot_rirk_system"]["max_balance_threshold_usdt"] = None
+                Utils.write_json_file(app_json_path, app_data)
+                await message.answer("✅ Порог профицита отключен (установлен в <b>null</b>).", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
+                await state.clear()
+                return
+
+            try:
+                new_val = float(raw)
+                if new_val <= 0:
+                    raise ValueError()
+            except ValueError:
+                await message.answer("❌ Введите корректное положительное число в $ (например: 300.0) или <code>null</code>:")
+                return
+
+            app_data["risk_system"]["max_balance_threshold_usdt"] = new_val
+            app_data["risk_system"]["enabled"] = True
+            if "stop_bot_rirk_system" in app_data:
+                app_data["stop_bot_rirk_system"]["max_balance_threshold_usdt"] = new_val
+                app_data["stop_bot_rirk_system"]["enabled"] = True
+            Utils.write_json_file(app_json_path, app_data)
+
+            await message.answer(
+                f"🌴 Максимальный целевой порог (профицит Miami Take) установлен на <b>{new_val:.2f} USDT</b>!\n"
                 f"Система защиты автоматически <b>активирована</b>.",
                 reply_markup=self._get_main_keyboard(),
                 parse_mode="HTML"

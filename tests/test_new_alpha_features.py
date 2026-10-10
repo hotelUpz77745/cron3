@@ -178,8 +178,192 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
 
         mock_client.cancel_orders_for_side.assert_not_called()
         mock_client.make_order.assert_not_called()
+
+    async def test_half_peel_execution_and_level_locking(self):
+        """Проверка: Half-Peel (peel_ratio=0.5) сбрасывает 50% объема, удерживает уровень активным и блокирует повторный пилинг (Variant 2)."""
+        avg_mgr = AverageManager()
+
+        state = PositionState(symbol="TESTUSDT", side="LONG")
+        state.in_position = True
+        state.total_volume = 20.0
+        state.avg_entry_price = 90.0
+
+        # Уровень 3 исполнен: цена 80.0, объем 10.0, peel_ratio = 0.5 (Half-Peel)
+        state.grid = {
+            "0": {"is_active": True, "fill_price": 100.0, "fill_qty": 10.0, "peel_tp_pct": None},
+            "3": {"is_active": True, "fill_price": 80.0, "fill_qty": 10.0, "peel_tp_pct": 1.2, "peel_ratio": 0.5},
+        }
+
+        mock_client = AsyncMock()
+        mock_client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        mock_runtime_mgr = MagicMock()
+        mock_tp_manager = MagicMock()
+        mock_tp_manager.place_take_profit = AsyncMock()
+        spec_data = {"tickSize": "0.01", "stepSize": "0.01"}
+
+        # 1. Отскок +1.5% >= 1.2%
+        current_price = 81.2
+        res1 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "TESTUSDT", "LONG", state, current_price, spec_data, mock_tp_manager)
+        self.assertTrue(res1)
+
+        # Проверяем маркет-сброс ровно 50% колена (5.0 монет)
+        mock_client.make_order.assert_called_once()
+        call_kwargs = mock_client.make_order.call_args[1]
+        self.assertEqual(call_kwargs["qty"], 5.0)
+
+        # Проверяем состояние колена: уровень остался АКТИВНЫМ, fill_qty = 5.0, peeled = True
         self.assertTrue(state.grid["3"]["is_active"])
-        self.assertEqual(state.total_volume, 20.0)
+        self.assertEqual(state.grid["3"]["fill_qty"], 5.0)
+        self.assertTrue(state.grid["3"]["peeled"])
+
+        # Общий объем позиции сжался на 5.0 (20.0 -> 15.0)
+        self.assertEqual(state.total_volume, 15.0)
+        mock_tp_manager.place_take_profit.assert_called_once()
+
+        # 2. Повторная проверка на том же уровне: должна быть заблокирована флагом peeled
+        mock_client.make_order.reset_mock()
+        res2 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "TESTUSDT", "LONG", state, current_price, spec_data, mock_tp_manager)
+        self.assertFalse(res2)
+        mock_client.make_order.assert_not_called()
+
+        # 3. При вызове reset() флаг peeled сбрасывается
+        state.reset()
+        self.assertNotIn("peeled", state.grid["3"])
+        self.assertFalse(state.grid["3"]["is_active"])
+        self.assertEqual(state.total_volume, 0.0)
+
+    def test_property_1_realized_pnl_wallet_protection_half_vs_full(self):
+        """Свойство 1: Баланс кошелька не уходит в пике (Realized PnL снижен в 2 раза)."""
+        avg_entry = 5.0
+        exit_price = 3.86
+        loss_per_coin = exit_price - avg_entry  # -1.14 USDT
+
+        full_peel_qty = 10.0
+        full_realized_pnl = full_peel_qty * loss_per_coin  # -11.40 USDT
+
+        half_peel_qty = 10.0 * 0.50
+        half_realized_pnl = half_peel_qty * loss_per_coin  # -5.70 USDT
+
+        self.assertAlmostEqual(full_realized_pnl, -11.40, places=4)
+        self.assertAlmostEqual(half_realized_pnl, -5.70, places=4)
+        wallet_savings = abs(full_realized_pnl) - abs(half_realized_pnl)
+        self.assertAlmostEqual(wallet_savings, 5.70, places=4)
+        self.assertAlmostEqual(half_realized_pnl / full_realized_pnl, 0.50, places=4)
+
+    def test_property_2_avg_entry_price_anchored_at_bottom(self):
+        """Свойство 2: Оставшиеся 50% объема удерживают среднюю цену внизу."""
+        cost_l0_l2 = 60.0 + 55.0 + 50.0  # 165.0 USDT, 30 монет
+
+        vol_full_peel = 30.0
+        avg_full_peel = cost_l0_l2 / vol_full_peel  # 5.50 USDT
+
+        vol_half_peel = 30.0 + 5.0  # 35 монет
+        cost_half_peel = cost_l0_l2 + (5.0 * 4.0)  # 185.0 USDT
+        avg_half_peel = cost_half_peel / vol_half_peel  # 5.2857 USDT
+
+        self.assertLess(avg_half_peel, avg_full_peel)
+        self.assertAlmostEqual(avg_full_peel, 5.50, places=2)
+        self.assertAlmostEqual(avg_half_peel, 5.2857, places=3)
+
+        price_rebound = 5.35
+        self.assertGreater(price_rebound, avg_half_peel)
+        self.assertLess(price_rebound, avg_full_peel)
+
+    async def test_property_3_peeled_level_locks_against_subsequent_dumps(self):
+        """Свойство 3: Уровень НЕ перезакупается на том же дампе."""
+        avg_mgr = AverageManager()
+        state = PositionState(symbol="STRKUSDT", side="LONG")
+        state.in_position = True
+        state.total_volume = 30.0
+        state.avg_entry_price = 1.0
+
+        state.grid = {
+            "0": {"is_active": True, "fill_price": 1.10, "fill_qty": 10.0, "peel_tp_pct": None},
+            "1": {"is_active": True, "fill_price": 0.95, "fill_qty": 10.0, "peel_tp_pct": None},
+            "3": {"is_active": True, "fill_price": 0.80, "fill_qty": 10.0, "peel_tp_pct": 1.2, "peel_ratio": 0.5},
+        }
+
+        mock_client = AsyncMock()
+        mock_client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        mock_runtime_mgr = MagicMock()
+        mock_tp_mgr = MagicMock()
+        mock_tp_mgr.place_take_profit = AsyncMock()
+        spec_data = {"tickSize": "0.001", "stepSize": "0.1"}
+
+        res1 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "STRKUSDT", "LONG", state, 0.815, spec_data, mock_tp_mgr)
+        self.assertTrue(res1)
+        self.assertTrue(state.grid["3"]["peeled"])
+        self.assertTrue(state.grid["3"]["is_active"])
+        self.assertEqual(state.grid["3"]["fill_qty"], 5.0)
+
+        # Повторный дамп: уровень остается active, повторный пилинг заблокирован
+        self.assertTrue(state.grid["3"]["is_active"])
+        mock_client.make_order.reset_mock()
+        res_rebounce = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "STRKUSDT", "LONG", state, 0.815, spec_data, mock_tp_mgr)
+        self.assertFalse(res_rebounce)
+        mock_client.make_order.assert_not_called()
+
+    async def test_multi_level_cascade_peeling_l3_to_l6_stress(self):
+        """Боевое крещение Half-Peel: каскадное срабатывание 4-х последовательных пилингов (L3..L6)."""
+        avg_mgr = AverageManager()
+        state = PositionState(symbol="PUMPUSDT", side="LONG")
+        state.in_position = True
+        state.total_volume = 58.0
+        state.avg_entry_price = 0.0050
+
+        state.grid = {
+            "0": {"is_active": True, "fill_price": 0.0060, "fill_qty": 10.0, "peel_tp_pct": None},
+            "1": {"is_active": True, "fill_price": 0.0055, "fill_qty": 10.0, "peel_tp_pct": None},
+            "2": {"is_active": True, "fill_price": 0.0050, "fill_qty": 10.0, "peel_tp_pct": None},
+            "3": {"is_active": True, "fill_price": 0.0045, "fill_qty": 8.0,  "peel_tp_pct": 1.2, "peel_ratio": 0.5},
+            "4": {"is_active": True, "fill_price": 0.0040, "fill_qty": 7.0,  "peel_tp_pct": 1.2, "peel_ratio": 0.5},
+            "5": {"is_active": True, "fill_price": 0.0035, "fill_qty": 7.0,  "peel_tp_pct": 1.4, "peel_ratio": 0.5},
+            "6": {"is_active": True, "fill_price": 0.0030, "fill_qty": 6.0,  "peel_tp_pct": 1.4, "peel_ratio": 0.5},
+        }
+
+        mock_client = AsyncMock()
+        mock_client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        mock_runtime_mgr = MagicMock()
+        mock_tp_mgr = MagicMock()
+        mock_tp_mgr.place_take_profit = AsyncMock()
+        spec_data = {"tickSize": "0.00001", "stepSize": "1.0"}
+
+        # Триггер 1: L6
+        res_l6 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "PUMPUSDT", "LONG", state, 0.00306, spec_data, mock_tp_mgr)
+        self.assertTrue(res_l6)
+        self.assertEqual(mock_client.make_order.call_args[1]["qty"], 3.0)
+        self.assertTrue(state.grid["6"]["peeled"])
+
+        # Триггер 2: L5
+        mock_client.make_order.reset_mock()
+        res_l5 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "PUMPUSDT", "LONG", state, 0.00357, spec_data, mock_tp_mgr)
+        self.assertTrue(res_l5)
+        self.assertEqual(mock_client.make_order.call_args[1]["qty"], 3.5)
+        self.assertTrue(state.grid["5"]["peeled"])
+
+        # Триггер 3: L4
+        mock_client.make_order.reset_mock()
+        res_l4 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "PUMPUSDT", "LONG", state, 0.00406, spec_data, mock_tp_mgr)
+        self.assertTrue(res_l4)
+        self.assertEqual(mock_client.make_order.call_args[1]["qty"], 3.5)
+        self.assertTrue(state.grid["4"]["peeled"])
+
+        # Триггер 4: L3
+        mock_client.make_order.reset_mock()
+        res_l3 = await avg_mgr.process_peel(mock_client, mock_runtime_mgr, "PUMPUSDT", "LONG", state, 0.00457, spec_data, mock_tp_mgr)
+        self.assertTrue(res_l3)
+        self.assertEqual(mock_client.make_order.call_args[1]["qty"], 4.0)
+        self.assertTrue(state.grid["3"]["peeled"])
+
+        self.assertEqual(state.total_volume, 44.0)
+        for lvl in ("3", "4", "5", "6"):
+            self.assertTrue(state.grid[lvl]["peeled"])
+            self.assertTrue(state.grid[lvl]["is_active"])
+
+        state.reset()
+        for lvl in ("3", "4", "5", "6"):
+            self.assertNotIn("peeled", state.grid[lvl])
+            self.assertFalse(state.grid[lvl]["is_active"])
 
     # --------------------------------------------------------------------------
     # 3. ТЕСТЫ RADAR NAVIGATOR (23H ROTATION WINDOW & ALPHA SELECTOR)

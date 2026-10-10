@@ -194,9 +194,13 @@ class AverageManager:
         )
 
     async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager):
-        invest_size = 100.0
-        if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
-            invest_size = runtime_manager.caches[symbol].get(side, {}).get("invest_size", 100.0)
+        invest_size = float(getattr(state, "eff_invest", 0.0) or 0.0)
+        if invest_size <= 0:
+            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+                side_c = runtime_manager.caches[symbol].get(side, {})
+                invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
+            else:
+                invest_size = 100.0
         volume_pct = float(level_data["volume"])
         
         # 1. ОТМЕНА СТАРЫХ ЛИМИТНЫХ ОРДЕРОВ (ВКЛЮЧАЯ ТЕЙК ПРОФИТ) ДО УСРЕДНЕНИЯ
@@ -273,8 +277,8 @@ class AverageManager:
         if not grid:
             return False
 
-        # Находим крайний (наиболее глубокий) активный уровень сетки
-        active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
+        # Находим крайний (наиболее глубокий) активный уровень сетки, еще не прошедший пилинг в этом цикле
+        active_levels = [int(k) for k, v in grid.items() if v.get("is_active") and not v.get("peeled")]
         if not active_levels:
             return False
 
@@ -282,6 +286,10 @@ class AverageManager:
         cur_level_str = str(cur_level_int)
         level_data = grid.get(cur_level_str)
         if not level_data:
+            return False
+
+        # Если уровень уже прошел пилинг в этом цикле (Variant 2), повторный пилинг не выполняется
+        if level_data.get("peeled"):
             return False
 
         # Проверяем наличие настройки пилинга на этом уровне
@@ -302,17 +310,24 @@ class AverageManager:
         if rebound_pct < float(peel_tp_pct):
             return False
 
-        # Отскок зафиксирован! Определяем объем разгрузки
+        # Отскок зафиксирован! Определяем объем разгрузки с учетом peel_ratio
+        peel_ratio = float(level_data.get("peel_ratio") if level_data.get("peel_ratio") is not None else 1.0)
+        peel_ratio = max(0.1, min(1.0, peel_ratio))
+
         fill_qty = level_data.get("fill_qty")
         if fill_qty and fill_qty > 0:
-            raw_qty = min(float(fill_qty), abs(state.total_volume))
+            raw_qty = min(float(fill_qty) * peel_ratio, abs(state.total_volume))
         else:
-            invest_size = 100.0
-            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
-                invest_size = runtime_manager.caches[symbol].get(side, {}).get("invest_size", 100.0)
+            invest_size = float(getattr(state, "eff_invest", 0.0) or 0.0)
+            if invest_size <= 0:
+                if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+                    side_c = runtime_manager.caches[symbol].get(side, {})
+                    invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
+                else:
+                    invest_size = 100.0
             vol_pct = float(level_data.get("volume", 0.0))
             raw_qty = TradeMath.calculate_order_volume(invest_size, vol_pct, current_price, spec_data, symbol)
-            raw_qty = min(raw_qty, abs(state.total_volume))
+            raw_qty = min(raw_qty * peel_ratio, abs(state.total_volume))
 
         peel_qty = TradeMath.round_qty(raw_qty, spec_data, symbol)
         if peel_qty <= 0:
@@ -326,7 +341,7 @@ class AverageManager:
             order_side = "SELL" if side == "LONG" else "BUY"
             logger.info(
                 f"[{symbol}] {side} 🍊 [SUB-GRID PEEL TRIGGERED] Level {cur_level_str}: "
-                f"Rebound +{rebound_pct:.2f}% >= {peel_tp_pct}% from fill {fill_price}. Closing peel vol {peel_qty}"
+                f"Rebound +{rebound_pct:.2f}% >= {peel_tp_pct}% from fill {fill_price}. Closing peel vol {peel_qty} (ratio {peel_ratio})"
             )
 
             res = await client.make_order(
@@ -338,29 +353,66 @@ class AverageManager:
             )
 
             if res.success:
-                # Синхронизируем уменьшение объема позиции при частичном сбросе колена
-                if side == "LONG":
-                    state.total_volume = max(0.0, round(state.total_volume - peel_qty, 8))
-                else:
-                    state.total_volume = min(0.0, round(state.total_volume + peel_qty, 8))
+                # Синхронизируем актуальный остаточный объем и среднюю цену напрямую с биржи,
+                # исключая гонку с WebSocket и двойное вычитание peel_qty
+                synced_from_rest = False
+                if client and hasattr(client, "fetch_positions"):
+                    try:
+                        pos_list = await client.fetch_positions(symbol)
+                        for p in pos_list:
+                            if p.get("positionSide") == side:
+                                rem_amt = float(p.get("positionAmt", 0.0))
+                                rem_entry = float(p.get("entryPrice", 0.0))
+                                state.total_volume = rem_amt
+                                if rem_entry > 0:
+                                    state.avg_entry_price = rem_entry
+                                synced_from_rest = True
+                                break
+                    except Exception as e:
+                        logger.warning(f"[{symbol}] {side} Failed to fetch post-peel position from REST: {e}")
+
+                if not synced_from_rest:
+                    if side == "LONG":
+                        state.total_volume = max(0.0, round(state.total_volume - peel_qty, 8))
+                    else:
+                        state.total_volume = min(0.0, round(state.total_volume + peel_qty, 8))
 
                 if abs(state.total_volume) <= 1e-8:
                     state.in_position = False
                     state.is_finished = True
 
-                # Сбрасываем статус разгруженного уровня в сетке (готов к повторному откупу)
-                level_data["is_active"] = False
-                level_data["is_armed"] = False
-                level_data["activated_at"] = None
-                level_data["timestamp"] = None
-                level_data["fill_price"] = None
-                level_data["fill_qty"] = None
+                peel_once = level_data.get("peel_once")
+                if peel_once is None:
+                    peel_once = (peel_ratio < 1.0)
+                else:
+                    peel_once = bool(peel_once)
 
-                rem_vol = abs(state.total_volume)
-                logger.info(
-                    f"[{symbol}] {side} 🍊 [SUB-GRID PEEL EXECUTED] Level {cur_level_str} successfully peeled! "
-                    f"Level reset for re-entry. Remaining vol: {rem_vol:.4f}"
-                )
+                if peel_once:
+                    # ВАРИАНТ 2: Однократный пилинг за цикл (peel_once=True, Новая Чита)
+                    # Сбросили объем (например 50%), остаток удерживает среднюю цену внизу
+                    curr_fill_qty = float(level_data.get("fill_qty") or 0.0)
+                    rem_level_qty = max(0.0, round(curr_fill_qty - peel_qty, 8))
+                    level_data["fill_qty"] = rem_level_qty
+                    level_data["peeled"] = True
+                    # Уровень остается активным с остаточным объемом, чтобы не откупаться повторно до закрытия корзины
+                    level_data["is_active"] = True
+                    logger.info(
+                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-ONCE EXECUTED] Level {cur_level_str} peeled {peel_qty} (ratio {peel_ratio})! "
+                        f"Level locked against re-entry with remaining {rem_level_qty:.4f} vol. Pos vol: {abs(state.total_volume):.4f}"
+                    )
+                else:
+                    # ВАРИАНТ 1: Многократный сброс уровня (peel_once=False, Старая Тошиба)
+                    level_data["is_active"] = False
+                    level_data["is_armed"] = False
+                    level_data["activated_at"] = None
+                    level_data["timestamp"] = None
+                    level_data["fill_price"] = None
+                    level_data["fill_qty"] = None
+                    level_data["peeled"] = False
+                    logger.info(
+                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-RESET EXECUTED] Level {cur_level_str} successfully peeled! "
+                        f"Level reset for re-entry. Remaining vol: {abs(state.total_volume):.4f}"
+                    )
 
                 # Сбрасываем кэш основного тейка для пересчета под оставшийся объем
                 state.tp_price = None

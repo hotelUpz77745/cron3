@@ -173,6 +173,11 @@ class StrategyApplicator:
             elif hasattr(strategy, "overrides") and "auto_closing" in strategy.overrides:
                 side_data["auto_closing"] = copy.deepcopy(strategy.overrides["auto_closing"])
 
+            if hasattr(strategy, "trend_size_cfg") and strategy.trend_size_cfg:
+                side_data["trend_size_depender"] = copy.deepcopy(strategy.trend_size_cfg)
+            if hasattr(strategy, "sizing_mode") and strategy.sizing_mode:
+                side_data["sizing_mode"] = strategy.sizing_mode
+
             side_cfgs[side] = side_data
 
         return side_cfgs
@@ -230,7 +235,7 @@ class StrategyApplicator:
                     "initial_entry_price", "open_time", "next_avg_price",
                     "fallback_price", "in_position", "in_position_papper",
                     "is_finished", "pending_avg", "pending_rolling_tp", "recent_closes",
-                    "trailing_tp_state", "trailing_grid_state"
+                    "trailing_tp_state", "trailing_grid_state", "eff_invest"
                 ]:
                     if state_key in exist_side:
                         new_side[state_key] = copy.deepcopy(exist_side[state_key])
@@ -261,7 +266,8 @@ class StrategyApplicator:
                     "pending_rolling_tp": False,
                     "recent_closes": copy.deepcopy(exist_side.get("recent_closes", [])),
                     "trailing_tp_state": {},
-                    "trailing_grid_state": {}
+                    "trailing_grid_state": {},
+                    "eff_invest": 0.0
                 })
                 if "grid" in new_side:
                     for grid_cfg in new_side["grid"].values():

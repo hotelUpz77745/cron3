@@ -49,8 +49,17 @@
       ">4": 1.6
     }
   },
+  "trend_size_depender": {
+    "trend_mode": "bb_deviation_4h",
+    "timeframe": "4h",
+    "eval_window": 20,
+    "eval_window_bars": 3360,
+    "multiplier": 2.0,
+    "min_side_pct": 33.3333,
+    "max_side_pct": 66.6667
+  },
   "LONG": {
-    "invest_size": 600.0,
+    "invest_size": 151.0,
     "grid": {
       "0": {
         "indent": 0.0,

@@ -207,6 +207,52 @@ class StrategyConfig:
             self.mode = "off"
         self.auto_closing_mode: str = self.mode
 
+        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго строковый тип ("dyn_bb" / "static")
+        sizing_mode_val = (
+            self.active_settings.get("sizing_mode")
+            or raw_meta.get("sizing_mode")
+            or self.overrides.get("sizing_mode")
+        )
+        if not sizing_mode_val and self.active_settings.get("sizing_modes"):
+            legacy_sm = self.active_settings.get("sizing_modes")
+            sizing_mode_val = legacy_sm[0] if isinstance(legacy_sm, list) and legacy_sm else str(legacy_sm)
+        elif not sizing_mode_val and raw_meta.get("sizing_modes"):
+            legacy_sm = raw_meta.get("sizing_modes")
+            sizing_mode_val = legacy_sm[0] if isinstance(legacy_sm, list) and legacy_sm else str(legacy_sm)
+
+        if sizing_mode_val and isinstance(sizing_mode_val, str):
+            self.sizing_mode: str = sizing_mode_val.lower().strip()
+        else:
+            self.sizing_mode = "dyn_bb"
+
+        base_tsd = copy.deepcopy(
+            raw_meta.get("trend_size_depender")
+            or self.overrides.get("trend_size_depender")
+            or (self.active_settings.get("override", {}) or {}).get("trend_size_depender")
+            or (self.active_settings.get("overrides", {}) or {}).get("trend_size_depender")
+            or _CFG.get("trend_size_depender", {})
+        )
+        if not base_tsd:
+            base_tsd = {
+                "enabled": (self.sizing_mode == "dyn_bb"),
+                "trend_mode": "bb_deviation_4h",
+                "timeframe": "4h",
+                "eval_window": 20,
+                "eval_window_bars": 3360,
+                "multiplier": 2.0,
+                "min_side_pct": 33.3333,
+                "max_side_pct": 66.6667
+            }
+        else:
+            if self.sizing_mode == "static":
+                base_tsd["enabled"] = False
+            elif self.sizing_mode == "dyn_bb":
+                base_tsd["enabled"] = True
+                if "trend_mode" not in base_tsd:
+                    base_tsd["trend_mode"] = "bb_deviation_4h"
+
+        self.trend_size_cfg: Dict[str, Any] = base_tsd
+
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
         sg_cfg = raw_meta.get("smart_grace") or self.overrides.get("smart_grace")
@@ -240,8 +286,14 @@ class StrategyConfig:
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 
-        # Персональный таймфрейм вселенной (по умолчанию 5m)
-        self.timeframe: str = str(raw_meta.get("timeframe") or self.overrides.get("timeframe", DEFAULT_TIMEFRAME))
+        # Персональный пульс/хартбит стратегии (по умолчанию 5m)
+        self.heartbeat_tfr: str = str(
+            raw_meta.get("heartbeat_tfr")
+            or self.overrides.get("heartbeat_tfr")
+            or raw_meta.get("timeframe")
+            or self.overrides.get("timeframe", DEFAULT_TIMEFRAME)
+        )
+        self.timeframe: str = self.heartbeat_tfr
 
         # Мультиаккаунтность: привязка стратегии к ключам в .env
         self.api_key_name: Optional[str] = self.active_settings.get("api_key_name")
@@ -296,6 +348,11 @@ class StrategyConfig:
     def modes(self) -> List[str]:
         """Обратная совместимость: возвращает список с текущим строковым режимом."""
         return [self.mode]
+
+    @property
+    def sizing_modes(self) -> List[str]:
+        """Обратная совместимость: возвращает список с текущим строковым режимом сайзинга."""
+        return [self.sizing_mode]
 
     def __repr__(self) -> str:
         return f"<StrategyConfig id='{self.strategy_id}' name='{self.name}' symbols={self.symbols}>"

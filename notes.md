@@ -1138,3 +1138,25 @@ $$\text{Actual Sponsored Loss} = \Delta Q_{burn} \times \text{Unit Loss}$$
                 "start_balance_usdt": 171.92
             }
         } -->
+
+
+
+<!-- ================================================================================================================================================================
+STRATEGIES LEADERBOARD (Active: 4 | Coins: 4)
+Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)
+================================================================================================================================================================
+#   Strategy / Universe ID                      Mode      Net Profit    Iter Net       Realized     Iter Real    Floating    Peak Net (Age)    Max DD      Trades   Rec   
+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+1   u16_titan_universal_alpha__fixed_b          [FIXED $120] +3.26 USDT    +3.26 $ (#1)   +4.69 $      +4.69 $      -1.43 $     +4.44 $ (4.4h)    -11.89 $    13       0.27  
+2   u16_titan_universal_alpha__toxic            [TOXIC]   -2.69 USDT    -2.69 $ (#2)   +7.85 $      +7.85 $      -10.54 $    +7.74 $ (1.2h)    -10.49 $    15       -0.26 
+3   u16_titan_universal_alpha__classic          [CLASSIC] -3.99 USDT    -3.99 $ (#1)   -1.26 $      -1.26 $      -2.72 $     +0.42 $ (2.4h)    -10.55 $    10       -0.38 
+4   u16_titan_universal_alpha__fixed            [FIXED $60] -11.91 USDT   -11.91 $ (#1)  +6.99 $      +6.99 $      -18.90 $    +2.20 $ (6.7h)    -18.11 $    10       -0.66 
+================================================================================================================================================================
+
+
+
+3   u16_titan_universal_alpha__classic          [CLASSIC] -3.99 USDT    -3.99 $ (#1)   -1.26 $      -1.26 $      -2.72 $     +0.42 $ (2.4h)    -10.55 $    10       -0.38  ---
+
+
+2026-10-08 19:37:12 | INFO | AvgManager | [GRASSUSDT] LONG 🍊 [SUB-GRID PEEL TRIGGERED] Level 4: Rebound +1.21% >= 1.2% from fill 0.5726. Closing peel vol 118.0
+2026-10-08 19:37:12 | INFO | AvgManager | [GRASSUSDT] LONG 🍊 [SUB-GRID PEEL EXECUTED] Level 4 successfully peeled! Level reset for re-entry. Remaining vol: 269.3000   -- это за счет пиллинга тотал реализ минус оказался или изза сброса чешуи? проверь правильность работы алгоритма. -->

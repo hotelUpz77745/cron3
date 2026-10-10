@@ -119,7 +119,23 @@ class CrossSideProfitRecycler:
         )
 
         if res.success:
-            losing_state.total_volume = max(0.0, losing_state.total_volume - rounded_qty)
+            # Синхронизируем фактический объем позиции с биржи/эмулятора без слепой ручной арифметики
+            synced = False
+            try:
+                positions = universe.client.fetch_positions(symbol)
+                if asyncio.iscoroutine(positions):
+                    positions = await positions
+                side_pos = next((p for p in positions if p.get("positionSide") == losing_side), None)
+                if side_pos:
+                    remote_vol = abs(float(side_pos.get("positionAmt", 0.0)))
+                    losing_state.total_volume = remote_vol
+                    synced = True
+            except Exception as e:
+                logger.warning(f"[{strat_id}][{symbol}] Failed to sync position after burn: {e}")
+
+            if not synced:
+                losing_state.total_volume = max(0.0, losing_state.total_volume - rounded_qty)
+
             if losing_state.total_volume <= 0:
                 losing_state.set_in_position(False)
                 losing_state.is_finished = True

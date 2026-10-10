@@ -10,5 +10,9 @@
     "AVAUSDT": true,
     "RAYSOLUSDT": true,
     "GTCUSDT": true,
-    "NEARUSDT": true
+    "NEARUSDT": true,
+    "ETHFIUSDT": true,
+    "STRKUSDT": true,
+    "METUSDT": true,
+    "RLCUSDT": true
 }

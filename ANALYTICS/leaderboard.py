@@ -199,57 +199,90 @@ class LeaderboardEngine:
     def format_table(
         self, entries: List[dict], evaluated_coins_count: int = 0, start_rank: int = 1, title_suffix: str = ""
     ) -> str:
-        """Форматирует ASCII таблицу Leaderboard с колонкой Mode (160 симв)."""
+        """Форматирует ASCII таблицу Leaderboard (178 симв при наличии сайзинга или 160 симв)."""
         active_count = len(entries)
+        has_sizing = any("sizing_badge" in item or "sizing_mode" in item for item in entries)
         title = f"STRATEGIES LEADERBOARD{title_suffix} (Active: {active_count} | Coins: {evaluated_coins_count})"
-        header = (
-            "=" * 160 + "\n"
-            f"{title}\n"
-            f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-            + "=" * 160 + "\n"
-            f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
-            + "-" * 160
-        )
+
+        if has_sizing:
+            header = (
+                "=" * 178 + "\n"
+                f"{title}\n"
+                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
+                + "=" * 178 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<53} {'Mode':<9} {'Sizing':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<7} {'Rec':<6}\n"
+                + "-" * 178
+            )
+        else:
+            header = (
+                "=" * 160 + "\n"
+                f"{title}\n"
+                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
+                + "=" * 160 + "\n"
+                f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
+                + "-" * 160
+            )
 
         rows = []
         for idx, item in enumerate(entries, start=start_rank):
-            net_str = f"{item['net_profit_usdt']:+.2f} USDT"
+            net_str = f"{item.get('net_profit_usdt', 0.0):+.2f} USDT"
             iter_idx = item.get('iteration_index', 1)
-            iter_val = item.get('iteration_net_profit_usdt', item['net_profit_usdt'])
+            iter_val = item.get('iteration_net_profit_usdt', item.get('net_profit_usdt', 0.0))
             iter_str = f"{iter_val:+.2f} $ (#{iter_idx})"
-            realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
+            realized_str = f"{item.get('realized_pnl_usdt', 0.0):+.2f} $"
             iter_real_str = f"{item.get('iteration_realized_pnl_usdt', 0.0):+.2f} $"
-            unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
+            unrealized_str = f"{item.get('unrealized_pnl_usdt', 0.0):+.2f} $"
             peak_val = item.get('peak_net_profit_usdt', 0.0)
             peak_age = item.get('peak_age_hours', 0.0)
             peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
-            dd_str = f"{item['max_drawdown_usdt']:.2f} $"
-            rec_str = f"{item['recovery_factor']:.2f}"
-            uid_short = item['universe_id'][:42]
-            mode_badge = item.get("mode_badge", "[OFF]")
+            dd_str = f"{item.get('max_drawdown_usdt', 0.0):.2f} $"
+            rec_str = f"{item.get('recovery_factor', 0.0):.2f}"
+            mode_badge = item.get("mode_badge") or (f"[{str(item.get('mode', 'OFF')).upper()}]")
 
-            row = (
-                f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
-                f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
-            )
+            if has_sizing:
+                uid_short = item.get('universe_id', '')[:52]
+                sizing_badge = item.get("sizing_badge", "[STATIC]")
+                row = (
+                    f"{idx:<3} {uid_short:<53} {mode_badge:<9} {sizing_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
+                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item.get('total_trades', 0):<7} {rec_str:<6}"
+                )
+            else:
+                uid_short = item.get('universe_id', '')[:42]
+                row = (
+                    f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
+                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item.get('total_trades', 0):<8} {rec_str:<6}"
+                )
             rows.append(row)
 
-        footer = "=" * 160
+        footer = "=" * (178 if has_sizing else 160)
         return "\n".join([header] + rows + [footer])
 
     def format_table_chunks(
-        self, entries: List[dict], evaluated_coins_count: int = 0, chunk_size: int = 12, title_suffix: str = ""
+        self, entries: List[dict], evaluated_coins_count: int = 0, chunk_size: int = 11, title_suffix: str = "", top_limit: Optional[int] = 32
     ) -> List[str]:
         """
         Разбивает таблицу лидерборда на порции (чанки) с сохранением заголовков колонок
         и сквозной нумерации, гарантируя непревышение лимита Telegram (4096 символов).
+        По умолчанию срез ограничивается top_limit элементами (дефолт 32).
         """
         if not entries:
             return ["Таблица лидеров пуста."]
 
-        total_entries = len(entries)
+        excluded_modes = ("dyn_bb", "dyn_bb_legacy", "dyn_bb_breakout", "dyn_brk_16", "dyn_brk_10")
+        clean_entries = [
+            e for e in entries
+            if not (
+                e.get("sizing_mode") in excluded_modes
+                or any(e.get("universe_id", "").endswith(f"__{m}") for m in excluded_modes)
+            )
+        ]
+
+        if top_limit is not None and top_limit > 0:
+            clean_entries = clean_entries[:top_limit]
+
+        total_entries = len(clean_entries)
         if total_entries <= chunk_size:
-            tbl = self.format_table(entries, evaluated_coins_count=evaluated_coins_count, start_rank=1, title_suffix=title_suffix)
+            tbl = self.format_table(clean_entries, evaluated_coins_count=evaluated_coins_count, start_rank=1, title_suffix=title_suffix)
             if len(tbl) <= 3500:
                 return [tbl]
 
@@ -259,44 +292,17 @@ class LeaderboardEngine:
         for chunk_idx in range(num_chunks):
             start_i = chunk_idx * chunk_size
             end_i = min(start_i + chunk_size, total_entries)
-            chunk_entries = entries[start_i:end_i]
+            chunk_entries = clean_entries[start_i:end_i]
             start_rank = start_i + 1
             end_rank = end_i
 
-            header = (
-                "=" * 160 + "\n"
-                f"STRATEGIES LEADERBOARD{title_suffix} (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries} | Coins: {evaluated_coins_count})\n"
-                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-                + "=" * 160 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
-                + "-" * 160
+            tbl = self.format_table(
+                chunk_entries,
+                evaluated_coins_count=evaluated_coins_count,
+                start_rank=start_rank,
+                title_suffix=f"{title_suffix} (Part {chunk_idx + 1}/{num_chunks} | #{start_rank}-#{end_rank} of {total_entries})"
             )
-
-            rows = []
-            for idx, item in enumerate(chunk_entries, start=start_rank):
-                net_str = f"{item['net_profit_usdt']:+.2f} USDT"
-                iter_idx = item.get('iteration_index', 1)
-                iter_val = item.get('iteration_net_profit_usdt', item['net_profit_usdt'])
-                iter_str = f"{iter_val:+.2f} $ (#{iter_idx})"
-                realized_str = f"{item['realized_pnl_usdt']:+.2f} $"
-                iter_real_str = f"{item.get('iteration_realized_pnl_usdt', 0.0):+.2f} $"
-                unrealized_str = f"{item['unrealized_pnl_usdt']:+.2f} $"
-                peak_val = item.get('peak_net_profit_usdt', 0.0)
-                peak_age = item.get('peak_age_hours', 0.0)
-                peak_net_str = f"{peak_val:+.2f} $ ({peak_age:.1f}h)" if peak_age > 0 else f"{peak_val:+.2f} $"
-                dd_str = f"{item['max_drawdown_usdt']:.2f} $"
-                rec_str = f"{item['recovery_factor']:.2f}"
-                uid_short = item['universe_id'][:42]
-                mode_badge = item.get("mode_badge", "[OFF]")
-
-                row = (
-                    f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
-                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item['total_trades']:<8} {rec_str:<6}"
-                )
-                rows.append(row)
-
-            footer = "=" * 160
-            chunks.append("\n".join([header] + rows + [footer]))
+            chunks.append(tbl)
 
         return chunks
 

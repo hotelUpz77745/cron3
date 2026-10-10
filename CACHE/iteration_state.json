@@ -68,14 +68,14 @@
         "iteration_index": 2,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 8.6381,
         "iteration_start_ts": 1791398732161,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791398732161,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-07 21:12:14 UTC"
+        "iteration_peak_net_profit_usdt": 7.7412,
+        "iteration_peak_ts": 1791473578736,
+        "historical_peak_net_profit_usdt": 7.7412,
+        "historical_peak_net_ts": 1791473578736,
+        "historical_max_drawdown_usdt": -17.6424,
+        "updated_at": "2026-10-09 13:49:51 UTC"
     },
     "__global__": {
         "iteration_index": 2,
@@ -84,5 +84,70 @@
         "iteration_peak_net_profit_usdt": 0.0,
         "iteration_peak_ts": 1791398732215,
         "updated_at": "2026-10-07 18:45:32 UTC"
+    },
+    "u16_titan_universal_alpha__fixed": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": -0.9643,
+        "iteration_start_ts": 1791420612421,
+        "iteration_peak_net_profit_usdt": 2.1961,
+        "iteration_peak_ts": 1791453922444,
+        "historical_peak_net_profit_usdt": 2.1961,
+        "historical_peak_net_ts": 1791453922444,
+        "historical_max_drawdown_usdt": -28.1243,
+        "updated_at": "2026-10-09 13:49:51 UTC"
+    },
+    "u16_titan_universal_alpha__fixed_b": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 8.4434,
+        "iteration_start_ts": 1791420612421,
+        "iteration_peak_net_profit_usdt": 7.1445,
+        "iteration_peak_ts": 1791512886074,
+        "historical_peak_net_profit_usdt": 7.1445,
+        "historical_peak_net_ts": 1791512886074,
+        "historical_max_drawdown_usdt": -11.8894,
+        "updated_at": "2026-10-09 13:49:51 UTC"
+    },
+    "u16_titan_universal_alpha__classic": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 1.263,
+        "iteration_start_ts": 1791420612421,
+        "iteration_peak_net_profit_usdt": 0.4226,
+        "iteration_peak_ts": 1791469429811,
+        "historical_peak_net_profit_usdt": 0.4226,
+        "historical_peak_net_ts": 1791469429811,
+        "historical_max_drawdown_usdt": -10.5453,
+        "updated_at": "2026-10-09 13:49:51 UTC"
+    },
+    "u96_omni_zenith_apex__classic": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1791555703132,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1791555703132,
+        "historical_peak_net_profit_usdt": 5.4813,
+        "historical_peak_net_ts": 1791554104176,
+        "historical_max_drawdown_usdt": -5.4813,
+        "updated_at": "2026-10-09 17:02:31 UTC"
+    },
+    "u16_apex_hybrid__half_peel__classic": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 57.5984,
+        "iteration_start_ts": 1791566582806,
+        "iteration_peak_net_profit_usdt": 0.0318,
+        "iteration_peak_ts": 1791568189161,
+        "historical_peak_net_profit_usdt": 0.0318,
+        "historical_peak_net_ts": 1791568189161,
+        "historical_max_drawdown_usdt": -74.2489,
+        "updated_at": "2026-10-10 18:51:47 UTC"
     }
 }

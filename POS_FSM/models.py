@@ -21,6 +21,7 @@ class PositionState:
     next_avg_price: float = None         # кешированная цена ближайшего усреднения
     tp_price: float = None               # целевая цена основного тейк-профита
     fallback_price: float = None    # кешированная цена страховочного маркета
+    eff_invest: float = 0.0              # эффективный invest_size стороны с учетом макро-тренда 4h
     
     in_position: bool = False
     in_position_papper: bool = False
@@ -54,6 +55,7 @@ class PositionState:
         self.avg_entry_price = 0.0
         self.pre_avg_price = 0.0
         self.initial_entry_price = 0.0
+        self.eff_invest = 0.0
         self.open_time = 0
         self.last_closed_volume = 0.0
         self.last_closed_avg_price = 0.0
@@ -83,6 +85,7 @@ class PositionState:
             v["fill_qty"] = None
             v.pop("armed_at_drawdown", None)
             v.pop("armed_timestamp", None)
+            v.pop("peeled", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

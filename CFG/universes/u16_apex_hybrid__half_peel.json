@@ -1,0 +1,194 @@
+{
+  "name": "👑 U16: Apex Hybrid (Dual-Zone Titan + Half-Peel 50% + 4h Trend Sizing 33/67)",
+  "description": "Вершина эволюции (Апекс Гибрид): 1) Двухзонная сетка (Зона 1 кэш-скальпер -1.8%/-3.8%, Зона 2 трейлинг-бункер со 3 шага); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5 на L3..L8 при отскоке +1.2%/+1.4%, оставшиеся 50% объема удерживают avg_entry_price внизу и защищают кошелек от эрозии); 3) Cross-Side Profit Recycling (50% тейка Зоны 1 тушит чешую Зоны 2 со 2-го уровня); 4) Knife Blocker = 2; 5) Динамический асимметричный сайзинг по 4h тренду trend_size_depender 33/67.",
+  "leverage": 20,
+  "timeframe": "5m",
+  "tp_purpose": "self",
+  "super_grid": {
+    "enabled": false
+  },
+  "smart_grace": {
+    "start_period_sec": 57,
+    "shift_interval_sec": 13,
+    "eval_window_sec": 300,
+    "increments_card": {
+      "==1": 0,
+      "==2": 0,
+      "==3": 30,
+      ">=4": 90
+    }
+  },
+  "smart_size": {
+    "eval_window_sec": 300,
+    "profiting_size_weights": {
+      "<2": 1.0,
+      "==2": 1.1,
+      "==3": 0.9,
+      ">=4": 0.7
+    },
+    "knife_blocker_enabled": true,
+    "knife_blocker_threshold": 2
+  },
+  "smart_tp": {
+    "enabled": false
+  },
+  "trend_size_depender": {
+    "trend_mode": "bb_deviation_4h",
+    "timeframe": "4h",
+    "eval_window": 20,
+    "eval_window_bars": 3360,
+    "multiplier": 2.0,
+    "min_side_pct": 33.3333,
+    "max_side_pct": 66.6667
+  },
+  "LONG": {
+    "invest_size": 600.0,
+    "grid": {
+      "0": {
+        "indent": 0.0,
+        "volume": 6.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true
+      },
+      "1": {
+        "indent": -1.8,
+        "volume": 7.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true
+      },
+      "2": {
+        "indent": -3.8,
+        "volume": 7.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true
+      },
+      "3": {
+        "indent": -6.5,
+        "activation": -8.5,
+        "volume": 9.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true
+      },
+      "4": {
+        "indent": -11.0,
+        "activation": -14.5,
+        "volume": 11.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true
+      },
+      "5": {
+        "indent": -18.0,
+        "activation": -24.0,
+        "volume": 13.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 2.2,
+        "peel_ratio": 0.25,
+        "peel_once": true
+      },
+      "6": {
+        "indent": -30.0,
+        "activation": -40.0,
+        "volume": 14.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 3.2,
+        "peel_ratio": 0.5,
+        "peel_once": true
+      },
+      "7": {
+        "indent": -50.0,
+        "activation": -66.0,
+        "volume": 15.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 4.4,
+        "peel_ratio": 0.5,
+        "peel_once": true
+      },
+      "8": {
+        "indent": -80.0,
+        "activation": -80.0,
+        "volume": 16.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 5.4,
+        "peel_ratio": 0.5,
+        "peel_once": true
+      }
+    },
+    "tp_map": {
+      "0": {
+        "indent": 2.0,
+        "fallback_indent": 2.6
+      },
+      "1": {
+        "indent": 1.6,
+        "fallback_indent": 2.2
+      },
+      "2": {
+        "indent": 1.3,
+        "fallback_indent": 1.8
+      },
+      "3": {
+        "indent": 1.0,
+        "fallback_indent": 1.5
+      },
+      "4": {
+        "indent": 0.8,
+        "fallback_indent": 1.2
+      },
+      "5": {
+        "indent": 0.65,
+        "fallback_indent": 1.0
+      },
+      "6": {
+        "indent": 0.65,
+        "fallback_indent": 0.95
+      },
+      "7": {
+        "indent": 0.65,
+        "fallback_indent": 0.9
+      },
+      "8": {
+        "indent": 0.65,
+        "fallback_indent": 0.85
+      }
+    }
+  },
+  "SHORT": {
+    "enabled": true,
+    "_inheritance_base_side": true
+  },
+  "cross_side_recycling": {
+    "enabled": true,
+    "recycle_ratio": 0.5,
+    "min_burn_level": 2,
+    "min_drawdown_pct": 3.0,
+    "max_slice_pct": 25.0
+  }
+}

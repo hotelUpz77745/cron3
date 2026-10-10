@@ -1,0 +1,521 @@
+# CORE/STRATEGY/trend_size_depender.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.STRATEGY.trend_size_depender
+ROLE: Асимметричный балансир инвестиционных сайзов LONG / SHORT по силе макро-тренда 4h.
+==============================================================================
+
+Принцип работы:
+1. Инвариант капитала (Money Management):
+   Суммарный капитал сторон всегда равен 100% выделенного лимита:
+   Invest_LONG + Invest_SHORT = 2 * BaseInvestSize = Const.
+2. Процентная линейка (33 градации, индекс k in [-16, +16]):
+   - k = 0   -> 50.0% LONG / 50.0% SHORT (Флэт / Баланс)
+   - k = +16 -> 66.67% LONG / 33.33% SHORT (Экстремальный аптренд)
+   - k = -16 -> 33.33% LONG / 66.67% SHORT (Экстремальный даунтренд)
+3. Документированные режимы оценки тренда на 4h свечах:
+   - 'adx_di_4h':      ADX / DMI Directional Momentum (нормализация [-50.0, +50.0])
+   - 'bb_deviation_4h': Bollinger Bands Channel Deviation (нормализация [-0.5, +0.5])
+   - 'ema_spread_4h':   Dual EMA 50/200 Spread % (нормализация [-6.0%, +6.0%])
+"""
+
+import math
+import time
+import asyncio
+from typing import Dict, List, Tuple, Any, Optional
+import numpy as np
+from c_log import UnifiedLogger
+from API.BINANCE.public import BinancePublic
+
+logger = UnifiedLogger("TrendSizeDepender")
+
+
+class TrendSizeDepender:
+    """
+    Институциональный балансир объемов между LONG и SHORT для боевого бота.
+    """
+
+    MIN_SIDE_PCT: float = 33.3333
+    MAX_SIDE_PCT: float = 66.6667
+    NEUTRAL_PCT: float = 50.0
+    STEPS_HALF: int = 16
+    STEP_PCT: float = (MAX_SIDE_PCT - NEUTRAL_PCT) / STEPS_HALF  # ~1.04167%
+
+    SUPPORTED_MODES: List[str] = [
+        "bb_inverted_lockout",
+        "bb_breakout_flat",
+        "bb_deviation_legacy",
+        "bb_deviation_4h",
+        "adx_di_4h",
+        "ema_spread_4h",
+        "ema_drift_4h",
+    ]
+
+    # Состояние 4-часовой заморозки по символам: symbol -> timestamp_разморозки
+    _lockout_until: Dict[str, float] = {}
+
+    # Кэш: (symbol, timeframe, trend_mode) -> (inv_long: float, inv_short: float, cached_at: float)
+    _cache: Dict[Tuple[str, str, str], Tuple[float, float, float]] = {}
+    _lock = asyncio.Lock()
+
+    @classmethod
+    def clear_lockouts(cls) -> None:
+        """Сброс таймеров заморозки (для тестов и рестарта сессий)."""
+        cls._lockout_until.clear()
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Очистка внутреннего кэша (для тестов и рестарта сессий)."""
+        cls._cache.clear()
+
+    @classmethod
+    def calculate_weights_from_grade(cls, grade: int) -> Tuple[float, float]:
+        """
+        Переводит целочисленный индекс тренда k in [-16, +16] в веса сторон в процентах.
+        Возвращает (weight_long_pct, weight_short_pct).
+        Сумма всегда строго равна 100.0%.
+        """
+        clamped_k = max(-cls.STEPS_HALF, min(cls.STEPS_HALF, int(grade)))
+        w_long = round(cls.NEUTRAL_PCT + clamped_k * cls.STEP_PCT, 4)
+        # Гарантируем строгие границы [33.3333, 66.6667]
+        w_long = max(cls.MIN_SIDE_PCT, min(cls.MAX_SIDE_PCT, w_long))
+        w_short = round(100.0 - w_long, 4)
+        return w_long, w_short
+
+    @classmethod
+    def grade_to_weights(cls, grade: int) -> Tuple[float, float]:
+        """Алиас для calculate_weights_from_grade."""
+        return cls.calculate_weights_from_grade(grade)
+
+    @classmethod
+    def calculate_invest_sizes(
+        cls,
+        base_invest: float,
+        w_long_pct: float,
+        w_short_pct: float
+    ) -> Tuple[float, float]:
+        """
+        Рассчитывает эффективные объемы в USDT для LONG и SHORT при заданном базовом сайзе.
+        Инвариант: invest_long + invest_short == 2.0 * base_invest.
+        """
+        if base_invest <= 0:
+            raise ValueError(f"base_invest must be positive, got {base_invest}")
+
+        total_invest = 2.0 * float(base_invest)
+        inv_long = round(total_invest * (float(w_long_pct) / 100.0), 2)
+        inv_short = round(total_invest - inv_long, 2)
+        return inv_long, inv_short
+
+    @classmethod
+    def evaluate_grade_adx(
+        cls,
+        highs: np.ndarray,
+        lows: np.ndarray,
+        closes: np.ndarray,
+        period: int = 14,
+        threshold_clamp: float = 50.0
+    ) -> int:
+        """
+        Вычисляет силу и направление тренда через ADX/DMI Уайлдера.
+        Направленный импульс: RawScore = ((+DI - -DI) / (+DI + -DI)) * ADX.
+        Нормализуется по threshold_clamp (50.0) и квантуется в целое k in [-16, 16].
+        """
+        n = len(closes)
+        if n < period + 2:
+            return 0
+
+        # 1. True Range и Directional Movement
+        tr = np.zeros(n)
+        plus_dm = np.zeros(n)
+        minus_dm = np.zeros(n)
+
+        for i in range(1, n):
+            h_diff = highs[i] - highs[i - 1]
+            l_diff = lows[i - 1] - lows[i]
+
+            plus_dm[i] = h_diff if (h_diff > 0 and h_diff > l_diff) else 0.0
+            minus_dm[i] = l_diff if (l_diff > 0 and l_diff > h_diff) else 0.0
+
+            tr1 = highs[i] - lows[i]
+            tr2 = abs(highs[i] - closes[i - 1])
+            tr3 = abs(lows[i] - closes[i - 1])
+            tr[i] = max(tr1, tr2, tr3)
+
+        # 2. Сглаживание Уайлдера
+        smooth_tr = np.zeros(n)
+        smooth_pdm = np.zeros(n)
+        smooth_mdm = np.zeros(n)
+
+        smooth_tr[period] = np.sum(tr[1:period + 1])
+        smooth_pdm[period] = np.sum(plus_dm[1:period + 1])
+        smooth_mdm[period] = np.sum(minus_dm[1:period + 1])
+
+        for i in range(period + 1, n):
+            smooth_tr[i] = smooth_tr[i - 1] - (smooth_tr[i - 1] / period) + tr[i]
+            smooth_pdm[i] = smooth_pdm[i - 1] - (smooth_pdm[i - 1] / period) + plus_dm[i]
+            smooth_mdm[i] = smooth_mdm[i - 1] - (smooth_mdm[i - 1] / period) + minus_dm[i]
+
+        # 3. +DI, -DI и DX
+        dx = np.zeros(n)
+        for i in range(period, n):
+            tr_val = smooth_tr[i]
+            if tr_val > 1e-8:
+                p_di = 100.0 * (smooth_pdm[i] / tr_val)
+                m_di = 100.0 * (smooth_mdm[i] / tr_val)
+                di_sum = p_di + m_di
+                if di_sum > 1e-8:
+                    dx[i] = 100.0 * abs(p_di - m_di) / di_sum
+
+        # 4. ADX (сглаживание DX)
+        adx_start = period * 2
+        if n <= adx_start:
+            last_p_di = 100.0 * (smooth_pdm[-1] / max(smooth_tr[-1], 1e-8))
+            last_m_di = 100.0 * (smooth_mdm[-1] / max(smooth_tr[-1], 1e-8))
+            di_diff = last_p_di - last_m_di
+            di_sum = last_p_di + last_m_di
+            raw_score = (di_diff / max(di_sum, 1e-8)) * dx[-1]
+        else:
+            adx = np.zeros(n)
+            adx[adx_start - 1] = np.mean(dx[period:adx_start])
+            for i in range(adx_start, n):
+                adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
+
+            last_p_di = 100.0 * (smooth_pdm[-1] / max(smooth_tr[-1], 1e-8))
+            last_m_di = 100.0 * (smooth_mdm[-1] / max(smooth_tr[-1], 1e-8))
+            di_diff = last_p_di - last_m_di
+            di_sum = last_p_di + last_m_di
+            current_adx = adx[-1]
+            raw_score = (di_diff / max(di_sum, 1e-8)) * current_adx
+
+        clamped_score = max(-threshold_clamp, min(threshold_clamp, raw_score))
+        grade = int(round((clamped_score / threshold_clamp) * cls.STEPS_HALF))
+        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
+
+    @classmethod
+    def evaluate_grade_bb(
+        cls,
+        closes: np.ndarray,
+        period: int = 20,
+        multiplier: float = 2.0
+    ) -> int:
+        """
+        Вычисляет относительное отклонение цены от средней линии Боллинджера (Middle BB).
+        NormalizedDev = (Close - Middle) / (Upper - Lower).
+        При цене на внешней границе NormalizedDev = +/-0.5.
+        Делим на 0.5 для нормализации к [-1.0, +1.0] и квантуем в k in [-16, 16].
+        """
+        if len(closes) < 3:
+            return 0
+
+        actual_period = min(len(closes), period)
+        window = closes[-actual_period:]
+        middle = float(np.mean(window))
+        std_val = float(np.std(window))
+
+        if std_val < 1e-8:
+            return 0
+
+        band_span = 2.0 * multiplier * std_val
+        last_close = float(closes[-1])
+        dev = (last_close - middle) / band_span
+
+        norm_dev = dev / 0.5
+        clamped_norm = max(-1.0, min(1.0, norm_dev))
+        grade = int(round(clamped_norm * cls.STEPS_HALF))
+        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
+
+    @classmethod
+    def evaluate_grade_bb_inverted_lockout(
+        cls,
+        closes: np.ndarray,
+        period: int = 20,
+        multiplier: float = 2.0,
+        symbol: str = "",
+        current_ts: float = 0.0,
+        lockout_duration_sec: float = 14400.0,
+    ) -> int:
+        """
+        Вариант 1 (Инвертированный контр-трендовый с 4h-заморозкой):
+        Контур 1 (внутри канала): при росте к верхней полосе увеличивается SHORT,
+        при падении к нижней полосе увеличивается LONG. Grade = -round(norm_dev * 16).
+        Контур 2 (пробой полосы): как только цена выходит за полосу (|norm_dev| > 1.0),
+        динамика отключается, задается жесткий сайзинг 50/50 (Grade = 0) и состояние
+        замораживается минимум на 4 часа (14400с).
+        """
+        if len(closes) < 3:
+            return 0
+
+        if current_ts > 1e11:
+            current_ts /= 1000.0
+
+        sym_key = symbol.upper().strip() if symbol else "DEFAULT"
+        if sym_key and current_ts > 0:
+            lock_until = cls._lockout_until.get(sym_key, 0.0)
+            if current_ts < lock_until:
+                return 0
+
+        actual_period = min(len(closes), period)
+        window = closes[-actual_period:]
+        middle = float(np.mean(window))
+        std_val = float(np.std(window))
+
+        if std_val < 1e-8:
+            return 0
+
+        last_close = float(closes[-1])
+        # При Close = Middle +/- mult*std_val norm_dev = +/-1.0
+        norm_dev = (last_close - middle) / (multiplier * std_val)
+
+        # Контур 2: пробой полосы -> активация 4h-заморозки 50/50
+        if abs(norm_dev) > 1.0:
+            if sym_key and current_ts > 0:
+                cls._lockout_until[sym_key] = current_ts + lockout_duration_sec
+            return 0
+
+        # Контур 1: инвертированная формула внутри канала
+        inverted_norm = -norm_dev
+        grade = int(round(inverted_norm * cls.STEPS_HALF))
+        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
+
+    @classmethod
+    def evaluate_grade_bb_breakout_flat(
+        cls,
+        closes: np.ndarray,
+        period: int = 20,
+        multiplier: float = 2.0,
+    ) -> int:
+        """
+        Вариант 2 (Пробойный импульсный с флетовой зоной 50/50):
+        1. Внутри полос (Lower <= Close <= Upper) -> жесткий сайзинг 50/50 (Grade = 0).
+        2. При пробое верхней полосы (Close > Upper) -> LONG +16% (Grade = +16, веса 66.67% / 33.33%).
+        3. При пробое нижней полосы (Close < Lower) -> SHORT +16% (Grade = -16, веса 33.33% / 66.67%).
+        """
+        if len(closes) < 3:
+            return 0
+
+        actual_period = min(len(closes), period)
+        window = closes[-actual_period:]
+        middle = float(np.mean(window))
+        std_val = float(np.std(window))
+
+        if std_val < 1e-8:
+            return 0
+
+        last_close = float(closes[-1])
+        upper = middle + multiplier * std_val
+        lower = middle - multiplier * std_val
+
+        if last_close > upper:
+            return cls.STEPS_HALF   # +16 -> Long +16.67%
+        elif last_close < lower:
+            return -cls.STEPS_HALF  # -16 -> Short +16.67%
+        else:
+            return 0                # 50/50 флет
+
+    @classmethod
+    def evaluate_grade_ema_spread(
+        cls,
+        closes: np.ndarray,
+        fast_period: int = 50,
+        slow_period: int = 200,
+        spread_clamp_pct: float = 6.0
+    ) -> int:
+        """
+        Вычисляет процентный спред между быстрой и медленной EMA (Dual EMA Spread).
+        SpreadPct = ((EMA50 - EMA200) / EMA200) * 100.
+        Нормализуется по spread_clamp_pct (6.0%) и квантуется в k in [-16, 16].
+        """
+        n = len(closes)
+        if n < slow_period:
+            fast_period = max(5, int(n * 0.25))
+            slow_period = max(10, int(n * 0.8))
+
+        def calc_ema(arr: np.ndarray, p: int) -> float:
+            alpha = 2.0 / (p + 1.0)
+            ema = float(arr[0])
+            for val in arr[1:]:
+                ema = alpha * float(val) + (1.0 - alpha) * ema
+            return ema
+
+        ema_fast = calc_ema(closes, fast_period)
+        ema_slow = calc_ema(closes, slow_period)
+
+        if ema_slow < 1e-8:
+            return 0
+
+        spread_pct = (ema_fast - ema_slow) / ema_slow * 100.0
+        clamped_spread = max(-spread_clamp_pct, min(spread_clamp_pct, spread_pct))
+        grade = int(round((clamped_spread / spread_clamp_pct) * cls.STEPS_HALF))
+        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
+
+    @classmethod
+    def evaluate_trend_grade(
+        cls,
+        trend_mode: str,
+        highs: np.ndarray,
+        lows: np.ndarray,
+        closes: np.ndarray,
+        cfg: Optional[Dict[str, Any]] = None,
+        symbol: str = "",
+        current_ts: float = 0.0
+    ) -> int:
+        """
+        Единый диспетчер оценки тренда.
+        Бросает громкий KeyError при неподдерживаемом режиме (Правило 2).
+        """
+        cfg = cfg or {}
+        mode = trend_mode.lower().strip()
+
+        if mode not in cls.SUPPORTED_MODES:
+            raise KeyError(
+                f"[TrendSizeDepender] Неизвестный trend_mode: '{trend_mode}'. "
+                f"Поддерживаемые режимы: {cls.SUPPORTED_MODES}"
+            )
+
+        if mode in ("bb_inverted_lockout", "bb_inverted_lockout_4h"):
+            period = int(cfg.get("eval_window", 20))
+            mult = float(cfg.get("multiplier", 2.0))
+            lockout_sec = float(cfg.get("lockout_duration_sec", 14400.0))
+            sym = str(symbol or cfg.get("symbol", "")).strip()
+            ts = float(current_ts or cfg.get("current_ts", 0.0))
+            return cls.evaluate_grade_bb_inverted_lockout(
+                closes=closes,
+                period=period,
+                multiplier=mult,
+                symbol=sym,
+                current_ts=ts,
+                lockout_duration_sec=lockout_sec
+            )
+
+        elif mode in ("bb_breakout_flat", "bb_breakout_flat_4h"):
+            period = int(cfg.get("eval_window", 20))
+            mult = float(cfg.get("multiplier", 2.0))
+            return cls.evaluate_grade_bb_breakout_flat(
+                closes=closes,
+                period=period,
+                multiplier=mult
+            )
+
+        elif mode in ("bb_deviation_legacy", "bb_deviation_4h"):
+            # [TOXIC_DEPRECATED]: bb_deviation_legacy увеличивал сайз в сторону роста/падения внутри полос,
+            # что накапливало токсичный инвентарь против разворота на боевом счете!
+            logger.warning(
+                f"[TrendSizeDepender] Режим '{mode}' помечен как TOXIC_DEPRECATED. "
+                "Рекомендуется переключиться на 'bb_breakout_flat' (DYN_BB_BREAKOUT) или 'bb_inverted_lockout' (DYN_BB_INV)."
+            )
+            period = int(cfg.get("eval_window", 20))
+            mult = float(cfg.get("multiplier", 2.0))
+            return cls.evaluate_grade_bb(
+                closes=closes,
+                period=period,
+                multiplier=mult
+            )
+
+        elif mode == "adx_di_4h":
+            period = int(cfg.get("eval_window", 14))
+            threshold_clamp = float(cfg.get("trend_threshold_clamp", 50.0))
+            return cls.evaluate_grade_adx(
+                highs=highs,
+                lows=lows,
+                closes=closes,
+                period=period,
+                threshold_clamp=threshold_clamp
+            )
+
+        elif mode in ("ema_spread_4h", "ema_drift_4h"):
+            fast = int(cfg.get("fast_period", 50))
+            slow = int(cfg.get("slow_period", 200))
+            clamp_pct = float(cfg.get("spread_clamp_pct", 6.0))
+            return cls.evaluate_grade_ema_spread(
+                closes=closes,
+                fast_period=fast,
+                slow_period=slow,
+                spread_clamp_pct=clamp_pct
+            )
+
+        raise KeyError(f"[TrendSizeDepender] Необработанный режим: '{trend_mode}'")
+
+    @classmethod
+    async def get_effective_invest_size(
+        cls,
+        client: Optional[object],
+        symbol: str,
+        side: str,
+        base_invest_size: float,
+        trend_size_cfg: Optional[Dict[str, Any]],
+        cache_ttl_sec: int = 120
+    ) -> float:
+        """
+        Асинхронно рассчитывает эффективный invest_size для указанной стороны (LONG или SHORT)
+        на основе 4h макро-тренда с потокобезопасным TTL-кэшированием свечей.
+        Если trend_size_cfg отключен или свечи недоступны, возвращает базовый base_invest_size.
+        """
+        if not trend_size_cfg or not trend_size_cfg.get("enabled", True):
+            return float(base_invest_size)
+
+        trend_mode = str(trend_size_cfg.get("trend_mode", "bb_deviation_4h")).lower().strip()
+        timeframe = str(trend_size_cfg.get("timeframe", "4h")).strip()
+        cache_key = (symbol.upper(), timeframe, trend_mode)
+        now = time.time()
+
+        cached = cls._cache.get(cache_key)
+        if cached is not None:
+            inv_l, inv_s, ts = cached
+            if now - ts < cache_ttl_sec:
+                return inv_l if side == "LONG" else inv_s
+
+        async with cls._lock:
+            # Двойная проверка под локом
+            cached = cls._cache.get(cache_key)
+            if cached is not None:
+                inv_l, inv_s, ts = cached
+                if now - ts < cache_ttl_sec:
+                    return inv_l if side == "LONG" else inv_s
+
+            try:
+                eval_window = int(trend_size_cfg.get("eval_window", 20))
+                limit = max(35, eval_window + 10)
+
+                klines = await BinancePublic.get_klines(symbol, timeframe, limit)
+                if not klines and client and hasattr(client, "get_klines"):
+                    klines = await client.get_klines(symbol, timeframe, limit)
+
+                if not klines or len(klines) < 15:
+                    logger.debug(
+                        f"[TrendSizeDepender][{symbol}] Not enough {timeframe} klines "
+                        f"({len(klines) if klines else 0}), using base {base_invest_size:.2f} USDT"
+                    )
+                    return float(base_invest_size)
+
+                highs_list, lows_list, closes_list = [], [], []
+                for k in klines:
+                    if isinstance(k, dict):
+                        highs_list.append(float(k.get("high", 0.0)))
+                        lows_list.append(float(k.get("low", 0.0)))
+                        closes_list.append(float(k.get("close", 0.0)))
+                    elif isinstance(k, (list, tuple)) and len(k) > 4:
+                        highs_list.append(float(k[2]))
+                        lows_list.append(float(k[3]))
+                        closes_list.append(float(k[4]))
+                highs = np.array(highs_list)
+                lows = np.array(lows_list)
+                closes = np.array(closes_list)
+
+                grade = cls.evaluate_trend_grade(trend_mode, highs, lows, closes, trend_size_cfg, symbol=symbol, current_ts=now)
+                w_long, w_short = cls.calculate_weights_from_grade(grade)
+                inv_l, inv_s = cls.calculate_invest_sizes(base_invest_size, w_long, w_short)
+
+                cls._cache[cache_key] = (inv_l, inv_s, now)
+                logger.info(
+                    f"[TrendSizeDepender][{symbol}] Evaluated {trend_mode} ({timeframe}): "
+                    f"Grade k={grade:+d} -> LONG {w_long:.2f}% ({inv_l:.2f}$), SHORT {w_short:.2f}% ({inv_s:.2f}$)"
+                )
+                return inv_l if side == "LONG" else inv_s
+
+            except Exception as e:
+                logger.warning(
+                    f"[TrendSizeDepender][{symbol}] Error computing trend size ({e}), "
+                    f"fallback to base {base_invest_size:.2f} USDT"
+                )
+                return float(base_invest_size)

@@ -141,6 +141,7 @@ class RuntimeFsmManager:
                 state.is_finished = side_cache.get("is_finished", False)
                 state.pending_avg = side_cache.get("pending_avg", False)
                 state.pending_rolling_tp = side_cache.get("pending_rolling_tp", False)
+                state.eff_invest = float(side_cache.get("eff_invest", 0.0))
                 
                 # Копируем словари и списки
                 state.grid = copy.deepcopy(side_cache.get("grid", {}))
@@ -194,6 +195,7 @@ class RuntimeFsmManager:
                     "trailing_tp_state": copy.deepcopy(getattr(state, "trailing_tp_state", {})),
                     "trailing_grid_state": copy.deepcopy(getattr(state, "trailing_grid_state", {})),
                     "recent_closes": state.recent_closes,
+                    "eff_invest": float(getattr(state, "eff_invest", 0.0)),
                 }
                 
                 changed = False

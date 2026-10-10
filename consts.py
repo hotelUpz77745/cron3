@@ -186,7 +186,8 @@ STREAMER_LOCK_NAME: str = str(_CFG["streamer"]["lock_name"])
 # SIGNAL, SMART GRACE, SMART SIZE & SMART TP FALLBACK DECLARATIONS
 # ============================================================
 _SIG_CFG: Dict[str, Any] = _CFG.get("signal") or {}
-DEFAULT_TIMEFRAME: str = str(_SIG_CFG.get("timeframe", "5m"))
+DEFAULT_HEARTBEAT_TFR: str = str(_SIG_CFG.get("heartbeat_tfr", _SIG_CFG.get("timeframe", "5m")))
+DEFAULT_TIMEFRAME: str = DEFAULT_HEARTBEAT_TFR
 DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
     "start_period_sec": 57,
     "shift_interval_sec": 13,
@@ -242,4 +243,5 @@ TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slic
 RISK_SYSTEM_CFG: dict = _CFG.get("risk_system", {})
 RISK_SYSTEM_ENABLED: bool = bool(RISK_SYSTEM_CFG.get("enabled", False))
 RISK_SYSTEM_MIN_BALANCE: Optional[float] = float(RISK_SYSTEM_CFG["min_balance_threshold_usdt"]) if RISK_SYSTEM_CFG.get("min_balance_threshold_usdt") is not None else None
+RISK_SYSTEM_MAX_BALANCE: Optional[float] = float(RISK_SYSTEM_CFG["max_balance_threshold_usdt"]) if RISK_SYSTEM_CFG.get("max_balance_threshold_usdt") is not None else None
 

@@ -297,35 +297,53 @@ class AutoCloser:
         if not analytics_data:
             return
 
-        # RISK SYSTEM CHECK (Глобальный ручник по балансу в $)
+        # RISK SYSTEM CHECK (Глобальный ручник по балансу в $: риск-стоп снизу и профит-стоп сверху)
         risk_cfg = app_data.get("risk_system") or app_data.get("stop_bot_rirk_system") or {}
         if risk_cfg.get("enabled"):
-            thresh = risk_cfg.get("min_balance_threshold_usdt")
+            min_thresh = risk_cfg.get("min_balance_threshold_usdt")
+            max_thresh = risk_cfg.get("max_balance_threshold_usdt")
             cur_bal = float(analytics_data.get("cur_balance_usdt", 0.0))
-            if thresh is not None and cur_bal > 0 and cur_bal < float(thresh):
-                if not getattr(self.bot_core, "is_paused", False):
-                    self._is_closing = True
-                    logger.critical(f"[RISK_SYSTEM] Balance {cur_bal:.2f} < threshold {thresh}! Triggering emergency stop.")
-                    self.bot_core.is_paused = True
-                    self.bot_core.entry_blocked = True
-                    self.bot_core.block_until_timestamp = time.time() + 9999999.0
-                    try:
-                        await self.bot_core.close_all_positions(reset_iterations=False)
-                        logger.info("[RISK_SYSTEM] Waiting for analytics sync (12s)...")
-                        await asyncio.sleep(12.0)
-                        if "risk_system" in app_data:
-                            app_data["risk_system"]["enabled"] = False
-                        elif "stop_bot_rirk_system" in app_data:
-                            app_data["stop_bot_rirk_system"]["enabled"] = False
-                        Utils.write_json_file(app_json_path, app_data)
-                        msg = f"⛔ <b>ГЛОБАЛЬНЫЙ РУЧНИК (RISK STOP)</b> ⛔\n\nБаланс упал ниже порога: <b>{cur_bal:.2f} USDT</b> < <b>{thresh:.2f} USDT</b>.\nВсе позиции закрыты. Бот <b>ОСТАНОВЛЕН</b>."
-                        if getattr(self.bot_core, 'notifier', None):
-                            await self.bot_core.notifier.send_alert(msg)
-                    except Exception as e:
-                        logger.error(f"[RISK_SYSTEM] Error during emergency stop: {e}")
-                    finally:
-                        self._is_closing = False
-                    return
+
+            trigger_min = (min_thresh is not None and cur_bal > 0 and cur_bal < float(min_thresh))
+            trigger_max = (max_thresh is not None and cur_bal > 0 and cur_bal >= float(max_thresh))
+
+            if (trigger_min or trigger_max) and not getattr(self.bot_core, "is_paused", False):
+                self._is_closing = True
+                if trigger_max:
+                    reason_log = f"[PROFIT_STOP] Balance {cur_bal:.2f} >= max profit threshold {max_thresh}! Locking profit into 100% cash and stopping bot."
+                    reason_msg = (
+                        f"🌴 <b>СТОП ПО ПРОФИЦИТУ (MIAMI PROFIT TAKE)</b> 🌴\n\n"
+                        f"Баланс достиг целевого максимума: <b>{cur_bal:.2f} USDT</b> >= <b>{float(max_thresh):.2f} USDT</b>.\n"
+                        f"Все позиции закрыты по рынку в 100% кэш. Бот <b>ОСТАНОВЛЕН С ПРИБЫЛЬЮ</b>."
+                    )
+                else:
+                    reason_log = f"[RISK_SYSTEM] Balance {cur_bal:.2f} < min threshold {min_thresh}! Triggering emergency stop."
+                    reason_msg = (
+                        f"⛔ <b>ГЛОБАЛЬНЫЙ РУЧНИК (RISK STOP)</b> ⛔\n\n"
+                        f"Баланс упал ниже порога: <b>{cur_bal:.2f} USDT</b> < <b>{float(min_thresh):.2f} USDT</b>.\n"
+                        f"Все позиции закрыты. Бот <b>ОСТАНОВЛЕН</b>."
+                    )
+
+                logger.critical(reason_log)
+                self.bot_core.is_paused = True
+                self.bot_core.entry_blocked = True
+                self.bot_core.block_until_timestamp = time.time() + 9999999.0
+                try:
+                    await self.bot_core.close_all_positions(reset_iterations=False)
+                    logger.info("[RISK_SYSTEM] Waiting for analytics sync (12s)...")
+                    await asyncio.sleep(12.0)
+                    if "risk_system" in app_data:
+                        app_data["risk_system"]["enabled"] = False
+                    elif "stop_bot_rirk_system" in app_data:
+                        app_data["stop_bot_rirk_system"]["enabled"] = False
+                    Utils.write_json_file(app_json_path, app_data)
+                    if getattr(self.bot_core, 'notifier', None):
+                        await self.bot_core.notifier.send_alert(reason_msg)
+                except Exception as e:
+                    logger.error(f"[RISK_SYSTEM] Error during emergency/profit stop: {e}")
+                finally:
+                    self._is_closing = False
+                return
 
         CLOSE_COOLDOWN_SEC = 45.0
         now_sec = time.time()
