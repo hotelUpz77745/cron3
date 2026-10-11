@@ -220,29 +220,38 @@ class LeaderboardEngine:
     def format_table(
         self, entries: List[dict], evaluated_coins_count: int = 0, start_rank: int = 1, title_suffix: str = ""
     ) -> str:
-        """Форматирует ASCII таблицу Leaderboard (178 симв при наличии сайзинга или 160 симв)."""
+        """Форматирует компактную ASCII таблицу Leaderboard с динамической подгонкой ширины ID стратегии."""
         active_count = len(entries)
         has_sizing = any("sizing_badge" in item or "sizing_mode" in item for item in entries)
         title = f"STRATEGIES LEADERBOARD{title_suffix} (Active: {active_count} | Coins: {evaluated_coins_count})"
 
+        # Рассчитываем динамическую ширину для Strategy / Universe ID
+        header_title = "Strategy / Universe ID"
+        max_uid_len = max([len(str(item.get("universe_id", ""))) for item in entries] + [len(header_title)]) if entries else len(header_title)
+        id_width = max(len(header_title), min(38, max_uid_len + 1))
+
         if has_sizing:
-            header = (
-                "=" * 178 + "\n"
-                f"{title}\n"
-                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-                + "=" * 178 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<53} {'Mode':<9} {'Sizing':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<7} {'Rec':<6}\n"
-                + "-" * 178
+            header_line = (
+                f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} {'Sizing':<9} "
+                f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
+                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6}"
             )
         else:
-            header = (
-                "=" * 160 + "\n"
-                f"{title}\n"
-                f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
-                + "=" * 160 + "\n"
-                f"{'#':<3} {'Strategy / Universe ID':<43} {'Mode':<9} {'Net Profit':<13} {'Iter Net':<14} {'Realized':<12} {'Iter Real':<12} {'Floating':<11} {'Peak Net (Age)':<17} {'Max DD':<11} {'Trades':<8} {'Rec':<6}\n"
-                + "-" * 160
+            header_line = (
+                f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} "
+                f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
+                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6}"
             )
+
+        total_width = len(header_line)
+        header = (
+            "=" * total_width + "\n"
+            f"{title}\n"
+            f"Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitative focus)\n"
+            + "=" * total_width + "\n"
+            + header_line + "\n"
+            + "-" * total_width
+        )
 
         rows = []
         for idx, item in enumerate(entries, start=start_rank):
@@ -259,23 +268,24 @@ class LeaderboardEngine:
             dd_str = f"{item.get('max_drawdown_usdt', 0.0):.2f} $"
             rec_str = f"{item.get('recovery_factor', 0.0):.2f}"
             mode_badge = item.get("mode_badge") or (f"[{str(item.get('mode', 'OFF')).upper()}]")
+            uid_short = item.get('universe_id', '')[:id_width]
 
             if has_sizing:
-                uid_short = item.get('universe_id', '')[:52]
                 sizing_badge = item.get("sizing_badge", "[STATIC]")
                 row = (
-                    f"{idx:<3} {uid_short:<53} {mode_badge:<9} {sizing_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
-                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item.get('total_trades', 0):<7} {rec_str:<6}"
+                    f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} {sizing_badge:<9} "
+                    f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
+                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6}"
                 )
             else:
-                uid_short = item.get('universe_id', '')[:42]
                 row = (
-                    f"{idx:<3} {uid_short:<43} {mode_badge:<9} {net_str:<13} {iter_str:<14} {realized_str:<12} {iter_real_str:<12} "
-                    f"{unrealized_str:<11} {peak_net_str:<17} {dd_str:<11} {item.get('total_trades', 0):<8} {rec_str:<6}"
+                    f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} "
+                    f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
+                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6}"
                 )
             rows.append(row)
 
-        footer = "=" * (178 if has_sizing else 160)
+        footer = "=" * total_width
         return "\n".join([header] + rows + [footer])
 
     def format_table_chunks(

@@ -7,6 +7,7 @@
 # ==============================================================================
 import asyncio
 import os
+from pathlib import Path
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile, BufferedInputFile, ReplyKeyboardMarkup, KeyboardButton
 from aiogram.filters import Command, StateFilter
@@ -17,7 +18,7 @@ from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import ErrorEvent
 
 from c_log import UnifiedLogger
-from consts import TG_TOKEN, ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR, TG_ALLOWED_USERS, ACTIVE_SYMBOLS
+from consts import TG_TOKEN, ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR, TG_ALLOWED_USERS, ACTIVE_SYMBOLS, BASE_DIR
 from TG.template_manager import TemplateManager
 
 try:
