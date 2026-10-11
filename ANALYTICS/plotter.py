@@ -53,12 +53,15 @@ def _resolve_paths(universe_id: Optional[str] = None):
                 json_path = matches[0]
 
         cand_csv = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{universe_id}.txt"
-        if cand_csv.exists():
+        if cand_csv.exists() and cand_csv.stat().st_size > 60:
             csv_path = cand_csv
         else:
             matches_csv = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{universe_id}*.txt"))
-            if matches_csv:
-                csv_path = matches_csv[0]
+            found = [m for m in matches_csv if m.stat().st_size > 60]
+            if found:
+                csv_path = found[0]
+            else:
+                csv_path = CSV_FILE
 
     return json_path, csv_path
 
@@ -72,11 +75,13 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     plot_file = IMAGES_DIR / (f"equity_curve_{universe_id}.png" if universe_id else "equity_curve.png")
 
     start_balance = 57.0
+    strat_symbols = set()
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
+                strat_symbols = set(data.get("per_coin", {}).keys()) | set(data.get("historical_symbols", []))
         except Exception:
             pass
 
@@ -90,14 +95,37 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                 reader = csv.reader(f, delimiter=";")
                 header = next(reader, None)
                 if header:
-                    has_bal = "Balance" in header
-                    bal_idx = header.index("Balance") if has_bal else -1
-                    pnl_idx = header.index("PnL") if "PnL" in header else 4
-                    close_idx = header.index("Close Time") if "Close Time" in header else 3
+                    header_lower = [h.strip().lower() for h in header]
+                    sym_idx = header_lower.index("symbol") if "symbol" in header_lower else (1 if "id" in header_lower else 0)
+                    has_bal = "balance" in header_lower
+                    bal_idx = header_lower.index("balance") if has_bal else -1
+
+                    pnl_idx = -1
+                    for cand in ["pnl (usdt)", "pnl", "pnl(usdt)"]:
+                        if cand in header_lower:
+                            pnl_idx = header_lower.index(cand)
+                            break
+                    if pnl_idx == -1:
+                        pnl_idx = 5 if ("id" in header_lower or len(header) >= 7) else 4
+
+                    close_idx = -1
+                    for cand in ["close time", "closetime", "close_time"]:
+                        if cand in header_lower:
+                            close_idx = header_lower.index(cand)
+                            break
+                    if close_idx == -1:
+                        close_idx = 4 if ("id" in header_lower or len(header) >= 7) else 3
+
+                    is_shared_ledger = (csv_path == CSV_FILE and bool(strat_symbols))
 
                     for row in reader:
-                        if len(row) <= close_idx:
+                        if len(row) <= max(close_idx, pnl_idx):
                             continue
+                        if strat_symbols and is_shared_ledger and len(row) > sym_idx:
+                            row_sym = row[sym_idx].strip()
+                            if row_sym not in strat_symbols:
+                                continue
+
                         t_str = row[close_idx].strip()
                         try:
                             dt = datetime.strptime(t_str, "%Y-%m-%d %H:%M:%S")
@@ -105,7 +133,7 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                             continue
 
                         try:
-                            if has_bal and len(row) > bal_idx and row[bal_idx].strip() != "":
+                            if has_bal and not is_shared_ledger and len(row) > bal_idx and row[bal_idx].strip() != "":
                                 current_balance = float(row[bal_idx])
                             else:
                                 pnl = float(row[pnl_idx])
@@ -178,12 +206,27 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
                 reader = csv.reader(f, delimiter=";")
                 header = next(reader, None)
                 if header:
-                    sym_idx = header.index("Symbol") if "Symbol" in header else 1
-                    pnl_idx = header.index("PnL") if "PnL" in header else 4
-                    close_idx = header.index("Close Time") if "Close Time" in header else 3
+                    header_lower = [h.strip().lower() for h in header]
+                    sym_idx = header_lower.index("symbol") if "symbol" in header_lower else (1 if "id" in header_lower else 0)
+                    
+                    pnl_idx = -1
+                    for cand in ["pnl (usdt)", "pnl", "pnl(usdt)"]:
+                        if cand in header_lower:
+                            pnl_idx = header_lower.index(cand)
+                            break
+                    if pnl_idx == -1:
+                        pnl_idx = 5 if ("id" in header_lower or len(header) >= 7) else 4
+
+                    close_idx = -1
+                    for cand in ["close time", "closetime", "close_time"]:
+                        if cand in header_lower:
+                            close_idx = header_lower.index(cand)
+                            break
+                    if close_idx == -1:
+                        close_idx = 4 if ("id" in header_lower or len(header) >= 7) else 3
 
                     for row in reader:
-                        if len(row) <= close_idx:
+                        if len(row) <= max(close_idx, pnl_idx):
                             continue
                         row_sym = row[sym_idx].strip().upper()
                         if row_sym != clean_sym:

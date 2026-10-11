@@ -67,7 +67,14 @@ class TradeVelocityEngine:
         Подгружает сделки из изолированной ленты сделок вселенной
         в пределах timeframe_hours с точной привязкой к меткам времени закрытия.
         """
-        if not self.ledger_path.exists():
+        # Подбираем актуальный леджер: если изолированный леджер вселенной пуст, читаем общий леджер
+        eff_ledger_path = self.ledger_path
+        if not eff_ledger_path.exists() or eff_ledger_path.stat().st_size <= 60:
+            general_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+            if general_ledger.exists() and general_ledger.stat().st_size > 60:
+                eff_ledger_path = general_ledger
+
+        if not eff_ledger_path.exists():
             return
 
         window_ms = int(self.timeframe_hours * 3600 * 1000)
@@ -75,18 +82,22 @@ class TradeVelocityEngine:
 
         new_trades: List[Tuple[int, str]] = []
         try:
-            with open(self.ledger_path, mode="r", encoding="utf-8") as f:
+            with open(eff_ledger_path, mode="r", encoding="utf-8") as f:
                 reader = csv.reader(f, delimiter=';')
                 header = next(reader, None)
                 if not header:
                     return
 
+                header_lower = [h.strip().lower() for h in header]
+                sym_idx = header_lower.index("symbol") if "symbol" in header_lower else (1 if "id" in header_lower else 0)
+                close_idx = header_lower.index("close time") if "close time" in header_lower else (4 if "id" in header_lower else 3)
+
                 for row in reader:
-                    if len(row) < 4:
+                    if len(row) <= max(sym_idx, close_idx):
                         continue
                     
-                    symbol = row[0].strip()
-                    close_time_str = row[3].strip()
+                    symbol = row[sym_idx].strip()
+                    close_time_str = row[close_idx].strip()
 
                     try:
                         dt = datetime.strptime(close_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)

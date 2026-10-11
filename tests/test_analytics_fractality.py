@@ -27,12 +27,16 @@ class TestAnalyticsFractality(unittest.TestCase):
 
         # No close button
         self.assertFalse(any('закрыть' in b.lower() for b in bb_buttons))
-        # Portfolio fractal buttons present
-        self.assertIn('analytics_bb_global', bb_cbs)
-        self.assertIn('analytics_bb_ranking', bb_cbs)
-        self.assertIn('analytics_bb_coins', bb_cbs)
+        # Big Board has exactly 3 buttons: Dome Analytics, Switch Dome, Leaderboard
+        self.assertEqual(len(bb_cbs), 3)
+        self.assertTrue(any(cb.startswith('analytics_dome:') for cb in bb_cbs))
+        self.assertIn('univ_page:1', bb_cbs)
         self.assertIn('analytics_bb_leaderboard', bb_cbs)
-        self.assertIn('analytics_bb_refresh', bb_cbs)
+        # Redundant buttons removed from Big Board
+        self.assertNotIn('analytics_bb_global', bb_cbs)
+        self.assertNotIn('analytics_bb_ranking', bb_cbs)
+        self.assertNotIn('analytics_bb_coins', bb_cbs)
+        self.assertNotIn('analytics_bb_refresh', bb_cbs)
 
     def test_portfolio_data_aggregation(self):
         summary, per_coin, last_trade = self.receiver._get_portfolio_all_analytics_data()

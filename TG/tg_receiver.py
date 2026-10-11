@@ -341,6 +341,22 @@ class TelegramReceiver:
                 g_load = float(data.get("current_grid_load_usdt", 0.0))
                 g_size = float(data.get("total_grid_size_usdt", 0.0))
 
+                per_coin = data.get("per_coin", {})
+                if comm == 0.0 and per_coin:
+                    comm = sum(float(c.get("commission_usdt", 0.0)) for c in per_coin.values())
+                if fund == 0.0 and per_coin:
+                    fund = sum(float(c.get("funding_usdt", 0.0)) for c in per_coin.values())
+                if rl_net == 0.0 and per_coin:
+                    rl_net = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in per_coin.values())
+                if g_load == 0.0 and per_coin:
+                    g_load = sum(float(c.get("current_grid_load_usdt", 0.0)) for c in per_coin.values())
+                if g_size == 0.0 and per_coin:
+                    g_size = sum(float(c.get("grid_capacity_usdt", 0.0)) for c in per_coin.values())
+                if m_used == 0.0 and per_coin:
+                    m_used = sum(float(c.get("current_margin_usdt", 0.0)) for c in per_coin.values())
+                if f_marg == 0.0 and cu_bal > 0:
+                    f_marg = max(0.0, cu_bal - m_used)
+
                 agg_summary["start_balance_usdt"] += st_bal
                 agg_summary["cur_balance_usdt"] += cu_bal
                 agg_summary["peak_balance_usdt"] += pk_bal
@@ -361,7 +377,6 @@ class TelegramReceiver:
                 agg_summary["current_grid_load_usdt"] += g_load
                 agg_summary["total_grid_size_usdt"] += g_size
 
-                per_coin = data.get("per_coin", {})
                 for sym, cinfo in per_coin.items():
                     if sym not in agg_per_coin:
                         agg_per_coin[sym] = {
@@ -422,7 +437,7 @@ class TelegramReceiver:
                 coin_entry["recovery_factor"] = 0.0
                 coin_entry["abs_recovery_factor"] = 0.0
 
-        for ledger_file in ANALYTICS_LEDGERS_DIR.glob("trades_ledger_*.txt"):
+        for ledger_file in list(ANALYTICS_LEDGERS_DIR.glob("trades_ledger*.txt")):
             try:
                 with open(ledger_file, 'r', encoding='utf-8') as f:
                     r = csv.reader(f, delimiter=';')
@@ -574,24 +589,14 @@ class TelegramReceiver:
             f"<i>Выберите действие или перейдите в детальную аналитику купола:</i>"
         )
 
-        short_uid = (current_uid[:18] + "..") if len(current_uid) > 18 else current_uid
+        short_uid = (current_uid[:20] + "..") if len(current_uid) > 20 else current_uid
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [
                 InlineKeyboardButton(text=f"🌌 Аналитика купола: {short_uid}", callback_data=f"analytics_dome:{current_uid}"),
+            ],
+            [
                 InlineKeyboardButton(text="🔄 Сменить купол", callback_data="univ_page:1"),
-            ],
-            [
-                InlineKeyboardButton(text="🌍 Global Analytics (Портфель)", callback_data="analytics_bb_global"),
-            ],
-            [
-                InlineKeyboardButton(text="🪙 Аналитика по монетам (Портфель)", callback_data="analytics_bb_coins"),
-            ],
-            [
-                InlineKeyboardButton(text="🏆 Рейтинг монет (Портфель)", callback_data="analytics_bb_ranking"),
-            ],
-            [
                 InlineKeyboardButton(text="🏆 Лидерборд стратегий", callback_data="analytics_bb_leaderboard"),
-                InlineKeyboardButton(text="🔄 Обновить Биг Борд", callback_data="analytics_bb_refresh"),
             ]
         ])
         return text, kb
@@ -661,11 +666,9 @@ class TelegramReceiver:
                 status_msg = await message.answer("⏳ Создание рантайм-бэкапа позиций (.pkl ➔ JSON)...")
                 res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[message.chat.id])
                 p = res.get("file")
-                if p and os.path.exists(p):
+                if not res.get("telegram_sent") and p and os.path.exists(p):
                     await message.answer_document(FSInputFile(p), caption=f"📦 <b>Рантайм-бэкап позиций</b>\nФайл: <code>{res.get('filename')}</code>\nРазмер: {res.get('size_bytes', 0) / 1024.0:.1f} KB", parse_mode="HTML")
-                    await status_msg.delete()
-                else:
-                    await status_msg.edit_text("⚠️ Ошибка: файл бэкапа не сформирован.")
+                await status_msg.delete()
             except Exception as e:
                 logger.error(f"Error handling /backup command: {e}")
                 await message.answer(f"❌ Ошибка создания бэкапа: {e}")
@@ -1071,10 +1074,8 @@ class TelegramReceiver:
                 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
                 res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[callback.message.chat.id])
                 p = res.get("file")
-                if p and os.path.exists(p):
+                if not res.get("telegram_sent") and p and os.path.exists(p):
                     await callback.message.answer_document(FSInputFile(p), caption=f"📦 <b>Рантайм-бэкап позиций</b>\nФайл: <code>{res.get('filename')}</code>\nРазмер: {res.get('size_bytes', 0) / 1024.0:.1f} KB", parse_mode="HTML")
-                else:
-                    await callback.message.answer("⚠️ Не удалось создать файл рантайм-бэкапа.")
             except Exception as e:
                 logger.error(f"Error sending runtime backup: {e}")
                 await callback.message.answer(f"❌ Ошибка бэкапа: {e}")
@@ -1303,7 +1304,6 @@ class TelegramReceiver:
                     InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet"),
                 ],
                 [
-                    InlineKeyboardButton(text="💰 Задать нач. баланс", callback_data=f"analytics_set_balance:{current_uid}"),
                     InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data=f"analytics_reset:{current_uid}"),
                 ],
                 [
@@ -1316,13 +1316,13 @@ class TelegramReceiver:
                     await target_msg.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
                 except Exception as e:
                     if "message is not modified" not in str(e).lower():
-                        logger.error(f"Error editing universe analytics screen: {e}")
+                        await target_msg.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
             elif edit and isinstance(target_msg, Message):
                 try:
                     await target_msg.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
                 except Exception as e:
                     if "message is not modified" not in str(e).lower():
-                        logger.error(f"Error editing universe analytics screen: {e}")
+                        await target_msg.answer(text, reply_markup=keyboard, parse_mode="HTML")
             elif isinstance(target_msg, CallbackQuery):
                 await target_msg.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
             else:
@@ -1396,32 +1396,80 @@ class TelegramReceiver:
                 evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
                 title_prefix = "🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT)</b>"
 
-            chunks = engine.format_table_chunks(entries, evaluated_coins_count=evaluated_coins, chunk_size=11, top_limit=32)
-            total_chunks = len(chunks)
+            clean_entries = [
+                e for e in entries
+                if not (
+                    e.get("sizing_mode") in ("dyn_bb", "dyn_bb_legacy", "dyn_bb_breakout", "dyn_brk_16", "dyn_brk_10")
+                    or any(e.get("universe_id", "").endswith(f"__{m}") for m in ("dyn_bb", "dyn_bb_legacy", "dyn_bb_breakout", "dyn_brk_16", "dyn_brk_10"))
+                )
+            ][:32]
 
-            for i, chunk in enumerate(chunks, 1):
-                part_title = f" (Часть {i}/{total_chunks})" if total_chunks > 1 else ""
-                response = f"{title_prefix}{part_title}\n\n<pre>{chunk}</pre>"
-                if len(response) <= 4000:
-                    await msg_target.answer(response, parse_mode="HTML")
-                else:
-                    sub_lines = chunk.splitlines()
-                    sub_buf = []
-                    sub_len = 0
-                    sub_idx = 1
-                    for line in sub_lines:
-                        if sub_len + len(line) + 1 > 3500:
-                            sub_text = "\n".join(sub_buf)
-                            await msg_target.answer(f"{title_prefix}{part_title}.{sub_idx}\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
-                            sub_buf = [line]
-                            sub_len = len(line)
-                            sub_idx += 1
-                        else:
-                            sub_buf.append(line)
-                            sub_len += len(line) + 1
-                    if sub_buf:
-                        sub_text = "\n".join(sub_buf)
-                        await msg_target.answer(f"{title_prefix}{part_title}.{sub_idx}\n\n<pre>{sub_text}</pre>", parse_mode="HTML")
+            if not clean_entries:
+                await msg_target.answer(f"{title_prefix}\n\n<i>Таблица лидеров пуста.</i>", parse_mode="HTML")
+                return
+
+            medals = {1: "🥇", 2: "🥈", 3: "🥉"}
+            card_texts = []
+            for rank, item in enumerate(clean_entries, 1):
+                medal = medals.get(rank, f"▫️ #{rank}")
+                uid = item.get("universe_id", "")
+                mode_b = item.get("mode_badge") or f"[{str(item.get('mode', 'OFF')).upper()}]"
+                size_b = item.get("sizing_badge", "[STATIC]")
+
+                net_val = float(item.get("net_profit_usdt", 0.0))
+                net_sign = "+" if net_val > 0 else ""
+                iter_idx = item.get("iteration_index", 1)
+                iter_net = float(item.get("iteration_net_profit_usdt", net_val))
+                iter_net_sign = "+" if iter_net > 0 else ""
+
+                real_val = float(item.get("realized_pnl_usdt", 0.0))
+                real_sign = "+" if real_val > 0 else ""
+                iter_real = float(item.get("iteration_realized_pnl_usdt", real_val))
+                iter_real_sign = "+" if iter_real > 0 else ""
+
+                unreal_val = float(item.get("unrealized_pnl_usdt", 0.0))
+                unreal_sign = "+" if unreal_val > 0 else ""
+
+                max_dd = float(item.get("max_drawdown_usdt", 0.0))
+                peak_net = float(item.get("peak_net_profit_usdt", 0.0))
+                peak_age = float(item.get("peak_age_hours", 0.0))
+                peak_str = f"+{peak_net:.2f}$ ({peak_age:.1f}ч)" if peak_net > 0 and peak_age > 0 else f"{peak_net:+.2f}$"
+
+                trades = int(item.get("total_trades", 0))
+                rec = float(item.get("recovery_factor", 0.0))
+
+                card = (
+                    f"{medal} <b>{uid}</b>\n"
+                    f"├ Режим: <code>{mode_b}</code> <code>{size_b}</code>\n"
+                    f"├ Net Profit: <b>{net_sign}{net_val:.2f} USDT</b> <i>(Итер #{iter_idx}: {iter_net_sign}{iter_net:.2f}$)</i>\n"
+                    f"├ Realized: <b>{real_sign}{real_val:.2f}$</b> <i>(Итер: {iter_real_sign}{iter_real:.2f}$)</i>\n"
+                    f"├ Floating: <b>{unreal_sign}{unreal_val:.2f}$</b>\n"
+                    f"├ Max DD: <code>{max_dd:.2f}$</code> | ATH Net: <code>{peak_str}</code>\n"
+                    f"└ Сделок: <b>{trades}</b> | Rec. Factor: <code>{rec:.2f}</code>"
+                )
+                card_texts.append(card)
+
+            chunk_size = 8
+            num_chunks = (len(card_texts) + chunk_size - 1) // chunk_size
+            for ch_idx in range(num_chunks):
+                ch_cards = card_texts[ch_idx * chunk_size : (ch_idx + 1) * chunk_size]
+                part_title = f" (Часть {ch_idx + 1}/{num_chunks})" if num_chunks > 1 else ""
+                header_msg = (
+                    f"{title_prefix}{part_title}\n"
+                    f"<i>Активных куполов: {len(clean_entries)} | Монет: {evaluated_coins}</i>\n"
+                    f"───────────────────────\n"
+                )
+                body_msg = "\n───────────────────────\n".join(ch_cards)
+                full_msg = header_msg + body_msg
+
+                kb = None
+                if ch_idx == num_chunks - 1:
+                    kb = InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="📄 Скачать leaderboard.txt", callback_data="download_leaderboard_txt")],
+                        [InlineKeyboardButton(text="🔙 Назад к Биг Борду", callback_data="analytics_bigboard")]
+                    ])
+
+                await msg_target.answer(full_msg, parse_mode="HTML", reply_markup=kb)
 
         @self.dp.callback_query(F.data == "analytics_bb_leaderboard")
         async def cb_analytics_bb_leaderboard(callback: CallbackQuery):
@@ -1430,6 +1478,22 @@ class TelegramReceiver:
             except Exception as e:
                 logger.error(f"Error in cb_analytics_bb_leaderboard: {e}")
                 await callback.message.answer(f"❌ Ошибка лидерборда: {e}")
+
+        @self.dp.callback_query(F.data == "download_leaderboard_txt")
+        async def cb_download_leaderboard_txt(callback: CallbackQuery):
+            await callback.answer()
+            engine = getattr(self.bot_core.analytics, "leaderboard_engine", None)
+            lb_file = getattr(engine, "leaderboard_file", None) if engine else None
+            if not lb_file or not os.path.exists(lb_file):
+                lb_file = BASE_DIR / "ANALYTICS" / "leaderboard.txt"
+            if os.path.exists(lb_file):
+                await callback.message.answer_document(
+                    FSInputFile(str(lb_file)),
+                    caption="🏆 <b>Полный отчет: Leaderboard Стратегий</b>",
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.answer("⚠️ Файл leaderboard.txt еще не сформирован.")
 
         @self.dp.callback_query(F.data == "analytics_bb_global")
         async def cb_analytics_bb_global(callback: CallbackQuery):
@@ -2023,7 +2087,7 @@ class TelegramReceiver:
                         InlineKeyboardButton(text="Abs Recovery", callback_data=f"analytics_ranking:abs_rec:{current_uid}")
                     ],
                     [
-                        InlineKeyboardButton(text="🔙 Назад", callback_data=f"analytics_dome:{current_uid}")
+                        InlineKeyboardButton(text="🔙 Назад в купол", callback_data=f"analytics_dome:{current_uid}")
                     ]
                 ])
                     
@@ -2039,24 +2103,19 @@ class TelegramReceiver:
                 if current_msg:
                     messages.append(current_msg)
 
-                if len(parts) > 1 and len(messages) == 1:
+                if messages:
                     try:
                         await callback.message.edit_text(messages[0], parse_mode="HTML", reply_markup=switch_kb)
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
-                            raise
-                else:
-                    if len(parts) > 1:
-                        try:
-                            await callback.message.delete()
-                        except Exception:
-                            pass
-                    for i, msg in enumerate(messages):
-                        rm = switch_kb if i == len(messages) - 1 else None
-                        await callback.message.answer(msg, parse_mode="HTML", reply_markup=rm)
+                            await callback.message.answer(messages[0], parse_mode="HTML", reply_markup=switch_kb)
+                    if len(messages) > 1:
+                        for i, msg in enumerate(messages[1:], 1):
+                            rm = switch_kb if i == len(messages) - 1 else None
+                            await callback.message.answer(msg, parse_mode="HTML", reply_markup=rm)
             except Exception as e:
                 logger.error(f"Error generating ranking for {current_uid}: {e}")
-                await callback.message.answer("Ошибка генерации рейтинга.")
+                await callback.message.answer("⚠️ Ошибка отображения рейтинга монет.")
 
         @self.dp.callback_query(F.data.startswith("analytics_txt"))
         async def process_analytics_txt(callback: CallbackQuery, state: FSMContext):
@@ -2104,11 +2163,43 @@ class TelegramReceiver:
                 lines.append(f"  Peak: {peak_val:,.2f} USDT")
                 lines.append(f"  Min (Bottom): {min_val:,.2f} USDT\n")
                 
+                per_coin_dict = data.get("per_coin", {})
                 realized = float(data.get('realized_pnl_usdt', 0))
                 realized_net = float(data.get('realized_pnl_net_usdt', realized))
                 comm = float(data.get('total_commission_usdt', 0))
                 fund = float(data.get('total_funding_usdt', 0))
-                
+                if comm == 0.0 and per_coin_dict:
+                    comm = sum(float(c.get("commission_usdt", 0.0)) for c in per_coin_dict.values())
+                if fund == 0.0 and per_coin_dict:
+                    fund = sum(float(c.get("funding_usdt", 0.0)) for c in per_coin_dict.values())
+                if realized_net == 0.0 and per_coin_dict:
+                    realized_net = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in per_coin_dict.values())
+                if realized == 0.0 and per_coin_dict:
+                    realized = sum(float(c.get("realized_pnl_usdt", c.get("realized_pnl_net_usdt", 0.0))) for c in per_coin_dict.values())
+
+                g_cap = float(data.get('total_grid_size_usdt') or 0.0)
+                g_load = float(data.get('current_grid_load_usdt') or 0.0)
+                g_pct = float(data.get('grid_load_pct') or 0.0)
+                if g_cap == 0.0 and per_coin_dict:
+                    g_cap = sum(float(c.get("grid_capacity_usdt", 0.0)) for c in per_coin_dict.values())
+                if g_load == 0.0 and per_coin_dict:
+                    g_load = sum(float(c.get("current_grid_load_usdt", 0.0)) for c in per_coin_dict.values())
+                if g_pct == 0.0 and g_cap > 0:
+                    g_pct = round((g_load / g_cap) * 100.0, 2)
+
+                m_used = float(data.get('total_margin_used_usdt') or 0.0)
+                m_pct = float(data.get('margin_load_pct') or 0.0)
+                if m_used == 0.0 and per_coin_dict:
+                    m_used = sum(float(c.get("current_margin_usdt", 0.0)) for c in per_coin_dict.values())
+                if m_pct == 0.0 and cur_val > 0:
+                    m_pct = round((m_used / cur_val) * 100.0, 2)
+
+                f_marg = float(data.get('free_margin_usdt') or 0.0)
+                f_pct = float(data.get('free_margin_pct') or 0.0)
+                if f_marg == 0.0 and cur_val > 0:
+                    f_marg = max(0.0, cur_val - m_used)
+                    f_pct = round((f_marg / cur_val) * 100.0, 2)
+
                 lines.append("Performance:")
                 lines.append(f"  Net Profit: {data.get('net_profit_usdt', 0):,.2f} USDT")
                 lines.append(f"  Realized PnL (Gross): {realized:,.2f} USDT")
@@ -2119,9 +2210,9 @@ class TelegramReceiver:
                 lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0):,.2f} USDT")
                 lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0):,.2f} USDT")
                 lines.append(f"  ROI: {data.get('roi_pct', 0):.2f}%")
-                lines.append(f"  Grid Load: {data.get('grid_load_pct', 0):.2f}% ({data.get('current_grid_load_usdt', 0):,.2f} / {data.get('total_grid_size_usdt', 0):,.2f} USDT | Max: {data.get('max_grid_load_pct', 0):.2f}%)")
-                lines.append(f"  Margin Load: {data.get('margin_load_pct', 0):.2f}% (Used: {data.get('total_margin_used_usdt', 0):,.2f} USDT | Max: {data.get('max_margin_load_pct', 0):.2f}%)")
-                lines.append(f"  Free Margin: {data.get('free_margin_usdt', 0):,.2f} USDT ({data.get('free_margin_pct', 0):.2f}% | Min: {data.get('min_free_margin_usdt', 0):,.2f} USDT)")
+                lines.append(f"  Grid Load: {g_pct:.2f}% ({g_load:,.2f} / {g_cap:,.2f} USDT | Max: {data.get('max_grid_load_pct', g_pct):.2f}%)")
+                lines.append(f"  Margin Load: {m_pct:.2f}% (Used: {m_used:,.2f} USDT | Max: {data.get('max_margin_load_pct', m_pct):.2f}%)")
+                lines.append(f"  Free Margin: {f_marg:,.2f} USDT ({f_pct:.2f}% | Min: {data.get('min_free_margin_usdt', f_marg):,.2f} USDT)")
                 lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0):.2f}")
                 lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0):.1f}%)\n")
                 
@@ -2229,10 +2320,42 @@ class TelegramReceiver:
                     msg += f"▪️ Peak: <b>{peak_val:,.2f}</b> USDT\n"
                     msg += f"▪️ Min (Bottom): <b>{min_val:,.2f}</b> USDT\n\n"
                     
+                    per_coin_dict = data.get("per_coin", {})
                     realized = float(data.get('realized_pnl_usdt') or 0.0)
                     realized_net = float(data.get('realized_pnl_net_usdt') or realized)
                     comm = float(data.get('total_commission_usdt') or 0.0)
                     fund = float(data.get('total_funding_usdt') or 0.0)
+                    if comm == 0.0 and per_coin_dict:
+                        comm = sum(float(c.get("commission_usdt", 0.0)) for c in per_coin_dict.values())
+                    if fund == 0.0 and per_coin_dict:
+                        fund = sum(float(c.get("funding_usdt", 0.0)) for c in per_coin_dict.values())
+                    if realized_net == 0.0 and per_coin_dict:
+                        realized_net = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in per_coin_dict.values())
+                    if realized == 0.0 and per_coin_dict:
+                        realized = sum(float(c.get("realized_pnl_usdt", c.get("realized_pnl_net_usdt", 0.0))) for c in per_coin_dict.values())
+
+                    g_cap = float(data.get('total_grid_size_usdt') or 0.0)
+                    g_load = float(data.get('current_grid_load_usdt') or 0.0)
+                    g_pct = float(data.get('grid_load_pct') or 0.0)
+                    if g_cap == 0.0 and per_coin_dict:
+                        g_cap = sum(float(c.get("grid_capacity_usdt", 0.0)) for c in per_coin_dict.values())
+                    if g_load == 0.0 and per_coin_dict:
+                        g_load = sum(float(c.get("current_grid_load_usdt", 0.0)) for c in per_coin_dict.values())
+                    if g_pct == 0.0 and g_cap > 0:
+                        g_pct = round((g_load / g_cap) * 100.0, 2)
+
+                    m_used = float(data.get('total_margin_used_usdt') or 0.0)
+                    m_pct = float(data.get('margin_load_pct') or 0.0)
+                    if m_used == 0.0 and per_coin_dict:
+                        m_used = sum(float(c.get("current_margin_usdt", 0.0)) for c in per_coin_dict.values())
+                    if m_pct == 0.0 and cur_val > 0:
+                        m_pct = round((m_used / cur_val) * 100.0, 2)
+
+                    f_marg = float(data.get('free_margin_usdt') or 0.0)
+                    f_pct = float(data.get('free_margin_pct') or 0.0)
+                    if f_marg == 0.0 and cur_val > 0:
+                        f_marg = max(0.0, cur_val - m_used)
+                        f_pct = round((f_marg / cur_val) * 100.0, 2)
                     
                     msg += "<b>📈 Performance:</b>\n"
                     msg += f"▪️ Net Profit: <b>{data.get('net_profit_usdt', 0):,.2f}</b> USDT\n"
@@ -2244,9 +2367,9 @@ class TelegramReceiver:
                     msg += f"▪️ Max Drawdown: <b>{data.get('max_drawdown_usdt', 0):,.2f}</b> USDT\n"
                     msg += f"▪️ Performance (Peak-Start): <b>{data.get('performance_usdt', 0):,.2f}</b> USDT\n"
                     msg += f"▪️ ROI: <b>{data.get('roi_pct', 0):.2f}%</b>\n"
-                    msg += f"▪️ Grid Load: <b>{data.get('grid_load_pct', 0):.2f}%</b> ({data.get('current_grid_load_usdt', 0):,.2f}/{data.get('total_grid_size_usdt', 0):,.2f} USDT | Max: <b>{data.get('max_grid_load_pct', 0):.2f}%</b>)\n"
-                    msg += f"▪️ Margin Load: <b>{data.get('margin_load_pct', 0):.2f}%</b> (Used: <b>{data.get('total_margin_used_usdt', 0):,.2f}</b> USDT | Max: <b>{data.get('max_margin_load_pct', 0):.2f}%</b>)\n"
-                    msg += f"▪️ Free Margin: <b>{data.get('free_margin_usdt', 0):,.2f}</b> USDT ({data.get('free_margin_pct', 0):.2f}% | Min: <b>{data.get('min_free_margin_usdt', 0):,.2f}</b> USDT)\n"
+                    msg += f"▪️ Grid Load: <b>{g_pct:.2f}%</b> ({g_load:,.2f}/{g_cap:,.2f} USDT | Max: <b>{data.get('max_grid_load_pct', g_pct):.2f}%</b>)\n"
+                    msg += f"▪️ Margin Load: <b>{m_pct:.2f}%</b> (Used: <b>{m_used:,.2f}</b> USDT | Max: <b>{data.get('max_margin_load_pct', m_pct):.2f}%</b>)\n"
+                    msg += f"▪️ Free Margin: <b>{f_marg:,.2f}</b> USDT ({f_pct:.2f}% | Min: <b>{data.get('min_free_margin_usdt', f_marg):,.2f}</b> USDT)\n"
                     msg += f"▪️ Recovery Factor: <b>{data.get('recovery_factor', 0):.2f}</b>\n"
                     msg += f"▪️ Trades: <b>{data.get('total_trades', 0)}</b> (Wins: <b>{data.get('winning_trades', 0)}</b> | <b>{data.get('winrate_pct', 0):.1f}%</b>)\n"
                     

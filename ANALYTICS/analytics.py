@@ -1208,17 +1208,36 @@ class AnalyticsManager:
 
             s_unreal = sum(float(c.get("current_drawdown", 0.0)) for c in strat_per_coin.values())
             s_real = sum(float(c.get("realized_pnl_net_usdt", c.get("realized_pnl_usdt", 0.0))) for c in strat_per_coin.values())
+            s_real_gross = sum(float(c.get("realized_pnl_usdt", c.get("realized_pnl_net_usdt", 0.0))) for c in strat_per_coin.values())
+            s_comm = sum(float(c.get("commission_usdt", 0.0)) for c in strat_per_coin.values())
+            s_fund = sum(float(c.get("funding_usdt", 0.0)) for c in strat_per_coin.values())
             s_trades = sum(int(c.get("total_trades", c.get("trades", 0))) for c in strat_per_coin.values())
             s_wins = sum(int(c.get("winning_trades", c.get("win_count", 0))) for c in strat_per_coin.values())
             s_losses = max(0, s_trades - s_wins)
 
             strat_data["unrealized_pnl_usdt"] = round(s_unreal, 4)
-            strat_data["realized_pnl_usdt"] = round(s_real, 4)
+            strat_data["realized_pnl_usdt"] = round(s_real_gross if s_real_gross != 0.0 else s_real, 4)
+            strat_data["realized_pnl_net_usdt"] = round(s_real, 4)
+            strat_data["total_commission_usdt"] = round(s_comm, 4)
+            strat_data["total_funding_usdt"] = round(s_fund, 4)
             strat_data["net_profit_usdt"] = round(s_real + s_unreal, 4)
             if s_trades > 0:
                 strat_data["total_trades"] = s_trades
                 strat_data["winning_trades"] = s_wins
                 strat_data["winrate_pct"] = round(s_wins / s_trades * 100.0, 2)
+
+            # Расчет Grid Load и Margin Load под куполом стратегии
+            s_grid_cap = sum(float(c.get("grid_capacity_usdt", 0.0)) for c in strat_per_coin.values())
+            s_grid_load = sum(float(c.get("current_grid_load_usdt", 0.0)) for c in strat_per_coin.values())
+            s_margin_used = sum(float(c.get("current_margin_usdt", 0.0)) for c in strat_per_coin.values())
+
+            strat_data["total_grid_size_usdt"] = round(s_grid_cap, 2)
+            strat_data["current_grid_load_usdt"] = round(s_grid_load, 4)
+            strat_data["grid_load_pct"] = round((s_grid_load / s_grid_cap) * 100.0, 2) if s_grid_cap > 0 else 0.0
+            strat_data["max_grid_load_usdt"] = round(max(float(strat_data.get("max_grid_load_usdt", 0.0)), s_grid_load), 4)
+            strat_data["max_grid_load_pct"] = round((strat_data["max_grid_load_usdt"] / s_grid_cap) * 100.0, 2) if s_grid_cap > 0 else 0.0
+            strat_data["total_margin_used_usdt"] = round(s_margin_used, 4)
+            strat_data["max_margin_used_usdt"] = round(max(float(strat_data.get("max_margin_used_usdt", 0.0)), s_margin_used), 4)
 
             # Rebase Guard for Strategy
             initial = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
@@ -1236,6 +1255,11 @@ class AnalyticsManager:
             s_init = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
             s_cur = round(s_init + strat_data["net_profit_usdt"], 4)
             strat_data["cur_balance_usdt"] = s_cur
+
+            free_margin = max(0.0, s_cur - s_margin_used)
+            strat_data["free_margin_usdt"] = round(free_margin, 4)
+            strat_data["free_margin_pct"] = round((free_margin / s_cur) * 100.0, 2) if s_cur > 0 else 0.0
+            strat_data["margin_load_pct"] = round((s_margin_used / s_cur) * 100.0, 2) if s_cur > 0 else 0.0
 
             s_peak = float(strat_data.get("peak_balance_usdt", s_init))
             s_trough = float(strat_data.get("_current_trough_usdt", s_init))
