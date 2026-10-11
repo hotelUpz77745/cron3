@@ -1255,6 +1255,7 @@ class AnalyticsManager:
             s_init = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
             s_cur = round(s_init + strat_data["net_profit_usdt"], 4)
             strat_data["cur_balance_usdt"] = s_cur
+            strat_data["roi_pct"] = round(((s_cur - s_init) / s_init) * 100.0, 2) if s_init > 0 else 0.0
 
             free_margin = max(0.0, s_cur - s_margin_used)
             strat_data["free_margin_usdt"] = round(free_margin, 4)

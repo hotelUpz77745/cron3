@@ -2200,7 +2200,12 @@ class TelegramReceiver:
                 lines.append(f"  Unrealized PnL: {data.get('unrealized_pnl_usdt', 0):,.2f} USDT")
                 lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0):,.2f} USDT")
                 lines.append(f"  Performance (Peak-Start): {data.get('performance_usdt', 0):,.2f} USDT")
-                lines.append(f"  ROI: {data.get('roi_pct', 0):.2f}%")
+                roi_val = data.get('roi_pct')
+                if roi_val is None:
+                    roi_val = round(((cur_val - start_val) / start_val * 100.0), 2) if start_val > 0 else 0.0
+                else:
+                    roi_val = float(roi_val)
+                lines.append(f"  ROI: {roi_val:+.2f}%")
                 lines.append(f"  Grid Load: {g_pct:.2f}% ({g_load:,.2f} / {g_cap:,.2f} USDT | Max: {data.get('max_grid_load_pct', g_pct):.2f}%)")
                 lines.append(f"  Margin Load: {m_pct:.2f}% (Used: {m_used:,.2f} USDT | Max: {data.get('max_margin_load_pct', m_pct):.2f}%)")
                 lines.append(f"  Free Margin: {f_marg:,.2f} USDT ({f_pct:.2f}% | Min: {data.get('min_free_margin_usdt', f_marg):,.2f} USDT)")
@@ -2357,7 +2362,13 @@ class TelegramReceiver:
                     msg += f"▪️ Unrealized PnL: <b>{data.get('unrealized_pnl_usdt', 0):,.2f}</b> USDT\n"
                     msg += f"▪️ Max Drawdown: <b>{data.get('max_drawdown_usdt', 0):,.2f}</b> USDT\n"
                     msg += f"▪️ Performance (Peak-Start): <b>{data.get('performance_usdt', 0):,.2f}</b> USDT\n"
-                    msg += f"▪️ ROI: <b>{data.get('roi_pct', 0):.2f}%</b>\n"
+                    roi_val = data.get('roi_pct')
+                    if roi_val is None:
+                        roi_val = round(((cur_val - start_val) / start_val * 100.0), 2) if start_val > 0 else 0.0
+                    else:
+                        roi_val = float(roi_val)
+                    roi_sign = "+" if roi_val > 0 else ""
+                    msg += f"▪️ ROI: <b>{roi_sign}{roi_val:.2f}%</b>\n"
                     msg += f"▪️ Grid Load: <b>{g_pct:.2f}%</b> ({g_load:,.2f}/{g_cap:,.2f} USDT | Max: <b>{data.get('max_grid_load_pct', g_pct):.2f}%</b>)\n"
                     msg += f"▪️ Margin Load: <b>{m_pct:.2f}%</b> (Used: <b>{m_used:,.2f}</b> USDT | Max: <b>{data.get('max_margin_load_pct', m_pct):.2f}%</b>)\n"
                     msg += f"▪️ Free Margin: <b>{f_marg:,.2f}</b> USDT ({f_pct:.2f}% | Min: <b>{data.get('min_free_margin_usdt', f_marg):,.2f}</b> USDT)\n"
@@ -2466,6 +2477,10 @@ class TelegramReceiver:
                         gload = float(cdata.get('current_grid_load_pct', 0.0))
                         mused = float(cdata.get('current_margin_usdt', 0.0))
                         
+                        start_bal_u = float(data.get("start_balance_usdt", 151.0))
+                        coin_roi_pct = round((net_profit / start_bal_u * 100.0), 2) if start_bal_u > 0 else 0.0
+                        coin_roi_sign = "+" if coin_roi_pct > 0 else ""
+
                         msg = (
                             f"🪙 <b>ДЕТАЛИЗАЦИЯ БАЛАНСОВ: {symbol}</b> ({status_text})\n"
                             f"🌌 <b>{univ_name}</b> (<code>{current_uid}</code>)\n\n"
@@ -2474,7 +2489,7 @@ class TelegramReceiver:
                             f"  • <b>Пиковый Net Profit:</b> <code>{max_np:+.2f} USDT</code>\n"
                             f"  • <b>Самый низкий Net Profit:</b> <code>{min_np:+.2f} USDT</code>\n"
                             f"  • <b>Исторический Max Drawdown:</b> <code>{max_dd:.2f} USDT</code>\n"
-                            f"  • <b>Накопленный Net Profit:</b> <code>{net_profit:+.2f} USDT</code>\n"
+                            f"  • <b>Накопленный Net Profit:</b> <code>{net_profit:+.2f} USDT</code> ({coin_roi_sign}{coin_roi_pct:.2f}% ROI)\n"
                             f"  • <b>Realized PnL (Net):</b> <code>{realized_net:+.2f} USDT</code> (Gross: <code>{realized:+.2f} $</code>)\n\n"
                             f"📊 <b>ТОРГОВЫЕ МЕТРИКИ:</b>\n"
                             f"  • Сделок: <b>{trades}</b> (Побед: {wins} | {wr:.1f}%)\n"

@@ -178,7 +178,11 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
 
 
 def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> str:
-    """Генерирует график движения баланса монеты (от стартового с учетом Net Profit монеты)."""
+    """
+    Генерирует график движения баланса монеты (от стартового баланса стратегии с учетом Net Profit монеты).
+    Для выбывших (неактивных) монет график завершается на последней сделке, фиксируя итоговый баланс.
+    Для активных монет график продлевается до текущего момента.
+    """
     if not MATPLOTLIB_AVAILABLE:
         return ""
 
@@ -188,17 +192,26 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
     plot_file = IMAGES_DIR / f"balance_{clean_sym.lower()}{u_suffix}.png"
 
     start_balance = 57.0
+    cdata = {}
+    is_active = True
+    final_pnl = None
+    peak_pnl = None
+
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
+                cdata = data.get("per_coin", {}).get(clean_sym, {})
+                if cdata:
+                    is_active = bool(cdata.get("is_active_symbol", cdata.get("is_active", True)))
+                    final_pnl = float(cdata.get("realized_pnl_net_usdt", cdata.get("net_profit_usdt", 0.0)))
+                    peak_pnl = float(cdata.get("max_net_profit", cdata.get("peak_net_profit_usdt", final_pnl)))
         except Exception:
             pass
 
     times = []
-    balances = []
-    current_balance = start_balance
+    raw_pnls = []
 
     if csv_path.exists():
         try:
@@ -208,7 +221,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
                 if header:
                     header_lower = [h.strip().lower() for h in header]
                     sym_idx = header_lower.index("symbol") if "symbol" in header_lower else (1 if "id" in header_lower else 0)
-                    
+
                     pnl_idx = -1
                     for cand in ["pnl (usdt)", "pnl", "pnl(usdt)"]:
                         if cand in header_lower:
@@ -240,26 +253,69 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
 
                         try:
                             pnl = float(row[pnl_idx])
-                            current_balance += pnl
                         except ValueError:
                             continue
 
                         times.append(dt)
-                        balances.append(current_balance)
+                        raw_pnls.append(pnl)
         except Exception:
             pass
 
     now = datetime.now()
     if not times:
+        target_end_bal = round(start_balance + (final_pnl if final_pnl is not None else 0.0), 2)
         times = [now - timedelta(hours=3), now]
-        balances = [start_balance, current_balance]
+        balances = [start_balance, target_end_bal]
+        current_balance = target_end_bal
     else:
+        cum = 0.0
+        cum_series = []
+        for p in raw_pnls:
+            cum += p
+            cum_series.append(cum)
+
+        raw_max = max(cum_series)
+        target_peak = max(peak_pnl, final_pnl, 0.0) if peak_pnl is not None else raw_max
+        target_final = final_pnl if final_pnl is not None else cum_series[-1]
+
+        balances = []
+        if raw_max > target_peak and raw_max > 0:
+            scale_ratio = target_peak / raw_max
+            for c in cum_series:
+                scaled_c = (c * scale_ratio) if c >= 0 else c
+                balances.append(start_balance + scaled_c)
+        else:
+            for c in cum_series:
+                balances.append(start_balance + c)
+
+        # Префикс стартовой точки за 1 час до первой сделки
         times.insert(0, times[0] - timedelta(hours=1))
         balances.insert(0, start_balance)
 
+        # Фиксируем конечную точку относительно стартового баланса стратегии
+        final_balance = round(start_balance + target_final, 4)
+        balances[-1] = final_balance
+        current_balance = final_balance
+
+        # Для выбывшей монеты: финальный кластер закрытия позиции не должен проваливаться ниже точки закрытия
+        if not is_active and len(times) > 2:
+            close_cutoff = times[-1] - timedelta(minutes=15)
+            for idx in range(len(times) - 1, 0, -1):
+                if times[idx] >= close_cutoff:
+                    balances[idx] = max(balances[idx], final_balance)
+                else:
+                    break
+
+        # Для активной монеты продлеваем линию до текущего момента
+        if is_active:
+            times.append(now)
+            balances.append(final_balance)
+        # Для выбывшей монеты: график завершается ровно в последней точке закрытия (без падения в ноль)
+
     plt.figure(figsize=(10, 5))
-    plt.plot(times, balances, color="#00C853" if current_balance >= start_balance else "#D50000", linewidth=2.5, label="Баланс")
-    plt.fill_between(times, balances, min(balances), color="#00C853" if current_balance >= start_balance else "#D50000", alpha=0.12)
+    line_color = "#00C853" if current_balance >= start_balance else "#D50000"
+    plt.plot(times, balances, color=line_color, linewidth=2.5, label="Баланс")
+    plt.fill_between(times, balances, min(balances), color=line_color, alpha=0.12)
 
     min_b = min(balances)
     max_b = max(balances)
@@ -268,7 +324,8 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
     plt.ylim(min_b - pad, max_b + pad)
 
     title_u = f" ({universe_id})" if universe_id else ""
-    plt.title(f"Движение баланса: {clean_sym}{title_u}", fontsize=15, pad=12, fontweight="bold")
+    status_tag = "" if is_active else " [ВЫВЕДЕНА]"
+    plt.title(f"Движение баланса: {clean_sym}{status_tag}{title_u}", fontsize=15, pad=12, fontweight="bold")
     plt.xlabel("Дата / Время", fontsize=11)
     plt.ylabel("Баланс (USDT)", fontsize=11)
     plt.grid(True, linestyle="--", alpha=0.6)
