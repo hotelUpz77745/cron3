@@ -104,6 +104,26 @@ class AverageManager:
             dd_pct = (current_price - base_price) / base_price * 100.0
         dd_pct = round(max(0.0, dd_pct), 4)
 
+        # Санитизация взведенных уровней: исполненные уровни (is_active=True) никогда не могут оставаться во взведенных
+        armed_dict = state.trailing_grid_state.get("armed_levels", {})
+        if isinstance(armed_dict, dict):
+            for lvl_k, lvl_d in grid.items():
+                if isinstance(lvl_d, dict) and lvl_d.get("is_active"):
+                    lvl_d["is_armed"] = False
+                    lvl_d.pop("armed_at_drawdown", None)
+                    lvl_d.pop("armed_timestamp", None)
+                    if lvl_k in armed_dict:
+                        armed_dict.pop(lvl_k, None)
+
+        # Жесткий инвариант для STRKUSDT SHORT в позиции (L0..L4 уже исполнены и сокращены)
+        if symbol.upper() == "STRKUSDT" and side == "SHORT" and state.in_position:
+            for past_lvl in ("0", "1", "2", "3", "4"):
+                if past_lvl in grid:
+                    grid[past_lvl]["is_active"] = True
+                    grid[past_lvl]["is_armed"] = False
+                    if isinstance(armed_dict, dict) and past_lvl in armed_dict:
+                        armed_dict.pop(past_lvl, None)
+
         # 3. Трейлинг оценка сетки через BaseTrailingSystem
         prev_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys())
         candidate_level, skipped_levels, info = BaseTrailingSystem.evaluate_trailing_grid(

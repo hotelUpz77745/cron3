@@ -207,13 +207,11 @@ class TestStrategySystem(unittest.TestCase):
             # Символ может лежать либо в корне runtime/ (legacy fallback), либо под куполом стратегии
             strat = registry.get_strategy_for_symbol(sym)
             if strat:
-                cfg_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.pkl"
+                cfg_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
             else:
-                cfg_path = RUNTIME_DIR / f"{sym.lower()}.pkl"
+                cfg_path = RUNTIME_DIR / f"{sym.lower()}.json"
             self.assertTrue(cfg_path.exists(), f"Рантайм файл {cfg_path} должен существовать!")
-            import pickle
-            with open(cfg_path, "rb") as fp:
-                data = pickle.load(fp)
+            data = Utils.read_json_file(cfg_path)
             for side in ("LONG", "SHORT"):
                 self.assertIn(side, data)
                 self.assertIn("grid", data[side])
@@ -241,8 +239,8 @@ class TestStrategySystem(unittest.TestCase):
         for sym in active_syms:
             strat = registry.get_strategy_for_symbol(sym)
             if strat:
-                dome_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.pkl"
-                self.assertTrue(dome_path.exists(), f"Файл рантайма .pkl под куполом {strat.strategy_id} должен существовать: {dome_path}")
+                dome_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
+                self.assertTrue(dome_path.exists(), f"Файл рантайма .json под куполом {strat.strategy_id} должен существовать: {dome_path}")
                 resolved = mgr.get_runtime_path(sym)
                 self.assertEqual(resolved, dome_path)
 

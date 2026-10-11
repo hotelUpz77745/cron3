@@ -44,13 +44,17 @@ class TestCleanRuntimeArchitecture(unittest.TestCase):
         if not runtime_dir.exists():
             return
             
-        for pkl in runtime_dir.glob("*/*.pkl"):
-            with open(pkl, "rb") as f:
-                data = pickle.load(f)
+        from c_utils import Utils
+        for rt_file in list(runtime_dir.glob("*/*.json")) + list(runtime_dir.glob("*/*.pkl")):
+            if rt_file.suffix == ".json":
+                data = Utils.read_json_file(rt_file)
+            else:
+                with open(rt_file, "rb") as f:
+                    data = pickle.load(f)
             for side in ["LONG", "SHORT"]:
                 if side in data:
-                    self.assertNotIn("auto_closing", data[side], f"Файл {pkl} {side} не должен содержать auto_closing")
-                    self.assertNotIn("trend_size_depender", data[side], f"Файл {pkl} {side} не должен содержать trend_size_depender")
+                    self.assertNotIn("auto_closing", data[side], f"Файл {rt_file} {side} не должен содержать auto_closing")
+                    self.assertNotIn("trend_size_depender", data[side], f"Файл {rt_file} {side} не должен содержать trend_size_depender")
 
 if __name__ == "__main__":
     unittest.main()

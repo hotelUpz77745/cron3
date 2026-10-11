@@ -28,31 +28,31 @@ class TemplateManager:
         if strategy_id:
             strat_dir = self.runtime_dir / strategy_id
             strat_dir.mkdir(parents=True, exist_ok=True)
-            cand_pkl = strat_dir / f"{sym_lower}.pkl"
-            if cand_pkl.exists():
-                return cand_pkl
             cand_json = strat_dir / f"{sym_lower}.json"
             if cand_json.exists():
                 return cand_json
-            return cand_pkl
+            cand_pkl = strat_dir / f"{sym_lower}.pkl"
+            if cand_pkl.exists():
+                return cand_pkl
+            return cand_json
         if self.bot_core and hasattr(self.bot_core, "runtime_manager"):
             return self.bot_core.runtime_manager.get_runtime_path(symbol)
         if self.runtime_dir.exists():
             for sub in self.runtime_dir.iterdir():
                 if sub.is_dir():
-                    cand_pkl = sub / f"{sym_lower}.pkl"
-                    if cand_pkl.exists():
-                        return cand_pkl
                     cand_json = sub / f"{sym_lower}.json"
                     if cand_json.exists():
                         return cand_json
-        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
-        if cand_root_pkl.exists():
-            return cand_root_pkl
+                    cand_pkl = sub / f"{sym_lower}.pkl"
+                    if cand_pkl.exists():
+                        return cand_pkl
         cand_root_json = self.runtime_dir / f"{sym_lower}.json"
         if cand_root_json.exists():
             return cand_root_json
-        return cand_root_pkl
+        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
+        if cand_root_pkl.exists():
+            return cand_root_pkl
+        return cand_root_json
 
     def generate_tg_template(self, symbol: str, strategy_id: Optional[str] = None) -> str:
         """Создает JSON шаблон для отправки в Telegram (чистые настройки)."""

@@ -77,7 +77,7 @@ class TestBackupSystem(unittest.TestCase):
         strat_dir = self.runtime_dir / strat_id
         strat_dir.mkdir(parents=True, exist_ok=True)
 
-        # Создаем тестовый .pkl рантайм
+        # Создаем тестовый .json рантайм
         sample_state = {
             "symbol": "ZROUSDT",
             "strategy_id": strat_id,
@@ -92,8 +92,8 @@ class TestBackupSystem(unittest.TestCase):
                 "current_step": 0
             }
         }
-        sample_pkl = strat_dir / "zrousdt.pkl"
-        Utils.atomic_write_pickle(sample_pkl, sample_state)
+        sample_json = strat_dir / "zrousdt.json"
+        Utils.atomic_write_json(sample_json, sample_state)
 
         # Вызываем экспорт с явным указанием путей
         export_file = RuntimeBackupService.export_runtime(

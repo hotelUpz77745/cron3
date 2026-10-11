@@ -76,8 +76,8 @@ class RuntimeBackupService:
                     for f in item.iterdir():
                         if f.suffix in (".pkl", ".json"):
                             sym = f.stem.lower()
-                            if sym in strategies_data[strat_name] and f.suffix == ".json":
-                                # Приоритет за .pkl, json игнорируем если pkl уже загружен
+                            if sym in strategies_data[strat_name] and f.suffix == ".pkl":
+                                # Приоритет за .json, pkl игнорируем если json уже загружен
                                 continue
                             try:
                                 if f.suffix == ".pkl":

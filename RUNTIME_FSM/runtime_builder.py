@@ -60,20 +60,25 @@ def build_runtime_caches(
 
         if strat:
             target_dir = RUNTIME_DIR / strat.strategy_id
-            target_file = target_dir / f"{sym_lower}.pkl"
+            target_file = target_dir / f"{sym_lower}.json"
             was_existing = target_file.exists()
             applicator.build_runtime_for_symbol(symbol, strat, target_dir=target_dir)
             if not was_existing and target_file.exists():
                 created_new = True
         else:
-            target_file = RUNTIME_DIR / f"{sym_lower}.pkl"
-            target_json = RUNTIME_DIR / f"{sym_lower}.json"
+            target_file = RUNTIME_DIR / f"{sym_lower}.json"
+            target_pkl = RUNTIME_DIR / f"{sym_lower}.pkl"
             if not target_file.exists():
-                if target_json.exists():
-                    data = Utils.read_json_file(target_json)
-                    Utils.atomic_write_pickle(target_file, data)
+                if target_pkl.exists():
+                    import pickle
                     try:
-                        target_json.unlink()
+                        with open(target_pkl, "rb") as fp:
+                            data = pickle.load(fp)
+                    except Exception:
+                        data = {}
+                    Utils.atomic_write_json(target_file, data, indent=4)
+                    try:
+                        target_pkl.unlink()
                     except Exception:
                         pass
                     created_new = True
@@ -115,7 +120,7 @@ def build_runtime_caches(
                             else:
                                 logger.error(f"[CRITICAL] Секция 'tp_map' ОТСУТСТВУЕТ для {side} в _base.json!")
 
-                    Utils.atomic_write_pickle(target_file, new_data)
+                    Utils.atomic_write_json(target_file, new_data, indent=4)
                     logger.info(f"Created runtime cache for {symbol} at {target_file.name}")
                     created_new = True
 
@@ -124,7 +129,7 @@ def build_runtime_caches(
 def prompt_runtime_check():
     if not AVOID_CHECK_RUNTIME_CFG:
         print("\n" + "="*60)
-        print("ВНИМАНИЕ! Проверьте настройки рантайма (.pkl) в CFG/runtime/")
+        print("ВНИМАНИЕ! Проверьте настройки рантайма (.json) в CFG/runtime/")
         print("Если все верно, нажмите Enter для продолжения...")
         print("="*60 + "\n")
         try:

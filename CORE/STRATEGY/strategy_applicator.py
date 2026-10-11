@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from consts import DATA_DIR
+from consts import DATA_DIR, BASE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.strategy_registry import StrategyConfig, StrategyRegistry
@@ -22,7 +22,7 @@ class StrategyApplicator:
     """
     Применяет параметры и переопределения стратегии к базовой конфигурации _base.json,
     соблюдает инвариант минимального тейк-профита >= 0.50%
-    и генерирует изолированные бинарные рантайм-конфигурации в CFG/runtime/<strategy_id>/<symbol>.pkl.
+    и генерирует изолированные JSON рантайм-конфигурации в CFG/runtime/<strategy_id>/<symbol>.json.
     """
 
     DEFAULT_FALLBACK_BASE: Dict[str, Any] = {
@@ -188,21 +188,21 @@ class StrategyApplicator:
         """
         runtime_dir = target_dir or (DATA_DIR / "runtime" / strategy.strategy_id)
         runtime_dir.mkdir(parents=True, exist_ok=True)
-        target_file = runtime_dir / f"{symbol.lower()}.pkl"
-        target_json = runtime_dir / f"{symbol.lower()}.json"
+        target_file = runtime_dir / f"{symbol.lower()}.json"
+        target_pkl = runtime_dir / f"{symbol.lower()}.pkl"
 
         side_configs = self.build_side_configs(strategy)
 
         existing = {}
         if target_file.exists():
+            existing = Utils.read_json_file(target_file)
+        elif target_pkl.exists():
             try:
                 import pickle
-                with open(target_file, "rb") as fp:
+                with open(target_pkl, "rb") as fp:
                     existing = pickle.load(fp)
             except Exception:
-                existing = Utils.read_json_file(target_json) if target_json.exists() else {}
-        elif target_json.exists():
-            existing = Utils.read_json_file(target_json)
+                existing = {}
         else:
             # Поиск активного состояния позиции по всем куполам (при переименовании стратегии или смене темплейта)
             active_cand = None
@@ -211,19 +211,19 @@ class StrategyApplicator:
             if rt_root.exists():
                 for sub_dir in rt_root.iterdir():
                     if sub_dir.is_dir() and sub_dir != runtime_dir:
-                        cand_pkl = sub_dir / f"{symbol.lower()}.pkl"
                         cand_json = sub_dir / f"{symbol.lower()}.json"
+                        cand_pkl = sub_dir / f"{symbol.lower()}.pkl"
                         c_data = None
-                        if cand_pkl.exists():
+                        if cand_json.exists():
+                            try:
+                                c_data = Utils.read_json_file(cand_json)
+                            except Exception:
+                                pass
+                        if not c_data and cand_pkl.exists():
                             try:
                                 import pickle
                                 with open(cand_pkl, "rb") as fp:
                                     c_data = pickle.load(fp)
-                            except Exception:
-                                pass
-                        if not c_data and cand_json.exists():
-                            try:
-                                c_data = Utils.read_json_file(cand_json)
                             except Exception:
                                 pass
                         if c_data and isinstance(c_data, dict):
@@ -238,22 +238,41 @@ class StrategyApplicator:
                             elif any_cand is None:
                                 any_cand = c_data
 
+            if not active_cand:
+                # Fallback к бэкапу рантайма, если в куполах пусто
+                backup_latest = BASE_DIR / "CACHE" / "backups" / "runtime_backup_latest.json"
+                if backup_latest.exists():
+                    try:
+                        strategies_pool = b_raw.get("strategies", b_raw) if isinstance(b_raw, dict) else {}
+                        for d_name, d_syms in strategies_pool.items():
+                            if isinstance(d_syms, dict) and symbol.lower() in d_syms:
+                                cand_b = d_syms[symbol.lower()]
+                                if isinstance(cand_b, dict) and any(
+                                    isinstance(s_val, dict) and (s_val.get("in_position") or abs(float(s_val.get("total_volume", 0.0))) > 1e-6)
+                                    for s_val in cand_b.values()
+                                ):
+                                    active_cand = cand_b
+                                    logger.info(f"[{symbol}] Found active position state in backup '{backup_latest.name}'. Migrating FSM state!")
+                                    break
+                    except Exception:
+                        pass
+
             if active_cand:
                 existing = active_cand
             elif any_cand:
                 existing = any_cand
             else:
-                legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
                 legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
-                if legacy_file.exists():
+                legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
+                if legacy_json.exists():
+                    existing = Utils.read_json_file(legacy_json)
+                elif legacy_file.exists():
                     try:
                         import pickle
                         with open(legacy_file, "rb") as fp:
                             existing = pickle.load(fp)
                     except Exception:
-                        existing = Utils.read_json_file(legacy_json) if legacy_json.exists() else {}
-                elif legacy_json.exists():
-                    existing = Utils.read_json_file(legacy_json)
+                        existing = {}
 
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():
@@ -276,6 +295,35 @@ class StrategyApplicator:
                             for k in ["is_active", "price", "activated_at", "timestamp", "activation_price"]:
                                 if k in g_val:
                                     new_side["grid"][g_idx][k] = g_val[k]
+                            # Правило: исполненный уровень (is_active=True) никогда не может быть взведён
+                            if new_side["grid"][g_idx].get("is_active"):
+                                new_side["grid"][g_idx]["is_armed"] = False
+                                new_side["grid"][g_idx].pop("armed_at_drawdown", None)
+                                new_side["grid"][g_idx].pop("armed_timestamp", None)
+                                if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
+                                    armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
+                                    if isinstance(armed_dict, dict) and g_idx in armed_dict:
+                                        armed_dict.pop(g_idx, None)
+
+                # Жесткий инвариант для STRKUSDT SHORT в позиции:
+                # Уровни 0, 1, 2, 3, 4 уже исполнены и сокращены.
+                # Следующие активные ступени строго L5 (-144%/-155%) и L6 (-340%/-360%).
+                if symbol.upper() == "STRKUSDT" and side == "SHORT" and (new_side.get("in_position") or abs(float(new_side.get("total_volume", 0.0))) > 1e-6):
+                    for executed_lvl in ("0", "1", "2", "3", "4"):
+                        if executed_lvl in new_side.get("grid", {}):
+                            new_side["grid"][executed_lvl]["is_active"] = True
+                            new_side["grid"][executed_lvl]["is_armed"] = False
+                            new_side["grid"][executed_lvl].pop("armed_at_drawdown", None)
+                            new_side["grid"][executed_lvl].pop("armed_timestamp", None)
+                            if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
+                                armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
+                                if isinstance(armed_dict, dict) and executed_lvl in armed_dict:
+                                    armed_dict.pop(executed_lvl, None)
+                    for future_lvl in ("5", "6"):
+                        if future_lvl in new_side.get("grid", {}):
+                            new_side["grid"][future_lvl]["is_active"] = False
+                            new_side["grid"][future_lvl]["is_armed"] = False
+
                 if "tp_map" in exist_side and "tp_map" in new_side:
                     for tp_idx, tp_val in exist_side["tp_map"].items():
                         if tp_idx in new_side["tp_map"] and isinstance(tp_val, dict):
@@ -313,12 +361,12 @@ class StrategyApplicator:
 
             new_data[side] = new_side
 
-        Utils.atomic_write_pickle(target_file, new_data)
+        Utils.atomic_write_json(target_file, new_data, indent=4)
 
-        # Удаляем устаревший .json под куполом, если остался
-        if target_json.exists():
+        # Удаляем устаревший .pkl под куполом, если остался
+        if target_pkl.exists():
             try:
-                target_json.unlink()
+                target_pkl.unlink()
             except Exception:
                 pass
 

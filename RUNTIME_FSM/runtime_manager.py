@@ -29,54 +29,63 @@ class RuntimeFsmManager:
         self.backup_manager = None
         self.strategy_registry = strategy_registry
 
-    def get_runtime_path(self, symbol: str, default_ext: str = ".pkl") -> Path:
+    def get_runtime_path(self, symbol: str, default_ext: str = ".json") -> Path:
         """
         Возвращает путь к рантайм-файлу позиции под куполом назначенной стратегии.
-        Приоритет: .pkl (ультрабыстрый бинарный рантайм), fallback: .json (обратная совместимость).
-        Пример: CFG/runtime/u9_omni_zenith_apex/zrousdt.pkl
+        Приоритет: .json (прозрачный читаемый рантайм на жестком диске), fallback: .pkl (миграция).
+        Пример: CFG/runtime/u16_chita__classic/strkusdt.json
         """
         sym_lower = symbol.lower()
         if self.strategy_registry:
             strat_id = self.strategy_registry.get_strategy_id_for_symbol(symbol)
             if strat_id:
-                cand_pkl = self.runtime_dir / strat_id / f"{sym_lower}.pkl"
                 cand_json = self.runtime_dir / strat_id / f"{sym_lower}.json"
-                if cand_pkl.exists():
-                    return cand_pkl
+                cand_pkl = self.runtime_dir / strat_id / f"{sym_lower}.pkl"
                 if cand_json.exists():
                     return cand_json
+                if cand_pkl.exists():
+                    return cand_pkl
                 return self.runtime_dir / strat_id / f"{sym_lower}{default_ext}"
 
         # Поиск по подпапкам стратегий
         if self.runtime_dir.exists():
             for sub in self.runtime_dir.iterdir():
                 if sub.is_dir():
-                    cand_pkl = sub / f"{sym_lower}.pkl"
                     cand_json = sub / f"{sym_lower}.json"
-                    if cand_pkl.exists():
-                        return cand_pkl
+                    cand_pkl = sub / f"{sym_lower}.pkl"
                     if cand_json.exists():
                         return cand_json
+                    if cand_pkl.exists():
+                        return cand_pkl
 
-        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
         cand_root_json = self.runtime_dir / f"{sym_lower}.json"
-        if cand_root_pkl.exists():
-            return cand_root_pkl
+        cand_root_pkl = self.runtime_dir / f"{sym_lower}.pkl"
         if cand_root_json.exists():
             return cand_root_json
+        if cand_root_pkl.exists():
+            return cand_root_pkl
 
         return self.runtime_dir / f"{sym_lower}{default_ext}"
 
     def load_initial_caches(self, symbols: List[str]):
         """
-        Изначально грузим и фиксируем кеш рантайма из папки стратегии (.pkl или .json).
+        Изначально грузим и фиксируем кеш рантайма из папки стратегии (.json или .pkl).
         Здесь же проводим базовую валидацию конфигурации.
         """
         import pickle
         for sym in symbols:
-            path = self.get_runtime_path(sym)
+            path = self.get_runtime_path(sym, default_ext=".json")
             if path.exists():
-                if str(path).endswith(".pkl"):
+                if str(path).endswith(".json"):
+                    data = Utils.read_json_file(path)
+                    # Если остался старый .pkl, удаляем его
+                    pkl_target = path.with_suffix(".pkl")
+                    if pkl_target.exists():
+                        try:
+                            pkl_target.unlink()
+                        except Exception:
+                            pass
+                elif str(path).endswith(".pkl"):
                     try:
                         with open(path, "rb") as fp:
                             data = pickle.load(fp)
@@ -84,15 +93,15 @@ class RuntimeFsmManager:
                         logger.error(f"[{sym}] Failed to load .pkl runtime: {e}, attempting json fallback")
                         json_path = path.with_suffix(".json")
                         data = Utils.read_json_file(json_path) if json_path.exists() else {}
-                else:
-                    data = Utils.read_json_file(path)
-                    # Миграция: сразу сохраняем в бинарный .pkl и удаляем старый .json
-                    pkl_target = path.with_suffix(".pkl")
-                    Utils.atomic_write_pickle(pkl_target, data)
+                    # Миграция: сохраняем в прозрачный .json и удаляем старый .pkl
+                    json_target = path.with_suffix(".json")
+                    Utils.atomic_write_json(json_target, data, indent=4)
                     try:
                         path.unlink()
                     except Exception:
                         pass
+                else:
+                    data = Utils.read_json_file(path)
                 
                 # Валидация на совпадение количества усреднений и тейков
                 for side in ["LONG", "SHORT"]:
@@ -219,20 +228,20 @@ class RuntimeFsmManager:
         logger.debug(f"[{symbol}] {side} FSM state reset to default (kept custom config).")
 
     async def save_cache(self, symbol: str):
-        """Конкурентно-безопасное сохранение in-memory кеша на диск под куполом стратегии (в .pkl)."""
+        """Конкурентно-безопасное сохранение in-memory кеша на диск под куполом стратегии (в .json)."""
         if symbol not in self.locks:
             self.locks[symbol] = asyncio.Lock()
             
         async with self.locks[symbol]:
             if symbol in self.caches:
-                path = self.get_runtime_path(symbol, default_ext=".pkl").with_suffix(".pkl")
+                path = self.get_runtime_path(symbol, default_ext=".json").with_suffix(".json")
                 path.parent.mkdir(parents=True, exist_ok=True)
-                Utils.atomic_write_pickle(path, self.caches[symbol])
-                # Удаляем устаревший .json, если остался
-                json_path = path.with_suffix(".json")
-                if json_path.exists():
+                Utils.atomic_write_json(path, self.caches[symbol], indent=4)
+                # Удаляем устаревший .pkl, если остался
+                pkl_path = path.with_suffix(".pkl")
+                if pkl_path.exists():
                     try:
-                        json_path.unlink()
+                        pkl_path.unlink()
                     except Exception:
                         pass
                 if self.backup_manager:
