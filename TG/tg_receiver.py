@@ -1289,7 +1289,7 @@ class TelegramReceiver:
                     InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data=f"analytics_coin_menu:{current_uid}"),
                 ],
                 [
-                    InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data=f"analytics_ranking:net:{current_uid}"),
+                    InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data=f"analytics_ranking:net:{current_uid}:new"),
                 ],
                 [
                     InlineKeyboardButton(text="📈 График эквити", callback_data=f"analytics_chart:{current_uid}"),
@@ -1302,9 +1302,6 @@ class TelegramReceiver:
                 ],
                 [
                     InlineKeyboardButton(text="📚 Шпаргалка (Cheat Sheet)", callback_data="analytics_cheat_sheet"),
-                ],
-                [
-                    InlineKeyboardButton(text="🗑️ Сбросить аналитику", callback_data=f"analytics_reset:{current_uid}"),
                 ],
                 [
                     InlineKeyboardButton(text="🔙 Назад к Биг Борду", callback_data="analytics_bigboard"),
@@ -1367,34 +1364,20 @@ class TelegramReceiver:
             data = self.bot_core.analytics._read_data()
             self.bot_core.analytics._update_strategies_stats(data)
 
-            # Проверяем витрину Радара (Полигон 288 куполов)
-            radar_entries = []
-            radar_coins = 0
-            try:
-                paths_cfg = getattr(self.bot_core, "config", {}).get("paths", {})
-                radar_dir_str = paths_cfg.get("radar_dir", "../cron3PapperUniverses")
-                r_dir = (BASE_DIR / radar_dir_str).resolve() if not Path(radar_dir_str).is_absolute() else Path(radar_dir_str)
-                radar_file = r_dir / "ANALYTICS" / "LEADERBOARDS" / "leaderboard_all.json"
-                if radar_file.exists():
-                    r_data = json.loads(radar_file.read_text(encoding="utf-8"))
-                    radar_entries = r_data.get("leaderboard", [])
-                    radar_coins = r_data.get("evaluated_coins_count", 0)
-            except Exception as re:
-                logger.warning(f"[TG] Could not read radar leaderboard: {re}")
+            active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
+            universes_meta = {
+                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
+                for sid, scfg in active_strats.items()
+            }
+            entries = engine.generate_leaderboard(universes_meta)
+            evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
+            title_prefix = "🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ</b>"
 
-            if radar_entries:
-                entries = radar_entries
-                evaluated_coins = radar_coins or len(self.bot_core.strategy_registry.get_all_active_symbols())
-                title_prefix = "🏆 <b>ЛИДЕРБОРД ВСЕЛЕННЫХ (ТОП-32 NET PROFIT)</b>"
-            else:
-                active_strats = self.bot_core.strategy_registry.get_active_strategies() if hasattr(self.bot_core.strategy_registry, "get_active_strategies") else self.bot_core.strategy_registry.active_strategies
-                universes_meta = {
-                    sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True}
-                    for sid, scfg in active_strats.items()
-                }
-                entries = engine.generate_leaderboard(universes_meta)
-                evaluated_coins = len(self.bot_core.strategy_registry.get_all_active_symbols())
-                title_prefix = "🏆 <b>ЛИДЕРБОРД СТРАТЕГИЙ (NET PROFIT)</b>"
+            # Сохраняем текстовый лидерборд
+            try:
+                engine.save_portfolio(entries, evaluated_coins_count=evaluated_coins)
+            except Exception:
+                pass
 
             clean_entries = [
                 e for e in entries
@@ -1998,6 +1981,7 @@ class TelegramReceiver:
             parts = callback.data.split(":")
             criterion = parts[1] if len(parts) > 1 and parts[1] else "net"
             target_uid = parts[2] if len(parts) > 2 and parts[2] else None
+            is_switch = len(parts) > 3 and parts[3] == "switch"
             current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
             set_user_universe_id(callback.from_user.id, current_uid)
             import html
@@ -2082,12 +2066,12 @@ class TelegramReceiver:
                 # Add inline keyboard to switch criterion
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="Net Profit", callback_data=f"analytics_ranking:net:{current_uid}"),
-                        InlineKeyboardButton(text="Recovery (Тек)", callback_data=f"analytics_ranking:rec:{current_uid}"),
-                        InlineKeyboardButton(text="Abs Recovery", callback_data=f"analytics_ranking:abs_rec:{current_uid}")
+                        InlineKeyboardButton(text="Net Profit", callback_data=f"analytics_ranking:net:{current_uid}:switch"),
+                        InlineKeyboardButton(text="Recovery (Тек)", callback_data=f"analytics_ranking:rec:{current_uid}:switch"),
+                        InlineKeyboardButton(text="Abs Recovery", callback_data=f"analytics_ranking:abs_rec:{current_uid}:switch")
                     ],
                     [
-                        InlineKeyboardButton(text="🔙 Назад в купол", callback_data=f"analytics_dome:{current_uid}")
+                        InlineKeyboardButton(text="❌ Закрыть рейтинг", callback_data="delete_ranking_msg")
                     ]
                 ])
                     
@@ -2103,19 +2087,26 @@ class TelegramReceiver:
                 if current_msg:
                     messages.append(current_msg)
 
-                if messages:
+                if is_switch:
                     try:
                         await callback.message.edit_text(messages[0], parse_mode="HTML", reply_markup=switch_kb)
-                    except Exception as e:
-                        if "message is not modified" not in str(e).lower():
-                            await callback.message.answer(messages[0], parse_mode="HTML", reply_markup=switch_kb)
-                    if len(messages) > 1:
-                        for i, msg in enumerate(messages[1:], 1):
-                            rm = switch_kb if i == len(messages) - 1 else None
-                            await callback.message.answer(msg, parse_mode="HTML", reply_markup=rm)
+                    except Exception:
+                        pass
+                else:
+                    for i, msg_text in enumerate(messages):
+                        rm = switch_kb if i == len(messages) - 1 else None
+                        await callback.message.answer(msg_text, parse_mode="HTML", reply_markup=rm)
             except Exception as e:
                 logger.error(f"Error generating ranking for {current_uid}: {e}")
                 await callback.message.answer("⚠️ Ошибка отображения рейтинга монет.")
+
+        @self.dp.callback_query(F.data == "delete_ranking_msg")
+        async def cb_delete_ranking_msg(callback: CallbackQuery):
+            await callback.answer()
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
 
         @self.dp.callback_query(F.data.startswith("analytics_txt"))
         async def process_analytics_txt(callback: CallbackQuery, state: FSMContext):
