@@ -1,13 +1,38 @@
 {
   "_comment": "Базовые параметры и шаблоны по умолчанию для всех вселенных",
   "trend_size_depender": {
-    "trend_mode": "bb_deviation_4h",
-    "timeframe": "4h",
-    "eval_window": 20,
-    "eval_window_bars": 3360,
-    "multiplier": 2.0,
-    "min_side_pct": 33.3333,
-    "max_side_pct": 66.6667
+    "mode": "static",
+    "_trend_size_depender_modes": {
+      "static": "(Статический) Сайзинг строго 50/50, макро-оценка тренда 4h выключена.",
+      "dyn_inv_16": "(Bollinger Inverted 16) Контр-трендовый 4h Боллинджер, шкала 16 (коридор 33.3% / 66.7%), 4h-заморозка 50/50 при пробое.",
+      "dyn_ema_16": "(EMA Trend 16) Трендовый фильтр Dual EMA 10/30 (4h), шкала 16 (коридор 33.3% / 66.7%).",
+      "dyn_ema_10": "(EMA Trend 10) Трендовый фильтр Dual EMA 10/30 (4h), мягкая шкала 10 (коридор 40.0% / 60.0%)."
+    },
+    "bb_inverted": {
+      "timeframe": "4h",
+      "window": 20,
+      "multiplier": 2.0,
+      "lockout_duration_sec": 14400.0,
+      "confirmation_candles": 5
+    },
+    "ema_trend": {
+      "timeframe": "4h",
+      "sma_fast": 10,
+      "sma_slow": 30,
+      "confirmation_candles": 5,
+      "require_rising": true,
+      "trend_positive": true
+    },
+    "scale_16": {
+      "scale": 16,
+      "min_side_pct": 33.3333,
+      "max_side_pct": 66.6667
+    },
+    "scale_10": {
+      "scale": 10,
+      "min_side_pct": 40.0,
+      "max_side_pct": 60.0
+    }
   },
   "auto_closing": {
     "negative": {

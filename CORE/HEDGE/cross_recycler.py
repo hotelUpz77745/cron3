@@ -75,11 +75,18 @@ class CrossSideProfitRecycler:
         losing_side = "SHORT" if winning_side == "LONG" else "LONG"
         fsm_states = getattr(universe, "fsm_states", {}) or {}
         losing_state = fsm_states.get(symbol, {}).get(losing_side)
-        if not losing_state or not losing_state.in_position or losing_state.total_volume <= 0:
+        if not losing_state or not losing_state.in_position:
+            return None
+
+        pos_vol = abs(float(getattr(losing_state, "total_volume", 0.0)))
+        if pos_vol <= 1e-8:
             return None
 
         cur_level = int(RiskCalculatingUtils.get_current_grid_level(losing_state.grid))
         if cur_level < min_burn_level:
+            logger.debug(
+                f"[{strat_id}][{symbol}] Cross-side recycling skipped: {losing_side} level {cur_level} < min_burn_level {min_burn_level}"
+            )
             return None
 
         if losing_side == "LONG":
@@ -90,15 +97,18 @@ class CrossSideProfitRecycler:
             loss_per_unit = current_price - losing_state.avg_entry_price
 
         if drawdown_pct < min_drawdown_pct or loss_per_unit <= 0:
+            logger.debug(
+                f"[{strat_id}][{symbol}] Cross-side recycling skipped: {losing_side} DD {drawdown_pct:.1f}% < min_dd {min_drawdown_pct}% or loss_per_unit <= 0"
+            )
             return None
 
         burn_budget = realized_profit * recycle_ratio
         raw_qty = burn_budget / loss_per_unit
-        max_allowed_qty = losing_state.total_volume * (max_slice_pct / 100.0)
+        max_allowed_qty = pos_vol * (max_slice_pct / 100.0)
         actual_qty = min(raw_qty, max_allowed_qty)
 
         rounded_qty = TradeMath.round_qty(actual_qty, spec_data, symbol)
-        if rounded_qty <= 0 or rounded_qty > losing_state.total_volume:
+        if rounded_qty <= 0 or rounded_qty > pos_vol:
             return None
 
         order_side = "SELL" if losing_side == "LONG" else "BUY"
@@ -127,16 +137,19 @@ class CrossSideProfitRecycler:
                     positions = await positions
                 side_pos = next((p for p in positions if p.get("positionSide") == losing_side), None)
                 if side_pos:
-                    remote_vol = abs(float(side_pos.get("positionAmt", 0.0)))
-                    losing_state.total_volume = remote_vol
+                    remote_amt = float(side_pos.get("positionAmt", 0.0))
+                    # Сохраняем знак объема для SHORT в live/эмуляторе
+                    losing_state.total_volume = remote_amt if losing_state.total_volume < 0 else abs(remote_amt)
                     synced = True
             except Exception as e:
                 logger.warning(f"[{strat_id}][{symbol}] Failed to sync position after burn: {e}")
 
             if not synced:
-                losing_state.total_volume = max(0.0, losing_state.total_volume - rounded_qty)
+                new_abs = max(0.0, pos_vol - rounded_qty)
+                losing_state.total_volume = -new_abs if losing_state.total_volume < 0 else new_abs
 
-            if losing_state.total_volume <= 0:
+            if abs(losing_state.total_volume) <= 1e-8:
+                losing_state.total_volume = 0.0
                 losing_state.set_in_position(False)
                 losing_state.is_finished = True
 
@@ -155,9 +168,10 @@ class CrossSideProfitRecycler:
                     pass
 
             # Если позиция осталась активна, актуализируем лимитный TP ордер под новый уменьшенный объем
-            if losing_state.in_position and losing_state.total_volume > 0:
+            if losing_state.in_position and abs(losing_state.total_volume) > 1e-8:
                 if hasattr(universe, "tp_manager") and hasattr(universe.tp_manager, "place_take_profit"):
                     try:
+                        opposite_state = fsm_states.get(symbol, {}).get(winning_side)
                         res_tp = universe.tp_manager.place_take_profit(
                             client=universe.client,
                             symbol=symbol,
@@ -165,6 +179,7 @@ class CrossSideProfitRecycler:
                             current_price=current_price,
                             spec_data=spec_data,
                             state=losing_state,
+                            opposite_state=opposite_state,
                         )
                         if asyncio.iscoroutine(res_tp):
                             await res_tp

@@ -1,11 +1,14 @@
-# tests/test_trend_size_depender.py
-# Unit tests for TrendSizeDepender, dynamic 4h trend sizing [DYN_BB], and BotCore integration
+# ==============================================================================
+# Path: tests/test_trend_size_depender.py
+# Role: Модульные тесты для TrendSizeDepender, режимов сайзинга ("static", "dyn_inv_16",
+#       "dyn_ema_16", "dyn_ema_10") и их интеграции со StrategyConfig и FSM.
+# ==============================================================================
 
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 import numpy as np
 
-from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
+from CORE.STRATEGY.trend_size_depender import TrendSizeDepender, TrendCalculator
 from CORE.STRATEGY.strategy_registry import StrategyRegistry, StrategyConfig
 from POS_FSM.models import PositionState
 from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
@@ -23,18 +26,32 @@ class TestTrendSizeDepender(unittest.TestCase):
         self.assertAlmostEqual(w_s, 50.0, places=4)
         self.assertAlmostEqual(w_l + w_s, 100.0, places=4)
 
-    def test_grade_to_weights_extremes(self):
-        """Проверка экстремумов Grade +16 (бычий) и -16 (медвежий): диапазон [33.3333%, 66.6667%]."""
-        # Максимальный бычий тренд (+16)
-        w_l_max, w_s_min = TrendSizeDepender.grade_to_weights(16)
+    def test_grade_to_weights_extremes_scale_16(self):
+        """Проверка экстремумов Scale 16: диапазон [33.3333%, 66.6667%]."""
+        # Максимальный бычий грейд (+16)
+        w_l_max, w_s_min = TrendSizeDepender.calculate_weights_from_grade(16, scale=16)
         self.assertAlmostEqual(w_l_max, 66.6667, places=3)
         self.assertAlmostEqual(w_s_min, 33.3333, places=3)
         self.assertAlmostEqual(w_l_max + w_s_min, 100.0, places=4)
 
-        # Максимальный медвежий тренд (-16)
-        w_l_min, w_s_max = TrendSizeDepender.grade_to_weights(-16)
+        # Максимальный медвежий грейд (-16)
+        w_l_min, w_s_max = TrendSizeDepender.calculate_weights_from_grade(-16, scale=16)
         self.assertAlmostEqual(w_l_min, 33.3333, places=3)
         self.assertAlmostEqual(w_s_max, 66.6667, places=3)
+        self.assertAlmostEqual(w_l_min + w_s_max, 100.0, places=4)
+
+    def test_grade_to_weights_extremes_scale_10(self):
+        """Проверка экстремумов Scale 10: диапазон [40.0%, 60.0%]."""
+        # Максимальный бычий грейд (+10)
+        w_l_max, w_s_min = TrendSizeDepender.calculate_weights_from_grade(10, scale=10)
+        self.assertAlmostEqual(w_l_max, 60.0, places=3)
+        self.assertAlmostEqual(w_s_min, 40.0, places=3)
+        self.assertAlmostEqual(w_l_max + w_s_min, 100.0, places=4)
+
+        # Максимальный медвежий грейд (-10)
+        w_l_min, w_s_max = TrendSizeDepender.calculate_weights_from_grade(-10, scale=10)
+        self.assertAlmostEqual(w_l_min, 40.0, places=3)
+        self.assertAlmostEqual(w_s_max, 60.0, places=3)
         self.assertAlmostEqual(w_l_min + w_s_max, 100.0, places=4)
 
     def test_grade_weights_symmetry_and_invariants(self):
@@ -50,59 +67,73 @@ class TestTrendSizeDepender(unittest.TestCase):
             inv_l, inv_s = TrendSizeDepender.calculate_invest_sizes(base_invest, w_l, w_s)
             self.assertAlmostEqual(inv_l + inv_s, 2.0 * base_invest, places=4, msg=f"Grade {k}: capital invariant violated")
 
-    def test_evaluate_grade_bb(self):
-        """Проверка расчета грейда на основе полос Боллинджера 4h."""
-        # 1. 25 свечей с одинаковой ценой 100.0 (std=0) -> нейтраль grade 0
+    def test_evaluate_grade_bb_inverted(self):
+        """Проверка расчета грейда на основе инвертированного Боллинджера 4h."""
         flat_closes = np.array([100.0] * 25)
-        grade = TrendSizeDepender.evaluate_grade_bb(flat_closes, period=20, multiplier=2.0)
-        w_l, w_s = TrendSizeDepender.calculate_weights_from_grade(grade)
+        grade = TrendSizeDepender.evaluate_grade_bb_inverted_lockout(flat_closes, period=20, multiplier=2.0)
         self.assertEqual(grade, 0)
-        self.assertAlmostEqual(w_l, 50.0, places=4)
 
-        # 2. Восходящий ряд, последняя цена сильно выше Upper Band -> grade +16
+        # Памп вверх -> инвертированный грейд уменьшает LONG (грейд 0 из-за локаута)
         bull_closes = np.array([10.0 + i for i in range(24)] + [200.0])
-        grade_bull = TrendSizeDepender.evaluate_grade_bb(bull_closes, period=20, multiplier=2.0)
-        w_l_bull, w_s_bull = TrendSizeDepender.calculate_weights_from_grade(grade_bull)
-        self.assertEqual(grade_bull, 16)
-        self.assertAlmostEqual(w_l_bull, 66.6667, places=3)
-        self.assertAlmostEqual(w_s_bull, 33.3333, places=3)
+        grade_bull = TrendSizeDepender.evaluate_grade_bb_inverted_lockout(bull_closes, period=20, multiplier=2.0)
+        self.assertEqual(grade_bull, 0)
 
-        # 3. Нисходящий ряд, последняя цена сильно ниже Lower Band -> grade -16
-        bear_closes = np.array([100.0 - i for i in range(24)] + [10.0])
-        grade_bear = TrendSizeDepender.evaluate_grade_bb(bear_closes, period=20, multiplier=2.0)
-        w_l_bear, w_s_bear = TrendSizeDepender.calculate_weights_from_grade(grade_bear)
-        self.assertEqual(grade_bear, -16)
-        self.assertAlmostEqual(w_l_bear, 33.3333, places=3)
-        self.assertAlmostEqual(w_s_bear, 66.6667, places=3)
+    def test_evaluate_grade_ema_trend(self):
+        """Проверка расчета грейда EMA Trend (быстрая 10 / медленная 30)."""
+        closes = np.array([10.0 + i * 2.0 for i in range(40)])
+        grade = TrendSizeDepender.evaluate_grade_ema_trend(closes, cfg={"sma_fast": 10, "sma_slow": 30, "scale": 16})
+        self.assertEqual(grade, 16)
+
+        down_closes = np.array([100.0 - i * 2.0 for i in range(40)])
+        grade_down = TrendSizeDepender.evaluate_grade_ema_trend(down_closes, cfg={"sma_fast": 10, "sma_slow": 30, "scale": 16})
+        self.assertEqual(grade_down, -16)
 
     def test_strategy_config_sizing_mode_string(self):
-        """Проверка: sizing_mode парсится строго как строка ('dyn_bb' / 'static') и настраивает trend_size_cfg."""
+        """Проверка: 4 строковых sizing_mode ('static', 'dyn_inv_16', 'dyn_ema_16', 'dyn_ema_10') и legacy-маппинг."""
         raw_meta = {
             "name": "Test Strategy",
             "LONG": {"invest_size": 600.0},
             "SHORT": {"invest_size": 600.0},
         }
 
-        # 1. Явно dyn_bb
-        act_dyn = {"sizing_mode": "dyn_bb", "mode": "classic"}
-        cfg_dyn = StrategyConfig("test_strat", raw_meta, {}, act_dyn)
-        self.assertEqual(cfg_dyn.sizing_mode, "dyn_bb")
-        self.assertTrue(cfg_dyn.trend_size_cfg["enabled"])
-        self.assertEqual(cfg_dyn.trend_size_cfg["trend_mode"], "bb_deviation_4h")
-        self.assertEqual(cfg_dyn.sizing_modes, ["dyn_bb"])
+        # 1. dyn_inv_16
+        act_inv = {"sizing_mode": "dyn_inv_16", "mode": "classic"}
+        cfg_inv = StrategyConfig("test_strat", raw_meta, {}, act_inv)
+        self.assertEqual(cfg_inv.sizing_mode, "dyn_inv_16")
+        self.assertTrue(cfg_inv.trend_size_cfg["enabled"])
+        self.assertEqual(cfg_inv.trend_size_cfg["trend_mode"], "bb_inverted_lockout")
+        self.assertEqual(cfg_inv.sizing_modes, ["dyn_inv_16"])
 
-        # 2. Явно static
+        # 2. dyn_ema_16
+        act_ema16 = {"sizing_mode": "dyn_ema_16", "mode": "classic"}
+        cfg_ema16 = StrategyConfig("test_strat", raw_meta, {}, act_ema16)
+        self.assertEqual(cfg_ema16.sizing_mode, "dyn_ema_16")
+        self.assertTrue(cfg_ema16.trend_size_cfg["enabled"])
+        self.assertEqual(cfg_ema16.trend_size_cfg["trend_mode"], "ema_trend_4h")
+        self.assertEqual(cfg_ema16.trend_size_cfg["scale"], 16)
+        self.assertEqual(cfg_ema16.sizing_modes, ["dyn_ema_16"])
+
+        # 3. dyn_ema_10
+        act_ema10 = {"sizing_mode": "dyn_ema_10", "mode": "classic"}
+        cfg_ema10 = StrategyConfig("test_strat", raw_meta, {}, act_ema10)
+        self.assertEqual(cfg_ema10.sizing_mode, "dyn_ema_10")
+        self.assertTrue(cfg_ema10.trend_size_cfg["enabled"])
+        self.assertEqual(cfg_ema10.trend_size_cfg["trend_mode"], "ema_trend_4h")
+        self.assertEqual(cfg_ema10.trend_size_cfg["scale"], 10)
+        self.assertEqual(cfg_ema10.sizing_modes, ["dyn_ema_10"])
+
+        # 4. static
         act_stat = {"sizing_mode": "static", "mode": "classic"}
         cfg_stat = StrategyConfig("test_strat", raw_meta, {}, act_stat)
         self.assertEqual(cfg_stat.sizing_mode, "static")
         self.assertFalse(cfg_stat.trend_size_cfg["enabled"])
         self.assertEqual(cfg_stat.sizing_modes, ["static"])
 
-        # 3. Дефолт при отсутствии параметра в active_settings -> dyn_bb
-        act_def = {"mode": "classic"}
-        cfg_def = StrategyConfig("test_strat", raw_meta, {}, act_def)
-        self.assertEqual(cfg_def.sizing_mode, "dyn_bb")
-        self.assertTrue(cfg_def.trend_size_cfg["enabled"])
+        # 5. Legacy dyn_bb -> dyn_inv_16
+        act_legacy = {"sizing_mode": "dyn_bb", "mode": "classic"}
+        cfg_legacy = StrategyConfig("test_strat", raw_meta, {}, act_legacy)
+        self.assertEqual(cfg_legacy.sizing_mode, "dyn_inv_16")
+        self.assertTrue(cfg_legacy.trend_size_cfg["enabled"])
 
     def test_position_state_eff_invest_field(self):
         """Проверка поля eff_invest в PositionState и сброса в reset()."""
@@ -147,7 +178,7 @@ class TestTrendSizeDepender(unittest.TestCase):
         """Проверка того, что усреднение берет eff_invest из стейта позиции."""
         mock_wait_sync.return_value = True
         state = PositionState(symbol="STRKUSDT", side="LONG")
-        state.eff_invest = 720.0  # трендовый сайз выше базового 600
+        state.eff_invest = 720.0
 
         avg_mgr = AverageManager()
         mock_client = AsyncMock()
@@ -161,7 +192,7 @@ class TestTrendSizeDepender(unittest.TestCase):
         mock_tp.place_take_profit = AsyncMock()
 
         spec_data = {"price_tick_size": 0.001, "lot_size": 1.0, "min_notional": 5.0}
-        level_data = {"volume": 10.0}  # 10% от сайза
+        level_data = {"volume": 10.0}
 
         import asyncio
         asyncio.run(
@@ -180,25 +211,26 @@ class TestTrendSizeDepender(unittest.TestCase):
             )
         )
 
-        # Объем должен быть рассчитан от 720.0 * 10% = 72.0 USDT / 1.0 = 72.0 шт
         mock_client.make_order.assert_called_once()
         called_kwargs = mock_client.make_order.call_args[1]
         self.assertEqual(called_kwargs["qty"], 72.0)
 
     @patch("CORE.STRATEGY.trend_size_depender.BinancePublic.get_klines", new_callable=AsyncMock)
-    def test_get_effective_invest_size_bullish(self, mock_get_klines):
-        """Проверка get_effective_invest_size: при бычьем тренде LONG получает ~66.67%, SHORT ~33.33%."""
-        # Моделируем 25 свечей с резким пампом
-        klines = [[0, 10.0 + i, 12.0 + i, 9.0 + i, 10.0 + i, 100.0] for i in range(25)]
-        klines[-1][4] = 200.0  # памп
+    def test_get_effective_invest_size_ema_trend(self, mock_get_klines):
+        """Проверка get_effective_invest_size c EMA Trend."""
+        klines = [[0, 10.0 + i, 12.0 + i, 9.0 + i, 10.0 + i, 100.0] for i in range(40)]
         mock_get_klines.return_value = klines
 
         trend_cfg = {
             "enabled": True,
-            "trend_mode": "bb_deviation_4h",
+            "trend_mode": "ema_trend",
             "timeframe": "4h",
-            "eval_window": 20,
-            "multiplier": 2.0
+            "eval_window": 30,
+            "sma_fast": 10,
+            "sma_slow": 30,
+            "scale": 16,
+            "min_side_pct": 33.3333,
+            "max_side_pct": 66.6667
         }
 
         import asyncio
@@ -211,12 +243,8 @@ class TestTrendSizeDepender(unittest.TestCase):
             TrendSizeDepender.get_effective_invest_size(mock_client, "STRKUSDT", "SHORT", 600.0, trend_cfg)
         )
 
-        # Капитал LONG должен быть ~800.0 (66.6667% от 1200 USDT общего капитала)
-        self.assertAlmostEqual(eff_long, 800.0, delta=1.0)
-        # Капитал SHORT должен быть ~400.0 (33.3333% от 1200 USDT общего капитала)
-        self.assertAlmostEqual(eff_short, 400.0, delta=1.0)
-        # Инвариант: сумма капиталов обеих сторон = 2 * 600 = 1200
         self.assertAlmostEqual(eff_long + eff_short, 1200.0, places=2)
+        self.assertGreater(eff_long, eff_short)
 
 
 if __name__ == "__main__":

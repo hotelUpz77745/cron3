@@ -141,13 +141,39 @@
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 57.5984,
+        "iteration_realized_pnl_usdt": 46.948,
         "iteration_start_ts": 1791566582806,
         "iteration_peak_net_profit_usdt": 0.0318,
         "iteration_peak_ts": 1791568189161,
         "historical_peak_net_profit_usdt": 0.0318,
         "historical_peak_net_ts": 1791568189161,
-        "historical_max_drawdown_usdt": -74.2489,
-        "updated_at": "2026-10-10 19:02:39 UTC"
+        "historical_max_drawdown_usdt": -97.0085,
+        "updated_at": "2026-10-11 19:47:36 UTC"
+    },
+    "u16_test_dome": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 30.0,
+        "iteration_start_ts": 1791743297543,
+        "iteration_peak_net_profit_usdt": 25.0,
+        "iteration_peak_ts": 1791743297543,
+        "historical_peak_net_profit_usdt": 25.0,
+        "historical_peak_net_ts": 1791743297543,
+        "historical_max_drawdown_usdt": -5.0,
+        "updated_at": "2026-10-11 20:45:35 UTC"
+    },
+    "u16_chita__classic": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 30.0683,
+        "iteration_start_ts": 1791566582806,
+        "iteration_peak_net_profit_usdt": 0.0318,
+        "iteration_peak_ts": 1791568189161,
+        "historical_peak_net_profit_usdt": 0.0318,
+        "historical_peak_net_ts": 1791568189161,
+        "historical_max_drawdown_usdt": -97.0085,
+        "updated_at": "2026-10-11 21:17:25 UTC"
     }
 }

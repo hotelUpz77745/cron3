@@ -151,6 +151,25 @@ class LeaderboardEngine:
                 mode = "off"
                 mode_badge = "[OFF]"
 
+        raw_sm = (
+            meta.get("sizing_mode")
+            or (meta.get("trend_size_depender") or {}).get("mode")
+            or meta.get("trend_size_mode")
+        )
+        sm_str = str(raw_sm).lower().strip() if raw_sm else "static"
+        if sm_str in ("dyn_inv_16", "dyn_bb", "dyn_bb_inv"):
+            sizing_mode = "dyn_inv_16"
+            sizing_badge = "[INV_16]"
+        elif sm_str in ("dyn_ema_16", "dyn_ema_trend"):
+            sizing_mode = "dyn_ema_16"
+            sizing_badge = "[EMA_16]"
+        elif sm_str == "dyn_ema_10":
+            sizing_mode = "dyn_ema_10"
+            sizing_badge = "[EMA_10]"
+        else:
+            sizing_mode = "static"
+            sizing_badge = "[STATIC]"
+
         return {
             "universe_id": universe_id,
             "name": meta.get("name", universe_id),
@@ -178,6 +197,8 @@ class LeaderboardEngine:
             "roi_pct": roi_pct,
             "mode": mode,
             "mode_badge": mode_badge,
+            "sizing_mode": sizing_mode,
+            "sizing_badge": sizing_badge,
             "trade_velocity": data.get("trade_velocity", {}),
         }
 

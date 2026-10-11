@@ -144,21 +144,11 @@ class UnifiedLogger:
             
             
             if LOG_TO_FILE:
-                handler = UnlockedRotatingFileHandler(
-                    log_path,
-                    maxBytes=max_bytes,
-                    backupCount=1,
-                    encoding="utf-8",
-                )
-                handler.setLevel(desired_level)
-                handler.setFormatter(formatter)
-                logger.addHandler(handler)
-                
-                # Общий лог-файл для всех модулей
+                # Единый лог-файл all.log для всех модулей ядра (без распыления на 25 файлов)
                 all_log_path = os.path.join(log_dir, "all.log")
                 all_handler = UnlockedRotatingFileHandler(
                     all_log_path,
-                    maxBytes=max_bytes * 5, # Сделаем его в 5 раз больше, так как он общий
+                    maxBytes=max_bytes * 5,
                     backupCount=1,
                     encoding="utf-8",
                 )

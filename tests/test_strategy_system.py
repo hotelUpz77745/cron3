@@ -71,7 +71,8 @@ class TestStrategySystem(unittest.TestCase):
                 "enabled": True,
                 "symbols": ["ARXUSDT", "LAUSDT"]
             },
-            "u9_omni_zenith_apex": {
+            "u96_omni_zenith_apex": {
+                "template": "u96_omni_zenith_apex",
                 "enabled": True,
                 "symbols": ["FARTCOINUSDT"]
             }
@@ -95,7 +96,8 @@ class TestStrategySystem(unittest.TestCase):
                 "api_key_name": "API_KEY_MAIN",
                 "symbols": ["ARXUSDT"]
             },
-            "u9_omni_zenith_apex": {
+            "u96_omni_zenith_apex": {
+                "template": "u96_omni_zenith_apex",
                 "enabled": True,
                 "api_key_name": "API_KEY_MAIN",
                 "symbols": ["ARXUSDT"]  # Конфликт на одном аккаунте!
@@ -112,7 +114,8 @@ class TestStrategySystem(unittest.TestCase):
                 "api_key_name": "API_KEY_ACCOUNT_1",
                 "symbols": ["ARXUSDT"]
             },
-            "u9_omni_zenith_apex": {
+            "u96_omni_zenith_apex": {
+                "template": "u96_omni_zenith_apex",
                 "enabled": True,
                 "api_key_name": "API_KEY_ACCOUNT_2",
                 "symbols": ["ARXUSDT"]  # Разрешено на разных счетах!
@@ -123,17 +126,19 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(len(registry.symbol_to_strategies["ARXUSDT"]), 2)
         strats = [s.strategy_id for s in registry.get_strategies_for_symbol("ARXUSDT")]
         self.assertIn("u6_symbiosis_gamma_fortress35", strats)
-        self.assertIn("u9_omni_zenith_apex", strats)
+        self.assertIn("u96_omni_zenith_apex", strats)
 
         # 3. Кастомные списки монет и строковый mode для разных модификаций одной стратегии
         dual_mode_active = {
-            "u16_titan_universal_alpha__classic": {
+            "u16_chita__classic": {
+                "template": "u16_chita",
                 "enabled": True,
                 "mode": "classic",
                 "api_key_name": "API_KEY_ACC1",
                 "symbols": ["NEARUSDT", "BTCUSDT"]
             },
-            "u16_titan_universal_alpha__toxic": {
+            "u16_chita__toxic": {
+                "template": "u16_chita",
                 "enabled": True,
                 "mode": "toxic",
                 "api_key_name": "API_KEY_ACC2",
@@ -142,8 +147,8 @@ class TestStrategySystem(unittest.TestCase):
         }
         dual_reg = StrategyRegistry(active_strategies_cfg=dual_mode_active)
         self.assertEqual(len(dual_reg.get_active_strategies()), 2)
-        strat_classic = dual_reg.active_strategies["u16_titan_universal_alpha__classic"]
-        strat_toxic = dual_reg.active_strategies["u16_titan_universal_alpha__toxic"]
+        strat_classic = dual_reg.active_strategies["u16_chita__classic"]
+        strat_toxic = dual_reg.active_strategies["u16_chita__toxic"]
         self.assertEqual(strat_classic.mode, "classic")
         self.assertEqual(strat_toxic.mode, "toxic")
         self.assertEqual(strat_classic.symbols, ["NEARUSDT", "BTCUSDT"])
@@ -347,12 +352,12 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(raw_meta["LONG"]["tp_map"]["8"]["indent"], 0.65)
 
     def test_u9_omni_zenith_apex_template(self):
-        """Тест универсальной формулы Вселенной u9_omni_zenith_apex."""
+        """Тест универсальной формулы Вселенной u96_omni_zenith_apex."""
         registry = StrategyRegistry()
-        self.assertIn("u9_omni_zenith_apex", registry.universes_db)
+        self.assertIn("u96_omni_zenith_apex", registry.universes_db)
 
-        raw_meta = registry.universes_db["u9_omni_zenith_apex"]
-        strat = StrategyConfig("u9_omni_zenith_apex", raw_meta, ["TESTUSDT"])
+        raw_meta = registry.universes_db["u96_omni_zenith_apex"]
+        strat = StrategyConfig("u96_omni_zenith_apex", raw_meta, ["TESTUSDT"])
 
         # Проверка ключевых параметров асимметричного дуального режима
         self.assertFalse(strat.super_grid_enabled)
@@ -362,7 +367,7 @@ class TestStrategySystem(unittest.TestCase):
 
         # Knife Blocker & Smart Size
         self.assertTrue(strat.smart_size_cfg["knife_blocker_enabled"])
-        self.assertEqual(strat.smart_size_cfg["knife_blocker_threshold"], 2)
+        self.assertEqual(strat.smart_size_cfg["knife_blocker_threshold"], 1)
         self.assertEqual(strat.smart_size_cfg["profiting_size_weights"][">=4"], 0.6)
         self.assertEqual(strat.smart_size_cfg["profiting_size_weights"]["==2"], 1.2)
 

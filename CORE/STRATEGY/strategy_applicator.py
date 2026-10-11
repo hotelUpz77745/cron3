@@ -166,15 +166,7 @@ class StrategyApplicator:
             elif hasattr(strategy, "overrides") and "avg_free_volume_behavior" in strategy.overrides:
                 side_data["avg_free_volume_behavior"] = strategy.overrides["avg_free_volume_behavior"]
 
-            if hasattr(strategy, "auto_closing_cfg") and strategy.auto_closing_cfg:
-                side_data["auto_closing"] = copy.deepcopy(strategy.auto_closing_cfg)
-            elif hasattr(strategy, "raw_meta") and "auto_closing" in strategy.raw_meta:
-                side_data["auto_closing"] = copy.deepcopy(strategy.raw_meta["auto_closing"])
-            elif hasattr(strategy, "overrides") and "auto_closing" in strategy.overrides:
-                side_data["auto_closing"] = copy.deepcopy(strategy.overrides["auto_closing"])
-
-            if hasattr(strategy, "trend_size_cfg") and strategy.trend_size_cfg:
-                side_data["trend_size_depender"] = copy.deepcopy(strategy.trend_size_cfg)
+            # auto_closing и trend_size_depender вынесены на уровень стратегии и не дублируются в рантайм позиций
             if hasattr(strategy, "sizing_mode") and strategy.sizing_mode:
                 side_data["sizing_mode"] = strategy.sizing_mode
 
@@ -212,24 +204,63 @@ class StrategyApplicator:
         elif target_json.exists():
             existing = Utils.read_json_file(target_json)
         else:
-            legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
-            legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
-            if legacy_file.exists():
-                try:
-                    import pickle
-                    with open(legacy_file, "rb") as fp:
-                        existing = pickle.load(fp)
-                except Exception:
-                    existing = Utils.read_json_file(legacy_json) if legacy_json.exists() else {}
-            elif legacy_json.exists():
-                existing = Utils.read_json_file(legacy_json)
+            # Поиск активного состояния позиции по всем куполам (при переименовании стратегии или смене темплейта)
+            active_cand = None
+            any_cand = None
+            rt_root = DATA_DIR / "runtime"
+            if rt_root.exists():
+                for sub_dir in rt_root.iterdir():
+                    if sub_dir.is_dir() and sub_dir != runtime_dir:
+                        cand_pkl = sub_dir / f"{symbol.lower()}.pkl"
+                        cand_json = sub_dir / f"{symbol.lower()}.json"
+                        c_data = None
+                        if cand_pkl.exists():
+                            try:
+                                import pickle
+                                with open(cand_pkl, "rb") as fp:
+                                    c_data = pickle.load(fp)
+                            except Exception:
+                                pass
+                        if not c_data and cand_json.exists():
+                            try:
+                                c_data = Utils.read_json_file(cand_json)
+                            except Exception:
+                                pass
+                        if c_data and isinstance(c_data, dict):
+                            has_pos = any(
+                                isinstance(s_val, dict) and (s_val.get("in_position") or abs(float(s_val.get("total_volume", 0.0))) > 1e-6)
+                                for s_val in c_data.values()
+                            )
+                            if has_pos:
+                                active_cand = c_data
+                                logger.info(f"[{symbol}] Found active position state in existing dome '{sub_dir.name}'. Migrating FSM state to '{runtime_dir.name}'!")
+                                break
+                            elif any_cand is None:
+                                any_cand = c_data
+
+            if active_cand:
+                existing = active_cand
+            elif any_cand:
+                existing = any_cand
+            else:
+                legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
+                legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+                if legacy_file.exists():
+                    try:
+                        import pickle
+                        with open(legacy_file, "rb") as fp:
+                            existing = pickle.load(fp)
+                    except Exception:
+                        existing = Utils.read_json_file(legacy_json) if legacy_json.exists() else {}
+                elif legacy_json.exists():
+                    existing = Utils.read_json_file(legacy_json)
 
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():
             new_side = copy.deepcopy(side_cfg)
             exist_side = existing.get(side, {})
             # Если позиция открыта, сохраняем состояние FSM
-            if exist_side.get("in_position", False):
+            if exist_side.get("in_position", False) or abs(float(exist_side.get("total_volume", 0.0))) > 1e-6:
                 for state_key in [
                     "total_volume", "avg_entry_price", "pre_avg_price",
                     "initial_entry_price", "open_time", "next_avg_price",

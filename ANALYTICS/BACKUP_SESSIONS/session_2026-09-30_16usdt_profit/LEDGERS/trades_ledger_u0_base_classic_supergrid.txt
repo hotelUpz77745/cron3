@@ -1,1 +1,0 @@
-Symbol;Side;Open Time;Close Time;PnL;Balance

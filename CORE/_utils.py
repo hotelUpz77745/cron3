@@ -105,6 +105,21 @@ class TradeMath:
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
         qty_precision = precisions[0] if precisions else 3
         return round(qty, qty_precision)
+
+    @classmethod
+    def round_price(
+        cls,
+        price: float,
+        symbol_info: Dict[str, Any],
+        symbol: str
+    ) -> float:
+        """
+        Округляет цену до требуемой спецификацией точности.
+        """
+        precisions = Utils.get_spec_precisions(symbol_info, symbol)
+        price_precision = precisions[1] if precisions else 2
+        return round(price, price_precision)
+
 # ==============================================================================
 # Role: Общие утилиты для расчетов рисков и детерминации уровней
 # ==============================================================================

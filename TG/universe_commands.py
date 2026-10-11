@@ -1,18 +1,39 @@
-# ============================================================
-# FILE: TG/universe_commands.py
-# ROLE: Telegram commands and navigation for Multi-Universe Engine (/leaderboard, /universes, /use)
-# ============================================================
+# ==============================================================================
+# Path: TG/universe_commands.py
+# Role: Интерактивное управление вселенными и стратегиями через Telegram:
+#       пагинация списка, детальная панель купола, переключение сайзинга
+#       ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10") и автозакрытия.
+# ==============================================================================
 
-from typing import Any, Tuple
+from pathlib import Path
+from typing import Any, Tuple, Dict, List, Optional
+import json
+
 from aiogram import Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from c_log import UnifiedLogger
+from c_utils import Utils
+from consts import DATA_DIR
 
 logger = UnifiedLogger("TGUniverseCommands")
 
 # Глобальный контекст выбранной вселенной для каждого пользователя: {user_id: universe_id}
-_active_user_universe = {}
+_active_user_universe: Dict[int, str] = {}
+
+SIZING_MODE_BADGES = {
+    "static": ("⚡ Static (50/50)", "Фиксированный сайзинг 50/50 (макро-тренд выключен)"),
+    "dyn_inv_16": ("🎯 Dyn Inv 16", "Bollinger Inverted Lockout 4h (шкала 16, коридор 33.3%..66.7%)"),
+    "dyn_ema_16": ("📈 Dyn EMA 16", "EMA Trend 4h 10/30 (шкала 16, коридор 33.3%..66.7%)"),
+    "dyn_ema_10": ("📊 Dyn EMA 10", "EMA Trend 4h 10/30 (мягкая шкала 10, коридор 40.0%..60.0%)"),
+}
+
+CLOSER_MODE_BADGES = {
+    "classic": ("🎯 Classic", "Фибоначчи кумулятивный трейлинг-тейк"),
+    "fixed": ("📌 Fixed", "Плоский тейк-профит по корзине"),
+    "toxic": ("☣️ Toxic", "Институциональный динамический токсик-выход"),
+    "off": ("⏹ Off", "Авто-закрытие отключено"),
+}
 
 
 def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
@@ -30,7 +51,7 @@ def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
                     return first_uid
         except Exception:
             pass
-    return "u16_titan_universal_alpha__fixed"
+    return "u16_chita__classic"
 
 
 def set_user_universe_id(user_id: int, universe_id: str) -> None:
@@ -42,7 +63,7 @@ PAGE_SIZE = 6
 
 
 def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
-    """Рендерит страницу со списком вселенных и инлайн-кнопками выбора."""
+    """Рендерит страницу со списком вселенных и инлайн-кнопками перехода в панель управления."""
     current_uid = get_user_universe_id(user_id, bot_core)
 
     active_strats = {}
@@ -69,23 +90,25 @@ def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[s
 
     text_lines = [
         f"🌌 <b>СПИСОК ВСЕЛЕННЫХ (Стр. {page}/{total_pages})</b>",
-        f"Ранжирование по чистому Net Profit",
-        f"Текущий контекст: <code>{current_uid}</code>\n",
+        f"Нажмите на купол для настройки сайзинга и автозакрытия.\n",
     ]
 
     buttons = []
     row_buttons = []
     for item in page_entries:
         uid = item["universe_id"]
+        scfg = active_strats.get(uid)
+        sz_mode = getattr(scfg, "sizing_mode", "static") if scfg else "static"
+        cl_mode = getattr(scfg, "mode", "classic") if scfg else "classic"
+        badge = f"[{sz_mode.upper()}]"
+
         mark = "👉 " if uid == current_uid else ""
         net_str = f"{item.get('net_profit_usdt', 0.0):+.2f}$"
-        real_str = f"{item.get('realized_pnl_usdt', 0.0):+.1f}$"
-        float_str = f"{item.get('unrealized_pnl_usdt', 0.0):+.1f}$"
         text_lines.append(
-            f"{mark}<code>{uid}</code>: <b>Net: {net_str}</b> (Real: {real_str}, Float: {float_str}) | Tr: <b>{item.get('total_trades', 0)}</b>"
+            f"{mark}<code>{uid}</code>: <b>Net: {net_str}</b> | Sizing: <code>{sz_mode}</code> | Mode: <code>{cl_mode}</code>"
         )
-        btn_label = f"👉 {uid}" if uid == current_uid else uid
-        row_buttons.append(InlineKeyboardButton(text=btn_label[:30], callback_data=f"use_univ:{uid}:{page}"))
+        btn_label = f"⚙️ {uid[:18]} {badge}"
+        row_buttons.append(InlineKeyboardButton(text=btn_label, callback_data=f"use_univ:{uid}:{page}"))
         if len(row_buttons) == 2:
             buttons.append(row_buttons)
             row_buttons = []
@@ -107,8 +130,76 @@ def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[s
     return "\n".join(text_lines), kb
 
 
+def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
+    """Рендерит детальную панель купола с инлайн-кнопками переключения сайзинга и автозакрытия."""
+    set_user_universe_id(user_id, uid)
+    app_json_path = DATA_DIR / "app.json"
+    app_data = Utils.read_json_file(app_json_path) or {}
+    active_strats = app_data.get("active_strategies", {})
+    s_cfg = active_strats.get(uid, {})
+
+    cur_sizing = str(s_cfg.get("sizing_mode", "static")).lower().strip()
+    cur_closer = str(s_cfg.get("mode", "classic")).lower().strip()
+    symbols = s_cfg.get("symbols", [])
+    sym_str = ", ".join(symbols) if symbols else "нет"
+    inv_size = float(s_cfg.get("invest_size", 151.0))
+
+    sz_badge, sz_desc = SIZING_MODE_BADGES.get(cur_sizing, (cur_sizing, ""))
+    cl_badge, cl_desc = CLOSER_MODE_BADGES.get(cur_closer, (cur_closer, ""))
+
+    text = (
+        f"🐆 <b>УПРАВЛЕНИЕ КУПОЛОМ:</b> <code>{uid}</code>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"💰 <b>Инвест-сайз:</b> <code>{inv_size:.1f} USDT</code>\n"
+        f"🎯 <b>Пул монет ({len(symbols)}):</b> <code>{sym_str}</code>\n\n"
+        f"⚖️ <b>Сайзинг (trend_size_depender):</b>\n"
+        f"• Текущий режим: <b>{sz_badge}</b>\n"
+        f"• Описание: <i>{sz_desc}</i>\n\n"
+        f"⚙️ <b>Режим автозакрытия (auto-closer):</b>\n"
+        f"• Текущий режим: <b>{cl_badge}</b>\n"
+        f"• Описание: <i>{cl_desc}</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"Выберите кнопку ниже для мгновенного переключения:"
+    )
+
+    buttons = []
+
+    # Ряд кнопок сайзинга
+    sz_row1 = []
+    sz_row2 = []
+    for mode_key in ("static", "dyn_inv_16"):
+        label, _ = SIZING_MODE_BADGES[mode_key]
+        prefix = "✅ " if mode_key == cur_sizing else ""
+        sz_row1.append(InlineKeyboardButton(text=f"{prefix}{label}", callback_data=f"set_sizing:{uid}:{mode_key}:{page}"))
+
+    for mode_key in ("dyn_ema_16", "dyn_ema_10"):
+        label, _ = SIZING_MODE_BADGES[mode_key]
+        prefix = "✅ " if mode_key == cur_sizing else ""
+        sz_row2.append(InlineKeyboardButton(text=f"{prefix}{label}", callback_data=f"set_sizing:{uid}:{mode_key}:{page}"))
+
+    buttons.append(sz_row1)
+    buttons.append(sz_row2)
+
+    # Ряд кнопок автозакрытия
+    cl_row = []
+    for cl_key in ("classic", "fixed", "toxic", "off"):
+        label, _ = CLOSER_MODE_BADGES[cl_key]
+        prefix = "✅ " if cl_key == cur_closer else ""
+        cl_row.append(InlineKeyboardButton(text=f"{prefix}{label[:9]}", callback_data=f"set_closer:{uid}:{cl_key}:{page}"))
+    buttons.append(cl_row)
+
+    # Нижняя навигация
+    buttons.append([
+        InlineKeyboardButton(text="🔄 Обновить", callback_data=f"manage_univ:{uid}:{page}"),
+        InlineKeyboardButton(text="🔙 К списку вселенных", callback_data=f"back_to_univ_list:{page}")
+    ])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    return text, kb
+
+
 def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
-    """Регистрирует пагинацию и смену вселенных в aiogram Dispatcher."""
+    """Регистрирует пагинацию, выбор и интерактивные кнопки управления вселенными."""
 
     @dp.callback_query(F.data.startswith("univ_page:"))
     async def cb_universe_page(callback: CallbackQuery):
@@ -125,21 +216,103 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
                 logger.error(f"Error in cb_universe_page: {e}")
         await callback.answer()
 
+    @dp.callback_query(F.data.startswith("manage_univ:"))
+    async def cb_manage_universe(callback: CallbackQuery):
+        parts = callback.data.split(":")
+        uid = parts[1]
+        page = int(parts[2]) if len(parts) > 2 else 1
+        try:
+            text, kb = render_strategy_control_panel(callback.from_user.id, bot_core, uid, page=page)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception as e:
+            if "message is not modified" not in str(e).lower():
+                logger.error(f"Error opening strategy control panel: {e}")
+        await callback.answer()
+
     @dp.callback_query(F.data.startswith("use_univ:"))
     async def cb_select_universe(callback: CallbackQuery):
         parts = callback.data.split(":")
         uid = parts[1]
-        current_page = int(parts[2]) if len(parts) > 2 else 1
-        set_user_universe_id(callback.from_user.id, uid)
-
+        page = int(parts[2]) if len(parts) > 2 else 1
         try:
-            text, kb = render_universes_page(callback.from_user.id, bot_core, page=current_page)
+            text, kb = render_strategy_control_panel(callback.from_user.id, bot_core, uid, page=page)
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            pass
+        except Exception as e:
+            if "message is not modified" not in str(e).lower():
+                logger.error(f"Error in use_univ: {e}")
+        await callback.answer()
 
-        alert_msg = (
-            f"✅ Контекст переключен на вселенную {uid}.\n"
-            f"Теперь детальная аналитика и метрики относятся к этой стратегии."
-        )
-        await callback.answer(alert_msg, show_alert=True)
+    @dp.callback_query(F.data.startswith("back_to_univ_list:"))
+    async def cb_back_to_univ_list(callback: CallbackQuery):
+        parts = callback.data.split(":")
+        page = int(parts[1]) if len(parts) > 1 else 1
+        try:
+            text, kb = render_universes_page(callback.from_user.id, bot_core, page=page)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception as e:
+            if "message is not modified" not in str(e).lower():
+                logger.error(f"Error returning to universes list: {e}")
+        await callback.answer()
+
+    @dp.callback_query(F.data.startswith("set_sizing:"))
+    async def cb_set_sizing(callback: CallbackQuery):
+        parts = callback.data.split(":")
+        uid = parts[1]
+        new_mode = parts[2]
+        page = int(parts[3]) if len(parts) > 3 else 1
+
+        app_json_path = DATA_DIR / "app.json"
+        app_data = Utils.read_json_file(app_json_path) or {}
+        if "active_strategies" in app_data and uid in app_data["active_strategies"]:
+            app_data["active_strategies"][uid]["sizing_mode"] = new_mode
+            Utils.atomic_write_json(app_json_path, app_data)
+
+            # Перезагружаем реестр и обновляем рантаймы
+            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+                bot_core.strategy_registry.reload(app_data["active_strategies"])
+                try:
+                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
+                except Exception as ex:
+                    logger.warning(f"Runtime rebuild notice on sizing change: {ex}")
+
+            logger.info(f"[{uid}] Сайзинг переключен на '{new_mode}' через Telegram.")
+            text, kb = render_strategy_control_panel(callback.from_user.id, bot_core, uid, page=page)
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except Exception:
+                pass
+            await callback.answer(f"✅ Сайзинг переключен на [{new_mode}]!", show_alert=True)
+        else:
+            await callback.answer(f"❌ Стратегия {uid} не найдена в active_strategies", show_alert=True)
+
+    @dp.callback_query(F.data.startswith("set_closer:"))
+    async def cb_set_closer(callback: CallbackQuery):
+        parts = callback.data.split(":")
+        uid = parts[1]
+        new_closer = parts[2]
+        page = int(parts[3]) if len(parts) > 3 else 1
+
+        app_json_path = DATA_DIR / "app.json"
+        app_data = Utils.read_json_file(app_json_path) or {}
+        if "active_strategies" in app_data and uid in app_data["active_strategies"]:
+            app_data["active_strategies"][uid]["mode"] = new_closer
+            Utils.atomic_write_json(app_json_path, app_data)
+
+            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+                bot_core.strategy_registry.reload(app_data["active_strategies"])
+                try:
+                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
+                except Exception as ex:
+                    logger.warning(f"Runtime rebuild notice on closer mode change: {ex}")
+
+            logger.info(f"[{uid}] Режим автозакрытия переключен на '{new_closer}' через Telegram.")
+            text, kb = render_strategy_control_panel(callback.from_user.id, bot_core, uid, page=page)
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except Exception:
+                pass
+            await callback.answer(f"✅ Автозакрытие переключено на [{new_closer}]!", show_alert=True)
+        else:
+            await callback.answer(f"❌ Стратегия {uid} не найдена в active_strategies", show_alert=True)

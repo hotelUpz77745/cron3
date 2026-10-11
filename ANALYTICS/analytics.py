@@ -1146,8 +1146,64 @@ class AnalyticsManager:
                     "per_coin": {}
                 }
 
-            strat_symbols = strat_cfg.symbols
-            strat_per_coin = {sym: per_coin_global[sym] for sym in strat_symbols if sym in per_coin_global}
+            strat_symbols = list(strat_cfg.symbols)
+            existing_per_coin = strat_data.get("per_coin", {})
+            # Собираем список всех символов стратегии: текущие активные + исторические с историей торговли
+            all_strat_symbols = set(strat_symbols)
+            for sym, c_info in existing_per_coin.items():
+                c_trades = int(c_info.get("total_trades", c_info.get("trades", 0)))
+                c_pnl = abs(float(c_info.get("realized_pnl_net_usdt", c_info.get("realized_pnl_usdt", 0.0))))
+                if c_trades > 0 or c_pnl > 1e-6:
+                    all_strat_symbols.add(sym)
+
+            # Сохраняем персистентный список historical_symbols стратегии
+            saved_hist = strat_data.get("historical_symbols", [])
+            for sym in saved_hist:
+                if sym in per_coin_global or sym in existing_per_coin:
+                    all_strat_symbols.add(sym)
+
+            # Выбывшие монеты из глобальной аналитики должны сохраняться в отчетах как неактивные
+            active_strats = self.strategy_registry.get_active_strategies()
+            for sym, c_info in per_coin_global.items():
+                c_trades = int(c_info.get("total_trades", c_info.get("trades", 0)))
+                c_pnl = abs(float(c_info.get("realized_pnl_net_usdt", c_info.get("realized_pnl_usdt", 0.0))))
+                if c_trades > 0 or c_pnl > 1e-6:
+                    # Если на счете 1 активная стратегия, либо монета не принадлежит ни одной другой активной стратегии
+                    if len(active_strats) <= 1:
+                        all_strat_symbols.add(sym)
+                    else:
+                        other_has = any(
+                            sym in other_cfg.symbols 
+                            for other_id, other_cfg in active_strats.items() 
+                            if other_id != strat_id
+                        )
+                        if not other_has:
+                            all_strat_symbols.add(sym)
+
+            strat_data["historical_symbols"] = sorted(list(all_strat_symbols))
+
+            strat_per_coin = {}
+            for sym in sorted(all_strat_symbols):
+                if sym in per_coin_global:
+                    c_data = dict(per_coin_global[sym])
+                elif sym in existing_per_coin:
+                    c_data = dict(existing_per_coin[sym])
+                else:
+                    continue
+
+                is_active = (sym in strat_symbols)
+                c_data["is_active_symbol"] = is_active
+                c_data["is_active"] = is_active
+                if not is_active:
+                    # Если монета выведена из стратегии и позиция закрыта — обнуляем текущую нагрузку и нереализованную просадку
+                    if abs(float(c_data.get("long_amt", 0.0))) <= 1e-8 and abs(float(c_data.get("short_amt", 0.0))) <= 1e-8:
+                        c_data["current_drawdown"] = 0.0
+                        c_data["current_grid_load_usdt"] = 0.0
+                        c_data["current_grid_load_pct"] = 0.0
+                        c_data["current_margin_usdt"] = 0.0
+                        c_data["margin_load_pct"] = 0.0
+                strat_per_coin[sym] = c_data
+
             strat_data["per_coin"] = strat_per_coin
 
             s_unreal = sum(float(c.get("current_drawdown", 0.0)) for c in strat_per_coin.values())
@@ -1265,11 +1321,13 @@ class AnalyticsManager:
             strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
             strat_data["iteration_realized_pnl_usdt"] = iter_real
 
-            if strat_data["peak_net_profit_usdt"] > hist_peak:
-                hist_peak = strat_data["peak_net_profit_usdt"]
+            cur_peak = strat_data.get("peak_net_profit_usdt", 0.0)
+            if cur_peak > hist_peak:
+                hist_peak = cur_peak
                 hist_peak_ts = strat_data.get("peak_net_ts", now_ms)
-            if strat_data["max_drawdown_usdt"] < hist_max_dd:
-                hist_max_dd = strat_data["max_drawdown_usdt"]
+            cur_max_dd = strat_data.get("max_drawdown_usdt", 0.0)
+            if cur_max_dd < hist_max_dd:
+                hist_max_dd = cur_max_dd
 
             # Сохраняем состояние итерации и исторические рекорды в кеш
             self._save_iteration_cache(strat_id, {
@@ -1320,6 +1378,7 @@ class AnalyticsManager:
                     **getattr(scfg, "raw_meta", {}),
                     "name": scfg.name,
                     "enabled": True,
+                    "sizing_mode": getattr(scfg, "sizing_mode", "static"),
                     "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))
                 }
                 for sid, scfg in self.strategy_registry.get_active_strategies().items()

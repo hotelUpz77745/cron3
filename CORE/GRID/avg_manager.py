@@ -102,7 +102,7 @@ class AverageManager:
             dd_pct = (base_price - current_price) / base_price * 100.0
         else:
             dd_pct = (current_price - base_price) / base_price * 100.0
-        dd_pct = max(0.0, dd_pct)
+        dd_pct = round(max(0.0, dd_pct), 4)
 
         # 3. Трейлинг оценка сетки через BaseTrailingSystem
         prev_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys())
@@ -142,14 +142,16 @@ class AverageManager:
                 grid[sk]["activated_at"] = now_sec
                 grid[sk]["timestamp"] = int(now_sec * 1000)
 
+            # Режим 2: accumulate_current — вливаем весь пропущенный объем в ближайший сработавший уровень
             if behavior == "accumulate_current":
                 level_data["volume"] = round(float(level_data.get("volume", 0.0)) + skipped_vol, 4)
                 logger.info(
                     f"[{symbol}] {side} 📦 [VOLUME ACCUMULATED] "
-                    f"Added {skipped_vol:.2f}% from skipped levels {skipped_levels} into level {candidate_level} "
+                    f"Added {skipped_vol:.2f}% from skipped levels {skipped_levels} into triggered level {candidate_level} "
                     f"(new vol: {level_data['volume']:.2f}%)"
                 )
-            elif behavior == "distribute_remaining":
+            # Режим 1: distribute_remaining (и distribute_within_zone) — распределяем равномерно между всеми оставшимися уровнями
+            elif behavior in ("distribute_remaining", "distribute_within_zone"):
                 cand_idx = int(candidate_level) if candidate_level.isdigit() else -1
                 remaining = [
                     lvl for lvl in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
@@ -160,8 +162,8 @@ class AverageManager:
                     for rem_lvl in remaining:
                         grid[rem_lvl]["volume"] = round(float(grid[rem_lvl].get("volume", 0.0)) + vol_share, 4)
                     logger.info(
-                        f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: distribute_remaining] "
-                        f"Distributed {skipped_vol:.2f}% from skipped levels {skipped_levels} across {remaining} "
+                        f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: {behavior}] "
+                        f"Distributed {skipped_vol:.2f}% from skipped levels {skipped_levels} across remaining {remaining} "
                         f"(+{vol_share:.2f}% each)"
                     )
                 else:
@@ -169,10 +171,11 @@ class AverageManager:
                         f"[{symbol}] {side} 📦 [VOLUME CEILING REACHED] "
                         f"Skipped {skipped_levels} at grid ceiling, remaining volume ignored."
                     )
+            # Режим 3: mark_executed — забиваем хер (объем сгорает, пропущенные уровни просто помечаются исполненными)
             elif behavior == "mark_executed":
                 logger.info(
                     f"[{symbol}] {side} 📦 [VOLUME BURNT: mark_executed] "
-                    f"Skipped levels {skipped_levels} marked executed (volume burnt)."
+                    f"Skipped levels {skipped_levels} marked executed (volume burnt, no redistribution)."
                 )
 
         is_trailing = grid[candidate_level].get("activation") is not None

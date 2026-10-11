@@ -503,7 +503,7 @@ class BotCore:
             # 1.5. Открытие позиции по маркету
             base_invest = float(side_cfg["invest_size"])
             strat = self.strategy_registry.get_strategy_for_symbol(symbol)
-            if strat and getattr(strat, "sizing_mode", "dyn_bb") == "dyn_bb" and getattr(strat, "trend_size_cfg", {}).get("enabled"):
+            if strat and getattr(strat, "trend_size_cfg", {}).get("enabled"):
                 from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
                 eff = await TrendSizeDepender.get_effective_invest_size(
                     sym_client, symbol, side, base_invest, strat.trend_size_cfg

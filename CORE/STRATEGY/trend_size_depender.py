@@ -31,6 +31,73 @@ from API.BINANCE.public import BinancePublic
 logger = UnifiedLogger("TrendSizeDepender")
 
 
+class NativeMath:
+    """Высокопроизводительный фасад низкоуровневых вычислений индикаторов."""
+
+    @staticmethod
+    def fast_ema(prices: List[float] | np.ndarray, length: int) -> List[float]:
+        if not isinstance(prices, np.ndarray):
+            arr = np.asarray(prices, dtype=np.float64)
+        else:
+            arr = prices.astype(np.float64, copy=False)
+
+        n = len(arr)
+        if n < length:
+            return []
+
+        k = 2.0 / (length + 1.0)
+        out = [float(np.mean(arr[:length]))]
+        ema = out[0]
+        for p in arr[length:]:
+            ema = p * k + ema * (1.0 - k)
+            out.append(ema)
+        return out
+
+
+class TrendCalculator:
+    """Изолированный калькулятор тренда на базе быстрой и медленной EMA (4h)."""
+
+    def __init__(self, cfg: Dict[str, Any]):
+        self.is_active: bool = bool(cfg.get("is_active", True))
+        self.timeframe: str = str(cfg.get("timeframe", "4h"))
+        self.sma_fast: int = int(cfg.get("sma_fast", 10))
+        self.sma_slow: int = int(cfg.get("sma_slow", 30))
+        self.confirmation_candles: int = int(cfg.get("confirmation_candles", 5))
+        self.require_rising: bool = bool(cfg.get("require_rising", True))
+
+    def calculate(self, closes: List[float]) -> str:
+        """
+        Классифицирует состояние рынка по ценам закрытия:
+        - UP: быстрая EMA выше медленной на протяжении N свечей (и растет, если require_rising=True)
+        - DOWN: быстрая EMA ниже медленной на протяжении N свечей (и падает, если require_rising=True)
+        - FLAT: расхождение условий либо боковое движение
+        - UNSTABLE: недостаточно свечей для расчета
+        """
+        if not self.is_active or not closes:
+            return "UNSTABLE"
+
+        ema_fast = NativeMath.fast_ema(closes, self.sma_fast)
+        ema_slow = NativeMath.fast_ema(closes, self.sma_slow)
+
+        if not ema_fast or not ema_slow or len(ema_fast) < self.confirmation_candles or len(ema_slow) < self.confirmation_candles:
+            return "UNSTABLE"
+
+        ef_tail = ema_fast[-self.confirmation_candles:]
+        es_tail = ema_slow[-self.confirmation_candles:]
+
+        is_above = all(f > s for f, s in zip(ef_tail, es_tail))
+        is_below = all(f < s for f, s in zip(ef_tail, es_tail))
+        is_rising = all(ef_tail[i] > ef_tail[i - 1] for i in range(1, len(ef_tail)))
+        is_falling = all(ef_tail[i] < ef_tail[i - 1] for i in range(1, len(ef_tail)))
+
+        if is_above and (not self.require_rising or is_rising):
+            return "UP"
+        elif is_below and (not self.require_rising or is_falling):
+            return "DOWN"
+        else:
+            return "FLAT"
+
+
 class TrendSizeDepender:
     """
     Институциональный балансир объемов между LONG и SHORT для боевого бота.
@@ -45,18 +112,24 @@ class TrendSizeDepender:
     SUPPORTED_MODES: List[str] = [
         "bb_inverted_lockout",
         "bb_breakout_flat",
-        "bb_deviation_legacy",
-        "bb_deviation_4h",
         "adx_di_4h",
         "ema_spread_4h",
         "ema_drift_4h",
+        "ema_trend_4h",
+        "ema_trend",
+        "dyn_inv_16",
+        "dyn_ema_16",
+        "dyn_ema_10",
+        "dyn_ema_trend",
+        "dyn_bb_inv",
+        "bb_inverted",
     ]
 
     # Состояние 4-часовой заморозки по символам: symbol -> timestamp_разморозки
     _lockout_until: Dict[str, float] = {}
 
-    # Кэш: (symbol, timeframe, trend_mode) -> (inv_long: float, inv_short: float, cached_at: float)
-    _cache: Dict[Tuple[str, str, str], Tuple[float, float, float]] = {}
+    # Кэш: (symbol, timeframe, trend_mode, scale) -> (inv_long: float, inv_short: float, cached_at: float)
+    _cache: Dict[Tuple[str, str, str, int], Tuple[float, float, float]] = {}
     _lock = asyncio.Lock()
 
     @classmethod
@@ -70,23 +143,48 @@ class TrendSizeDepender:
         cls._cache.clear()
 
     @classmethod
-    def calculate_weights_from_grade(cls, grade: int) -> Tuple[float, float]:
+    def calculate_weights_from_grade(
+        cls,
+        grade: int,
+        trend_mode: str = "",
+        scale: Optional[int] = None
+    ) -> Tuple[float, float]:
         """
         Переводит целочисленный индекс тренда k in [-16, +16] в веса сторон в процентах.
-        Возвращает (weight_long_pct, weight_short_pct).
-        Сумма всегда строго равна 100.0%.
+        Поддерживает две институциональные шкалы:
+          - scale = 10: мягкая линейка [-10% .. +10%] -> коридор [40.0% .. 60.0%]
+          - scale = 16: полная линейка [-16.67% .. +16.67%] -> коридор [33.3333% .. 66.6667%]
         """
-        clamped_k = max(-cls.STEPS_HALF, min(cls.STEPS_HALF, int(grade)))
-        w_long = round(cls.NEUTRAL_PCT + clamped_k * cls.STEP_PCT, 4)
-        # Гарантируем строгие границы [33.3333, 66.6667]
-        w_long = max(cls.MIN_SIDE_PCT, min(cls.MAX_SIDE_PCT, w_long))
+        tm = str(trend_mode).lower().strip()
+        if scale is None:
+            scale = 10 if tm in ("dyn_ema_10", "ema_trend_10") else 16
+
+        delta_pct = 10.0 if scale == 10 else (cls.MAX_SIDE_PCT - cls.NEUTRAL_PCT)
+
+        if tm in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_10", "dyn_ema_trend", "ema_trend"):
+            if grade > 0:
+                w_long = round(cls.NEUTRAL_PCT + delta_pct, 4)
+                return w_long, round(100.0 - w_long, 4)
+            elif grade < 0:
+                w_long = round(cls.NEUTRAL_PCT - delta_pct, 4)
+                return w_long, round(100.0 - w_long, 4)
+            else:
+                return 50.0, 50.0
+
+        steps = scale if scale else cls.STEPS_HALF
+        clamped_k = max(-steps, min(steps, int(grade)))
+        step_pct = delta_pct / steps
+        w_long = round(cls.NEUTRAL_PCT + clamped_k * step_pct, 4)
+        min_pct = round(cls.NEUTRAL_PCT - delta_pct, 4)
+        max_pct = round(cls.NEUTRAL_PCT + delta_pct, 4)
+        w_long = max(min_pct, min(max_pct, w_long))
         w_short = round(100.0 - w_long, 4)
         return w_long, w_short
 
     @classmethod
-    def grade_to_weights(cls, grade: int) -> Tuple[float, float]:
+    def grade_to_weights(cls, grade: int, trend_mode: str = "", scale: Optional[int] = None) -> Tuple[float, float]:
         """Алиас для calculate_weights_from_grade."""
-        return cls.calculate_weights_from_grade(grade)
+        return cls.calculate_weights_from_grade(grade, trend_mode=trend_mode, scale=scale)
 
     @classmethod
     def calculate_invest_sizes(
@@ -373,7 +471,7 @@ class TrendSizeDepender:
                 f"Поддерживаемые режимы: {cls.SUPPORTED_MODES}"
             )
 
-        if mode in ("bb_inverted_lockout", "bb_inverted_lockout_4h"):
+        if mode in ("bb_inverted_lockout", "bb_inverted_lockout_4h", "dyn_inv_16", "dyn_bb_inv", "bb_inverted"):
             period = int(cfg.get("eval_window", 20))
             mult = float(cfg.get("multiplier", 2.0))
             lockout_sec = float(cfg.get("lockout_duration_sec", 14400.0))
@@ -397,20 +495,8 @@ class TrendSizeDepender:
                 multiplier=mult
             )
 
-        elif mode in ("bb_deviation_legacy", "bb_deviation_4h"):
-            # [TOXIC_DEPRECATED]: bb_deviation_legacy увеличивал сайз в сторону роста/падения внутри полос,
-            # что накапливало токсичный инвентарь против разворота на боевом счете!
-            logger.warning(
-                f"[TrendSizeDepender] Режим '{mode}' помечен как TOXIC_DEPRECATED. "
-                "Рекомендуется переключиться на 'bb_breakout_flat' (DYN_BB_BREAKOUT) или 'bb_inverted_lockout' (DYN_BB_INV)."
-            )
-            period = int(cfg.get("eval_window", 20))
-            mult = float(cfg.get("multiplier", 2.0))
-            return cls.evaluate_grade_bb(
-                closes=closes,
-                period=period,
-                multiplier=mult
-            )
+        elif mode in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_10", "dyn_ema_trend", "ema_trend"):
+            return cls.evaluate_grade_ema_trend(closes=closes, cfg=cfg)
 
         elif mode == "adx_di_4h":
             period = int(cfg.get("eval_window", 14))
@@ -437,6 +523,38 @@ class TrendSizeDepender:
         raise KeyError(f"[TrendSizeDepender] Необработанный режим: '{trend_mode}'")
 
     @classmethod
+    def evaluate_grade_ema_trend(
+        cls,
+        closes: np.ndarray,
+        cfg: Optional[Dict[str, Any]] = None
+    ) -> int:
+        """
+        Оценивает состояние тренда 4h Dual EMA 10/30 (TrendCalculator).
+        Возвращает:
+          - +scale при UP (восходящий тренд)
+          - -scale при DOWN (нисходящий тренд)
+          - 0 при FLAT или UNSTABLE
+        """
+        scale = int((cfg or {}).get("scale", 16))
+        trend_cfg = {
+            "is_active": True,
+            "timeframe": "4h",
+            "sma_fast": int((cfg or {}).get("sma_fast", 10)),
+            "sma_slow": int((cfg or {}).get("sma_slow", 30)),
+            "confirmation_candles": int((cfg or {}).get("confirmation_candles", 5)),
+            "require_rising": bool((cfg or {}).get("require_rising", True))
+        }
+        calc = TrendCalculator(trend_cfg)
+        close_list = closes.tolist() if isinstance(closes, np.ndarray) else list(closes)
+        state = calc.calculate(close_list)
+        if state == "UP":
+            return scale
+        elif state == "DOWN":
+            return -scale
+        else:
+            return 0
+
+    @classmethod
     async def get_effective_invest_size(
         cls,
         client: Optional[object],
@@ -449,14 +567,18 @@ class TrendSizeDepender:
         """
         Асинхронно рассчитывает эффективный invest_size для указанной стороны (LONG или SHORT)
         на основе 4h макро-тренда с потокобезопасным TTL-кэшированием свечей.
-        Если trend_size_cfg отключен или свечи недоступны, возвращает базовый base_invest_size.
+        Если trend_size_cfg отключен или режим static, возвращает базовый base_invest_size.
         """
         if not trend_size_cfg or not trend_size_cfg.get("enabled", True):
             return float(base_invest_size)
 
-        trend_mode = str(trend_size_cfg.get("trend_mode", "bb_deviation_4h")).lower().strip()
+        trend_mode = str(trend_size_cfg.get("trend_mode") or trend_size_cfg.get("mode", "static")).lower().strip()
+        if trend_mode == "static":
+            return float(base_invest_size)
+
         timeframe = str(trend_size_cfg.get("timeframe", "4h")).strip()
-        cache_key = (symbol.upper(), timeframe, trend_mode)
+        scale = int(trend_size_cfg.get("scale", 16))
+        cache_key = (symbol.upper(), timeframe, trend_mode, scale)
         now = time.time()
 
         cached = cls._cache.get(cache_key)
@@ -503,12 +625,12 @@ class TrendSizeDepender:
                 closes = np.array(closes_list)
 
                 grade = cls.evaluate_trend_grade(trend_mode, highs, lows, closes, trend_size_cfg, symbol=symbol, current_ts=now)
-                w_long, w_short = cls.calculate_weights_from_grade(grade)
+                w_long, w_short = cls.calculate_weights_from_grade(grade, trend_mode=trend_mode, scale=scale)
                 inv_l, inv_s = cls.calculate_invest_sizes(base_invest_size, w_long, w_short)
 
                 cls._cache[cache_key] = (inv_l, inv_s, now)
                 logger.info(
-                    f"[TrendSizeDepender][{symbol}] Evaluated {trend_mode} ({timeframe}): "
+                    f"[TrendSizeDepender][{symbol}] Evaluated {trend_mode} (scale={scale}, {timeframe}): "
                     f"Grade k={grade:+d} -> LONG {w_long:.2f}% ({inv_l:.2f}$), SHORT {w_short:.2f}% ({inv_s:.2f}$)"
                 )
                 return inv_l if side == "LONG" else inv_s

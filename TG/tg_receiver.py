@@ -402,6 +402,7 @@ class TelegramReceiver:
                     c_dd_net = float(cinfo.get("max_drawdown_net_usdt", cinfo.get("max_drawdown", 0.0)))
                     coin_entry["max_drawdown_net_usdt"] = min(coin_entry.get("max_drawdown_net_usdt", 0.0), c_dd_net)
                     coin_entry["universes_active"] += 1
+                    coin_entry["is_active"] = coin_entry.get("is_active", False) or cinfo.get("is_active_symbol", True)
                     coin_entry["grid_capacity_usdt"] += float(cinfo.get("grid_capacity_usdt", 0.0))
                     coin_entry["current_grid_load_usdt"] += float(cinfo.get("current_grid_load_usdt", 0.0))
                     coin_entry["current_margin_usdt"] += float(cinfo.get("current_margin_usdt", 0.0))
@@ -654,17 +655,19 @@ class TelegramReceiver:
 
         @self.dp.message(Command("backup"))
         async def backup_cmd(message: Message):
-            msg = await message.answer("⏳ Создание рантайм-бэкапа из .pkl и упаковка в JSON...")
             try:
                 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
-                res = await RuntimeBackupService.export_and_send(bot_instance=self.bot_core, chat_ids=[message.chat.id])
-                if res.get("status") == "success":
-                    await msg.edit_text(f"✅ Рантайм-бэкап сформирован и отправлен в чат!\n📄 Файл: <code>{res.get('filename')}</code>\n💾 Размер: {res.get('size_bytes') / 1024.0:.1f} KB", parse_mode="HTML")
+                status_msg = await message.answer("⏳ Создание рантайм-бэкапа позиций (.pkl ➔ JSON)...")
+                res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[message.chat.id])
+                p = res.get("file")
+                if p and os.path.exists(p):
+                    await message.answer_document(FSInputFile(p), caption=f"📦 <b>Рантайм-бэкап позиций</b>\nФайл: <code>{res.get('filename')}</code>\nРазмер: {res.get('size_bytes', 0) / 1024.0:.1f} KB", parse_mode="HTML")
+                    await status_msg.delete()
                 else:
-                    await msg.edit_text(f"⚠️ Бэкап создан локально ({res.get('filename')}), но возникла заминка при отправке.")
+                    await status_msg.edit_text("⚠️ Ошибка: файл бэкапа не сформирован.")
             except Exception as e:
-                logger.error(f"Backup command error: {e}")
-                await msg.edit_text(f"❌ Ошибка создания бэкапа: {e}")
+                logger.error(f"Error handling /backup command: {e}")
+                await message.answer(f"❌ Ошибка создания бэкапа: {e}")
 
         @self.dp.callback_query(F.data.startswith("rot_accept:"))
         async def on_rot_accept(callback: CallbackQuery):
@@ -1062,23 +1065,18 @@ class TelegramReceiver:
         @self.dp.callback_query(F.data == "logs_get_runtime_backup")
         async def on_get_runtime_backup(callback: CallbackQuery, state: FSMContext):
             await state.clear()
-            await callback.answer()
-            msg = await callback.message.answer("⏳ Создание рантайм-бэкапа из .pkl и упаковка в JSON...")
+            await callback.answer("⏳ Создание бэкапа рантайма...")
             try:
                 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
-                res = await RuntimeBackupService.export_and_send(bot_instance=self.bot_core, chat_ids=[callback.message.chat.id])
-                if res.get("status") == "success":
-                    await msg.edit_text(
-                        f"✅ Рантайм-бэкап сформирован и отправлен в чат!\n"
-                        f"📄 Файл: <code>{res.get('filename')}</code>\n"
-                        f"💾 Размер: {res.get('size_bytes') / 1024.0:.1f} KB",
-                        parse_mode="HTML"
-                    )
+                res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[callback.message.chat.id])
+                p = res.get("file")
+                if p and os.path.exists(p):
+                    await callback.message.answer_document(FSInputFile(p), caption=f"📦 <b>Рантайм-бэкап позиций</b>\nФайл: <code>{res.get('filename')}</code>\nРазмер: {res.get('size_bytes', 0) / 1024.0:.1f} KB", parse_mode="HTML")
                 else:
-                    await msg.edit_text(f"⚠️ Бэкап создан локально ({res.get('filename')}), но возникла заминка при отправке.")
+                    await callback.message.answer("⚠️ Не удалось создать файл рантайм-бэкапа.")
             except Exception as e:
-                logger.error(f"Error creating runtime backup: {e}")
-                await msg.edit_text(f"❌ Ошибка создания рантайм-бэкапа: {e}")
+                logger.error(f"Error sending runtime backup: {e}")
+                await callback.message.answer(f"❌ Ошибка бэкапа: {e}")
 
         @self.dp.callback_query(F.data.startswith("analytics_reset"))
         async def on_reset_analytics(callback: CallbackQuery, state: FSMContext):
@@ -1522,6 +1520,8 @@ class TelegramReceiver:
                     tr = cdata.get('total_trades', 0)
                     val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
 
+                is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
+                active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
                 if i == 1:
                     medal = "🥇"
                 elif i == 2:
@@ -1530,7 +1530,7 @@ class TelegramReceiver:
                     medal = "🥉"
                 else:
                     medal = "▪️"
-                lines.append(f"{medal} <b>{sym}</b>: {val_str}")
+                lines.append(f"{medal} <b>{sym}</b>{active_badge}: {val_str}")
 
             switch_kb = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -1574,8 +1574,10 @@ class TelegramReceiver:
                 net = agg_per_coin[coin].get("net_profit_usdt", 0.0)
                 sign = "+" if net > 0 else ""
                 icon = "🟢" if net >= 0 else "🔴"
+                is_act = agg_per_coin[coin].get("is_active", True)
+                status_tag = "" if is_act else " [неактивна]"
                 keyboard_buttons.append([InlineKeyboardButton(
-                    text=f"🪙 {coin} {icon} ({sign}{net:,.2f}$)",
+                    text=f"🪙 {coin}{status_tag} {icon} ({sign}{net:,.2f}$)",
                     callback_data=f"analytics_bb_coin_{coin}"
                 )])
 
@@ -1999,6 +2001,8 @@ class TelegramReceiver:
                         tr = cdata.get('total_trades', cdata.get('trades', 0))
                         val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
                     
+                    is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
+                    active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
                     if i == 1:
                         medal = "🥇"
                     elif i == 2:
@@ -2008,7 +2012,7 @@ class TelegramReceiver:
                     else:
                         medal = "▪️"
                         
-                    lines.append(f"{medal} <b>{sym}</b>: {val_str}")
+                    lines.append(f"{medal} <b>{sym}</b>{active_badge}: {val_str}")
                 
                 # Add inline keyboard to switch criterion
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2126,7 +2130,8 @@ class TelegramReceiver:
                     lines.append("="*50 + "\n")
                     
                     for sym, cdata in sorted(data["per_coin"].items()):
-                        lines.append(f"--- {sym} ---")
+                        status_str = "[АКТИВНА]" if cdata.get("is_active_symbol", True) else "[ВЫВЕДЕНА / АРХИВ]"
+                        lines.append(f"--- {sym} {status_str} ---")
                         lines.append(f"  Trades: {cdata.get('total_trades', 0)} (Wins: {cdata.get('winning_trades', 0)} | {cdata.get('winrate_pct', 0):.1f}%)")
                         
                         crealized = float(cdata.get('realized_pnl_usdt', 0))
@@ -2291,8 +2296,9 @@ class TelegramReceiver:
             row = []
             for coin in sorted(universe_coins):
                 is_active = coin in self.bot_core.symbols
-                status_icon = "🟢" if is_active else "🔴"
-                row.append(InlineKeyboardButton(text=f"🪙 {coin} {status_icon}", callback_data=f"analytics_coin:{coin}:{current_uid}"))
+                status_icon = "🟢" if is_active else "⏸"
+                status_tag = "" if is_active else " [неактивна]"
+                row.append(InlineKeyboardButton(text=f"🪙 {coin}{status_tag} {status_icon}", callback_data=f"analytics_coin:{coin}:{current_uid}"))
                 if len(row) == 2:
                     keyboard_buttons.append(row)
                     row = []
