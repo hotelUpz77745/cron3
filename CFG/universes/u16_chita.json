@@ -39,7 +39,7 @@
     },
     "knife_blocker_enabled": true,
     "knife_blocker_threshold": 1,
-    "omni_size_all_zones": true
+    "omni_size_all_zones": false
   },
   "smart_tp": {
     "enabled": false,
