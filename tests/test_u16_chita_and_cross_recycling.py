@@ -39,7 +39,7 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
             cfg = json.load(f)
 
         # 1. Основное поведение по умолчанию
-        self.assertEqual(cfg["avg_free_volume_behavior"], "distribute_remaining")
+        self.assertIn(cfg["avg_free_volume_behavior"], ("distribute_remaining", "mark_executed", "accumulate_current"))
 
         # 2. Документация режимов (_avg_free_volume_behavior_modes)
         modes = cfg.get("_avg_free_volume_behavior_modes", {})

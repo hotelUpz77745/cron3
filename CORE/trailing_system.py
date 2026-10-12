@@ -275,6 +275,8 @@ class BaseTrailingSystem:
         for lvl_str in sorted(unexecuted_levels, key=lambda x: int(x) if x.isdigit() else x, reverse=True):
             lvl_data = grid[lvl_str]
             raw_floor = lvl_data.get("super_indent") or lvl_data.get("indent")
+            if raw_floor is None:
+                continue
             floor_val = cls.normalize_abs(raw_floor)
 
             raw_act = lvl_data.get("activation")
@@ -301,6 +303,8 @@ class BaseTrailingSystem:
                 raw_act = lvl_data.get("activation")
                 if raw_act is None:
                     raw_floor = lvl_data.get("super_indent") or lvl_data.get("indent")
+                    if raw_floor is None:
+                        continue
                     floor_val = cls.normalize_abs(raw_floor)
                     if drawdown_pct >= floor_val:
                         candidate_level = lvl_str

@@ -49,24 +49,24 @@ class AverageManager:
                     needs_save = True
             else:
                 if level_data.get("price") is None:
-                    indent_pct = level_data["indent"]
-                    
-                    is_sg_enabled = False
-                    if getattr(runtime_manager, "strategy_registry", None):
-                        try:
-                            strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
-                            is_sg_enabled = strat.super_grid_enabled
-                        except Exception:
-                            is_sg_enabled = False
-                    elif "super_grid" in _CFG:
-                        is_sg_enabled = bool(_CFG["super_grid"].get("enabled", False))
+                    indent_pct = level_data.get("indent")
+                    if indent_pct is not None:
+                        is_sg_enabled = False
+                        if getattr(runtime_manager, "strategy_registry", None):
+                            try:
+                                strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                                is_sg_enabled = strat.super_grid_enabled
+                            except Exception:
+                                is_sg_enabled = False
+                        elif "super_grid" in _CFG:
+                            is_sg_enabled = bool(_CFG["super_grid"].get("enabled", False))
 
-                    if is_sg_enabled and level_data.get("super_indent") is not None:
-                        indent_pct = level_data["super_indent"]
-                        
-                    price = TradeMath.calculate_grid_price(initial_price, indent_pct, side, spec_data, symbol)
-                    level_data["price"] = price
-                    needs_save = True
+                        if is_sg_enabled and level_data.get("super_indent") is not None:
+                            indent_pct = level_data["super_indent"]
+                            
+                        price = TradeMath.calculate_grid_price(initial_price, indent_pct, side, spec_data, symbol)
+                        level_data["price"] = price
+                        needs_save = True
 
                 # Расчет цены активации (курка) при наличии activation
                 if level_data.get("activation") is not None and level_data.get("activation_price") is None:
@@ -311,7 +311,19 @@ class AverageManager:
         if not level_data:
             return False
 
-        # Если уровень уже прошел пилинг в этом цикле (Variant 2), повторный пилинг не выполняется
+        # Проверяем настройку peel_num / peel_once
+        if "peel_num" in level_data:
+            raw_pn = level_data["peel_num"]
+            if raw_pn is None:
+                return False
+            try:
+                if int(raw_pn) <= 0:
+                    return False
+            except (ValueError, TypeError):
+                return False
+        elif "peel_once" in level_data and level_data["peel_once"] is None:
+            return False
+
         if level_data.get("peeled"):
             return False
 
@@ -404,27 +416,37 @@ class AverageManager:
                     state.in_position = False
                     state.is_finished = True
 
-                peel_once = level_data.get("peel_once")
-                if peel_once is None:
-                    peel_once = (peel_ratio < 1.0)
-                else:
-                    peel_once = bool(peel_once)
+                peeled_count = int(level_data.get("peeled_count", 0)) + 1
+                level_data["peeled_count"] = peeled_count
 
-                if peel_once:
-                    # ВАРИАНТ 2: Однократный пилинг за цикл (peel_once=True, Новая Чита)
-                    # Сбросили объем (например 50%), остаток удерживает среднюю цену внизу
-                    curr_fill_qty = float(level_data.get("fill_qty") or 0.0)
-                    rem_level_qty = max(0.0, round(curr_fill_qty - peel_qty, 8))
-                    level_data["fill_qty"] = rem_level_qty
+                raw_peel_num = level_data.get("peel_num")
+                if raw_peel_num is not None:
+                    try:
+                        p_limit = int(raw_peel_num)
+                    except (ValueError, TypeError):
+                        p_limit = 1
+                elif "peel_once" in level_data:
+                    p_limit = 1 if level_data["peel_once"] else 999
+                else:
+                    p_limit = 1 if (peel_ratio < 1.0) else 999
+
+                curr_fill_qty = float(level_data.get("fill_qty") or 0.0)
+                rem_level_qty = max(0.0, round(curr_fill_qty - peel_qty, 8))
+                level_data["fill_qty"] = rem_level_qty
+
+                if peeled_count >= p_limit:
                     level_data["peeled"] = True
-                    # Уровень остается активным с остаточным объемом, чтобы не откупаться повторно до закрытия корзины
-                    level_data["is_active"] = True
+                    if rem_level_qty > 0:
+                        level_data["is_active"] = True
+                    else:
+                        level_data["is_active"] = False
+                        level_data["fill_price"] = None
+                        level_data["fill_qty"] = None
                     logger.info(
-                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-ONCE EXECUTED] Level {cur_level_str} peeled {peel_qty} (ratio {peel_ratio})! "
-                        f"Level locked against re-entry with remaining {rem_level_qty:.4f} vol. Pos vol: {abs(state.total_volume):.4f}"
+                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-LIMIT EXECUTED] Level {cur_level_str} peeled {peel_qty} (ratio {peel_ratio})! "
+                        f"Peel limit reached ({peeled_count}/{p_limit}). Level locked against re-entry with rem {rem_level_qty:.4f} vol. Pos vol: {abs(state.total_volume):.4f}"
                     )
                 else:
-                    # ВАРИАНТ 1: Многократный сброс уровня (peel_once=False, Старая Тошиба)
                     level_data["is_active"] = False
                     level_data["is_armed"] = False
                     level_data["activated_at"] = None
@@ -433,8 +455,8 @@ class AverageManager:
                     level_data["fill_qty"] = None
                     level_data["peeled"] = False
                     logger.info(
-                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-RESET EXECUTED] Level {cur_level_str} successfully peeled! "
-                        f"Level reset for re-entry. Remaining vol: {abs(state.total_volume):.4f}"
+                        f"[{symbol}] {side} 🍊 [SUB-GRID PEEL-RESET EXECUTED] Level {cur_level_str} peeled {peel_qty} (ratio {peel_ratio})! "
+                        f"Peel {peeled_count}/{p_limit} complete. Level reset for re-entry. Remaining vol: {abs(state.total_volume):.4f}"
                     )
 
                 # Сбрасываем кэш основного тейка для пересчета под оставшийся объем

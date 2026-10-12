@@ -82,6 +82,8 @@ class TradeMath:
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
         price_precision = precisions[1] if precisions else (8 if initial_price < 1.0 else 2)
         
+        if indent_pct is None:
+            return initial_price
         indent_abs = abs(indent_pct)
         
         if side.upper() == "LONG":

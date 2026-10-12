@@ -86,6 +86,7 @@ class PositionState:
             v.pop("armed_at_drawdown", None)
             v.pop("armed_timestamp", None)
             v.pop("peeled", None)
+            v.pop("peeled_count", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

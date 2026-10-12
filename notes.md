@@ -1864,3 +1864,274 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
   },
   "invest_size": 400.0
 } -->
+
+
+
+<!-- {
+  "name": "🐆 U16: Chita (7-Lvl Fibonacci Heavy Artillery + Half-Peel 50% + Distribute Remaining)",
+  "description": "Эволюционная модель Чита (U16 Chita): 1) Разряженная 7-уровневая Фибо-сетка с защитой от ракет (Зона 1 скальп L0..L2: 0%/-3%/-8%, 16% объема; Зона 2 буфер разворота L3..L4: -21%/-55%, 21% объема; Зона 3 тяжелая артиллерия и бункер L5..L6: -144%/-340%, 60% объема; 3% кэш-подушка); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5 на L3..L6); 3) Политика пропущенного объема: distribute_remaining (пропорционально распределяем между всеми оставшимися уровнями сетки); 4) Cross-Side Profit Recycling с 4-го колена усреднения (L4); 5) Knife Blocker = 1; 6) Динамический сайзинг dyn_ema_71 (1.14 / 1.28 / 1.42 / 1.0); 7) Smart Grace 150s (0/0/0/0).",
+  "leverage": 20,
+  "timeframe": "5m",
+  "tp_purpose": "self",
+  "avg_free_volume_behavior": "mark_executed",
+  "_avg_free_volume_behavior_modes": {
+    "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
+    "accumulate_current": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
+    "mark_executed": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
+  },
+  "super_grid": {
+    "enabled": false
+  },
+  "smart_grace": {
+    "start_period_sec": 150,
+    "shift_interval_sec": 13,
+    "white_noise_factor": [
+      3,
+      13
+    ],
+    "eval_window_sec": 300,
+    "increments_card": {
+      "==1": 0,
+      "==2": 0,
+      "==3": 0,
+      ">=4": 0
+    }
+  },
+  "smart_size": {
+    "eval_window_sec": 300,
+    "dynamic_sizing_mode": "dyn_ema_71",
+    "profiting_size_weights": {
+      "==1": 1.14,
+      "==2": 1.28,
+      "==3": 1.42,
+      ">=4": 1.0
+    },
+    "knife_blocker_enabled": true,
+    "knife_blocker_threshold": 1,
+    "omni_size_all_zones": false
+  },
+  "smart_tp": {
+    "enabled": false,
+    "eval_window_sec": 300,
+    "increments_tp": {
+      "<2": 1.0,
+      "==2": 1.0,
+      "==3": 1.0,
+      ">=4": 1.0
+    }
+  },
+  "trend_size_depender": {
+    "mode": "static"
+  },
+  "auto_closing": {
+    "mode": "iter_net_classic",
+    "positive": {
+      "enabled": true,
+      "mode": "iter_net_classic",
+      "quant_base_usdt": 10.0,
+      "quant_reference_size": 600.0,
+      "trailing_ratchet": {
+        "enabled": true,
+        "levels": [
+          {
+            "activation": 12.0,
+            "floor": 8.0,
+            "min_age_hours": 24.0,
+            "enabled": true,
+            "_desc": "L0: Prolonged stagnation (24h+)"
+          },
+          {
+            "activation": 20.0,
+            "floor": 16.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L1: Elevated start ($20 -> $16)"
+          },
+          {
+            "activation": 32.0,
+            "floor": 26.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L2: Confident Fibo wave ($32 -> $26)"
+          },
+          {
+            "activation": 50.0,
+            "floor": 42.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L3: Strong trend ($50 -> $42)"
+          },
+          {
+            "activation": 80.0,
+            "floor": 68.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L4: Impulse pump ($80 -> $68)"
+          },
+          {
+            "activation": 120.0,
+            "floor": 105.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L5: Mega rally ($120 -> $105)"
+          }
+        ]
+      }
+    },
+    "negative": {
+      "threshold": null,
+      "threshold_increment": null
+    }
+  },
+  "LONG": {
+    "invest_size": 400.0,
+    "grid": {
+      "0": {
+        "role": "L0: Скальп-ядро (Зона 1: отступ 0.0%, объем 5.0%)",
+        "indent": 0.0,
+        "volume": 5.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true,
+        "zone": 1
+      },
+      "1": {
+        "role": "L1: Скальп (Зона 1: отступ -3.0%, объем 5.0%)",
+        "indent": -3.0,
+        "volume": 5.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true,
+        "zone": 1
+      },
+      "2": {
+        "role": "L2: Скальп (Зона 1: отступ -8.0%, объем 6.0%)",
+        "indent": -8.0,
+        "volume": 5.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true,
+        "zone": 1
+      },
+      "3": {
+        "role": "L3: Буфер (Зона 2: разворот, Фибо -21.0% / курок -26.0%, объем 9.0%, Half-Peel 50%)",
+        "indent": -21.0,
+        "activation": -26.0,
+        "volume": 7.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_once": true,
+        "zone": 2
+      },
+      "4": {
+        "role": "L4: Буфер (Зона 2: разворот, Фибо -55.0% / курок -65.0%, объем 12.0%, Half-Peel 50%, триггер Cross-Side Recycling)",
+        "indent": -55.0,
+        "activation": -65.0,
+        "volume": 7.5,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 1.4,
+        "peel_ratio": 0.5,
+        "peel_once": true,
+        "zone": 2
+      },
+      "5": {
+        "role": "L5: Тяжелая Артиллерия (Зона 3: глубинная броня, Фибо -144.0% / курок -155.0%, объем 25.0%, Half-Peel 50%)",
+        "indent": -144.0,
+        "activation": -155.0,
+        "volume": 10.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 1.5,
+        "peel_ratio": 0.5,
+        "peel_once": true,
+        "zone": 3
+      },
+      "6": {
+        "role": "L6: Бункер / Финал (Зона 3: глубинная броня, Фибо -340.0% / курок -360.0%, объем 35.0%, Half-Peel 50%)",
+        "indent": -360.0,
+        "activation": -380.0,
+        "volume": 15.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 1.6,
+        "peel_ratio": 0.5,
+        "peel_once": true,
+        "zone": 3
+      },
+      "7": {
+        "role": "L6: Бункер / Финал (Зона 3: глубинная броня, Фибо -340.0% / курок -360.0%, объем 35.0%, Half-Peel 50%)",
+        "indent": -900.0,
+        "activation": -900.0,
+        "volume": 20.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 1.6,
+        "peel_ratio": 0.5,
+        "peel_once": true,
+        "zone": 3
+      }
+    },
+    "tp_map": {
+      "0": {
+        "indent": 2.0,
+        "fallback_indent": 2.6
+      },
+      "1": {
+        "indent": 1.6,
+        "fallback_indent": 2.2
+      },
+      "2": {
+        "indent": 1.3,
+        "fallback_indent": 1.8
+      },
+      "3": {
+        "indent": 1.0,
+        "fallback_indent": 1.5
+      },
+      "4": {
+        "indent": 0.8,
+        "fallback_indent": 1.2
+      },
+      "5": {
+        "indent": 0.65,
+        "fallback_indent": 1.0
+      },
+      "6": {
+        "indent": 0.65,
+        "fallback_indent": 0.95
+      },
+      "7": {
+        "indent": 0.65,
+        "fallback_indent": 0.95
+      }
+    }
+  },
+  "SHORT": {
+    "enabled": true,
+    "_inheritance_base_side": true
+  },
+  "cross_side_recycling": {
+    "enabled": true,
+    "recycle_ratio": 0.5,
+    "min_burn_level": 4,
+    "min_drawdown_pct": 3.0,
+    "max_slice_pct": 25.0
+  }
+} -->
