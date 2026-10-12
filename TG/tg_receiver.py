@@ -152,17 +152,23 @@ class TelegramReceiver:
                     analytics_path = ANALYTICS_STATS_DIR / f"analytics_{current_uid}.json"
 
         csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
-        if not csv_path.exists():
+        if not csv_path.exists() or csv_path.stat().st_size <= 60:
             matches_csv = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{current_uid}*.txt"))
-            if matches_csv:
-                csv_path = sorted(matches_csv)[0]
+            found = [m for m in matches_csv if m.stat().st_size > 60]
+            if found:
+                csv_path = sorted(found)[0]
             else:
                 pure_id = current_uid.split("__")[0]
                 pure_csv_matches = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{pure_id}*.txt"))
-                if pure_csv_matches:
-                    csv_path = sorted(pure_csv_matches)[0]
+                found_pure = [m for m in pure_csv_matches if m.stat().st_size > 60]
+                if found_pure:
+                    csv_path = sorted(found_pure)[0]
                 else:
-                    csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
+                    general_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                    if general_ledger.exists() and general_ledger.stat().st_size > 60:
+                        csv_path = general_ledger
+                    else:
+                        csv_path = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{current_uid}.txt"
 
         return current_uid, univ_name, analytics_path, csv_path
 
@@ -1951,7 +1957,17 @@ class TelegramReceiver:
             await callback.answer()
             strat_id = callback.data.split("strat_ledger:")[1]
             strat_txt = ANALYTICS_LEDGERS_DIR / f"trades_ledger_{strat_id}.txt"
-            if strat_txt.exists():
+            if not strat_txt.exists() or strat_txt.stat().st_size <= 60:
+                matches = list(ANALYTICS_LEDGERS_DIR.glob(f"trades_ledger_{strat_id}*.txt"))
+                found = [m for m in matches if m.stat().st_size > 60]
+                if found:
+                    strat_txt = sorted(found)[0]
+                else:
+                    general_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                    if general_ledger.exists() and general_ledger.stat().st_size > 60:
+                        strat_txt = general_ledger
+
+            if strat_txt.exists() and strat_txt.stat().st_size > 60:
                 await callback.message.answer_document(FSInputFile(str(strat_txt)))
             else:
                 await callback.message.answer(f"Леджер для {strat_id} пока пуст.")
@@ -2123,14 +2139,19 @@ class TelegramReceiver:
             target_uid = parts[1] if len(parts) > 1 and parts[1] else None
             current_uid, univ_name, _, csv_path = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
             set_user_universe_id(callback.from_user.id, current_uid)
-            if csv_path.exists():
+            if not csv_path.exists() or csv_path.stat().st_size <= 60:
+                general_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                if general_ledger.exists() and general_ledger.stat().st_size > 60:
+                    csv_path = general_ledger
+
+            if csv_path.exists() and csv_path.stat().st_size > 60:
                 await callback.message.answer_document(
                     FSInputFile(str(csv_path)),
                     caption=f"📝 Лента сделок (TXT): <b>{univ_name}</b> (<code>{current_uid}</code>)",
                     parse_mode="HTML"
                 )
             else:
-                await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден.", parse_mode="HTML")
+                await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден или пуст.", parse_mode="HTML")
 
         @self.dp.callback_query(F.data.startswith("analytics_full_report"))
         async def process_analytics_full_report(callback: CallbackQuery, state: FSMContext):

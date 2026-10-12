@@ -220,10 +220,47 @@ class AnalyticsManager:
                     pass
 
             strat_txt = self.ledgers_dir / f"trades_ledger_{strat_id}.txt"
-            if not strat_txt.exists():
+            reconstructed = False
+            if (not strat_txt.exists() or strat_txt.stat().st_size <= 60) and self.txt_file.exists() and self.txt_file.stat().st_size > 60:
+                try:
+                    strat_symbols = set(getattr(strat_cfg, "symbols", []))
+                    if strat_symbols:
+                        with open(self.txt_file, mode="r", encoding="utf-8") as gf:
+                            g_reader = csv.reader(gf, delimiter=';')
+                            g_header = next(g_reader, None)
+                            g_rows = list(g_reader)
+                        
+                        s_rows = []
+                        s_bal = strat_init_bal
+                        s_cnt = 1
+                        for r in g_rows:
+                            if not r or len(r) < 6:
+                                continue
+                            sym = r[1]
+                            if sym in strat_symbols:
+                                try:
+                                    pnl = float(r[5])
+                                except (ValueError, TypeError):
+                                    pnl = 0.0
+                                s_bal += pnl
+                                s_rows.append([s_cnt, sym, r[2], r[3], r[4], round(pnl, 4), round(s_bal, 4)])
+                                s_cnt += 1
+                        
+                        if s_rows:
+                            temp_s = strat_txt.with_suffix('.tmp')
+                            with open(temp_s, mode="w", newline="", encoding="utf-8") as sf:
+                                s_writer = csv.writer(sf, delimiter=';')
+                                s_writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                                s_writer.writerows(s_rows)
+                            os.replace(temp_s, strat_txt)
+                            reconstructed = True
+                except Exception as e:
+                    logger.debug(f"Failed to backfill {strat_id} ledger from main ledger: {e}")
+
+            if not strat_txt.exists() and not reconstructed:
                 with open(strat_txt, mode="w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f, delimiter=';')
-                    writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
+                    writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
 
     def _read_data(self) -> dict:
         if not self.log_file.exists():
@@ -655,8 +692,35 @@ class AnalyticsManager:
                     with open(temp_txt, 'w', encoding='utf-8', newline='') as f:
                         writer = csv.writer(f, delimiter=';')
                         writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
-                        writer.writerows(ledger_rows)
                     os.replace(temp_txt, self.txt_file)
+
+                    # Синхронно обновляем изолированные леджеры активных стратегий
+                    if self.strategy_registry and getattr(self.strategy_registry, "active_strategies", None):
+                        for s_id, s_cfg in self.strategy_registry.active_strategies.items():
+                            s_symbols = set(getattr(s_cfg, "symbols", []))
+                            if not s_symbols:
+                                continue
+                            s_init_bal = float(getattr(s_cfg, "start_balance_usdt", 151.0))
+                            s_rows = []
+                            s_bal = s_init_bal
+                            s_cnt = 1
+                            for r in ledger_rows:
+                                if len(r) > 1 and r[1] in s_symbols:
+                                    try:
+                                        r_pnl = float(r[5])
+                                    except (ValueError, TypeError):
+                                        r_pnl = 0.0
+                                    s_bal += r_pnl
+                                    s_rows.append([s_cnt, r[1], r[2], r[3], r[4], round(r_pnl, 4), round(s_bal, 4)])
+                                    s_cnt += 1
+                            
+                            s_txt = self.ledgers_dir / f"trades_ledger_{s_id}.txt"
+                            s_tmp = s_txt.with_suffix('.tmp')
+                            with open(s_tmp, 'w', encoding='utf-8', newline='') as sf:
+                                s_writer = csv.writer(sf, delimiter=';')
+                                s_writer.writerow(["Id", "Symbol", "Side", "Open Time", "Close Time", "PnL (USDT)", "Balance"])
+                                s_writer.writerows(s_rows)
+                            os.replace(s_tmp, s_txt)
                         
                 # Reconstruct JSON
                 async with self._lock:
