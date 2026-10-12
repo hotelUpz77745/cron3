@@ -590,15 +590,6 @@ class AutoCloser:
                         strat_msg = strat_msg.replace("базовая точка Net: <b>0.00 USDT</b>", f"базовая точка Net: <b>{settled_net:+.2f} USDT</b>")
                         await self.bot_core.notifier.send_alert(strat_msg)
 
-                    if hasattr(self.bot_core, "radar_navigator") and self.bot_core.radar_navigator.is_enabled():
-                        matched_rule_str = getattr(self, "_last_matched_rule", "") or getattr(AutoCloser, "_last_matched_rule", "")
-                        asyncio.create_task(
-                            self.bot_core.radar_navigator.on_ratchet_closed(
-                                strat_id=strat_id,
-                                matched_rule=matched_rule_str,
-                                is_stagnation=is_stagnation
-                            )
-                        )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")
                 finally:

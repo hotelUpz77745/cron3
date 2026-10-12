@@ -3839,8 +3839,10 @@ class TelegramReceiver:
         @self.dp.message(F.text == "🎯 Selector")
         async def on_selector_cmd(message: Message, state: FSMContext):
             await state.clear()
-            target_count = _CFG["auto_closing"]["positive"]["radar_rotation_on_close"]["target_coins_count"]
-            configured_type = _CFG["auto_closing"]["positive"]["radar_rotation_on_close"]["selector_type"]
+            from CORE.SELECTOR.coin_selection_service import CoinSelectionService
+            _sel_svc = CoinSelectionService()
+            target_count = _sel_svc.get_configured_target_count()
+            configured_type = _sel_svc.get_configured_selector_type()
             text = (
                 f"🎯 <b>Coin Selection Service (On-Demand)</b>\n\n"
                 f"⚙️ <b>Текущий конфиг app.json:</b>\n"

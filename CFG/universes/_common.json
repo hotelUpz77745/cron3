@@ -42,18 +42,6 @@
     "positive": {
       "quant_base_usdt": 10.0,
       "quant_reference_size": 600.0,
-      "radar_rotation_on_close": {
-        "enabled": false,
-        "_desc_enabled": "Trigger coin rotation upon auto-closer liquidation to 100% cash. Default false in combat mode.",
-        "min_universe_age_hours": 23.0,
-        "_desc_min_universe_age_hours": "Minimum continuous runtime (23.0h) since start or last rotation before allowing rotation.",
-        "selector_type": "alpha_coin_selector",
-        "_desc_selector_type": "'alpha_coin_selector' (volatility klines) or 'samsonov_funnel' (radar telemetry).",
-        "target_coins_count": 4,
-        "_desc_target_coins_count": "Target number of active coins in strategy pool.",
-        "min_score_lead_pct": 35.0,
-        "_desc_min_score_lead_pct": "Hysteresis threshold (+35%): candidate replaces worst coin only if score is at least 35% higher."
-      },
       "fixed_net": {
         "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
         "target_net_usdt": 60.0,

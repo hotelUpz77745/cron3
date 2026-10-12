@@ -366,16 +366,15 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(state.grid[lvl]["is_active"])
 
     # --------------------------------------------------------------------------
-    # 3. ТЕСТЫ RADAR NAVIGATOR (23H ROTATION WINDOW & ALPHA SELECTOR)
+    # 3. ТЕСТЫ RADAR NAVIGATOR (ИНВАРИАНТ #3: РУЧНОЙ ПУЛ ОПЕРАТОРА БЕЗ РОТАЦИИ)
     # --------------------------------------------------------------------------
-    async def test_radar_navigator_blocks_rotation_before_23_hours(self):
-        """Проверка: ротация по храповику блокируется, если с прошлой ротации прошло < 23 часов."""
+    async def test_radar_navigator_preserves_operator_pool_on_ratchet_closed(self):
+        """Инвариант #3: срабатывание автоклозера не запускает ротацию обоймы оператора."""
         cfg = {
             "radar_synergy": {
                 "enabled": True,
                 "mode": "auto",
                 "selector_type": "alpha_coin_selector",
-                "min_rotation_interval_hours": 23.0,
                 "target_coins_count": 4,
             },
             "paths": {"radar_dir": "../cron3PapperUniverses"},
@@ -391,74 +390,12 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
             nav = RadarNavigator(self.mock_bot)
             strat_id = "u6_symbiosis_gamma_fortress35"
 
-            # 1. Первая ротация в t0
-            t0 = time.time()
-            nav.last_rotation_ts_by_strat[strat_id] = t0
+            nav.alpha_selector.select_top_coins = AsyncMock()
+            await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
 
-            # 2. Срабатывание храповика через 10 часов (< 23ч)
-            with patch("time.time", return_value=t0 + (10.0 * 3600)):
-                nav.alpha_selector.select_top_coins = AsyncMock()
-                await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
-
-                # Селектор не должен вызываться, ротация заблокирована 23-часовым фильтром
-                nav.alpha_selector.select_top_coins.assert_not_called()
-                self.mock_bot.delete_symbol.assert_not_called()
-
-    async def test_radar_navigator_allows_rotation_after_23_hours(self):
-        """Проверка: ротация успешно исполняется, если прошло >= 23 часов."""
-        cfg = {
-            "radar_synergy": {
-                "enabled": True,
-                "mode": "auto",
-                "selector_type": "alpha_coin_selector",
-                "min_rotation_interval_hours": 23.0,
-                "target_coins_count": 2,
-            },
-            "paths": {"radar_dir": "../cron3PapperUniverses"},
-            "active_strategies": {
-                "u6_symbiosis_gamma_fortress35": {
-                    "enabled": True,
-                    "symbols": ["OLD1USDT", "OLD2USDT"]
-                }
-            }
-        }
-
-        with patch("CORE.radar_navigator._CFG", cfg):
-            nav = RadarNavigator(self.mock_bot)
-            strat_id = "u6_symbiosis_gamma_fortress35"
-
-            # Настраиваем реестр стратегий в mock_bot
-            mock_strat = MagicMock()
-            mock_strat.symbols = ["OLD1USDT", "OLD2USDT"]
-            self.mock_bot.strategy_registry.active_strategies = {strat_id: mock_strat}
-
-            t0 = time.time()
-            nav.last_rotation_ts_by_strat[strat_id] = t0
-
-            # Имитируем прошествие 24 часов
-            t_24h = t0 + (24.0 * 3600)
-            mock_candidates = [
-                {"symbol": "NEW1USDT", "eligible": True, "score": 95.0, "natr": 3.0, "wiggle": 0.8},
-                {"symbol": "NEW2USDT", "eligible": True, "score": 90.0, "natr": 2.8, "wiggle": 0.75},
-            ]
-
-            with patch("time.time", return_value=t_24h):
-                nav.alpha_selector.select_top_coins = AsyncMock(return_value=mock_candidates)
-                await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
-
-                # Селектор вызван, старые монеты удалены, новые добавлены
-                nav.alpha_selector.select_top_coins.assert_called_once()
-                self.assertEqual(self.mock_bot.delete_symbol.call_count, 2)
-                self.assertEqual(self.mock_bot.add_symbol.call_count, 2)
-
-                # Проверяем аргументы удаления и добавления
-                deleted_symbols = [call[0][0] for call in self.mock_bot.delete_symbol.call_args_list]
-                added_symbols = [call[0][0] for call in self.mock_bot.add_symbol.call_args_list]
-                self.assertEqual(set(deleted_symbols), {"OLD1USDT", "OLD2USDT"})
-                self.assertEqual(set(added_symbols), {"NEW1USDT", "NEW2USDT"})
-
-                # Проверяем обновление метки времени последней ротации
-                self.assertEqual(nav.last_rotation_ts_by_strat[strat_id], t_24h)
+            nav.alpha_selector.select_top_coins.assert_not_called()
+            self.mock_bot.delete_symbol.assert_not_called()
+            self.mock_bot.add_symbol.assert_not_called()
 
 
 if __name__ == "__main__":
