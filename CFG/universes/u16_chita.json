@@ -1,6 +1,6 @@
 {
-  "name": "🐆 U16: Chita (8-Lvl Asymmetric Heavy Artillery + Half-Peel 50% + Distribute Remaining)",
-  "description": "Эволюционная модель Чита (U16 Chita): 1) Разряженная 8-уровневая асимметричная Фибо-сетка с защитой от ракет (Зона 1 скальп L0..L2: 0%/-3%/-8%, 16% объема; Зона 2 буфер разворота L3..L4: Long -18%/-32%, Short +21%/+55%, 19% объема; Зона 3 тяжелая артиллерия и бункер L5..L7: Long -48%/-65%/-80%, Short +144%/+360%/+900%, 50% объема; 15% кэш-подушка); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5, peel_num = 1 на L3..L7); 3) Политика пропущенного объема: distribute_remaining (пропорционально распределяем между всеми оставшимися уровнями сетки); 4) Cross-Side Profit Recycling с 4-го колена усреднения (L4); 5) Knife Blocker = 1; 6) Динамический сайзинг dyn_ema_71 (1.14 / 1.28 / 1.42 / 1.0); 7) Smart Grace 150s (0/0/0/0).",
+  "name": "🐆 U16: Chita (8-Lvl Asymmetric Heavy Artillery + Half-Peel 50% + Mark Executed)",
+  "description": "Эволюционная модель Чита (U16 Chita): 1) Разряженная 8-уровневая асимметричная Фибо-сетка с защитой от ракет (Зона 1 скальп L0..L2: 0%/-3%/-8%, 16% объема; Зона 2 буфер разворота L3..L4: Long -21%/-34%, Short +21%/+55%, 19% объема; Зона 3 тяжелая артиллерия L5: Long -55%, Short +144%, 15% объема; Бункер L6..L7: Short +360%/+900%, Long L6..L7 зарезервированы enabled: false); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5, peel_num = 1 на активных уровнях Зоны 2-3); 3) Политика пропущенного объема: mark_executed (объем сгорает без перегрузки депозита); 4) Cross-Side Profit Recycling с 4-го колена усреднения (L4); 5) Knife Blocker = 1; 6) Динамический сайзинг dyn_ema_71 (1.14 / 1.28 / 1.42 / 1.0); 7) Smart Grace 150s (0/0/0/0).",
   "leverage": 20,
   "timeframe": "5m",
   "tp_purpose": "self",
@@ -119,6 +119,7 @@
     "grid": {
       "0": {
         "role": "L0: Скальп-ядро (Зона 1: отступ 0.0%, объем 5.0%)",
+        "enabled": true,
         "indent": 0.0,
         "volume": 5.0,
         "super_indent": null,
@@ -131,6 +132,7 @@
       },
       "1": {
         "role": "L1: Скальп (Зона 1: отступ -3.0%, объем 5.0%)",
+        "enabled": true,
         "indent": -3.0,
         "volume": 5.0,
         "super_indent": null,
@@ -143,6 +145,7 @@
       },
       "2": {
         "role": "L2: Скальп (Зона 1: отступ -8.0%, объем 6.0%)",
+        "enabled": true,
         "indent": -8.0,
         "volume": 6.0,
         "super_indent": null,
@@ -155,6 +158,7 @@
       },
       "3": {
         "role": "L3: Буфер (Зона 2: разворот, Фибо -18.0% / курок -23.0%, объем 8.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -21.0,
         "activation": -23.0,
         "volume": 8.0,
@@ -168,6 +172,7 @@
       },
       "4": {
         "role": "L4: Буфер (Зона 2: разворот, Фибо -32.0% / курок -38.0%, объем 11.0%, Half-Peel 50%, триггер Cross-Side Recycling, peel_num=1)",
+        "enabled": true,
         "indent": -34.0,
         "activation": -38.0,
         "volume": 11.0,
@@ -181,6 +186,7 @@
       },
       "5": {
         "role": "L5: Тяжелая Артиллерия (Зона 3: глубинная броня, Фибо -55.0% / курок -60.0%, объем 15.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -55.0,
         "activation": -60.0,
         "volume": 15.0,
@@ -194,28 +200,30 @@
       },
       "6": {
         "role": "L6: Бункер (Зона 3: глубинная броня, Фибо -65.0% / курок -72.0%, объем 17.0%, Half-Peel 50%, peel_num=1)",
-        "indent": -65.0,
-        "activation": -72.0,
+        "enabled": false,
+        "indent": null,
+        "activation": null,
         "volume": 17.0,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
-        "peel_tp_pct": 1.6,
-        "peel_ratio": 0.5,
-        "peel_num": 1,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
         "zone": 3
       },
       "7": {
         "role": "L7: Дно Капитуляции (Зона 3: финальный бункер, Фибо -80.0% / курок -85.0%, объем 18.0%, Half-Peel 50%, peel_num=1)",
-        "indent": -80.0,
-        "activation": -85.0,
+        "enabled": false,
+        "indent": null,
+        "activation": null,
         "volume": 18.0,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
-        "peel_tp_pct": 1.6,
-        "peel_ratio": 0.5,
-        "peel_num": 1,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
         "zone": 3
       }
     },
@@ -260,6 +268,7 @@
     "grid": {
       "0": {
         "role": "L0: Скальп-ядро (Зона 1: отступ 0.0%, объем 5.0%)",
+        "enabled": true,
         "indent": 0.0,
         "volume": 5.0,
         "super_indent": null,
@@ -272,6 +281,7 @@
       },
       "1": {
         "role": "L1: Скальп (Зона 1: памп +3.0%, объем 5.0%)",
+        "enabled": true,
         "indent": -3.0,
         "volume": 5.0,
         "super_indent": null,
@@ -284,6 +294,7 @@
       },
       "2": {
         "role": "L2: Скальп (Зона 1: памп +8.0%, объем 6.0%)",
+        "enabled": true,
         "indent": -8.0,
         "volume": 6.0,
         "super_indent": null,
@@ -296,6 +307,7 @@
       },
       "3": {
         "role": "L3: Буфер (Зона 2: разворот, памп +21.0% / курок +26.0%, объем 8.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -21.0,
         "activation": -26.0,
         "volume": 8.0,
@@ -309,6 +321,7 @@
       },
       "4": {
         "role": "L4: Буфер (Зона 2: разворот, памп +55.0% / курок +65.0%, объем 11.0%, Half-Peel 50%, триггер Cross-Side Recycling, peel_num=1)",
+        "enabled": true,
         "indent": -55.0,
         "activation": -65.0,
         "volume": 11.0,
@@ -322,6 +335,7 @@
       },
       "5": {
         "role": "L5: Тяжелая Артиллерия (Зона 3: противоракетная броня, памп +144.0% / курок +155.0%, объем 15.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -144.0,
         "activation": -155.0,
         "volume": 15.0,
@@ -335,6 +349,7 @@
       },
       "6": {
         "role": "L6: Мега-Ралли (Зона 3: глубинная броня, памп +360.0% / курок +380.0%, объем 17.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -360.0,
         "activation": -380.0,
         "volume": 17.0,
@@ -348,6 +363,7 @@
       },
       "7": {
         "role": "L7: Анти-Ракета 10x (Зона 3: финальный щит, памп +900.0% / курок +900.0%, объем 18.0%, Half-Peel 50%, peel_num=1)",
+        "enabled": true,
         "indent": -900.0,
         "activation": -900.0,
         "volume": 18.0,

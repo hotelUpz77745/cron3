@@ -427,6 +427,28 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
             if test_file.exists():
                 test_file.unlink()
 
+    def test_disabled_grid_levels_handling(self):
+        """Проверка: уровни с enabled: false корректно игнорируются трейлингом и не падают при None отступах."""
+        from CORE.trailing_system import BaseTrailingSystem
+        grid = {
+            "0": {"enabled": True, "indent": 0.0, "volume": 5.0, "is_active": True},
+            "1": {"enabled": True, "indent": -3.0, "volume": 5.0, "is_active": False},
+            "6": {"enabled": False, "indent": None, "activation": None, "volume": 17.0, "is_active": False},
+            "7": {"enabled": False, "indent": None, "activation": None, "volume": 18.0, "is_active": False},
+        }
+        tr_state = {}
+
+        # 1. При просадке 0% отключенные уровни L6/L7 не взводятся и не исполняются
+        cand, skipped, info = BaseTrailingSystem.evaluate_trailing_grid(0.0, grid, tr_state)
+        self.assertIsNone(cand)
+        self.assertEqual(skipped, [])
+
+        # 2. Даже при катастрофической просадке 99% отключенные уровни L6/L7 не исполняются
+        cand, skipped, info = BaseTrailingSystem.evaluate_trailing_grid(99.0, grid, tr_state)
+        self.assertEqual(cand, "1")
+        self.assertNotIn("6", skipped)
+        self.assertNotIn("7", skipped)
+
 
 if __name__ == "__main__":
     unittest.main()

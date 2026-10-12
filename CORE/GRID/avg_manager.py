@@ -39,6 +39,11 @@ class AverageManager:
             
         needs_save = False
         for level_str, level_data in grid.items():
+            if level_data.get("enabled", True) is False:
+                level_data["price"] = None
+                level_data["activation_price"] = None
+                level_data["is_armed"] = False
+                continue
             if level_str == "0":
                 if not level_data.get("is_active") or level_data.get("activated_at") is None:
                     level_data["is_active"] = True
@@ -104,16 +109,17 @@ class AverageManager:
             dd_pct = (current_price - base_price) / base_price * 100.0
         dd_pct = round(max(0.0, dd_pct), 4)
 
-        # Санитизация взведенных уровней: исполненные уровни (is_active=True) никогда не могут оставаться во взведенных
+        # Санитизация взведенных уровней: исполненные (is_active=True) или отключенные (enabled=False) уровни никогда не могут быть взведены
         armed_dict = state.trailing_grid_state.get("armed_levels", {})
         if isinstance(armed_dict, dict):
             for lvl_k, lvl_d in grid.items():
-                if isinstance(lvl_d, dict) and lvl_d.get("is_active"):
-                    lvl_d["is_armed"] = False
-                    lvl_d.pop("armed_at_drawdown", None)
-                    lvl_d.pop("armed_timestamp", None)
-                    if lvl_k in armed_dict:
-                        armed_dict.pop(lvl_k, None)
+                if isinstance(lvl_d, dict):
+                    if lvl_d.get("enabled", True) is False or lvl_d.get("is_active"):
+                        lvl_d["is_armed"] = False
+                        lvl_d.pop("armed_at_drawdown", None)
+                        lvl_d.pop("armed_timestamp", None)
+                        if lvl_k in armed_dict:
+                            armed_dict.pop(lvl_k, None)
 
         # Жесткий инвариант для STRKUSDT SHORT в позиции (L0..L4 уже исполнены и сокращены)
         if symbol.upper() == "STRKUSDT" and side == "SHORT" and state.in_position:
@@ -145,6 +151,8 @@ class AverageManager:
                 if lvl_str == "0":
                     continue
                 data = grid[lvl_str]
+                if data.get("enabled", True) is False:
+                    continue
                 if not data.get("is_active"):
                     state.next_avg_price = data.get("price")
                     break
@@ -175,7 +183,7 @@ class AverageManager:
                 cand_idx = int(candidate_level) if candidate_level.isdigit() else -1
                 remaining = [
                     lvl for lvl in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
-                    if (int(lvl) if lvl.isdigit() else -1) > cand_idx and not grid[lvl].get("is_active")
+                    if (int(lvl) if lvl.isdigit() else -1) > cand_idx and not grid[lvl].get("is_active") and grid[lvl].get("enabled", True) is not False
                 ]
                 if remaining:
                     vol_share = round(skipped_vol / len(remaining), 4)
@@ -301,7 +309,7 @@ class AverageManager:
             return False
 
         # Находим крайний (наиболее глубокий) активный уровень сетки, еще не прошедший пилинг в этом цикле
-        active_levels = [int(k) for k, v in grid.items() if v.get("is_active") and not v.get("peeled")]
+        active_levels = [int(k) for k, v in grid.items() if v.get("is_active") and not v.get("peeled") and v.get("enabled", True) is not False]
         if not active_levels:
             return False
 

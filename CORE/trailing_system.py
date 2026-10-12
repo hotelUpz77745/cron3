@@ -237,10 +237,10 @@ class BaseTrailingSystem:
         # Отслеживаем максимальную просадку в рамках позиции
         state_trailing["max_drawdown"] = max(state_trailing.get("max_drawdown", 0.0), drawdown_pct)
 
-        # Сортируем неисполненные уровни (исключая начальный уровень 0)
+        # Сортируем неисполненные уровни (исключая начальный уровень 0 и отключенные уровни enabled=False)
         unexecuted_levels = [
             lvl_str for lvl_str in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
-            if lvl_str != "0" and not grid[lvl_str].get("is_active")
+            if lvl_str != "0" and not grid[lvl_str].get("is_active") and grid[lvl_str].get("enabled", True) is not False
         ]
 
         if not unexecuted_levels:

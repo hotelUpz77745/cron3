@@ -307,6 +307,17 @@ class StrategyApplicator:
                                     armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
                                     if isinstance(armed_dict, dict) and g_idx in armed_dict:
                                         armed_dict.pop(g_idx, None)
+                            elif new_side["grid"][g_idx].get("enabled", True) is False:
+                                new_side["grid"][g_idx]["is_active"] = False
+                                new_side["grid"][g_idx]["is_armed"] = False
+                                new_side["grid"][g_idx]["price"] = None
+                                new_side["grid"][g_idx]["activation_price"] = None
+                                new_side["grid"][g_idx].pop("armed_at_drawdown", None)
+                                new_side["grid"][g_idx].pop("armed_timestamp", None)
+                                if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
+                                    armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
+                                    if isinstance(armed_dict, dict) and g_idx in armed_dict:
+                                        armed_dict.pop(g_idx, None)
 
                 # Жесткий инвариант для STRKUSDT SHORT в позиции:
                 # Уровни 0, 1, 2, 3, 4 уже исполнены и сокращены.
