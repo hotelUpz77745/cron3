@@ -1677,14 +1677,14 @@ class TelegramReceiver:
             target_uid = parts[1] if len(parts) > 1 and parts[1] else None
             current_uid, univ_name, _, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
             set_user_universe_id(callback.from_user.id, current_uid)
-            msg = await callback.message.answer(f"⏳ Генерация графика эквити для <code>{current_uid}</code>...", parse_mode="HTML")
+            msg = await callback.message.answer(f"⏳ Генерация графика Net Profit для <code>{current_uid}</code>...", parse_mode="HTML")
             try:
                 plot_path = generate_equity_curve(universe_id=current_uid)
                 if plot_path and os.path.exists(plot_path):
                     await msg.delete()
                     await callback.message.answer_photo(
                         FSInputFile(plot_path),
-                        caption=f"📈 <b>Кривая баланса и эквити</b>: <b>{univ_name}</b> (<code>{current_uid}</code>)",
+                        caption=f"📈 <b>Кривая чистого Net Profit & Эквити</b>: <b>{univ_name}</b> (<code>{current_uid}</code>)",
                         parse_mode="HTML"
                     )
                 else:
@@ -2508,20 +2508,6 @@ class TelegramReceiver:
                 except Exception as e:
                     logger.error(f"Error reading per_coin data for {symbol}: {e}")
 
-            # Автоматическая генерация и отправка графика движения баланса:
-            try:
-                plot_path = generate_balance_curve(symbol, universe_id=current_uid)
-                if plot_path and os.path.exists(plot_path):
-                    await callback.message.answer_photo(
-                        FSInputFile(plot_path),
-                        caption=f"📈 <b>Движение баланса</b>: <b>{symbol}</b> | {univ_name} (<code>{current_uid}</code>)",
-                        parse_mode="HTML"
-                    )
-                else:
-                    await callback.message.answer(f"❌ Не удалось сгенерировать график баланса для {symbol} ({current_uid}).")
-            except Exception as e:
-                logger.error(f"Error generating coin balance plot: {e}")
-                await callback.message.answer(f"❌ Ошибка генерации графика для {symbol}: {e}")
 
         @self.dp.message(F.text == "⚙️ Set Coins")
         async def on_set_coins(message: Message, state: FSMContext):

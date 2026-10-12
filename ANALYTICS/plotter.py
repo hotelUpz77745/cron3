@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 try:
+    import numpy as np
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -67,7 +68,11 @@ def _resolve_paths(universe_id: Optional[str] = None):
 
 
 def generate_equity_curve(universe_id: Optional[str] = None) -> str:
-    """Генерирует график движения баланса (от стартового с учетом суммарного Net Profit)."""
+    """
+    Генерирует график чистого Net Profit и эквити баланса.
+    Кривая строится строго по чистому Net Profit с учетом комиссий, фандинга и
+    текущей плавающей просадки (unrealized_pnl) в финальной точке.
+    """
     if not MATPLOTLIB_AVAILABLE:
         return ""
 
@@ -76,6 +81,13 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
 
     start_balance = 57.0
     strat_symbols = set()
+    iter_start_ts = None
+    realized_gross = 0.0
+    realized_net = 0.0
+    unrealized = 0.0
+    net_profit_final = 0.0
+    cur_balance = 57.0
+
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
@@ -83,15 +95,18 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                 start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
                 strat_symbols = set(data.get("per_coin", {}).keys()) | set(data.get("historical_symbols", []))
                 iter_start_ts = data.get("iteration_start_ts", data.get("first_trade_ts"))
+                realized_gross = float(data.get("realized_pnl_usdt", 0.0))
+                realized_net = float(data.get("realized_pnl_net_usdt", realized_gross))
+                unrealized = float(data.get("unrealized_pnl_usdt", 0.0))
+                net_profit_final = float(data.get("net_profit_usdt", realized_net + unrealized))
+                cur_balance = float(data.get("cur_balance_usdt", start_balance + net_profit_final))
         except Exception:
             pass
 
     start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0) if iter_start_ts else None
 
-    times = []
-    balances = []
-    current_balance = start_balance
-
+    # Чтение сделок из леджера
+    raw_trades = []
     if csv_path.exists():
         try:
             with open(csv_path, mode="r", encoding="utf-8") as f:
@@ -100,8 +115,6 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                 if header:
                     header_lower = [h.strip().lower() for h in header]
                     sym_idx = header_lower.index("symbol") if "symbol" in header_lower else (1 if "id" in header_lower else 0)
-                    has_bal = "balance" in header_lower
-                    bal_idx = header_lower.index("balance") if has_bal else -1
 
                     pnl_idx = -1
                     for cand in ["pnl (usdt)", "pnl", "pnl(usdt)"]:
@@ -139,50 +152,123 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                             continue
 
                         try:
-                            if has_bal and not is_shared_ledger and len(row) > bal_idx and row[bal_idx].strip() != "":
-                                current_balance = float(row[bal_idx])
-                            else:
-                                pnl = float(row[pnl_idx])
-                                current_balance += pnl
+                            pnl = float(row[pnl_idx])
                         except ValueError:
                             continue
 
-                        times.append(dt)
-                        balances.append(current_balance)
+                        raw_trades.append((dt, pnl))
         except Exception:
             pass
 
     now = datetime.now()
-    if not times:
-        times = [now - timedelta(hours=3), now]
-        balances = [start_balance, current_balance]
+    times = []
+    net_profits = []
+
+    if not raw_trades:
+        first_t = start_dt if start_dt else (now - timedelta(hours=3))
+        times = [first_t, now]
+        net_profits = [0.0, net_profit_final]
     else:
-        times.insert(0, times[0] - timedelta(hours=1))
-        balances.insert(0, start_balance)
+        # Масштабируем промежуточный гросс-профит сделок к чистому реализованному Net PnL (за вычетом комиссий/фандинга)
+        sum_gross = sum(p for _, p in raw_trades)
+        net_scale = (realized_net / sum_gross) if (sum_gross != 0.0 and abs(sum_gross) > 1e-4) else 1.0
+
+        cum_net = 0.0
+        first_t = raw_trades[0][0] - timedelta(minutes=30)
+        times.append(first_t)
+        net_profits.append(0.0)
+
+        for dt, pnl in raw_trades:
+            trade_net = pnl * net_scale if (sum_gross != 0.0 and abs(sum_gross) > 1e-4) else (pnl + (realized_net - sum_gross) / len(raw_trades))
+            cum_net += trade_net
+            times.append(dt)
+            net_profits.append(round(cum_net, 4))
+
+        # Фиксируем последнюю закрытую сделку строго на realized_net
+        net_profits[-1] = realized_net
+
+        # Финальная точка отражает реальный Net Profit с учетом открытой плавающей просадки
         times.append(now)
-        balances.append(current_balance)
+        net_profits.append(net_profit_final)
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(times, balances, color="#2196F3", linewidth=2.5, label="Баланс (USDT)")
-    plt.fill_between(times, balances, min(balances), color="#2196F3", alpha=0.12)
+    # Построение графика в темной теме
+    plt.style.use("dark_background")
+    fig, ax1 = plt.subplots(figsize=(11, 5.8), dpi=130)
+    fig.patch.set_facecolor("#0F131A")
+    ax1.set_facecolor("#161B24")
 
-    min_b = min(balances)
-    max_b = max(balances)
-    spread = max_b - min_b
-    pad = 1.0 if spread < 5 else (5.0 if spread < 20 else 10.0)
-    plt.ylim(min_b - pad, max_b + pad)
+    # Основная кривая Net Profit
+    ax1.plot(times, net_profits, color="#29B6F6", linewidth=2.4, label="Чистый Net Profit", zorder=4)
 
-    title_u = f" [{universe_id}]" if universe_id else " [Global]"
-    plt.title(f"Кривая баланса и эквити{title_u}", fontsize=15, pad=12, fontweight="bold")
-    plt.xlabel("Дата / Время", fontsize=11)
-    plt.ylabel("Баланс (USDT)", fontsize=11)
-    plt.grid(True, linestyle="--", alpha=0.6)
-    plt.xticks(rotation=45)
-    plt.tight_layout()
+    # Пунктирная нулевая линия и заливка областей профита/просадки
+    ax1.axhline(0.0, color="#78909C", linestyle="--", linewidth=1.2, alpha=0.7, zorder=3)
+    np_arr = np.array(net_profits) if 'np' in globals() else None
+    if np_arr is not None:
+        ax1.fill_between(times, np_arr, 0.0, where=(np_arr >= 0), color="#00D26A", alpha=0.18, interpolate=True)
+        ax1.fill_between(times, np_arr, 0.0, where=(np_arr < 0), color="#FF5252", alpha=0.18, interpolate=True)
 
-    plt.savefig(plot_file, dpi=120)
-    plt.close()
+    # Финальная точка с плашкой значения
+    end_color = "#00D26A" if net_profit_final >= 0 else "#FF5252"
+    ax1.scatter([times[-1]], [net_profits[-1]], color=end_color, s=60, zorder=6, edgecolors="white", linewidths=1.5)
+    sign = "+" if net_profit_final >= 0 else ""
+    callout_txt = f"{sign}{net_profit_final:.2f} USDT"
+    ax1.annotate(
+        callout_txt,
+        xy=(times[-1], net_profits[-1]),
+        xytext=(-70, 15 if net_profit_final < 0 else -20),
+        textcoords="offset points",
+        color="white",
+        fontweight="bold",
+        fontsize=10,
+        bbox=dict(boxstyle="round,pad=0.3", fc=end_color, ec="none", alpha=0.85),
+        arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.2", color=end_color, lw=1.2)
+    )
+
+    # Границы шкалы
+    min_np = min(net_profits)
+    max_np = max(net_profits)
+    span = max_np - min_np
+    pad = max(2.0, span * 0.15)
+    ax1.set_ylim(min_np - pad, max_np + pad)
+
+    # Вторичная правая шкала: Баланс / Эквити (Старт + Net Profit)
+    ax2 = ax1.twinx()
+    ax2.set_ylim(min_np - pad + start_balance, max_np + pad + start_balance)
+    ax2.set_ylabel("Баланс / Эквити (USDT)", color="#90CAF9", fontsize=10, labelpad=8)
+    ax2.tick_params(axis="y", labelcolor="#90CAF9")
+
+    # Заголовки и сетка
+    title_u = f" [{universe_id}]" if universe_id else ""
+    ax1.set_title(f"Кривая чистого Net Profit & Эквити{title_u}", fontsize=14, fontweight="bold", pad=15, color="#ECEFF1")
+    ax1.set_xlabel("Дата / Время", fontsize=10, color="#B0BEC5")
+    ax1.set_ylabel("Чистый Net Profit (USDT)", fontsize=10, color="#ECEFF1")
+    ax1.grid(True, linestyle=":", alpha=0.25, color="#CFD8DC")
+    ax1.tick_params(axis="x", rotation=30, labelsize=9, colors="#B0BEC5")
+    ax1.tick_params(axis="y", labelsize=9, colors="#ECEFF1")
+
+    # Информационный блок в углу
+    stats_box = (
+        f"ИТОГИ:\n"
+        f"• Чистый Net Profit: {net_profit_final:+.2f} USDT\n"
+        f"• Реализованный Net: {realized_net:+.2f} USDT\n"
+        f"• Плавающий PnL (Float): {unrealized:+.2f} USDT\n"
+        f"• Баланс: {cur_balance:.2f} $ (Старт: {start_balance:.2f} $)"
+    )
+    ax1.text(
+        0.02, 0.95, stats_box,
+        transform=ax1.transAxes,
+        verticalalignment="top",
+        fontsize=9,
+        family="monospace",
+        color="#ECEFF1",
+        bbox=dict(boxstyle="round,pad=0.5", fc="#1E2633", ec="#37474F", alpha=0.9)
+    )
+
+    fig.tight_layout()
+    plt.savefig(plot_file, dpi=130)
+    plt.close(fig)
     return str(plot_file)
+
 
 
 def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> str:
