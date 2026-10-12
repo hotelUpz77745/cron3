@@ -75,6 +75,33 @@ class TestAnalyticsFractality(unittest.TestCase):
         self.assertNotIn("MDME", btc)
         self.assertNotIn("epoch_state", btc)
 
+    def test_universe_analytics_menu_structure(self):
+        """Проверяет объединенное меню аналитики вселенной: Рейтинг наверху, Лидерборд и Смена вселенной на месте, нет Global Analytics."""
+        text, kb = self.receiver._render_universe_analytics(12345)
+        self.assertIn("АНАЛИТИКА КУПОЛА СТРАТЕГИИ", text)
+
+        all_buttons = [btn.text for row in kb.inline_keyboard for btn in row]
+        all_cbs = [btn.callback_data for row in kb.inline_keyboard for btn in row]
+
+        # 1. Первая кнопка на самом верху - Рейтинг монет
+        self.assertIn("Рейтинг монет", kb.inline_keyboard[0][0].text)
+        self.assertTrue(kb.inline_keyboard[0][0].callback_data.startswith("analytics_ranking:"))
+
+        # 2. Кнопка смены вселенной и лидерборд присутствуют
+        self.assertIn("univ_page:1", all_cbs)
+        self.assertIn("analytics_bb_leaderboard", all_cbs)
+
+        # 3. Лишние кнопки убраны (Global Analytics, переход во вселенную, возврат к бигборду)
+        self.assertFalse(any("global" in cb.lower() for cb in all_cbs))
+        self.assertFalse(any(cb.startswith("analytics_dome:") for cb in all_cbs))
+        self.assertFalse(any("биг борд" in btn.lower() for btn in all_buttons))
+
+        # 4. Основные разделы аналитики доступны
+        self.assertTrue(any("монетам" in btn.lower() for btn in all_buttons))
+        self.assertTrue(any("эквити" in btn.lower() for btn in all_buttons))
+        self.assertTrue(any("лента сделок" in btn.lower() for btn in all_buttons))
+        self.assertTrue(any("отчет" in btn.lower() for btn in all_buttons))
+
 
 if __name__ == '__main__':
     unittest.main()
