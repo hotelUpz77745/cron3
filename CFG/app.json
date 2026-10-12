@@ -46,7 +46,6 @@
             ],
             "mode": "classic",
             "sizing_mode": "static",
-            "invest_size": 151.0,
             "analytics": {
                 "start_balance_usdt": 151.0
             }

@@ -71,6 +71,21 @@ class RadarNavigator:
         self.symbols_pending_rotation: set[str] = set()
         self.last_rotation_ts_by_strat: Dict[str, float] = {}
 
+    def is_symbol_pending_rotation(self, symbol: str) -> bool:
+        """Проверяет, ожидает ли монета ротации Штурмана."""
+        return symbol in self.symbols_pending_rotation
+
+    def cancel_timeout_task(self, req_id: str) -> None:
+        """Отменяет фоновый таймаут-таск advisory ротации."""
+        task = self.timeout_tasks.pop(req_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    async def apply_rotation(self, *args, **kwargs) -> None:
+        """Хук применения ротации (демонтирован)."""
+        logger.info("[RadarNavigator] Запрос на ротацию проигнорирован: ротация демонтирована.")
+        return
+
     def is_enabled(self) -> bool:
         return self.enabled and self.mode != "disabled"
 

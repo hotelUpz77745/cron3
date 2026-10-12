@@ -289,6 +289,9 @@ class StrategyApplicator:
                 ]:
                     if state_key in exist_side:
                         new_side[state_key] = copy.deepcopy(exist_side[state_key])
+                tsd = getattr(strategy, "trend_size_cfg", {}) or {}
+                if not tsd.get("enabled", False) or tsd.get("mode") == "static":
+                    new_side["eff_invest"] = float(new_side.get("invest_size", 0.0))
                 if "grid" in exist_side and "grid" in new_side:
                     for g_idx, g_val in exist_side["grid"].items():
                         if g_idx in new_side["grid"] and isinstance(g_val, dict):

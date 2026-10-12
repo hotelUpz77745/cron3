@@ -484,9 +484,15 @@ class BotCore:
             logger.warning(f"[{symbol}] {side}: Entry aborted — Close All cooldown is currently active.")
             return
 
-        if hasattr(self, "radar_navigator") and self.radar_navigator and self.radar_navigator.is_symbol_pending_rotation(symbol):
-            logger.info(f"[{symbol}] Вход в позицию отложен: монета ожидает решения по ротации Штурмана (advisory timeout).")
-            return
+        if hasattr(self, "radar_navigator") and self.radar_navigator:
+            is_pending = False
+            if hasattr(self.radar_navigator, "is_symbol_pending_rotation"):
+                is_pending = bool(self.radar_navigator.is_symbol_pending_rotation(symbol))
+            elif symbol in getattr(self.radar_navigator, "symbols_pending_rotation", set()):
+                is_pending = True
+            if is_pending:
+                logger.info(f"[{symbol}] Вход в позицию отложен: монета ожидает решения по ротации Штурмана (advisory timeout).")
+                return
 
         state = self.fsm_states[symbol][side]
         if getattr(state, "is_closing", False) is True:
