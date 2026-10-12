@@ -64,12 +64,48 @@
       "trailing_ratchet": {
         "enabled": true,
         "levels": [
-          { "activation": 12.0, "floor": 8.0, "min_age_hours": 24.0, "enabled": true, "_desc": "L0: Prolonged stagnation (24h+)" },
-          { "activation": 20.0, "floor": 16.0, "min_age_hours": 0.0, "enabled": true, "_desc": "L1: Elevated start ($20 -> $16)" },
-          { "activation": 32.0, "floor": 26.0, "min_age_hours": 0.0, "enabled": true, "_desc": "L2: Confident Fibo wave ($32 -> $26)" },
-          { "activation": 50.0, "floor": 42.0, "min_age_hours": 0.0, "enabled": true, "_desc": "L3: Strong trend ($50 -> $42)" },
-          { "activation": 80.0, "floor": 68.0, "min_age_hours": 0.0, "enabled": true, "_desc": "L4: Impulse pump ($80 -> $68)" },
-          { "activation": 120.0, "floor": 105.0, "min_age_hours": 0.0, "enabled": true, "_desc": "L5: Mega rally ($120 -> $105)" }
+          {
+            "activation": 12.0,
+            "floor": 8.0,
+            "min_age_hours": 24.0,
+            "enabled": true,
+            "_desc": "L0: Prolonged stagnation (24h+)"
+          },
+          {
+            "activation": 20.0,
+            "floor": 16.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L1: Elevated start ($20 -> $16)"
+          },
+          {
+            "activation": 32.0,
+            "floor": 26.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L2: Confident Fibo wave ($32 -> $26)"
+          },
+          {
+            "activation": 50.0,
+            "floor": 42.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L3: Strong trend ($50 -> $42)"
+          },
+          {
+            "activation": 80.0,
+            "floor": 68.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L4: Impulse pump ($80 -> $68)"
+          },
+          {
+            "activation": 120.0,
+            "floor": 105.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L5: Mega rally ($120 -> $105)"
+          }
         ]
       }
     },
@@ -79,7 +115,7 @@
     }
   },
   "LONG": {
-    "invest_size": 600.0,
+    "invest_size": 400.0,
     "grid": {
       "0": {
         "role": "L0: Скальп-ядро (Зона 1: отступ 0.0%, объем 5.0%)",
@@ -211,5 +247,6 @@
     "min_burn_level": 4,
     "min_drawdown_pct": 3.0,
     "max_slice_pct": 25.0
-  }
+  },
+  "invest_size": 400.0
 }
