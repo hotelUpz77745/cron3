@@ -992,9 +992,13 @@ class TelegramReceiver:
                                 grid = cfg["grid"]
                                 indents = []
                                 super_indents = []
-                                for k in sorted(grid.keys(), key=lambda x: int(x)):
-                                    indents.append(str(grid[k]["indent"]))
-                                    si = grid[k].get("super_indent")
+                                for k in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
+                                    lvl_d = grid[k]
+                                    if isinstance(lvl_d, dict) and (lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None):
+                                        indents.append("off")
+                                    else:
+                                        indents.append(str(lvl_d.get("indent") if isinstance(lvl_d, dict) else lvl_d))
+                                    si = lvl_d.get("super_indent") if isinstance(lvl_d, dict) else None
                                     super_indents.append(str(si) if si is not None else "-")
                                 lines.append(f"    ├ Grid: [{', '.join(indents)}]")
                                 
@@ -1005,8 +1009,10 @@ class TelegramReceiver:
                                 
                                 tp_map = cfg["tp_map"]
                                 tps = []
-                                for k in sorted(tp_map.keys(), key=lambda x: int(x)):
-                                    tps.append(str(tp_map[k]["indent"]))
+                                for k in sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x):
+                                    tp_d = tp_map[k]
+                                    raw_tp_ind = tp_d.get("indent") if isinstance(tp_d, dict) else tp_d
+                                    tps.append(str(raw_tp_ind) if raw_tp_ind is not None else "-")
                                 lines.append(f"    └ TP: [{', '.join(tps)}]")
                                 
                         msg_text = "\n".join(lines)
@@ -3028,22 +3034,34 @@ class TelegramReceiver:
                 # Fetch all grid levels for display
                 grid_cfg = side_data.get("grid", {})
                 grid_lines = ["📊 <b>Grid (Avg):</b>"]
-                for k in sorted(grid_cfg.keys(), key=lambda x: int(x)):
+                for k in sorted(grid_cfg.keys(), key=lambda x: int(x) if x.isdigit() else x):
                     lvl_data = grid_cfg[k]
-                    vol = lvl_data.get('volume', 0)
-                    ind = lvl_data.get('indent', 0)
+                    if not isinstance(lvl_data, dict):
+                        continue
+                    en_lvl = lvl_data.get("enabled", True)
+                    vol = lvl_data.get('volume')
+                    ind = lvl_data.get('indent')
                     si = lvl_data.get('super_indent')
-                    si_text = f" (Super: {si})" if si is not None else ""
-                    grid_lines.append(f"  • Lvl {k}: Vol <b>{vol}</b> | Indent <b>{ind}</b>{si_text}")
+                    if en_lvl is False or (ind is None and vol is None):
+                        grid_lines.append(f"  • Lvl {k}: [Отключен/Резерв]")
+                    else:
+                        vol_str = f"{vol}" if vol is not None else "-"
+                        ind_str = f"{ind}" if ind is not None else "-"
+                        si_text = f" (Super: {si})" if si is not None else ""
+                        grid_lines.append(f"  • Lvl {k}: Vol <b>{vol_str}</b> | Indent <b>{ind_str}</b>{si_text}")
                 
                 # Fetch all TP levels for display
                 tp_cfg = side_data.get("tp_map", {})
                 tp_lines = ["🎯 <b>Take Profits (TP):</b>"]
-                for k in sorted(tp_cfg.keys(), key=lambda x: int(x)):
+                for k in sorted(tp_cfg.keys(), key=lambda x: int(x) if x.isdigit() else x):
                     lvl_data = tp_cfg[k]
-                    ind = lvl_data.get('indent', 0)
-                    fb = lvl_data.get('fallback_indent', 0)
-                    tp_lines.append(f"  • Lvl {k}: Indent <b>{ind}</b> | Fallback <b>{fb}</b>")
+                    if not isinstance(lvl_data, dict):
+                        continue
+                    ind = lvl_data.get('indent')
+                    fb = lvl_data.get('fallback_indent')
+                    ind_str = f"{ind}" if ind is not None else "-"
+                    fb_str = f"{fb}" if fb is not None else "-"
+                    tp_lines.append(f"  • Lvl {k}: Indent <b>{ind_str}</b> | Fallback <b>{fb_str}</b>")
 
                 tp_purpose = side_data.get("tp_purpose", "self")
                 
@@ -3206,14 +3224,15 @@ class TelegramReceiver:
             is_act = fsm_state.grid.get(str(lvl), {}).get("is_active", False) if fsm_state else False
             warn = "\n\n⚠️ <i>Внимание: Этот уровень уже отработал! Сброс цены не произойдет. Новые настройки применятся только для следующих циклов позиции.</i>" if is_act else ""
             
-            runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side, {})
             grid_cfg = runtime_cfg.get("grid", {}).get(str(lvl), {})
-            cur_vol = grid_cfg.get("volume", 0)
-            cur_ind = grid_cfg.get("indent", 0)
+            cur_vol = grid_cfg.get("volume")
+            cur_ind = grid_cfg.get("indent")
             
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
+            vol_disp = cur_vol if cur_vol is not None else "[Отключен/None]"
+            ind_disp = cur_ind if cur_ind is not None else "[Отключен/None]"
             msg = f"Усреднение (Set Avg) для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\n"
-            msg += f"Текущие значения:\n🔹 Объем: <b>{cur_vol}</b>\n🔹 Индент: <b>{cur_ind}</b>\n\nВыберите параметр для изменения:"
+            msg += f"Текущие значения:\n🔹 Объем: <b>{vol_disp}</b>\n🔹 Индент: <b>{ind_disp}</b>\n\nВыберите параметр для изменения:"
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -3345,12 +3364,14 @@ class TelegramReceiver:
             
             runtime_cfg = self.bot_core.runtime_configs.get(symbol, {}).get(side, {})
             tp_cfg = runtime_cfg.get("tp_map", {}).get(str(lvl), {})
-            cur_ind = tp_cfg.get("indent", 0)
-            cur_fb = tp_cfg.get("fallback_indent", 0)
+            cur_ind = tp_cfg.get("indent")
+            cur_fb = tp_cfg.get("fallback_indent")
             
             await state.update_data(edit_symbol=symbol, edit_side=side, edit_lvl=lvl)
+            ind_disp = cur_ind if cur_ind is not None else "[None]"
+            fb_disp = cur_fb if cur_fb is not None else "[None]"
             msg = f"Установка тейк-профита для <b>{symbol} {side} | Уровень {lvl}</b>.{warn}\n\n"
-            msg += f"Текущие значения:\n🔹 Indent: <b>{cur_ind}</b>\n🔹 Fallback: <b>{cur_fb}</b>\n\nВыберите параметр для изменения:"
+            msg += f"Текущие значения:\n🔹 Indent: <b>{ind_disp}</b>\n🔹 Fallback: <b>{fb_disp}</b>\n\nВыберите параметр для изменения:"
             
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [

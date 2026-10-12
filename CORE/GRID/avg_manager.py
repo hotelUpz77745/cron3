@@ -39,7 +39,7 @@ class AverageManager:
             
         needs_save = False
         for level_str, level_data in grid.items():
-            if level_data.get("enabled", True) is False:
+            if level_data.get("enabled", True) is False or (level_str != "0" and level_data.get("indent") is None):
                 level_data["price"] = None
                 level_data["activation_price"] = None
                 level_data["is_armed"] = False
@@ -114,7 +114,7 @@ class AverageManager:
         if isinstance(armed_dict, dict):
             for lvl_k, lvl_d in grid.items():
                 if isinstance(lvl_d, dict):
-                    if lvl_d.get("enabled", True) is False or lvl_d.get("is_active"):
+                    if lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None or lvl_d.get("is_active"):
                         lvl_d["is_armed"] = False
                         lvl_d.pop("armed_at_drawdown", None)
                         lvl_d.pop("armed_timestamp", None)
@@ -163,7 +163,7 @@ class AverageManager:
         # 4. Обработка пропущенных уровней (avg_free_volume_behavior)
         if skipped_levels:
             behavior = getattr(state, "avg_free_volume_behavior", "distribute_remaining")
-            skipped_vol = sum(float(grid[sk].get("volume", 0.0)) for sk in skipped_levels)
+            skipped_vol = sum(float(grid[sk].get("volume") or 0.0) for sk in skipped_levels if isinstance(grid.get(sk), dict) and grid[sk].get("enabled", True) is not False)
             now_sec = time.time()
             for sk in skipped_levels:
                 grid[sk]["is_active"] = True
@@ -172,7 +172,7 @@ class AverageManager:
 
             # Режим 2: accumulate_current — вливаем весь пропущенный объем в ближайший сработавший уровень
             if behavior == "accumulate_current":
-                level_data["volume"] = round(float(level_data.get("volume", 0.0)) + skipped_vol, 4)
+                level_data["volume"] = round(float(level_data.get("volume") or 0.0) + skipped_vol, 4)
                 logger.info(
                     f"[{symbol}] {side} 📦 [VOLUME ACCUMULATED] "
                     f"Added {skipped_vol:.2f}% from skipped levels {skipped_levels} into triggered level {candidate_level} "
@@ -183,12 +183,15 @@ class AverageManager:
                 cand_idx = int(candidate_level) if candidate_level.isdigit() else -1
                 remaining = [
                     lvl for lvl in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
-                    if (int(lvl) if lvl.isdigit() else -1) > cand_idx and not grid[lvl].get("is_active") and grid[lvl].get("enabled", True) is not False
+                    if (int(lvl) if lvl.isdigit() else -1) > cand_idx
+                    and not grid[lvl].get("is_active")
+                    and grid[lvl].get("enabled", True) is not False
+                    and grid[lvl].get("indent") is not None
                 ]
                 if remaining:
                     vol_share = round(skipped_vol / len(remaining), 4)
                     for rem_lvl in remaining:
-                        grid[rem_lvl]["volume"] = round(float(grid[rem_lvl].get("volume", 0.0)) + vol_share, 4)
+                        grid[rem_lvl]["volume"] = round(float(grid[rem_lvl].get("volume") or 0.0) + vol_share, 4)
                     logger.info(
                         f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: {behavior}] "
                         f"Distributed {skipped_vol:.2f}% from skipped levels {skipped_levels} across remaining {remaining} "
@@ -232,7 +235,7 @@ class AverageManager:
                 invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
             else:
                 invest_size = 100.0
-        volume_pct = float(level_data["volume"])
+        volume_pct = float(level_data.get("volume") or 0.0)
         
         # 1. ОТМЕНА СТАРЫХ ЛИМИТНЫХ ОРДЕРОВ (ВКЛЮЧАЯ ТЕЙК ПРОФИТ) ДО УСРЕДНЕНИЯ
         logger.info(f"[{symbol}] {side} Canceling all limit orders before averaging...")
@@ -368,7 +371,7 @@ class AverageManager:
                     invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
                 else:
                     invest_size = 100.0
-            vol_pct = float(level_data.get("volume", 0.0))
+            vol_pct = float(level_data.get("volume") or 0.0)
             raw_qty = TradeMath.calculate_order_volume(invest_size, vol_pct, current_price, spec_data, symbol)
             raw_qty = min(raw_qty * peel_ratio, abs(state.total_volume))
 

@@ -804,8 +804,8 @@ class AnalyticsManager:
                         try:
                             import json as _json_local
                             rt_data = _json_local.loads(rt_path.read_text(encoding="utf-8"))
-                            local_long_vol = float(rt_data.get("LONG", {}).get("volume", 0.0))
-                            local_short_vol = float(rt_data.get("SHORT", {}).get("volume", 0.0))
+                            local_long_vol = float(rt_data.get("LONG", {}).get("volume") or 0.0)
+                            local_short_vol = float(rt_data.get("SHORT", {}).get("volume") or 0.0)
                             
                             rest_details = coin_details.get(sym, {})
                             rest_long_amt = abs(rest_details.get("long_amt", 0.0))

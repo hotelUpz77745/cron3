@@ -240,7 +240,11 @@ class BaseTrailingSystem:
         # Сортируем неисполненные уровни (исключая начальный уровень 0 и отключенные уровни enabled=False)
         unexecuted_levels = [
             lvl_str for lvl_str in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
-            if lvl_str != "0" and not grid[lvl_str].get("is_active") and grid[lvl_str].get("enabled", True) is not False
+            if lvl_str != "0"
+            and isinstance(grid.get(lvl_str), dict)
+            and not grid[lvl_str].get("is_active")
+            and grid[lvl_str].get("enabled", True) is not False
+            and (grid[lvl_str].get("super_indent") is not None or grid[lvl_str].get("indent") is not None)
         ]
 
         if not unexecuted_levels:

@@ -56,9 +56,18 @@ class QuantCalculator:
                 grid = long_cfg["grid"]
                 loaded_steps = []
                 loaded_vols = []
-                for k in sorted(grid.keys(), key=lambda x: int(x)):
-                    loaded_steps.append(float(grid[k]["indent"]))
-                    loaded_vols.append(float(grid[k]["volume"]))
+                for k in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
+                    lvl_info = grid[k]
+                    if not isinstance(lvl_info, dict):
+                        continue
+                    if lvl_info.get("enabled", True) is False:
+                        continue
+                    raw_indent = lvl_info.get("indent")
+                    raw_vol = lvl_info.get("volume")
+                    if raw_indent is None or raw_vol is None:
+                        continue
+                    loaded_steps.append(float(raw_indent))
+                    loaded_vols.append(float(raw_vol))
                 
                 if not grid_steps and loaded_steps:
                     grid_steps = loaded_steps

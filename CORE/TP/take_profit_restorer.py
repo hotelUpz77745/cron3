@@ -232,7 +232,7 @@ async def standalone_restore():
             level = "0"
 
         tp_cfg = tp_map.get(level, {})
-        indent = float(tp_cfg.get("indent", 2.0))
+        indent = float(tp_cfg.get("indent") or tp_cfg.get("fallback_indent") or 2.0)
         tp_price = TradeMath.calculate_take_profit_price(entry, indent, side, spec_data, sym)
         vol_float = abs(amt)
         volume = TradeMath.round_qty(vol_float, spec_data, sym)

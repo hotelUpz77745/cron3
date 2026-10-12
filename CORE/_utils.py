@@ -54,7 +54,9 @@ class TradeMath:
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
         price_precision = precisions[1] if precisions else (8 if avg_entry_price < 1.0 else 2)
         
-        indent_abs = abs(tp_percent_indent)
+        if tp_percent_indent is None:
+            return avg_entry_price
+        indent_abs = abs(float(tp_percent_indent))
         
         if side.upper() == "LONG":
             tp_price = avg_entry_price * (1 + indent_abs / 100.0)
@@ -136,7 +138,10 @@ class RiskCalculatingUtils:
         Определяет текущий активный уровень сетки на основе флагов is_active.
         Возвращает строковый ключ уровня (например, "0", "1", "2").
         """
-        active_levels = [int(k) for k, v in grid.items() if v.get("is_active")]
+        active_levels = [
+            int(k) for k, v in grid.items()
+            if isinstance(v, dict) and v.get("is_active") and v.get("enabled", True) is not False and str(k).isdigit()
+        ]
         return str(max(active_levels)) if active_levels else "0"
 
 

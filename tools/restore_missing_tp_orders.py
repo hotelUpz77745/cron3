@@ -100,7 +100,7 @@ async def restore_missing_tp():
             level = "0"
             
         tp_cfg = tp_map.get(level, {})
-        indent = float(tp_cfg.get("indent", 2.0))
+        indent = float(tp_cfg.get("indent") or tp_cfg.get("fallback_indent") or 2.0)
         print(f"   -> Уровень сетки: {level}, TP indent: {indent}%")
 
         # Расчет цены TP от цены входа

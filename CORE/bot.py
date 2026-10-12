@@ -527,7 +527,7 @@ class BotCore:
                     logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied: x{size_mult:.2f} -> invest_size={invest_size:.2f} USDT (closes: {closed_count})")
 
             grid_0 = side_cfg["grid"]["0"]
-            volume_pct = grid_0["volume"]
+            volume_pct = float(grid_0.get("volume") or 0.0)
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
             
             order_side = "BUY" if side == "LONG" else "SELL"

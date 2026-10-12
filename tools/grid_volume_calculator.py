@@ -151,7 +151,7 @@ def audit_repository_universes() -> Dict[str, Dict]:
             for side in ["LONG", "SHORT"]:
                 audited_count += 1
                 grid = data.get(side, {}).get("grid", {})
-                tot_vol = sum(float(v.get("volume", 0.0)) for v in grid.values())
+                tot_vol = sum(float(v.get("volume") or 0.0) for v in grid.values() if isinstance(v, dict) and v.get("enabled", True) is not False)
                 diff = 100.0 - tot_vol
                 status = "✅ OK" if abs(diff) < 0.05 else "❌ ERROR"
                 print(f"{side + ' (_base default)':<40} | {len(grid):<8} | {tot_vol:>10.2f} %   | {diff:>+8.2f} %   | {status}")
@@ -172,7 +172,7 @@ def audit_repository_universes() -> Dict[str, Dict]:
 
                 for grid_label, grid in grids_to_check:
                     audited_count += 1
-                    tot_vol = sum(float(v.get("volume", 0.0)) for v in grid.values())
+                    tot_vol = sum(float(v.get("volume") or 0.0) for v in grid.values() if isinstance(v, dict) and v.get("enabled", True) is not False)
                     diff = 100.0 - tot_vol
                     status = "✅ OK" if abs(diff) < 0.05 else "❌ ХВОСТ!"
                     print(f"{grid_label:<40} | {len(grid):<8} | {tot_vol:>10.2f} %   | {diff:>+8.2f} %   | {status}")
