@@ -144,7 +144,7 @@
       "2": {
         "role": "L2: Скальп (Зона 1: отступ -8.0%, объем 6.0%)",
         "indent": -8.0,
-        "volume": 6.0,
+        "volume": 5.0,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
@@ -157,7 +157,7 @@
         "role": "L3: Буфер (Зона 2: разворот, Фибо -21.0% / курок -26.0%, объем 9.0%, Half-Peel 50%)",
         "indent": -21.0,
         "activation": -26.0,
-        "volume": 9.0,
+        "volume": 7.5,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
@@ -170,7 +170,7 @@
         "role": "L4: Буфер (Зона 2: разворот, Фибо -55.0% / курок -65.0%, объем 12.0%, Half-Peel 50%, триггер Cross-Side Recycling)",
         "indent": -55.0,
         "activation": -65.0,
-        "volume": 12.0,
+        "volume": 7.5,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
@@ -183,7 +183,7 @@
         "role": "L5: Тяжелая Артиллерия (Зона 3: глубинная броня, Фибо -144.0% / курок -155.0%, объем 25.0%, Half-Peel 50%)",
         "indent": -144.0,
         "activation": -155.0,
-        "volume": 25.0,
+        "volume": 10.0,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
@@ -194,9 +194,22 @@
       },
       "6": {
         "role": "L6: Бункер / Финал (Зона 3: глубинная броня, Фибо -340.0% / курок -360.0%, объем 35.0%, Half-Peel 50%)",
-        "indent": -340.0,
-        "activation": -360.0,
-        "volume": 35.0,
+        "indent": -360.0,
+        "activation": -380.0,
+        "volume": 15.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "peel_tp_pct": 1.6,
+        "peel_ratio": 0.5,
+        "peel_once": true,
+        "zone": 3
+      },
+      "7": {
+        "role": "L6: Бункер / Финал (Зона 3: глубинная броня, Фибо -340.0% / курок -360.0%, объем 35.0%, Half-Peel 50%)",
+        "indent": -900.0,
+        "activation": -900.0,
+        "volume": 20.0,
         "super_indent": null,
         "activated_at": null,
         "timestamp": null,
@@ -232,6 +245,10 @@
         "fallback_indent": 1.0
       },
       "6": {
+        "indent": 0.65,
+        "fallback_indent": 0.95
+      },
+      "7": {
         "indent": 0.65,
         "fallback_indent": 0.95
       }

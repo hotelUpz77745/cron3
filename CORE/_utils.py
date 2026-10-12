@@ -85,9 +85,10 @@ class TradeMath:
         indent_abs = abs(indent_pct)
         
         if side.upper() == "LONG":
-            price = initial_price * (1 - indent_abs / 100.0)
+            factor = max(0.0001, 1.0 - indent_abs / 100.0)
+            price = initial_price * factor
         elif side.upper() == "SHORT":
-            price = initial_price * (1 + indent_abs / 100.0)
+            price = initial_price * (1.0 + indent_abs / 100.0)
         else:
             price = initial_price
             
