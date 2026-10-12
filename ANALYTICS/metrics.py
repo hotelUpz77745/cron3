@@ -127,6 +127,8 @@ class AnalyticsMathEngine:
             
             realized_net = cdata.get("realized_pnl_net_usdt", 0.0)
             net_profit = cdata.get("net_profit_usdt", 0.0)
+            initial = float(data.get("start_balance_usdt", 0.0))
+            cdata["roi_pct"] = round((net_profit / initial) * 100.0, 2) if initial > 0 else 0.0
             
             cdata["max_net_profit"] = round(max(cdata.get("max_net_profit", net_profit), net_profit), 4)
             cdata["min_net_profit"] = round(min(cdata.get("min_net_profit", net_profit), net_profit), 4)

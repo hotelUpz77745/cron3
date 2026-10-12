@@ -932,6 +932,8 @@ class AnalyticsManager:
                     
                     c_drawdown = cdata.get("current_drawdown", 0.0)
                     cdata["net_profit_usdt"] = round(c_net + c_drawdown, 4)
+                    global_init = float(data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
+                    cdata["roi_pct"] = round((cdata["net_profit_usdt"] / global_init) * 100.0, 2) if global_init > 0 else 0.0
                     
                     bot_gross_profit += c_gross
                     bot_total_comm += c_comm
@@ -1202,6 +1204,9 @@ class AnalyticsManager:
                         c_data["current_grid_load_pct"] = 0.0
                         c_data["current_margin_usdt"] = 0.0
                         c_data["margin_load_pct"] = 0.0
+                s_init_coin = float(strat_data.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT))
+                c_np = float(c_data.get("net_profit_usdt", 0.0))
+                c_data["roi_pct"] = round((c_np / s_init_coin) * 100.0, 2) if s_init_coin > 0 else 0.0
                 strat_per_coin[sym] = c_data
 
             strat_data["per_coin"] = strat_per_coin

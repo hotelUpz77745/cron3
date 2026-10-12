@@ -76,7 +76,8 @@ class LeaderboardEngine:
             start_bal = float(data.get("start_balance_usdt", meta_start or 150.0))
             cur_bal = float(data.get("cur_balance_usdt", start_bal))
         net_profit = float(data.get("net_profit_usdt", 0.0))
-        realized_pnl = float(data.get("realized_pnl_usdt", 0.0))
+        realized_pnl_gross = float(data.get("realized_pnl_usdt", 0.0))
+        realized_pnl = float(data.get("realized_pnl_net_usdt", realized_pnl_gross))
         unrealized_pnl = float(data.get("unrealized_pnl_usdt", 0.0))
         max_dd_usdt = float(data.get("max_drawdown_usdt", 0.0))
         max_dd_pct = float(data.get("max_drawdown_pct", 0.0))
@@ -187,6 +188,7 @@ class LeaderboardEngine:
             "peak_age_hours": round(peak_age_h, 1),
             "net_velocity": round(net_vel, 2),
             "realized_pnl_usdt": round(realized_pnl, 2),
+            "realized_pnl_gross_usdt": round(realized_pnl_gross, 2),
             "unrealized_pnl_usdt": round(unrealized_pnl, 2),
             "max_drawdown_usdt": round(max_dd_usdt, 2),
             "max_drawdown_pct": round(max_dd_pct, 2),

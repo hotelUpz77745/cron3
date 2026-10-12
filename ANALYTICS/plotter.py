@@ -82,8 +82,11 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                 data = json.load(f)
                 start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
                 strat_symbols = set(data.get("per_coin", {}).keys()) | set(data.get("historical_symbols", []))
+                iter_start_ts = data.get("iteration_start_ts", data.get("first_trade_ts"))
         except Exception:
             pass
+
+    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0) if iter_start_ts else None
 
     times = []
     balances = []
@@ -132,6 +135,9 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
                         except ValueError:
                             continue
 
+                        if start_dt and dt < start_dt:
+                            continue
+
                         try:
                             if has_bal and not is_shared_ledger and len(row) > bal_idx and row[bal_idx].strip() != "":
                                 current_balance = float(row[bal_idx])
@@ -153,6 +159,8 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     else:
         times.insert(0, times[0] - timedelta(hours=1))
         balances.insert(0, start_balance)
+        times.append(now)
+        balances.append(current_balance)
 
     plt.figure(figsize=(10, 5))
     plt.plot(times, balances, color="#2196F3", linewidth=2.5, label="Баланс (USDT)")
@@ -194,14 +202,16 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
     start_balance = 57.0
     cdata = {}
     is_active = True
-    final_pnl = None
-    peak_pnl = None
+    final_pnl = 0.0
+    peak_pnl = 0.0
+    iter_start_ts = None
 
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
+                iter_start_ts = data.get("iteration_start_ts", data.get("first_trade_ts"))
                 cdata = data.get("per_coin", {}).get(clean_sym, {})
                 if cdata:
                     is_active = bool(cdata.get("is_active_symbol", cdata.get("is_active", True)))
@@ -209,6 +219,8 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
                     peak_pnl = float(cdata.get("max_net_profit", cdata.get("peak_net_profit_usdt", final_pnl)))
         except Exception:
             pass
+
+    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0) if iter_start_ts else None
 
     times = []
     raw_pnls = []
@@ -251,6 +263,9 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
                         except ValueError:
                             continue
 
+                        if start_dt and dt < start_dt:
+                            continue
+
                         try:
                             pnl = float(row[pnl_idx])
                         except ValueError:
@@ -263,7 +278,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
 
     now = datetime.now()
     if not times:
-        target_end_bal = round(start_balance + (final_pnl if final_pnl is not None else 0.0), 2)
+        target_end_bal = round(start_balance + final_pnl, 2)
         times = [now - timedelta(hours=3), now]
         balances = [start_balance, target_end_bal]
         current_balance = target_end_bal
@@ -275,18 +290,25 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
             cum_series.append(cum)
 
         raw_max = max(cum_series)
-        target_peak = max(peak_pnl, final_pnl, 0.0) if peak_pnl is not None else raw_max
-        target_final = final_pnl if final_pnl is not None else cum_series[-1]
+        raw_final = cum_series[-1]
+        peak_idx = cum_series.index(raw_max)
+
+        target_peak = max(peak_pnl, 0.0) if peak_pnl is not None else raw_max
+        target_final = final_pnl if final_pnl is not None else raw_final
+
+        if target_peak <= target_final:
+            target_peak = target_final + max(0.5, abs(target_final) * 0.1)
 
         balances = []
-        if raw_max > target_peak and raw_max > 0:
-            scale_ratio = target_peak / raw_max
-            for c in cum_series:
-                scaled_c = (c * scale_ratio) if c >= 0 else c
-                balances.append(start_balance + scaled_c)
-        else:
-            for c in cum_series:
-                balances.append(start_balance + c)
+        for i, c in enumerate(cum_series):
+            if i <= peak_idx:
+                scaled_c = c * (target_peak / raw_max) if raw_max > 0 else c
+            else:
+                if abs(raw_max - raw_final) > 1e-6:
+                    scaled_c = target_peak + (c - raw_max) * ((target_peak - target_final) / (raw_max - raw_final))
+                else:
+                    scaled_c = target_final
+            balances.append(round(start_balance + scaled_c, 4))
 
         # Префикс стартовой точки за 1 час до первой сделки
         times.insert(0, times[0] - timedelta(hours=1))
@@ -297,20 +319,11 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
         balances[-1] = final_balance
         current_balance = final_balance
 
-        # Для выбывшей монеты: финальный кластер закрытия позиции не должен проваливаться ниже точки закрытия
-        if not is_active and len(times) > 2:
-            close_cutoff = times[-1] - timedelta(minutes=15)
-            for idx in range(len(times) - 1, 0, -1):
-                if times[idx] >= close_cutoff:
-                    balances[idx] = max(balances[idx], final_balance)
-                else:
-                    break
-
         # Для активной монеты продлеваем линию до текущего момента
         if is_active:
             times.append(now)
             balances.append(final_balance)
-        # Для выбывшей монеты: график завершается ровно в последней точке закрытия (без падения в ноль)
+        # Для выбывшей монеты: график завершается строго в последней точке закрытия (без падения в ноль)
 
     plt.figure(figsize=(10, 5))
     line_color = "#00C853" if current_balance >= start_balance else "#D50000"

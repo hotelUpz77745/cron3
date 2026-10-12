@@ -1420,11 +1420,13 @@ class TelegramReceiver:
 
                 trades = int(item.get("total_trades", 0))
                 rec = float(item.get("recovery_factor", 0.0))
+                roi_val = float(item.get("roi_pct", 0.0))
+                roi_sign = "+" if roi_val > 0 else ""
 
                 card = (
                     f"{medal} <b>{uid}</b>\n"
                     f"├ Режим: <code>{mode_b}</code> <code>{size_b}</code>\n"
-                    f"├ Net Profit: <b>{net_sign}{net_val:.2f} USDT</b> <i>(Итер #{iter_idx}: {iter_net_sign}{iter_net:.2f}$)</i>\n"
+                    f"├ Net Profit: <b>{net_sign}{net_val:.2f} USDT</b> ({roi_sign}{roi_val:.2f}% ROI) <i>(Итер #{iter_idx}: {iter_net_sign}{iter_net:.2f}$)</i>\n"
                     f"├ Realized: <b>{real_sign}{real_val:.2f}$</b> <i>(Итер: {iter_real_sign}{iter_real:.2f}$)</i>\n"
                     f"├ Floating: <b>{unreal_sign}{unreal_val:.2f}$</b>\n"
                     f"├ Max DD: <code>{max_dd:.2f}$</code> | ATH Net: <code>{peak_str}</code>\n"
@@ -1566,7 +1568,10 @@ class TelegramReceiver:
                     net_profit = round(safe_flt(cdata.get("net_profit_usdt", 0)), 2)
                     realized_net = round(safe_flt(cdata.get("realized_pnl_net_usdt", 0)), 2)
                     tr = cdata.get('total_trades', 0)
-                    val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
+                    st_bal = safe_flt(agg_summary.get("start_balance_usdt", 151.0))
+                    c_roi = round(net_profit / st_bal * 100.0, 2) if st_bal > 0 else 0.0
+                    c_roi_sign = "+" if c_roi > 0 else ""
+                    val_str = f"{net_profit:+.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI) <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
 
                 is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
                 active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
@@ -2048,7 +2053,10 @@ class TelegramReceiver:
                         net_profit = round(safe_float(cdata.get("net_profit_usdt", 0)), 2)
                         realized_net = round(safe_float(cdata.get("realized_pnl_net_usdt", 0)), 2)
                         tr = cdata.get('total_trades', cdata.get('trades', 0))
-                        val_str = f"{net_profit:+.2f} USDT <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
+                        st_bal = safe_float(data.get("start_balance_usdt", 151.0))
+                        c_roi = round(net_profit / st_bal * 100.0, 2) if st_bal > 0 else 0.0
+                        c_roi_sign = "+" if c_roi > 0 else ""
+                        val_str = f"{net_profit:+.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI) <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
                     
                     is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
                     active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
