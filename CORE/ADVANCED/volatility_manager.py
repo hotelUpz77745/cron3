@@ -88,15 +88,21 @@ class VolatilityManager:
                 is_advanced = False
                 sg_cfg = {}
 
-            timeframe = sg_cfg.get("timeframe", "1w")
-            window = int(sg_cfg.get("window", 12))
-            multiplier = float(sg_cfg.get("multiplier", 2.0))
+            timeframe = sg_cfg.get("timeframe", "1w") or "1w"
+            window = int(sg_cfg.get("window") or 12)
+            multiplier = float(sg_cfg.get("multiplier") or 2.0)
             min_volatility_pct = sg_cfg.get("min_volatility_pct")
             if min_volatility_pct is not None:
-                min_volatility_pct = float(min_volatility_pct)
+                try:
+                    min_volatility_pct = float(min_volatility_pct)
+                except (ValueError, TypeError):
+                    min_volatility_pct = None
             max_volatility_pct = sg_cfg.get("max_volatility_pct")
             if max_volatility_pct is not None:
-                max_volatility_pct = float(max_volatility_pct)
+                try:
+                    max_volatility_pct = float(max_volatility_pct)
+                except (ValueError, TypeError):
+                    max_volatility_pct = None
 
             adjusted_vol = 0.0
             count = 0
@@ -115,8 +121,8 @@ class VolatilityManager:
                 # Calculate average volatility
                 total_vol = 0.0
                 for k in klines:
-                    high = k.get("high", 0.0)
-                    low = k.get("low", 0.0)
+                    high = float(k.get("high") or 0.0)
+                    low = float(k.get("low") or 0.0)
                     if low > 0:
                         vol = ((high / low) - 1) * 100
                         total_vol += vol
@@ -171,9 +177,20 @@ class VolatilityManager:
                         if not grid:
                             continue
                             
-                        # Find the last element (max index)
-                        max_idx = str(max(int(idx) for idx in grid.keys()))
-                        last_indent = abs(float(grid[max_idx].get("indent", 0.0)))
+                        # Find the active levels with non-null indents
+                        valid_levels = {
+                            int(idx): el for idx, el in grid.items()
+                            if el.get("enabled", True) is not False and el.get("indent") is not None
+                        }
+                        if not valid_levels:
+                            continue
+
+                        max_valid_lvl = max(valid_levels.keys())
+                        last_indent_raw = valid_levels[max_valid_lvl].get("indent")
+                        try:
+                            last_indent = abs(float(last_indent_raw)) if last_indent_raw is not None else 0.0
+                        except (ValueError, TypeError):
+                            last_indent = 0.0
                         
                         if last_indent == 0:
                             continue
@@ -182,12 +199,18 @@ class VolatilityManager:
                         
                         # Apply to all elements in grid
                         for idx, el in grid.items():
-                            if is_advanced:
-                                orig_indent = float(el.get("indent", 0.0))
-                                new_indent = orig_indent * ratio
-                                el["super_indent"] = round(new_indent, 4)
-                                if not el.get("is_active", False):
-                                    el["price"] = None
+                            is_lvl_enabled = el.get("enabled", True) is not False
+                            raw_ind = el.get("indent")
+
+                            if is_advanced and is_lvl_enabled and raw_ind is not None:
+                                try:
+                                    orig_indent = float(raw_ind)
+                                    new_indent = orig_indent * ratio
+                                    el["super_indent"] = round(new_indent, 4)
+                                    if not el.get("is_active", False):
+                                        el["price"] = None
+                                except (ValueError, TypeError):
+                                    el["super_indent"] = None
                             else:
                                 if el.get("super_indent") is not None:
                                     el["super_indent"] = None

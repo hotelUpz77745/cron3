@@ -51,7 +51,20 @@ class TakeProfitRestorer:
 
         try:
             # 1. Запрашиваем все открытые ордера по аккаунту одним пакетным запросом
-            open_orders = await self.bot_core.client.fetch_open_orders()
+            try:
+                open_orders = await self.bot_core.client.fetch_open_orders()
+            except Exception as e:
+                err_str = str(e)
+                is_transient = any(
+                    kw in err_str.lower()
+                    for kw in ("502", "503", "504", "bad gateway", "gateway timeout", "timeout", "connection", "network", "temporarily unavailable")
+                ) or isinstance(e, (asyncio.TimeoutError, ConnectionError, OSError))
+
+                if is_transient:
+                    logger.warning(f"[TP_RESTORER] ⚠️ Временная недоступность Binance API при получении открытых ордеров ({e}). Пропуск аудита.")
+                    return stats
+                raise
+
             orders_map: Dict[tuple[str, str], List[dict]] = {}
             for o in open_orders:
                 sym = o.get("symbol", "").upper()
@@ -131,7 +144,16 @@ class TakeProfitRestorer:
                 )
 
         except Exception as e:
-            logger.error(f"[TP_RESTORER] Ошибка во время аудита TP ордеров: {e}", exc_info=True)
+            err_str = str(e)
+            is_transient = any(
+                kw in err_str.lower()
+                for kw in ("502", "503", "504", "bad gateway", "gateway timeout", "timeout", "connection", "network", "temporarily unavailable")
+            ) or isinstance(e, (asyncio.TimeoutError, ConnectionError, OSError))
+
+            if is_transient:
+                logger.warning(f"[TP_RESTORER] ⚠️ Временная ошибка сети/API при аудите TP ({e}). Пропуск тика.")
+            else:
+                logger.error(f"[TP_RESTORER] Ошибка во время аудита TP ордеров: {e}", exc_info=True)
 
         return stats
 
