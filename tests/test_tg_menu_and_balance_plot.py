@@ -85,7 +85,7 @@ class TestTGMenuAndBalancePlot(unittest.TestCase):
         self.assertEqual(row1_texts, ["▶️ Start", "ℹ️ Status", "⏸️ Stop"])
 
         row2_texts = [btn.text for btn in rows[1]]
-        self.assertEqual(row2_texts, ["🌌 Set Universes", "📊 Analytics"])
+        self.assertEqual(row2_texts, ["🌌 Set Universes", "📊 Analytics", "🎯 Скринеры"])
 
         row3_texts = [btn.text for btn in rows[2]]
         self.assertEqual(row3_texts, ["⚙️ Set Coins", "🛡️ Risk System", "📜 Logs"])
@@ -94,7 +94,7 @@ class TestTGMenuAndBalancePlot(unittest.TestCase):
         self.assertEqual(row4_texts, ["🚨 Close All"])
 
         all_buttons = [btn.text for r in rows for btn in r]
-        self.assertEqual(len(all_buttons), 9, "Всего в главном меню должно быть ровно 9 кнопок")
+        self.assertEqual(len(all_buttons), 10, "Всего в главном меню должно быть ровно 10 кнопок")
 
     # =========================================================================
     # 2. ТЕСТЫ МЕНЮ SET COINS (Ровно 3 кнопки ReplyKeyboardMarkup)

@@ -196,9 +196,26 @@ class SamsonovFunnelSelector:
         target_count: int = 4,
     ) -> Dict[str, Any]:
         """Возвращает детальную разбивку всех этапов воронки."""
+        empty_notice_str = "Пусто, выросла капуста"
+        try:
+            from consts import DATA_DIR
+            app_cfg = Utils.read_json_file(DATA_DIR / "app.json") if (DATA_DIR / "app.json").exists() else {}
+            if "samsonov_funnel" in app_cfg and "empty_notice" in app_cfg["samsonov_funnel"]:
+                empty_notice_str = str(app_cfg["samsonov_funnel"]["empty_notice"])
+        except Exception:
+            pass
+
         data = self.load_universe_data(universe_id)
         if not data or "per_coin" not in data:
-            return {"total_input": 0, "step1_pool": [], "step2_pool": [], "step3_pool": [], "final_targets": []}
+            return {
+                "total_input": 0,
+                "step1_pool": [],
+                "step2_pool": [],
+                "step3_pool": [],
+                "final_targets": [],
+                "empty_notice": empty_notice_str,
+                "empty_reason": "radar_data_empty",
+            }
 
         per_coin: Dict[str, Dict[str, Any]] = data["per_coin"]
         records: List[Dict[str, Any]] = []
@@ -228,6 +245,16 @@ class SamsonovFunnelSelector:
             })
 
         total_input = len(records)
+        if total_input == 0:
+            return {
+                "total_input": 0,
+                "step1_pool": [],
+                "step2_pool": [],
+                "step3_pool": [],
+                "final_targets": [],
+                "empty_notice": empty_notice_str,
+                "empty_reason": "no_trades_in_radar",
+            }
 
         # ШАГ 1: Ранжирование по Realized PnL (net fee) -> срез ТОП-50%
         step1_sorted = sorted(records, key=lambda x: x["realized_net"], reverse=True)
@@ -249,6 +276,7 @@ class SamsonovFunnelSelector:
             "step2_pool": step2_pool,
             "step3_pool": step3_sorted,
             "final_targets": final_targets,
+            "empty_notice": empty_notice_str if not final_targets else None,
         }
 
     def run_samsonov_funnel(

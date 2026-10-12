@@ -18,6 +18,7 @@ from consts import DATA_DIR
 from c_utils import Utils
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.client_prod import BinanceClient
+from CORE.ADVANCED.klines_cache import KlinesCache
 
 logger = UnifiedLogger("VolatilityScanner")
 
@@ -46,32 +47,14 @@ class VolatilityScanner:
             "enabled": True,
             "strict_window": True,
             "min_dayly_vol_usdt": 3000000,
-            "atr_volatility_filter": {
-                "enabled": True,
-                "timeframe": "1w",
-                "window": 12,
-                "min_volatility_pct": 25.0,
-                "max_volatility_pct": 40.0
-            },
-            "rsi_filter": {
-                "enabled": True,
-                "timeframe": "4h",
-                "period": 14,
-                "min_rsi": 35.0,
-                "max_rsi": 65.0
-            },
+            "atr_calc_base": "H-L",
+            "klines_cache_ttl_sec": 300,
+            "atr_volatility_filter": {"enabled": True, "timeframe": "1w", "window": 12, "min_volatility_pct": 25.0, "max_volatility_pct": 40.0},
+            "rsi_filter": {"enabled": True, "timeframe": "4h", "period": 14, "min_rsi": 35.0, "max_rsi": 65.0},
             "bollinger_width_filter": {
-                "enabled": True,
-                "timeframe": "4h",
-                "MA_type": "SMA",
-                "period": 20,
-                "multiplier": 2.0,
-                "min_width_pct": 8.0,
-                "max_width_pct": 13.0,
-                "center_proximity_filter": {
-                    "enabled": True,
-                    "max_deviation_from_center_pct": 75.0
-                }
+                "enabled": True, "timeframe": "4h", "MA_type": "SMA", "period": 20, "multiplier": 2.0,
+                "min_width_pct": 8.0, "max_width_pct": 13.0,
+                "center_proximity_filter": {"enabled": True, "max_deviation_from_center_pct": 75.0}
             }
         }
 
@@ -80,6 +63,10 @@ class VolatilityScanner:
                 data = Utils.read_json_file(self.config_path)
                 if data and "volatility_scanner" in data:
                     raw_cfg = data["volatility_scanner"]
+                    default_cfg["atr_calc_base"] = str(raw_cfg.get("atr_calc_base", "H-L")).strip().upper()
+                    if "klines_cache_ttl_sec" in raw_cfg:
+                        default_cfg["klines_cache_ttl_sec"] = float(raw_cfg["klines_cache_ttl_sec"])
+
                     # Поддержка нового структурированного формата
                     if "atr_volatility_filter" in raw_cfg or "rsi_filter" in raw_cfg or "bollinger_width_filter" in raw_cfg:
                         default_cfg["enabled"] = raw_cfg.get("enabled", True)
@@ -120,34 +107,76 @@ class VolatilityScanner:
     def compute_atr_volatility(
         klines: List[Dict[str, Any]],
         window: int = 12,
-        strict_window: bool = True
-    ) -> Tuple[bool, Optional[float], int]:
+        strict_window: bool = True,
+        calc_base: str = "H-L"
+    ) -> Tuple[bool, Optional[float], int, Optional[Dict[str, Any]]]:
         """
-        Расчет средней свечной волатильности: ((High / Low) - 1) * 100%.
-        Возвращает (passed_strict, avg_volatility, candles_count).
+        Расчет средней свечной волатильности и характеристик наибольшей свечи:
+          - calc_base 'H-L': между хаем и лоем ((High / Low) - 1) * 100%.
+          - calc_base 'O-C': между опен и клоз (|Open - Close| / min(Open, Close)) * 100%.
+        Возвращает (passed_strict, avg_volatility, candles_count, max_candle_dict).
         """
         if not klines:
-            return False, None, 0
+            return False, None, 0, None
 
         if strict_window and len(klines) < window:
-            return False, None, len(klines)
+            return False, None, len(klines), None
 
         target_klines = klines[-window:] if len(klines) >= window else klines
+        base_upper = (calc_base or "H-L").strip().upper()
         total_vol = 0.0
         count = 0
+        max_vol = -1.0
+        extreme_candle_data: Optional[Dict[str, Any]] = None
+
         for k in target_klines:
             high = float(k.get("high", 0.0))
             low = float(k.get("low", 0.0))
-            if low > 0:
-                vol = ((high / low) - 1.0) * 100.0
-                total_vol += vol
-                count += 1
+            open_p = float(k.get("open", low))
+            close_p = float(k.get("close", high))
+
+            if base_upper == "O-C":
+                body_abs = abs(open_p - close_p)
+                base_denom = min(open_p, close_p) if min(open_p, close_p) > 0 else max(open_p, close_p, 1e-8)
+                vol = (body_abs / base_denom) * 100.0 if base_denom > 0 else 0.0
+            else:
+                vol = ((high / low) - 1.0) * 100.0 if low > 0 else 0.0
+
+            total_vol += vol
+            count += 1
+
+            if vol > max_vol:
+                max_vol = vol
+                shadow_abs = max(high - low, 0.0)
+                shadow_pct = ((high - low) / low) * 100.0 if low > 0 else 0.0
+                body_abs = abs(open_p - close_p)
+                body_denom = min(open_p, close_p) if min(open_p, close_p) > 0 else max(open_p, close_p, 1e-8)
+                body_pct = (body_abs / body_denom) * 100.0 if body_denom > 0 else 0.0
+                is_green = close_p >= open_p
+                color = "green" if is_green else "red"
+                color_label = "🟢 Зеленая" if is_green else "🔴 Красная"
+
+                extreme_candle_data = {
+                    "atr_pct": round(vol, 2),
+                    "calc_base": base_upper,
+                    "shadow_span_usdt": round(shadow_abs, 6),
+                    "shadow_span_pct": round(shadow_pct, 2),
+                    "body_span_usdt": round(body_abs, 6),
+                    "body_span_pct": round(body_pct, 2),
+                    "color": color,
+                    "color_label": color_label,
+                    "open": round(open_p, 6),
+                    "high": round(high, 6),
+                    "low": round(low, 6),
+                    "close": round(close_p, 6),
+                    "open_time": k.get("open_time")
+                }
 
         if count == 0:
-            return False, None, 0
+            return False, None, 0, None
 
         avg_vol = total_vol / count
-        return True, round(avg_vol, 2), count
+        return True, round(avg_vol, 2), count, extreme_candle_data
 
     @staticmethod
     def compute_rsi(closes: List[float], period: int = 14) -> Optional[float]:
@@ -296,8 +325,9 @@ class VolatilityScanner:
                 return False, None
 
             window = int(atr_cfg.get("window", 12))
-            passed_strict, avg_vol, count = self.compute_atr_volatility(
-                klines_1w, window=window, strict_window=strict_window
+            calc_base = str(cfg.get("atr_calc_base", "H-L")).strip().upper()
+            passed_strict, avg_vol, count, max_candle = self.compute_atr_volatility(
+                klines_1w, window=window, strict_window=strict_window, calc_base=calc_base
             )
             if not passed_strict or avg_vol is None:
                 return False, None
@@ -311,6 +341,8 @@ class VolatilityScanner:
 
             result["volatility"] = avg_vol
             result["candles"] = count
+            result["calc_base"] = calc_base
+            result["max_candle"] = max_candle
 
         # ── 2. RSI & Bollinger Bands Filters (по 4h свечам) ───────────────────
         need_4h = rsi_cfg.get("enabled", True) or bb_cfg.get("enabled", True)
@@ -376,15 +408,17 @@ class VolatilityScanner:
         return True, result
 
     async def _fetch_klines(self, symbol: str, interval: str, limit: int) -> Optional[List[Dict[str, Any]]]:
-        """Асинхронная загрузка свечей с fallback на клиент биржи."""
-        try:
+        """Асинхронная загрузка свечей с поддержкой KlinesCache и fallback на клиент биржи."""
+        cfg = self._get_config()
+        ttl_sec = float(cfg.get("klines_cache_ttl_sec", 300.0))
+
+        async def fetcher():
             klines = await BinancePublic.get_klines(symbol, interval, limit)
             if not klines and self.client:
                 klines = await self.client.get_klines(symbol, interval, limit)
             return klines
-        except Exception as e:
-            logger.debug(f"[Scanner] Error fetching klines for {symbol} ({interval}): {e}")
-            return None
+
+        return await KlinesCache.get_or_fetch(symbol, interval, limit, fetcher, ttl_sec=ttl_sec)
 
     async def _process_symbol(self, symbol: str, cfg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Обрабатывает одну монету с сетевым ограничением semaphore."""
@@ -509,7 +543,12 @@ class VolatilityScanner:
             ]
             for item in matching_symbols:
                 lines.append(f"Символ: {item['symbol']}")
-                lines.append(f"Волатильность (1w ATR): {item.get('volatility', 0.0)}% (свечей: {item.get('candles', 0)})")
+                calc_base_str = item.get("calc_base", "H-L")
+                lines.append(f"Волатильность (1w ATR [{calc_base_str}]): {item.get('volatility', 0.0)}% (свечей: {item.get('candles', 0)})")
+                mc = item.get("max_candle")
+                if mc:
+                    lines.append(f"Наибольшая свеча (Extreme ATR): {mc.get('atr_pct', 0.0)}% | {mc.get('color_label', '')}")
+                    lines.append(f"   └ Тени (H-L): {mc.get('shadow_span_pct', 0.0)}% ({mc.get('shadow_span_usdt', 0.0)} USDT) | Тело (O-C): {mc.get('body_span_pct', 0.0)}% ({mc.get('body_span_usdt', 0.0)} USDT)")
                 if item.get("rsi") is not None:
                     lines.append(f"RSI (4h): {item['rsi']}")
                 if item.get("bb_width_pct") is not None:

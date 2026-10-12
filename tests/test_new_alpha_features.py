@@ -390,10 +390,9 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
             nav = RadarNavigator(self.mock_bot)
             strat_id = "u6_symbiosis_gamma_fortress35"
 
-            nav.alpha_selector.select_top_coins = AsyncMock()
-            await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
-
-            nav.alpha_selector.select_top_coins.assert_not_called()
+            with patch.object(AlphaCoinSelector, "select_top_coins", new_callable=AsyncMock) as mock_sel:
+                await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
+                mock_sel.assert_not_called()
             self.mock_bot.delete_symbol.assert_not_called()
             self.mock_bot.add_symbol.assert_not_called()
 

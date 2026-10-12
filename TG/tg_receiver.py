@@ -108,7 +108,8 @@ class TelegramReceiver:
             ],
             [
                 KeyboardButton(text="🌌 Set Universes"),
-                KeyboardButton(text="📊 Analytics")
+                KeyboardButton(text="📊 Analytics"),
+                KeyboardButton(text="🎯 Скринеры")
             ],
             [
                 KeyboardButton(text="⚙️ Set Coins"),
@@ -3731,39 +3732,117 @@ class TelegramReceiver:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
 
         # =========================================================
-        # /selector - COIN SELECTION SERVICE (ON-DEMAND ROTATION)
+        # ЕДИНЫЙ СЕРВИС СКРИНЕРОВ: /screener, /selector, /sonnik, "🎯 Скринеры"
         # =========================================================
-        @self.dp.message(Command("selector"))
-        @self.dp.message(F.text == "🎯 Selector")
-        async def on_selector_cmd(message: Message, state: FSMContext):
-            await state.clear()
-            from CORE.SELECTOR.coin_selection_service import CoinSelectionService
-            _sel_svc = CoinSelectionService()
-            target_count = _sel_svc.get_configured_target_count()
-            configured_type = _sel_svc.get_configured_selector_type()
-            text = (
-                f"🎯 <b>Coin Selection Service (On-Demand)</b>\n\n"
-                f"⚙️ <b>Текущий конфиг app.json:</b>\n"
-                f"• Источник: <code>{configured_type}</code>\n"
-                f"• Целевой срез: <code>{target_count}</code> монет\n\n"
-                f"Выберите алгоритм для сканирования и получения актуального среза:"
-            )
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        def _get_screener_main_markup():
+            return InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="⚡ Alpha Selector (Wiggle & NATR)", callback_data="cb_selector_run:alpha_coin_selector")
+                    InlineKeyboardButton(text="⚡ 1. Alpha Selector (Wiggle & NATR)", callback_data="cb_selector_run:alpha_coin_selector")
                 ],
                 [
-                    InlineKeyboardButton(text="📡 Samsonov Funnel (Радар Полигона)", callback_data="cb_selector_run:samsonov_funnel")
+                    InlineKeyboardButton(text="📡 2. Скринер Самсонова (Радар)", callback_data="cb_selector_run:samsonov_funnel")
                 ],
                 [
-                    InlineKeyboardButton(text="⚙️ По умолчанию из конфига", callback_data=f"cb_selector_run:{configured_type}")
+                    InlineKeyboardButton(text="🔍 3. Volatility Scanner (Сонник)", callback_data="cb_selector_run:volatility_scanner")
+                ],
+                [
+                    InlineKeyboardButton(text="⚙️ Настройки скринеров", callback_data="cb_screener_settings_menu")
                 ]
             ])
-            await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.message(Command("screener"))
+        @self.dp.message(Command("selector"))
+        @self.dp.message(Command("sonnik"))
+        @self.dp.message(F.text == "🎯 Скринеры")
+        @self.dp.message(F.text == "🎯 Selector")
+        async def on_screener_cmd(message: Message, state: FSMContext):
+            await state.clear()
+            text = (
+                "🎯 <b>Единый сервис рыночных скринеров</b>\n\n"
+                "Выберите инструмент для сканирования и анализа рынка:\n"
+                "1️⃣ ⚡ <b>Alpha Selector</b> — Institutional Wiggle & NATR ранжирование (поверх пула волатильности).\n"
+                "2️⃣ 📡 <b>Скринер Самсонова</b> — 3-ступенчатая квантовая воронка Полигона Радара.\n"
+                "3️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
+            )
+            await message.answer(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_screener_main_menu")
+        async def process_cb_screener_main_menu(callback: CallbackQuery, state: FSMContext):
+            await state.clear()
+            await callback.answer()
+            text = (
+                "🎯 <b>Единый сервис рыночных скринеров</b>\n\n"
+                "Выберите инструмент для сканирования и анализа рынка:\n"
+                "1️⃣ ⚡ <b>Alpha Selector</b> — Institutional Wiggle & NATR ранжирование (поверх пула волатильности).\n"
+                "2️⃣ 📡 <b>Скринер Самсонова</b> — 3-ступенчатая квантовая воронка Полигона Радара.\n"
+                "3️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
+            )
+            try:
+                await callback.message.edit_text(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
+            except Exception:
+                await callback.message.answer(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_screener_settings_menu")
+        async def process_cb_screener_settings_menu(callback: CallbackQuery, state: FSMContext):
+            await callback.answer()
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="🔍 Настройки Volatility Scanner", callback_data="cb_edit_screener_cfg:volatility_scanner")],
+                [InlineKeyboardButton(text="⚡ Настройки Alpha Selector", callback_data="cb_edit_screener_cfg:alpha_coin_selector")],
+                [InlineKeyboardButton(text="📡 Настройки Скринера Самсонова", callback_data="cb_edit_screener_cfg:samsonov_funnel")],
+                [InlineKeyboardButton(text="🔙 Назад в меню скринеров", callback_data="cb_screener_main_menu")]
+            ])
+            text = (
+                "⚙️ <b>Настройки сервиса скринеров</b>\n\n"
+                "Выберите компонент для редактирования параметров в <code>app.json</code>:"
+            )
+            try:
+                await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            except Exception:
+                await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+
+        @self.dp.callback_query(F.data == "cb_edit_scanner_config")
+        async def process_cb_edit_scanner_config_compat(callback: CallbackQuery, state: FSMContext):
+            # Обратная совместимость старого callback
+            await process_cb_screener_settings_menu(callback, state)
+
+        @self.dp.callback_query(F.data.startswith("cb_edit_screener_cfg:"))
+        async def process_cb_edit_screener_cfg(callback: CallbackQuery, state: FSMContext):
+            target_key = callback.data.split(":", 1)[1]
+            await callback.answer()
+            config_path = DATA_DIR / "app.json"
+            app_data = Utils.read_json_file(config_path) if config_path.exists() else {}
+            cfg = app_data.get(target_key, {})
+
+            names_map = {
+                "volatility_scanner": "Volatility Scanner (Сонник)",
+                "alpha_coin_selector": "Alpha Selector (Wiggle & NATR)",
+                "samsonov_funnel": "Скринер Самсонова (Радар Полигона)"
+            }
+            comp_name = names_map.get(target_key, target_key)
+
+            await state.update_data(screener_cfg_key=target_key)
+            json_bytes = json.dumps(cfg, indent=4, ensure_ascii=False).encode("utf-8")
+            await callback.message.answer(
+                f"<b>Текущие настройки {comp_name}:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).",
+                reply_markup=self._get_back_keyboard(),
+                parse_mode="HTML"
+            )
+            await callback.message.answer_document(BufferedInputFile(json_bytes, filename=f"{target_key}_config.json"))
+            await state.set_state(TGStates.waiting_for_scanner_json)
+
+        @self.dp.callback_query(F.data == "cb_run_scanner")
+        async def process_cb_run_scanner_compat(callback: CallbackQuery, state: FSMContext):
+            # Обратная совместимость для cb_run_scanner
+            callback.data = "cb_selector_run:volatility_scanner"
+            await process_cb_selector_run(callback, state)
 
         @self.dp.callback_query(F.data.startswith("cb_selector_run:"))
         async def process_cb_selector_run(callback: CallbackQuery, state: FSMContext):
             selector_type = callback.data.split(":", 1)[1]
+            if getattr(self, '_scanner_running', False):
+                await callback.answer("Команда уже запущена, дождитесь результата", show_alert=True)
+                return
+            self._scanner_running = True
             await callback.answer("Запускаю отбор монет...")
             status_msg = await callback.message.answer(f"⏳ Сканирование ({selector_type}), пожалуйста подождите...")
 
@@ -3771,28 +3850,38 @@ class TelegramReceiver:
                 from CORE.SELECTOR.coin_selection_service import CoinSelectionService
                 service = CoinSelectionService(bot_core=self.bot_core)
                 target_count = service.get_configured_target_count()
+
+                if selector_type == "volatility_scanner":
+                    import importlib
+                    import CORE.ADVANCED.volatility_scanner as vs
+                    importlib.reload(vs)
+                    scanner = vs.VolatilityScanner(client=getattr(self.bot_core, "client", None))
+                    await scanner.scan()
+
                 results = await service.get_top_coins(selector_type=selector_type, target_count=target_count)
 
-                if not results:
-                    await status_msg.edit_text(f"⚠️ Селектор <code>{selector_type}</code> не вернул подходящих монет под текущие фильтры.")
-                    return
-
-                selected_symbols = [x["symbol"] for x in results]
-                self._last_selector_results = selected_symbols
-                self._last_selector_type = selector_type
-
                 report_text = service.format_telegram_report(results, selector_type, target_count)
-
                 inline_buttons = [
-                    [InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")]
+                    [InlineKeyboardButton(text="🔄 Пересканировать", callback_data=f"cb_selector_run:{selector_type}")],
+                    [InlineKeyboardButton(text="⚙️ Настройки скринеров", callback_data="cb_screener_settings_menu")],
+                    [InlineKeyboardButton(text="🔙 В меню скринеров", callback_data="cb_screener_main_menu")]
                 ]
-
                 keyboard = InlineKeyboardMarkup(inline_keyboard=inline_buttons)
                 await status_msg.edit_text(report_text, reply_markup=keyboard, parse_mode="HTML")
 
+                if selector_type == "volatility_scanner":
+                    txt_output_path = DATA_DIR / "volatile_symbols.txt"
+                    if txt_output_path.exists():
+                        await callback.message.answer_document(
+                            FSInputFile(txt_output_path),
+                            caption="✅ Детализированный отчет Volatility Scanner (свечи, тени, тело)."
+                        )
+
             except Exception as e:
-                logger.error(f"Error in selector run: {e}", exc_info=True)
-                await status_msg.edit_text(f"❌ Ошибка при выполнении селектора: {e}")
+                logger.error(f"Error in screener run: {e}", exc_info=True)
+                await status_msg.edit_text(f"❌ Ошибка при выполнении скринера: {e}")
+            finally:
+                self._scanner_running = False
 
         @self.dp.callback_query(F.data.startswith("cb_selector_apply:"))
         async def process_cb_selector_apply(callback: CallbackQuery, state: FSMContext):
@@ -3802,147 +3891,16 @@ class TelegramReceiver:
                 show_alert=True
             )
 
-        # =========================================================
-        # /sonnik - VOLATILITY SCANNER
-        # =========================================================
-        @self.dp.message(Command("sonnik"))
-        async def on_sonnik_cmd(message: Message, state: FSMContext):
-            await state.clear()
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="🔍 Запустить Скринер волатильности", callback_data="cb_run_scanner")],
-                [InlineKeyboardButton(text="⚙️ Настройки Скринера", callback_data="cb_edit_scanner_config")]
-            ])
-            await message.answer("<b>Сонник (Сканер волатильности)</b>\nВыберите действие:", reply_markup=keyboard, parse_mode="HTML")
-
-        @self.dp.callback_query(F.data == "cb_run_scanner")
-        async def process_cb_run_scanner(callback: CallbackQuery, state: FSMContext):
-            if getattr(self, '_scanner_running', False):
-                await callback.answer("Команда уже запущена дождитесь результата", show_alert=True)
-                return
-            self._scanner_running = True
-            try:
-                await callback.answer("Запускаю сканирование... Это займет некоторое время.")
-                msg = await callback.message.answer("⏳ Сканирование волатильности запущено, пожалуйста подождите...")
-                output_path = DATA_DIR / "volatile_symbols.json"
-                if output_path.exists():
-                    try:
-                        os.remove(output_path)
-                    except:
-                        pass
-                        
-                # Запускаем напрямую в текущем процессе с перезагрузкой модуля
-                import importlib
-                import CORE.ADVANCED.volatility_scanner as vs
-                importlib.reload(vs)
-                scanner = vs.VolatilityScanner(client=self.bot_core.client)
-                await scanner.scan()
-                
-                output_path = DATA_DIR / "volatile_symbols.json"
-                txt_output_path = DATA_DIR / "volatile_symbols.txt"
-                if output_path.exists():
-                    try:
-                        with open(output_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                        
-                        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                        lines = [f"Дата: {now_str}"]
-                        lines.append(f"Количество монет: {len(data)}")
-                        
-                        coin_list = [item["symbol"] for item in data]
-                        lines.append("")
-                        lines.append("JSON Symbols List (для app.json):")
-                        lines.append(json.dumps(coin_list, ensure_ascii=False))
-                        lines.append("")
-                        lines.append("JSON Symbols List (развернутый):")
-                        lines.append(json.dumps(coin_list, indent=4, ensure_ascii=False))
-                        lines.append("\nДетализация:")
-                        lines.append("_____")
-                        
-                        for item in data:
-                            lines.append(f"Символ: {item['symbol']}")
-                            lines.append(f"Волатильность (1w ATR): {item.get('volatility', 0.0)}% (свечей: {item.get('candles', 0)})")
-                            if item.get("rsi") is not None:
-                                lines.append(f"RSI (4h): {item['rsi']}")
-                            if item.get("bb_width_pct") is not None:
-                                lines.append(f"BB Width (4h): {item['bb_width_pct']}%")
-                            if item.get("bb_center_dev_pct") is not None:
-                                lines.append(f"BB Center Dev: {item['bb_center_dev_pct']}% (Middle: {item.get('middle_bb')}, Price: {item.get('current_price')})")
-                            lines.append("_____")
-                            
-                        with open(txt_output_path, "w", encoding="utf-8") as f:
-                            f.write("\n".join(lines))
-                        
-                        await msg.delete()
-                        await callback.message.answer_document(FSInputFile(txt_output_path), caption="✅ Сканирование завершено. Результаты в файле.")
-                    except Exception as e:
-                        logger.error(f"Error formatting scanner output: {e}")
-                        await msg.edit_text(f"❌ Ошибка форматирования результатов: {e}")
-                else:
-                    await msg.edit_text("❌ Ошибка сканирования (файл не создан).")
-                    
-            except Exception as e:
-                logger.error(f"Error running scanner: {e}")
-                await msg.edit_text(f"❌ Системная ошибка при запуске сканера: {e}")
-            finally:
-                self._scanner_running = False
-
-        @self.dp.callback_query(F.data == "cb_edit_scanner_config")
-        async def process_cb_edit_scanner_config(callback: CallbackQuery, state: FSMContext):
-            await callback.answer()
-            
-            config_path = DATA_DIR / "app.json"
-            cfg = {
-                "enabled": True,
-                "strict_window": True,
-                "min_dayly_vol_usdt": 3000000,
-                "atr_volatility_filter": {
-                    "enabled": True,
-                    "timeframe": "1w",
-                    "window": 12,
-                    "min_volatility_pct": 25.0,
-                    "max_volatility_pct": 40.0
-                },
-                "rsi_filter": {
-                    "enabled": True,
-                    "timeframe": "4h",
-                    "period": 14,
-                    "min_rsi": 35.0,
-                    "max_rsi": 65.0
-                },
-                "bollinger_width_filter": {
-                    "enabled": True,
-                    "timeframe": "4h",
-                    "MA_type": "SMA",
-                    "period": 20,
-                    "multiplier": 2.0,
-                    "min_width_pct": 8.0,
-                    "max_width_pct": 13.0,
-                    "center_proximity_filter": {
-                        "enabled": True,
-                        "max_deviation_from_center_pct": 40.0
-                    }
-                }
-            }
-            if config_path.exists():
-                try:
-                    data = Utils.read_json_file(config_path)
-                    if "volatility_scanner" in data:
-                        cfg = data["volatility_scanner"]
-                except:
-                    pass
-                    
-            json_bytes = json.dumps(cfg, indent=4, ensure_ascii=False).encode("utf-8")
-            await callback.message.answer("<b>Текущие настройки Скринера:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
-            await callback.message.answer_document(BufferedInputFile(json_bytes, filename="scanner_config.json"))
-            await state.set_state(TGStates.waiting_for_scanner_json)
-
         @self.dp.message(TGStates.waiting_for_scanner_json)
         async def process_scanner_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Back":
+            if message.text and message.text in ("🔙 Back", "🔙 Назад"):
                 await state.clear()
                 await message.answer("Отменено.", reply_markup=self._get_main_keyboard())
                 return
-                
+
+            state_data = await state.get_data()
+            cfg_key = state_data.get("screener_cfg_key", "volatility_scanner")
+
             json_str = ""
             if message.document:
                 file = await self.bot.get_file(message.document.file_id)
@@ -3954,19 +3912,18 @@ class TelegramReceiver:
             else:
                 await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
                 return
-                
+
             try:
                 new_cfg = json.loads(json_str)
-                
                 config_path = DATA_DIR / "app.json"
                 app_data = {}
                 if config_path.exists():
                     app_data = Utils.read_json_file(config_path)
-                
-                app_data["volatility_scanner"] = new_cfg
+
+                app_data[cfg_key] = new_cfg
                 Utils.write_json_file(config_path, app_data)
-                
-                await message.answer("✅ Настройки Скринера успешно обновлены!", reply_markup=self._get_main_keyboard())
+
+                await message.answer(f"✅ Настройки для <code>{cfg_key}</code> успешно обновлены!", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
                 await state.clear()
             except Exception as e:
                 await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")

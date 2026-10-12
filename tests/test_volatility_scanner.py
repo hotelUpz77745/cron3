@@ -4,22 +4,36 @@ from CORE.ADVANCED.volatility_scanner import VolatilityScanner
 class TestVolatilityScanner(unittest.TestCase):
     def test_compute_atr_volatility(self):
         klines = [
-            {"high": 110.0, "low": 100.0},  # (110/100 - 1)*100 = 10%
-            {"high": 120.0, "low": 100.0},  # (120/100 - 1)*100 = 20%
-            {"high": 130.0, "low": 100.0},  # (130/100 - 1)*100 = 30%
+            {"open": 102.0, "high": 110.0, "low": 100.0, "close": 108.0},  # H-L: 10%, O-C: (6/102)*100 = 5.88%, Green
+            {"open": 118.0, "high": 120.0, "low": 100.0, "close": 102.0},  # H-L: 20%, O-C: (16/102)*100 = 15.69%, Red
+            {"open": 105.0, "high": 130.0, "low": 100.0, "close": 125.0},  # H-L: 30%, O-C: (20/105)*100 = 19.05%, Green
         ]
         # Strict window check: len < 4 fails
-        passed, avg_vol, count = VolatilityScanner.compute_atr_volatility(klines, window=4, strict_window=True)
+        passed, avg_vol, count, max_candle = VolatilityScanner.compute_atr_volatility(klines, window=4, strict_window=True)
         self.assertFalse(passed)
 
-        # Strict window check: len >= 3 passes, average = 20.0%
-        passed, avg_vol, count = VolatilityScanner.compute_atr_volatility(klines, window=3, strict_window=True)
+        # Strict window check: len >= 3 passes, average = 20.0% (H-L base)
+        passed, avg_vol, count, max_candle = VolatilityScanner.compute_atr_volatility(klines, window=3, strict_window=True, calc_base="H-L")
         self.assertTrue(passed)
         self.assertEqual(avg_vol, 20.0)
         self.assertEqual(count, 3)
+        self.assertIsNotNone(max_candle)
+        self.assertEqual(max_candle["atr_pct"], 30.0)
+        self.assertEqual(max_candle["shadow_span_usdt"], 30.0)
+        self.assertEqual(max_candle["color"], "green")
+        self.assertEqual(max_candle["color_label"], "🟢 Зеленая")
+
+        # O-C calculation base check
+        passed_oc, avg_oc, count_oc, max_candle_oc = VolatilityScanner.compute_atr_volatility(klines, window=3, strict_window=True, calc_base="O-C")
+        self.assertTrue(passed_oc)
+        self.assertEqual(count_oc, 3)
+        self.assertIsNotNone(max_candle_oc)
+        self.assertEqual(max_candle_oc["calc_base"], "O-C")
+        self.assertEqual(max_candle_oc["color"], "green")
+        self.assertEqual(max_candle_oc["body_span_usdt"], 20.0)
 
         # Non-strict window with len < 5: uses available 3
-        passed, avg_vol, count = VolatilityScanner.compute_atr_volatility(klines, window=5, strict_window=False)
+        passed, avg_vol, count, max_candle = VolatilityScanner.compute_atr_volatility(klines, window=5, strict_window=False)
         self.assertTrue(passed)
         self.assertEqual(avg_vol, 20.0)
 
@@ -224,16 +238,27 @@ class TestVolatilityScanner(unittest.TestCase):
         self.assertTrue(passed)
         self.assertIsNone(res["rsi"])  # RSI was disabled
 
-    def test_bollinger_bands_ema_mode(self):
-        closes = [100.0 + (2.0 if i % 2 == 0 else -2.0) for i in range(50)]
-        bb_sma = VolatilityScanner.compute_bollinger_bands(closes, period=20, multiplier=2.0, ma_type="SMA")
-        bb_ema = VolatilityScanner.compute_bollinger_bands(closes, period=20, multiplier=2.0, ma_type="EMA")
+    def test_klines_cache_ttl_and_storage(self):
+        from CORE.ADVANCED.klines_cache import KlinesCache
+        KlinesCache.clear()
+        self.assertEqual(KlinesCache.size(), 0)
 
-        self.assertIsNotNone(bb_sma)
-        self.assertIsNotNone(bb_ema)
-        self.assertAlmostEqual(bb_sma["middle"], 100.0, delta=0.2)
-        self.assertAlmostEqual(bb_ema["middle"], 100.0, delta=0.2)
-        self.assertTrue(bb_ema["width_pct"] > 0)
+        mock_klines = [{"open": 100.0, "high": 110.0, "low": 90.0, "close": 105.0}]
+        KlinesCache.set("BTCUSDT", "1w", 12, mock_klines)
+        self.assertEqual(KlinesCache.size(), 1)
+
+        # Immediate get
+        cached = KlinesCache.get("BTCUSDT", "1w", 12, ttl_sec=300.0)
+        self.assertEqual(cached, mock_klines)
+
+        # Case-insensitive symbol
+        cached_lower = KlinesCache.get("btcusdt", "1w", 12, ttl_sec=300.0)
+        self.assertEqual(cached_lower, mock_klines)
+
+        # Expired TTL
+        cached_expired = KlinesCache.get("BTCUSDT", "1w", 12, ttl_sec=-1.0)
+        self.assertIsNone(cached_expired)
 
 if __name__ == "__main__":
     unittest.main()
+

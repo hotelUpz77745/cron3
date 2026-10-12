@@ -17,8 +17,11 @@ _ROOT = Path(__file__).resolve().parent.parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
+from consts import DATA_DIR
 from c_log import UnifiedLogger
+from c_utils import Utils
 from API.BINANCE.public import BinancePublic, is_valid_symbol
+from CORE.ADVANCED.klines_cache import KlinesCache
 
 logger = UnifiedLogger("AlphaCoinSelector")
 VALID_SYMBOL_REGEX = re.compile(r"^[A-Za-z0-9]+$")
@@ -108,11 +111,42 @@ class AlphaCoinSelector:
         }
 
     @classmethod
+    def _get_config(cls) -> Dict[str, Any]:
+        """Считывает конфигурацию альфа-селектора и волатильности из app.json."""
+        default_cfg = {
+            "enabled": True,
+            "target_count": 4,
+            "timeframe": "15m",
+            "candles_limit": 96,
+            "use_volatility_scanner_pool": True,
+            "min_natr_threshold": 0.25,
+            "max_parabolic_pump_pct": 60.0,
+            "max_death_spiral_dump_pct": -45.0,
+            "klines_cache_ttl_sec": 300.0,
+        }
+        app_path = DATA_DIR / "app.json"
+        if app_path.exists():
+            try:
+                data = Utils.read_json_file(app_path)
+                if data and "alpha_coin_selector" in data:
+                    default_cfg.update(data["alpha_coin_selector"])
+                if data and "volatility_scanner" in data:
+                    vs = data["volatility_scanner"]
+                    if "klines_cache_ttl_sec" in vs:
+                        default_cfg["klines_cache_ttl_sec"] = float(vs["klines_cache_ttl_sec"])
+            except Exception as e:
+                logger.error(f"[AlphaCoinSelector] Error reading config: {e}")
+        return default_cfg
+
+    @classmethod
     def rank_symbols(
         cls,
         symbols: List[str],
         candles_dict: Dict[str, Dict[str, np.ndarray]],
         top_k: int = 4,
+        min_natr_threshold: float = 0.25,
+        max_parabolic_pump_pct: float = 60.0,
+        max_death_spiral_dump_pct: float = -45.0,
     ) -> List[Dict[str, Any]]:
         """Ранжирует словарь свечей и возвращает Top-K лидеров."""
         results = []
@@ -125,6 +159,9 @@ class AlphaCoinSelector:
                 high_arr=c_data["high"],
                 low_arr=c_data["low"],
                 close_arr=c_data["close"],
+                min_natr_threshold=min_natr_threshold,
+                max_parabolic_pump_pct=max_parabolic_pump_pct,
+                max_death_spiral_dump_pct=max_death_spiral_dump_pct,
             )
             metrics["symbol"] = sym
             results.append(metrics)
@@ -162,18 +199,55 @@ class AlphaCoinSelector:
     @classmethod
     async def select_top_coins(
         cls,
-        target_count: int = 4,
+        target_count: Optional[int] = None,
         universe_filter: Optional[List[str]] = None,
-        interval: str = "15m",
-        limit: int = 96,  # 96 свечей по 15m = ровно 24 часа истории
+        interval: Optional[str] = None,
+        limit: Optional[int] = None,
         universe: Optional[List[str]] = None,
+        use_volatility_pool: Optional[bool] = None,
+        volatile_file_path: Optional[Path] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Асинхронный метод боевого отбора монет через прямое сканирование рынка.
-        Если передан universe_filter или universe, оценивает именно эти символы.
-        Если нет, берет перпетуал-тикеры с объемом > 30M USDT.
+        Асинхронный метод боевого отбора монет.
+        Если use_volatility_pool=True (по дефолту из app.json), берет стек монет
+        строго из отфильтрованного результата VolatilityScanner.
         """
+        cfg = cls._get_config()
+        effective_count = target_count if target_count is not None else int(cfg.get("target_count", 4))
+        effective_interval = interval or str(cfg.get("timeframe", "15m"))
+        effective_limit = limit if limit is not None else int(cfg.get("candles_limit", 96))
+        use_vol_pool = use_volatility_pool if use_volatility_pool is not None else bool(cfg.get("use_volatility_scanner_pool", True))
+        ttl_sec = float(cfg.get("klines_cache_ttl_sec", 300.0))
+
         candidates_to_fetch = universe_filter or universe
+
+        if not candidates_to_fetch and use_vol_pool:
+            from consts import DATA_DIR
+            volatile_file = volatile_file_path if volatile_file_path is not None else (DATA_DIR / "volatile_symbols.json")
+            if not volatile_file.exists():
+                try:
+                    from CORE.ADVANCED.volatility_scanner import VolatilityScanner
+                    scanner = VolatilityScanner()
+                    await scanner.scan()
+                except Exception as e:
+                    logger.error(f"[AlphaCoinSelector] Failed to run VolatilityScanner: {e}")
+
+            if volatile_file.exists():
+                try:
+                    vdata = Utils.read_json_file(volatile_file)
+                    if isinstance(vdata, list) and vdata:
+                        candidates_to_fetch = [
+                            str(x["symbol"]).upper().strip()
+                            for x in vdata if isinstance(x, dict) and "symbol" in x
+                        ]
+                        logger.info(f"[AlphaCoinSelector] Loaded {len(candidates_to_fetch)} symbols strictly from VolatilityScanner pool.")
+                except Exception as e:
+                    logger.error(f"[AlphaCoinSelector] Error loading volatile_symbols.json: {e}")
+
+            if not candidates_to_fetch:
+                logger.warning("[AlphaCoinSelector] VolatilityScanner pool is empty. 0 coins qualified.")
+                return []
+
         if not candidates_to_fetch:
             try:
                 tickers = await BinancePublic.get_24h_ticker()
@@ -203,7 +277,10 @@ class AlphaCoinSelector:
         async def fetch_klines(sym: str) -> Optional[tuple[str, dict]]:
             async with sem:
                 try:
-                    raw = await BinancePublic.get_klines(sym, interval=interval, limit=limit)
+                    async def fetcher():
+                        return await BinancePublic.get_klines(sym, interval=effective_interval, limit=effective_limit)
+
+                    raw = await KlinesCache.get_or_fetch(sym, effective_interval, effective_limit, fetcher, ttl_sec=ttl_sec)
                     if not raw or len(raw) < 20:
                         return None
                     return sym, {
@@ -230,9 +307,16 @@ class AlphaCoinSelector:
             logger.warning("[AlphaCoinSelector] Failed to load klines for candidates.")
             return []
 
-        ranked = cls.rank_symbols(valid_symbols, candles_dict, top_k=target_count)
+        ranked = cls.rank_symbols(
+            valid_symbols,
+            candles_dict,
+            top_k=effective_count,
+            min_natr_threshold=float(cfg.get("min_natr_threshold", 0.25)),
+            max_parabolic_pump_pct=float(cfg.get("max_parabolic_pump_pct", 60.0)),
+            max_death_spiral_dump_pct=float(cfg.get("max_death_spiral_dump_pct", -45.0)),
+        )
         logger.info(
-            f"[AlphaCoinSelector] Top-{target_count} selected: "
+            f"[AlphaCoinSelector] Top-{effective_count} selected: "
             + ", ".join([f"{x['symbol']} (score: {x['score']})" for x in ranked])
         )
         return ranked

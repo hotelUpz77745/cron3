@@ -114,6 +114,48 @@ class CoinSelectionService:
         self._enrich_with_bot_status(formatted)
         return formatted
 
+    async def get_volatility_top_coins(
+        self,
+        target_count: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Запрашивает актуальный срез монет из VolatilityScanner.
+        Обогащает результат текущим статусом активности в боте.
+        """
+        limit = target_count if target_count is not None else self.get_configured_target_count()
+        output_path = DATA_DIR / "volatile_symbols.json"
+
+        if not output_path.exists():
+            from CORE.ADVANCED.volatility_scanner import VolatilityScanner
+            scanner = VolatilityScanner(client=getattr(self.bot_core, "client", None))
+            await scanner.scan()
+
+        data: List[Dict[str, Any]] = []
+        if output_path.exists():
+            try:
+                raw = Utils.read_json_file(output_path)
+                if isinstance(raw, list):
+                    data = raw
+            except Exception as e:
+                logger.error(f"[CoinSelectionService] Error reading volatile_symbols.json: {e}")
+
+        formatted = []
+        for item in data[:limit]:
+            formatted.append({
+                "symbol": item["symbol"],
+                "score": item.get("volatility", 0.0),
+                "volatility": item.get("volatility", 0.0),
+                "candles": item.get("candles", 0),
+                "calc_base": item.get("calc_base", "H-L"),
+                "max_candle": item.get("max_candle"),
+                "rsi": item.get("rsi"),
+                "bb_width_pct": item.get("bb_width_pct"),
+                "reason": f"volatility_scanner (1w ATR {item.get('volatility', 0.0)}%)",
+            })
+
+        self._enrich_with_bot_status(formatted)
+        return formatted
+
     async def get_top_coins(
         self,
         selector_type: Optional[str] = None,
@@ -128,6 +170,8 @@ class CoinSelectionService:
 
         if sel == "samsonov_funnel":
             return await self.get_samsonov_top_coins(target_count=cnt, universe_id=universe_id)
+        elif sel == "volatility_scanner":
+            return await self.get_volatility_top_coins(target_count=cnt)
         return await self.get_alpha_top_coins(target_count=cnt)
 
     def _enrich_with_bot_status(self, coin_list: List[Dict[str, Any]]) -> None:
@@ -253,11 +297,12 @@ class CoinSelectionService:
         target_count: int,
     ) -> str:
         """Форматирует красивый Telegram-отчет по срезу отобранных монет."""
-        header_title = (
-            "⚡ <b>Alpha Coin Selector</b> (Wiggle & NATR)"
-            if selector_type == "alpha_coin_selector"
-            else "📡 <b>Samsonov Funnel Selector</b> (Радар)"
-        )
+        if selector_type == "alpha_coin_selector":
+            header_title = "⚡ <b>Alpha Coin Selector</b> (Wiggle & NATR)"
+        elif selector_type == "samsonov_funnel":
+            header_title = "📡 <b>Samsonov Funnel Selector</b> (Радар)"
+        else:
+            header_title = "🔍 <b>Volatility Scanner</b> (Сонник)"
 
         lines = [
             f"{header_title}",
@@ -265,7 +310,13 @@ class CoinSelectionService:
         ]
 
         if not results:
-            lines.append("⚠️ <i>Подходящих монет под текущие строгие фильтры не обнаружено.</i>")
+            if selector_type == "samsonov_funnel":
+                lines.append("🥬 <b>Пусто, выросла капуста!</b>")
+                lines.append("<i>Сырье для воронки отсутствует: бумажный бот (Полигон Радара) отключен или нет накопленной статистики сделок.</i>")
+            elif selector_type == "alpha_coin_selector":
+                lines.append("⚠️ <i>Подходящих монет под текущие строгие фильтры не обнаружено (или пул Volatility Scanner пуст).</i>")
+            else:
+                lines.append("⚠️ <i>Подходящих монет под текущие фильтры волатильности не обнаружено.</i>")
             return "\n".join(lines)
 
         for i, item in enumerate(results, start=1):
@@ -282,12 +333,27 @@ class CoinSelectionService:
                     f"<b>#{i} {sym}</b> — Score: <b>{score:.3f}</b> | {status_emoji}{strat_info}\n"
                     f"   └ NATR: <code>{natr:.2f}%</code> | Wiggle: <code>{wiggle:.1f}</code> | Shift: <code>{move:+.1f}%</code>"
                 )
-            else:
+            elif selector_type == "samsonov_funnel":
                 trades = item.get("trades", 0)
                 resilience = item.get("resilience", 0.0)
                 lines.append(
                     f"<b>#{i} {sym}</b> — Score: <b>{score:.2f}</b> | {status_emoji}{strat_info}\n"
                     f"   └ Сделок: <code>{trades}</code> | Resilience: <code>{resilience:.2f}</code>"
+                )
+            else:
+                vol = item.get("volatility", 0.0)
+                base = item.get("calc_base", "H-L")
+                candles = item.get("candles", 0)
+                mc = item.get("max_candle")
+                mc_line = ""
+                if mc:
+                    mc_line = (
+                        f"\n   └ Max свеча: <code>{mc.get('atr_pct', 0.0)}%</code> {mc.get('color_label', '')} "
+                        f"(Тени: <code>{mc.get('shadow_span_pct', 0.0)}%</code>, Тело: <code>{mc.get('body_span_pct', 0.0)}%</code>)"
+                    )
+                lines.append(
+                    f"<b>#{i} {sym}</b> — ATR [{base}]: <b>{vol:.2f}%</b> (свечей: {candles}) | {status_emoji}{strat_info}"
+                    f"{mc_line}"
                 )
 
         lines.append("\n💡 <i>Нажмите кнопку ниже для повторного сканирования:</i>")

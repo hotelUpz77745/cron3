@@ -64,6 +64,10 @@
         "_desc_strict_window": "Strict history length requirement: exclude young listings with fewer candles than window.",
         "min_dayly_vol_usdt": 3000000,
         "_desc_min_dayly_vol_usdt": "Base liquidity filter: minimum 24h trading volume in USDT.",
+        "atr_calc_base": "H-L",
+        "_desc_atr_calc_base": "Calculation base for ATR: 'H-L' (High-Low shadow range) or 'O-C' (Open-Close candle body).",
+        "klines_cache_ttl_sec": 300,
+        "_desc_klines_cache_ttl_sec": "Candle cache lifetime in seconds (default 300 = 5 minutes).",
         "atr_volatility_filter": {
             "enabled": true,
             "_desc_enabled": "Long-term candle volatility filter (ATR range).",
@@ -72,7 +76,7 @@
             "window": 12,
             "_desc_window": "Number of candles for volatility averaging.",
             "min_volatility_pct": 25.0,
-            "_desc_min_volatility_pct": "Minimum average candle volatility (High/Low - 1)*100 in %.",
+            "_desc_min_volatility_pct": "Minimum average candle volatility in %.",
             "max_volatility_pct": 40.0,
             "_desc_max_volatility_pct": "Maximum average candle volatility in %."
         },
@@ -111,7 +115,38 @@
                 "_comment": "50% = price at channel boundary, 75% = price within 1.5x half-width from center."
             }
         },
-        "_comment_call": "Telegram trigger: /sonnik command -> 'Run Scanner' button"
+        "_comment_call": "Telegram trigger: /sonnik or /screener command"
+    },
+    "alpha_coin_selector": {
+        "enabled": true,
+        "_desc_enabled": "Alpha coin selector toggle (Wiggle & NATR ranking).",
+        "target_count": 4,
+        "_desc_target_count": "Default top coins count to select.",
+        "timeframe": "15m",
+        "_desc_timeframe": "Candle timeframe for alpha metrics calculation.",
+        "candles_limit": 96,
+        "_desc_candles_limit": "Number of candles (96 * 15m = 24h history).",
+        "use_volatility_scanner_pool": true,
+        "_desc_use_volatility_scanner_pool": "Strictly take candidate universe from volatility_scanner output (e.g. 65 coins).",
+        "min_natr_threshold": 0.25,
+        "_desc_min_natr_threshold": "Minimum NATR % required to qualify.",
+        "max_parabolic_pump_pct": 60.0,
+        "_desc_max_parabolic_pump_pct": "Anti-pump ceiling: reject parabolic surges above this %.",
+        "max_death_spiral_dump_pct": -45.0,
+        "_desc_max_death_spiral_dump_pct": "Anti-dump floor: reject death spiral collapses below this %."
+    },
+    "samsonov_funnel": {
+        "enabled": true,
+        "_desc_enabled": "Samsonov 3-step funnel selector toggle.",
+        "target_count": 4,
+        "_desc_target_count": "Default top coins count to select.",
+        "default_universe_id": "u0_fat_swing123",
+        "_desc_default_universe_id": "Fallback universe if bot active strategies are not specified.",
+        "w_resilience": 1.0,
+        "w_realized": 1.0,
+        "w_velocity": 1.0,
+        "empty_notice": "Пусто, выросла капуста",
+        "_desc_empty_notice": "Safe notice when paper bot is disabled or raw radar data is empty."
     },
     "watchdog": {
         "timeout_sec": 60,
