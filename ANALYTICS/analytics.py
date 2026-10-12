@@ -1346,6 +1346,7 @@ class AnalyticsManager:
                 s_trough = s_cur
             if s_cur < s_min:
                 s_min = s_cur
+                strat_data["min_balance_ts"] = now_ms
 
             strat_data["peak_balance_usdt"] = round(s_peak, 4)
             strat_data["peak_net_profit_usdt"] = round(s_peak - s_init, 4)
