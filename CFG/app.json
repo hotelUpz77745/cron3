@@ -64,7 +64,7 @@
         "_desc_strict_window": "Strict history length requirement: exclude young listings with fewer candles than window.",
         "min_dayly_vol_usdt": 3000000,
         "_desc_min_dayly_vol_usdt": "Base liquidity filter: minimum 24h trading volume in USDT.",
-        "atr_calc_base": "H-L",
+        "atr_calc_base": "O-C",
         "_desc_atr_calc_base": "Calculation base for ATR: 'H-L' (High-Low shadow range) or 'O-C' (Open-Close candle body).",
         "klines_cache_ttl_sec": 300,
         "_desc_klines_cache_ttl_sec": "Candle cache lifetime in seconds (default 300 = 5 minutes).",

@@ -1,347 +1,89 @@
-Дата: 2026-10-11 23:40:17 UTC
-Количество монет: 67
+Дата: 2026-10-12 19:18:24 UTC
+Количество монет: 11
 
 JSON Symbols List (для app.json):
-["ENAUSDT", "LYNUSDT", "METUSDT", "LAUSDT", "ROBOUSDT", "BOMEUSDT", "MINAUSDT", "IOSTUSDT", "GIGGLEUSDT", "ESPUSDT", "PUMPUSDT", "NIGHTUSDT", "GRIFFAINUSDT", "SOONUSDT", "KAITOUSDT", "ERAUSDT", "RIVERUSDT", "RAYSOLUSDT", "ARXUSDT", "EDGEUSDT", "ZROUSDT", "ALLOUSDT", "TRUMPUSDT", "REUSDT", "UNIUSDT", "BBUSDT", "VVVUSDT", "DASHUSDT", "LUMIAUSDT", "ARUSDT", "GTCUSDT", "ZECUSDT", "STXUSDT", "LITUSDT", "AIAUSDT", "BILLUSDT", "0GUSDT", "1000BONKUSDT", "VELODROMEUSDT", "CTSIUSDT", "WLDUSDT", "KMNOUSDT", "OGNUSDT", "PIXELUSDT", "FARTCOINUSDT", "SANDUSDT", "TIAUSDT", "PENGUUSDT", "2ZUSDT", "XAIUSDT", "ZENUSDT", "JTOUSDT", "ETHFIUSDT", "XPLUSDT", "NEIROUSDT", "GRTUSDT", "FETUSDT", "BRETTUSDT", "1000PEPEUSDT", "BASEDUSDT", "KAIAUSDT", "SPXUSDT", "WIFUSDT", "YBUSDT", "MONUSDT", "KITEUSDT", "JUPUSDT"]
+["AINUSDT", "BTWUSDT", "USELESSUSDT", "QNTUSDT", "MUBARAKUSDT", "UAIUSDT", "STRKUSDT", "SYNUSDT", "ONUSDT", "ARBUSDT", "SKRUSDT"]
 
 JSON Symbols List (развернутый):
 [
-    "ENAUSDT",
-    "LYNUSDT",
-    "METUSDT",
-    "LAUSDT",
-    "ROBOUSDT",
-    "BOMEUSDT",
-    "MINAUSDT",
-    "IOSTUSDT",
-    "GIGGLEUSDT",
-    "ESPUSDT",
-    "PUMPUSDT",
-    "NIGHTUSDT",
-    "GRIFFAINUSDT",
-    "SOONUSDT",
-    "KAITOUSDT",
-    "ERAUSDT",
-    "RIVERUSDT",
-    "RAYSOLUSDT",
-    "ARXUSDT",
-    "EDGEUSDT",
-    "ZROUSDT",
-    "ALLOUSDT",
-    "TRUMPUSDT",
-    "REUSDT",
-    "UNIUSDT",
-    "BBUSDT",
-    "VVVUSDT",
-    "DASHUSDT",
-    "LUMIAUSDT",
-    "ARUSDT",
-    "GTCUSDT",
-    "ZECUSDT",
-    "STXUSDT",
-    "LITUSDT",
-    "AIAUSDT",
-    "BILLUSDT",
-    "0GUSDT",
-    "1000BONKUSDT",
-    "VELODROMEUSDT",
-    "CTSIUSDT",
-    "WLDUSDT",
-    "KMNOUSDT",
-    "OGNUSDT",
-    "PIXELUSDT",
-    "FARTCOINUSDT",
-    "SANDUSDT",
-    "TIAUSDT",
-    "PENGUUSDT",
-    "2ZUSDT",
-    "XAIUSDT",
-    "ZENUSDT",
-    "JTOUSDT",
-    "ETHFIUSDT",
-    "XPLUSDT",
-    "NEIROUSDT",
-    "GRTUSDT",
-    "FETUSDT",
-    "BRETTUSDT",
-    "1000PEPEUSDT",
-    "BASEDUSDT",
-    "KAIAUSDT",
-    "SPXUSDT",
-    "WIFUSDT",
-    "YBUSDT",
-    "MONUSDT",
-    "KITEUSDT",
-    "JUPUSDT"
+    "AINUSDT",
+    "BTWUSDT",
+    "USELESSUSDT",
+    "QNTUSDT",
+    "MUBARAKUSDT",
+    "UAIUSDT",
+    "STRKUSDT",
+    "SYNUSDT",
+    "ONUSDT",
+    "ARBUSDT",
+    "SKRUSDT"
 ]
 
 Детализация:
 _____
-Символ: ENAUSDT
-Волатильность (1w ATR): 39.65% (свечей: 12)
-RSI (4h): 61.96
-_____
-Символ: LYNUSDT
-Волатильность (1w ATR): 39.23% (свечей: 12)
-RSI (4h): 41.15
-_____
-Символ: METUSDT
-Волатильность (1w ATR): 38.89% (свечей: 12)
-RSI (4h): 55.02
-_____
-Символ: LAUSDT
-Волатильность (1w ATR): 38.69% (свечей: 12)
-RSI (4h): 63.62
-_____
-Символ: ROBOUSDT
-Волатильность (1w ATR): 37.6% (свечей: 12)
-RSI (4h): 58.66
-_____
-Символ: BOMEUSDT
-Волатильность (1w ATR): 37.57% (свечей: 12)
-RSI (4h): 57.3
-_____
-Символ: MINAUSDT
-Волатильность (1w ATR): 37.44% (свечей: 12)
-RSI (4h): 36.05
-_____
-Символ: IOSTUSDT
-Волатильность (1w ATR): 37.01% (свечей: 12)
-RSI (4h): 60.99
-_____
-Символ: GIGGLEUSDT
-Волатильность (1w ATR): 36.46% (свечей: 12)
-RSI (4h): 54.97
-_____
-Символ: ESPUSDT
-Волатильность (1w ATR): 36.09% (свечей: 12)
-RSI (4h): 62.14
-_____
-Символ: PUMPUSDT
-Волатильность (1w ATR): 35.89% (свечей: 12)
-RSI (4h): 46.77
-_____
-Символ: NIGHTUSDT
-Волатильность (1w ATR): 35.68% (свечей: 12)
-RSI (4h): 53.78
-_____
-Символ: GRIFFAINUSDT
-Волатильность (1w ATR): 34.97% (свечей: 12)
-RSI (4h): 42.65
-_____
-Символ: SOONUSDT
-Волатильность (1w ATR): 34.59% (свечей: 12)
-RSI (4h): 39.37
-_____
-Символ: KAITOUSDT
-Волатильность (1w ATR): 34.2% (свечей: 12)
-RSI (4h): 52.6
-_____
-Символ: ERAUSDT
-Волатильность (1w ATR): 33.84% (свечей: 12)
-RSI (4h): 55.48
-_____
-Символ: RIVERUSDT
-Волатильность (1w ATR): 33.79% (свечей: 12)
-RSI (4h): 42.77
-_____
-Символ: RAYSOLUSDT
-Волатильность (1w ATR): 33.53% (свечей: 12)
-RSI (4h): 56.1
-_____
-Символ: ARXUSDT
-Волатильность (1w ATR): 33.24% (свечей: 12)
-RSI (4h): 57.42
-_____
-Символ: EDGEUSDT
-Волатильность (1w ATR): 33.05% (свечей: 12)
-RSI (4h): 38.41
-_____
-Символ: ZROUSDT
-Волатильность (1w ATR): 32.94% (свечей: 12)
-RSI (4h): 54.08
-_____
-Символ: ALLOUSDT
-Волатильность (1w ATR): 32.83% (свечей: 12)
-RSI (4h): 44.15
-_____
-Символ: TRUMPUSDT
-Волатильность (1w ATR): 32.03% (свечей: 12)
-RSI (4h): 60.71
-_____
-Символ: REUSDT
-Волатильность (1w ATR): 31.9% (свечей: 12)
-RSI (4h): 45.4
-_____
-Символ: UNIUSDT
-Волатильность (1w ATR): 31.13% (свечей: 12)
-RSI (4h): 52.55
-_____
-Символ: BBUSDT
-Волатильность (1w ATR): 31.12% (свечей: 12)
-RSI (4h): 60.56
-_____
-Символ: VVVUSDT
-Волатильность (1w ATR): 30.69% (свечей: 12)
-RSI (4h): 58.34
-_____
-Символ: DASHUSDT
-Волатильность (1w ATR): 30.46% (свечей: 12)
-RSI (4h): 53.25
-_____
-Символ: LUMIAUSDT
-Волатильность (1w ATR): 30.22% (свечей: 12)
-RSI (4h): 57.02
-_____
-Символ: ARUSDT
-Волатильность (1w ATR): 30.19% (свечей: 12)
-RSI (4h): 58.66
-_____
-Символ: GTCUSDT
-Волатильность (1w ATR): 30.18% (свечей: 12)
-RSI (4h): 51.17
-_____
-Символ: ZECUSDT
-Волатильность (1w ATR): 30.03% (свечей: 12)
-RSI (4h): 58.21
-_____
-Символ: STXUSDT
-Волатильность (1w ATR): 29.96% (свечей: 12)
-RSI (4h): 55.23
-_____
-Символ: LITUSDT
-Волатильность (1w ATR): 29.61% (свечей: 12)
-RSI (4h): 61.78
-_____
-Символ: AIAUSDT
-Волатильность (1w ATR): 29.14% (свечей: 12)
-RSI (4h): 49.2
-_____
-Символ: BILLUSDT
-Волатильность (1w ATR): 29.07% (свечей: 12)
-RSI (4h): 48.54
-_____
-Символ: 0GUSDT
-Волатильность (1w ATR): 28.99% (свечей: 12)
-RSI (4h): 50.27
-_____
-Символ: 1000BONKUSDT
-Волатильность (1w ATR): 28.69% (свечей: 12)
-RSI (4h): 53.15
-_____
-Символ: VELODROMEUSDT
-Волатильность (1w ATR): 28.39% (свечей: 12)
-RSI (4h): 62.64
-_____
-Символ: CTSIUSDT
-Волатильность (1w ATR): 28.26% (свечей: 12)
-RSI (4h): 57.46
-_____
-Символ: WLDUSDT
-Волатильность (1w ATR): 28.2% (свечей: 12)
-RSI (4h): 56.99
-_____
-Символ: KMNOUSDT
-Волатильность (1w ATR): 27.95% (свечей: 12)
-RSI (4h): 60.4
-_____
-Символ: OGNUSDT
-Волатильность (1w ATR): 27.71% (свечей: 12)
-RSI (4h): 49.3
-_____
-Символ: PIXELUSDT
-Волатильность (1w ATR): 27.52% (свечей: 12)
-RSI (4h): 48.69
-_____
-Символ: FARTCOINUSDT
-Волатильность (1w ATR): 27.36% (свечей: 12)
-RSI (4h): 59.56
-_____
-Символ: SANDUSDT
-Волатильность (1w ATR): 27.01% (свечей: 12)
-RSI (4h): 44.23
-_____
-Символ: TIAUSDT
-Волатильность (1w ATR): 26.99% (свечей: 12)
-RSI (4h): 62.64
-_____
-Символ: PENGUUSDT
-Волатильность (1w ATR): 26.89% (свечей: 12)
-RSI (4h): 44.98
-_____
-Символ: 2ZUSDT
-Волатильность (1w ATR): 26.81% (свечей: 12)
-RSI (4h): 49.56
-_____
-Символ: XAIUSDT
-Волатильность (1w ATR): 26.57% (свечей: 12)
-RSI (4h): 55.53
-_____
-Символ: ZENUSDT
-Волатильность (1w ATR): 26.54% (свечей: 12)
-RSI (4h): 51.43
-_____
-Символ: JTOUSDT
-Волатильность (1w ATR): 26.53% (свечей: 12)
-RSI (4h): 58.69
-_____
-Символ: ETHFIUSDT
-Волатильность (1w ATR): 26.49% (свечей: 12)
-RSI (4h): 62.58
-_____
-Символ: XPLUSDT
-Волатильность (1w ATR): 26.35% (свечей: 12)
-RSI (4h): 54.58
-_____
-Символ: NEIROUSDT
-Волатильность (1w ATR): 26.25% (свечей: 12)
-RSI (4h): 59.02
-_____
-Символ: GRTUSDT
-Волатильность (1w ATR): 26.07% (свечей: 12)
-RSI (4h): 58.39
-_____
-Символ: FETUSDT
-Волатильность (1w ATR): 26.02% (свечей: 12)
-RSI (4h): 62.47
-_____
-Символ: BRETTUSDT
-Волатильность (1w ATR): 25.96% (свечей: 12)
-RSI (4h): 58.66
-_____
-Символ: 1000PEPEUSDT
-Волатильность (1w ATR): 25.64% (свечей: 12)
-RSI (4h): 63.94
-_____
-Символ: BASEDUSDT
-Волатильность (1w ATR): 25.62% (свечей: 12)
-RSI (4h): 48.36
-_____
-Символ: KAIAUSDT
-Волатильность (1w ATR): 25.61% (свечей: 12)
-RSI (4h): 56.87
-_____
-Символ: SPXUSDT
-Волатильность (1w ATR): 25.61% (свечей: 12)
-RSI (4h): 50.63
-_____
-Символ: WIFUSDT
-Волатильность (1w ATR): 25.35% (свечей: 12)
-RSI (4h): 52.92
-_____
-Символ: YBUSDT
-Волатильность (1w ATR): 25.35% (свечей: 12)
-RSI (4h): 54.06
-_____
-Символ: MONUSDT
-Волатильность (1w ATR): 25.3% (свечей: 12)
-RSI (4h): 64.44
-_____
-Символ: KITEUSDT
-Волатильность (1w ATR): 25.27% (свечей: 12)
-RSI (4h): 48.07
-_____
-Символ: JUPUSDT
-Волатильность (1w ATR): 25.18% (свечей: 12)
-RSI (4h): 52.48
+Символ: AINUSDT
+Волатильность (1w ATR [O-C]): 39.8% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 227.22% | 🔴 Красная
+   └ Тени (H-L): 1041.95% (0.19797 USDT) | Тело (O-C): 227.22% (0.04742 USDT)
+RSI (4h): 55.01
+_____
+Символ: BTWUSDT
+Волатильность (1w ATR [O-C]): 37.91% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 167.08% | 🟢 Зеленая
+   └ Тени (H-L): 206.65% (0.1623 USDT) | Тело (O-C): 167.08% (0.1344 USDT)
+RSI (4h): 58.0
+_____
+Символ: USELESSUSDT
+Волатильность (1w ATR [O-C]): 35.81% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 217.12% | 🟢 Зеленая
+   └ Тени (H-L): 385.24% (0.25283 USDT) | Тело (O-C): 217.12% (0.14762 USDT)
+RSI (4h): 36.73
+_____
+Символ: QNTUSDT
+Волатильность (1w ATR [O-C]): 35.37% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 346.41% | 🟢 Зеленая
+   └ Тени (H-L): 484.43% (310.42 USDT) | Тело (O-C): 346.41% (222.12 USDT)
+RSI (4h): 35.09
+_____
+Символ: MUBARAKUSDT
+Волатильность (1w ATR [O-C]): 32.23% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 97.06% | 🟢 Зеленая
+   └ Тени (H-L): 122.99% (0.01498 USDT) | Тело (O-C): 97.06% (0.01254 USDT)
+RSI (4h): 43.96
+_____
+Символ: UAIUSDT
+Волатильность (1w ATR [O-C]): 32.04% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 123.06% | 🔴 Красная
+   └ Тени (H-L): 166.62% (0.3509 USDT) | Тело (O-C): 123.06% (0.2978 USDT)
+RSI (4h): 45.83
+_____
+Символ: STRKUSDT
+Волатильность (1w ATR [O-C]): 31.67% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 109.98% | 🟢 Зеленая
+   └ Тени (H-L): 164.58% (0.07875 USDT) | Тело (O-C): 109.98% (0.06448 USDT)
+RSI (4h): 52.95
+_____
+Символ: SYNUSDT
+Волатильность (1w ATR [O-C]): 28.78% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 179.8% | 🟢 Зеленая
+   └ Тени (H-L): 255.79% (0.19926 USDT) | Тело (O-C): 179.8% (0.1415 USDT)
+RSI (4h): 44.43
+_____
+Символ: ONUSDT
+Волатильность (1w ATR [O-C]): 27.62% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 90.94% | 🟢 Зеленая
+   └ Тени (H-L): 202.14% (0.24671 USDT) | Тело (O-C): 90.94% (0.11633 USDT)
+RSI (4h): 60.27
+_____
+Символ: ARBUSDT
+Волатильность (1w ATR [O-C]): 27.18% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 124.73% | 🟢 Зеленая
+   └ Тени (H-L): 146.9% (0.12306 USDT) | Тело (O-C): 124.73% (0.105 USDT)
+RSI (4h): 42.58
+_____
+Символ: SKRUSDT
+Волатильность (1w ATR [O-C]): 26.81% (свечей: 12)
+Наибольшая свеча (Extreme ATR): 199.59% | 🟢 Зеленая
+   └ Тени (H-L): 240.16% (0.018149 USDT) | Тело (O-C): 199.59% (0.016153 USDT)
+RSI (4h): 51.59
 _____
