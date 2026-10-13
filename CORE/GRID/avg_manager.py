@@ -496,6 +496,31 @@ class AverageManager:
                 state.fallback_price = None
                 state.trailing_tp_state = {}
 
+                # Учет срезки Sub-grid Peel в бухгалтерии аналитики
+                try:
+                    analytics = getattr(runtime_manager, "analytics", None)
+                    if not analytics and hasattr(runtime_manager, "bot_core"):
+                        analytics = getattr(runtime_manager.bot_core, "analytics", None)
+                    strat_id = "default"
+                    if hasattr(runtime_manager, "strategy_registry") and runtime_manager.strategy_registry:
+                        strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                        if strat:
+                            strat_id = getattr(strat, "strategy_id", "default")
+                    if analytics and hasattr(analytics, "record_subgrid_peel"):
+                        analytics.record_subgrid_peel(
+                            strategy_id=strat_id,
+                            symbol=symbol,
+                            side=side,
+                            level=str(cur_level_str),
+                            fill_price=fill_price,
+                            peel_price=current_price,
+                            rebound_pct=rebound_pct,
+                            peel_qty=peel_qty,
+                            rem_pos_qty=abs(state.total_volume),
+                        )
+                except Exception as e:
+                    logger.warning(f"[{symbol}] Failed to record subgrid peel: {e}")
+
                 if hasattr(runtime_manager, "mark_dirty") and callable(runtime_manager.mark_dirty):
                     runtime_manager.mark_dirty()
 

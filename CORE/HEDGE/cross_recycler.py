@@ -206,6 +206,32 @@ class CrossSideProfitRecycler:
                 except Exception as e:
                     logger.warning(f"[{strat_id}][{symbol}] Failed to cancel orders for fully burned side: {e}")
 
+            # Учет сжигания Cross-Side Profit Recycling в бухгалтерии аналитики
+            try:
+                analytics = getattr(universe, "analytics", None)
+                if not analytics and hasattr(universe, "runtime_manager"):
+                    analytics = getattr(universe.runtime_manager, "analytics", None)
+                if not analytics and hasattr(universe, "bot_core"):
+                    analytics = getattr(universe.bot_core, "analytics", None)
+
+                if analytics and hasattr(analytics, "record_cross_recycling"):
+                    analytics.record_cross_recycling(
+                        strategy_id=strat_id or "default",
+                        symbol=symbol,
+                        winning_side=winning_side,
+                        realized_profit=realized_profit,
+                        losing_side=losing_side,
+                        losing_level=cur_level,
+                        losing_dd_pct=drawdown_pct,
+                        burn_qty=rounded_qty,
+                        current_price=current_price,
+                        actual_burn_loss=actual_burn_loss,
+                        burn_budget=burn_budget,
+                        rem_pos_qty=abs(losing_state.total_volume),
+                    )
+            except Exception as e:
+                logger.warning(f"[{strat_id}][{symbol}] Failed to record cross-recycling to analytics: {e}")
+
             return {
                 "symbol": symbol,
                 "winning_side": winning_side,

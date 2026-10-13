@@ -1430,12 +1430,19 @@ class TelegramReceiver:
                 roi_val = float(item.get("roi_pct", 0.0))
                 roi_sign = "+" if roi_val > 0 else ""
 
+                peel_cnt = int(item.get("peel_events", 0))
+                peel_vol = float(item.get("peel_vol_usdt", 0.0))
+                rec_cnt = int(item.get("rec_events", 0))
+                rec_vol = float(item.get("rec_burn_usdt", 0.0))
+                def_line = f"├ Дефенс: 🍊 {peel_cnt} пилинг ({peel_vol:.1f}$) | ♻️ {rec_cnt} рециклер ({rec_vol:.1f}$)\n"
+
                 card = (
                     f"{medal} <b>{uid}</b>\n"
                     f"├ Режим: <code>{mode_b}</code> <code>{size_b}</code>\n"
                     f"├ Net Profit: <b>{net_sign}{net_val:.2f} USDT</b> ({roi_sign}{roi_val:.2f}% ROI) <i>(Итер #{iter_idx}: {iter_net_sign}{iter_net:.2f}$)</i>\n"
                     f"├ Realized: <b>{real_sign}{real_val:.2f}$</b> <i>(Итер: {iter_real_sign}{iter_real:.2f}$)</i>\n"
                     f"├ Floating: <b>{unreal_sign}{unreal_val:.2f}$</b>\n"
+                    f"{def_line}"
                     f"├ Max DD: <code>{max_dd:.2f}$</code> | ATH Net: <code>{peak_str}</code>\n"
                     f"└ Сделок: <b>{trades}</b> | Rec. Factor: <code>{rec:.2f}</code>"
                 )
@@ -2240,7 +2247,13 @@ class TelegramReceiver:
                 lines.append(f"  Margin Load: {m_pct:.2f}% (Used: {m_used:,.2f} USDT | Max: {data.get('max_margin_load_pct', m_pct):.2f}%)")
                 lines.append(f"  Free Margin: {f_marg:,.2f} USDT ({f_pct:.2f}% | Min: {data.get('min_free_margin_usdt', f_marg):,.2f} USDT)")
                 lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0):.2f}")
-                lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0):.1f}%)\n")
+                lines.append(f"  Trades: {data.get('total_trades', 0)} (Wins: {data.get('winning_trades', 0)} | {data.get('winrate_pct', 0):.1f}%)")
+
+                toxic_def = data.get("toxic_defense", {})
+                peel_def = toxic_def.get("subgrid_peeling", {})
+                rec_def = toxic_def.get("cross_recycling", {})
+                lines.append(f"  Defense (Subgrid Peels): {peel_def.get('events_count', 0)} events | Vol: {peel_def.get('total_peeled_usdt', 0.0):,.2f} USDT | Locked: {peel_def.get('locked_micro_pnl_usdt', 0.0):+,.2f} USDT")
+                lines.append(f"  Defense (Cross-Recycling): {rec_def.get('events_count', 0)} events | Vol: {rec_def.get('burned_volume_usdt', 0.0):,.2f} USDT | Absorbed: {rec_def.get('loss_absorbed_usdt', 0.0):+,.2f} USDT\n")
                 
                 if "per_coin" in data:
                     lines.append("="*50)

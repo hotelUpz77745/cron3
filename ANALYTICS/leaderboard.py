@@ -171,6 +171,18 @@ class LeaderboardEngine:
             sizing_mode = "static"
             sizing_badge = "[STATIC]"
 
+        toxic_def = data.get("toxic_defense", {})
+        peel_def = toxic_def.get("subgrid_peeling", {})
+        rec_def = toxic_def.get("cross_recycling", {})
+        peel_events = int(peel_def.get("events_count", 0))
+        peel_vol = float(peel_def.get("total_peeled_usdt", 0.0))
+        peel_pnl = float(peel_def.get("locked_micro_pnl_usdt", 0.0))
+        rec_events = int(rec_def.get("events_count", 0))
+        rec_vol = float(rec_def.get("burned_volume_usdt", 0.0))
+        rec_loss = float(rec_def.get("loss_absorbed_usdt", 0.0))
+        rec_spent = float(rec_def.get("profit_spent_usdt", 0.0))
+        def_badge = f"{peel_events}P/{rec_events}R"
+
         return {
             "universe_id": universe_id,
             "name": meta.get("name", universe_id),
@@ -202,6 +214,15 @@ class LeaderboardEngine:
             "sizing_mode": sizing_mode,
             "sizing_badge": sizing_badge,
             "trade_velocity": data.get("trade_velocity", {}),
+            "toxic_defense": toxic_def,
+            "peel_events": peel_events,
+            "peel_vol_usdt": round(peel_vol, 2),
+            "peel_pnl_usdt": round(peel_pnl, 2),
+            "rec_events": rec_events,
+            "rec_burn_usdt": round(rec_vol, 2),
+            "rec_loss_usdt": round(rec_loss, 2),
+            "rec_spent_usdt": round(rec_spent, 2),
+            "defense_badge": def_badge,
         }
 
     def generate_leaderboard(
@@ -236,13 +257,13 @@ class LeaderboardEngine:
             header_line = (
                 f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} {'Sizing':<9} "
                 f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
-                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6}"
+                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6} {'Def (P/R)':<10}"
             )
         else:
             header_line = (
                 f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} "
                 f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
-                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6}"
+                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6} {'Def (P/R)':<10}"
             )
 
         total_width = len(header_line)
@@ -271,24 +292,41 @@ class LeaderboardEngine:
             rec_str = f"{item.get('recovery_factor', 0.0):.2f}"
             mode_badge = item.get("mode_badge") or (f"[{str(item.get('mode', 'OFF')).upper()}]")
             uid_short = item.get('universe_id', '')[:id_width]
+            def_badge = item.get("defense_badge", "0P/0R")
 
             if has_sizing:
                 sizing_badge = item.get("sizing_badge", "[STATIC]")
                 row = (
                     f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} {sizing_badge:<9} "
                     f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
-                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6}"
+                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6} {def_badge:<10}"
                 )
             else:
                 row = (
                     f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} "
                     f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
-                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6}"
+                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6} {def_badge:<10}"
                 )
             rows.append(row)
 
+        notes_lines = []
+        tot_peels = sum(item.get("peel_events", 0) for item in entries)
+        tot_recs = sum(item.get("rec_events", 0) for item in entries)
+        if tot_peels > 0 or tot_recs > 0:
+            peel_vol_sum = sum(item.get("peel_vol_usdt", 0.0) for item in entries)
+            peel_pnl_sum = sum(item.get("peel_pnl_usdt", 0.0) for item in entries)
+            rec_burn_sum = sum(item.get("rec_burn_usdt", 0.0) for item in entries)
+            rec_loss_sum = sum(item.get("rec_loss_usdt", 0.0) for item in entries)
+            notes_lines.append(
+                f"[DEFENSE BOOKKEEPING]: Subgrid Peels: {tot_peels} ({peel_vol_sum:.1f}$ vol, {peel_pnl_sum:+.2f}$ locked pnl) | "
+                f"Cross-Recycling: {tot_recs} ({rec_burn_sum:.1f}$ vol burned, {rec_loss_sum:.2f}$ loss absorbed)"
+            )
+
         footer = "=" * total_width
-        return "\n".join([header] + rows + [footer])
+        all_lines = [header] + rows + [footer]
+        if notes_lines:
+            all_lines.extend(notes_lines + ["=" * total_width])
+        return "\n".join(all_lines)
 
     def format_table_chunks(
         self, entries: List[dict], evaluated_coins_count: int = 0, chunk_size: int = 11, title_suffix: str = "", top_limit: Optional[int] = 32

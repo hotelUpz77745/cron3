@@ -78,6 +78,8 @@ class AnalyticsManager:
         self.ledgers_dir = ANALYTICS_LEDGERS_DIR
         self.log_file = ANALYTICS_STATS_DIR / "analytics.json"
         self.txt_file = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+        self.peels_ledger = ANALYTICS_LEDGERS_DIR / "peels_ledger.txt"
+        self.recycling_ledger = ANALYTICS_LEDGERS_DIR / "recycling_ledger.txt"
         self.leaderboard_engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=ANALYTICS_STATS_DIR)
         try:
             from ANALYTICS.trade_velocity import TradeVelocityEngine
@@ -158,6 +160,24 @@ class AnalyticsManager:
             with open(self.txt_file, mode="w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f, delimiter=';')
                 writer.writerow(["Symbol", "Side", "Open Time", "Close Time", "PnL", "Balance"])
+
+        if not self.peels_ledger.exists():
+            with open(self.peels_ledger, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow([
+                    "Id", "Timestamp (UTC)", "Strategy", "Symbol", "Side", "Level",
+                    "Fill Price", "Peel Price", "Rebound %", "Peel Qty",
+                    "Peel Vol (USDT)", "Micro PnL (USDT)", "Remaining Pos Qty"
+                ])
+
+        if not self.recycling_ledger.exists():
+            with open(self.recycling_ledger, mode="w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow([
+                    "Id", "Timestamp (UTC)", "Strategy", "Symbol", "Winning Side",
+                    "Realized Profit (USDT)", "Losing Side", "Losing Level", "Losing DD %",
+                    "Burn Qty", "Burn Vol (USDT)", "Slice Loss (USDT)", "Burn Budget (USDT)", "Remaining Pos Qty"
+                ])
 
         self._ensure_strategy_files()
 
@@ -448,6 +468,218 @@ class AnalyticsManager:
         task = asyncio.create_task(self._fetch_and_record(client, symbol, side, open_time, close_time))
         self._background_tasks.add(task)
         task.add_done_callback(self._background_tasks.discard)
+
+    def record_subgrid_peel(
+        self,
+        strategy_id: str,
+        symbol: str,
+        side: str,
+        level: str,
+        fill_price: float,
+        peel_price: float,
+        rebound_pct: float,
+        peel_qty: float,
+        rem_pos_qty: float,
+    ):
+        """
+        Записывает операцию Sub-grid Peel (LIFO откусывание объема на отскоке колена)
+        в бухгалтерский леджер и обновляет агрегированную аналитику.
+        """
+        try:
+            dt_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            peel_vol_usdt = round(float(peel_qty) * float(peel_price), 4)
+            if str(side).upper() == "LONG":
+                micro_pnl = round((float(peel_price) - float(fill_price)) * float(peel_qty), 4)
+            else:
+                micro_pnl = round((float(fill_price) - float(peel_price)) * float(peel_qty), 4)
+
+            # 1. Запись в общий peels_ledger.txt
+            cnt = 1
+            if self.peels_ledger.exists():
+                try:
+                    with open(self.peels_ledger, "r", encoding="utf-8") as f:
+                        cnt = sum(1 for line in f if line.strip())
+                except Exception:
+                    cnt = 1
+
+            row = [
+                cnt,
+                dt_str,
+                strategy_id,
+                symbol,
+                side,
+                f"L{level}" if not str(level).startswith("L") else level,
+                round(float(fill_price), 6),
+                round(float(peel_price), 6),
+                f"+{float(rebound_pct):.2f}%",
+                round(float(peel_qty), 4),
+                peel_vol_usdt,
+                micro_pnl,
+                round(float(rem_pos_qty), 4),
+            ]
+
+            with open(self.peels_ledger, mode="a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow(row)
+
+            # 2. Запись в изолированный леджер стратегии peels_ledger_{strategy_id}.txt
+            if strategy_id and strategy_id != "default":
+                strat_peel_txt = self.ledgers_dir / f"peels_ledger_{strategy_id}.txt"
+                if not strat_peel_txt.exists():
+                    with open(strat_peel_txt, mode="w", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=';')
+                        writer.writerow([
+                            "Id", "Timestamp (UTC)", "Strategy", "Symbol", "Side", "Level",
+                            "Fill Price", "Peel Price", "Rebound %", "Peel Qty",
+                            "Peel Vol (USDT)", "Micro PnL (USDT)", "Remaining Pos Qty"
+                        ])
+                s_cnt = 1
+                try:
+                    with open(strat_peel_txt, "r", encoding="utf-8") as f:
+                        s_cnt = sum(1 for line in f if line.strip())
+                except Exception:
+                    s_cnt = 1
+                s_row = [s_cnt] + row[1:]
+                with open(strat_peel_txt, mode="a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f, delimiter=';')
+                    writer.writerow(s_row)
+
+            # 3. Обновление агрегированного JSON аналитики
+            data = self._read_data()
+            if data:
+                if "toxic_defense" not in data:
+                    data["toxic_defense"] = {
+                        "subgrid_peeling": {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0},
+                        "cross_recycling": {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0}
+                    }
+                sg = data["toxic_defense"].setdefault("subgrid_peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0})
+                sg["events_count"] = int(sg.get("events_count", 0)) + 1
+                sg["total_peeled_usdt"] = round(float(sg.get("total_peeled_usdt", 0.0)) + peel_vol_usdt, 4)
+                sg["locked_micro_pnl_usdt"] = round(float(sg.get("locked_micro_pnl_usdt", 0.0)) + micro_pnl, 4)
+
+                # Per-coin update
+                cdata = data.setdefault("per_coin", {}).setdefault(symbol, {})
+                cpeel = cdata.setdefault("peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0})
+                cpeel["events_count"] = int(cpeel.get("events_count", 0)) + 1
+                cpeel["total_peeled_usdt"] = round(float(cpeel.get("total_peeled_usdt", 0.0)) + peel_vol_usdt, 4)
+                cpeel["locked_micro_pnl_usdt"] = round(float(cpeel.get("locked_micro_pnl_usdt", 0.0)) + micro_pnl, 4)
+
+                self._write_data(data)
+                self._update_strategies_stats(data)
+
+            logger.info(
+                f"[{strategy_id}][{symbol}] 🍊 Subgrid Peel accounted: Vol ${peel_vol_usdt:.2f}, "
+                f"Micro PnL ${micro_pnl:+.2f}, Rem: {rem_pos_qty:.4f}"
+            )
+        except Exception as e:
+            logger.error(f"[record_subgrid_peel] Error recording peel: {e}")
+
+    def record_cross_recycling(
+        self,
+        strategy_id: str,
+        symbol: str,
+        winning_side: str,
+        realized_profit: float,
+        losing_side: str,
+        losing_level: int,
+        losing_dd_pct: float,
+        burn_qty: float,
+        current_price: float,
+        actual_burn_loss: float,
+        burn_budget: float,
+        rem_pos_qty: float,
+    ):
+        """
+        Записывает операцию Cross-Side Profit Recycling (сжигание токсичного объема за счет тейков)
+        в бухгалтерский леджер и обновляет агрегированную аналитику.
+        """
+        try:
+            dt_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            burn_vol_usdt = round(float(burn_qty) * float(current_price), 4)
+
+            # 1. Запись в общий recycling_ledger.txt
+            cnt = 1
+            if self.recycling_ledger.exists():
+                try:
+                    with open(self.recycling_ledger, "r", encoding="utf-8") as f:
+                        cnt = sum(1 for line in f if line.strip())
+                except Exception:
+                    cnt = 1
+
+            row = [
+                cnt,
+                dt_str,
+                strategy_id,
+                symbol,
+                winning_side,
+                round(float(realized_profit), 4),
+                losing_side,
+                f"L{losing_level}",
+                f"-{abs(float(losing_dd_pct)):.2f}%",
+                round(float(burn_qty), 4),
+                burn_vol_usdt,
+                round(float(actual_burn_loss), 4),
+                round(float(burn_budget), 4),
+                round(float(rem_pos_qty), 4),
+            ]
+
+            with open(self.recycling_ledger, mode="a", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerow(row)
+
+            # 2. Запись в изолированный леджер стратегии recycling_ledger_{strategy_id}.txt
+            if strategy_id and strategy_id != "default":
+                strat_rec_txt = self.ledgers_dir / f"recycling_ledger_{strategy_id}.txt"
+                if not strat_rec_txt.exists():
+                    with open(strat_rec_txt, mode="w", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f, delimiter=';')
+                        writer.writerow([
+                            "Id", "Timestamp (UTC)", "Strategy", "Symbol", "Winning Side",
+                            "Realized Profit (USDT)", "Losing Side", "Losing Level", "Losing DD %",
+                            "Burn Qty", "Burn Vol (USDT)", "Slice Loss (USDT)", "Burn Budget (USDT)", "Remaining Pos Qty"
+                        ])
+                s_cnt = 1
+                try:
+                    with open(strat_rec_txt, "r", encoding="utf-8") as f:
+                        s_cnt = sum(1 for line in f if line.strip())
+                except Exception:
+                    s_cnt = 1
+                s_row = [s_cnt] + row[1:]
+                with open(strat_rec_txt, mode="a", newline="", encoding="utf-8") as f:
+                    writer = csv.writer(f, delimiter=';')
+                    writer.writerow(s_row)
+
+            # 3. Обновление агрегированного JSON аналитики
+            data = self._read_data()
+            if data:
+                if "toxic_defense" not in data:
+                    data["toxic_defense"] = {
+                        "subgrid_peeling": {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0},
+                        "cross_recycling": {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0}
+                    }
+                rc = data["toxic_defense"].setdefault("cross_recycling", {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0})
+                rc["events_count"] = int(rc.get("events_count", 0)) + 1
+                rc["burned_volume_usdt"] = round(float(rc.get("burned_volume_usdt", 0.0)) + burn_vol_usdt, 4)
+                rc["profit_spent_usdt"] = round(float(rc.get("profit_spent_usdt", 0.0)) + float(burn_budget), 4)
+                rc["loss_absorbed_usdt"] = round(float(rc.get("loss_absorbed_usdt", 0.0)) + float(actual_burn_loss), 4)
+
+                # Per-coin update
+                cdata = data.setdefault("per_coin", {}).setdefault(symbol, {})
+                crec = cdata.setdefault("cross_recycling", {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0})
+                crec["events_count"] = int(crec.get("events_count", 0)) + 1
+                crec["burned_volume_usdt"] = round(float(crec.get("burned_volume_usdt", 0.0)) + burn_vol_usdt, 4)
+                crec["profit_spent_usdt"] = round(float(crec.get("profit_spent_usdt", 0.0)) + float(burn_budget), 4)
+                crec["loss_absorbed_usdt"] = round(float(crec.get("loss_absorbed_usdt", 0.0)) + float(actual_burn_loss), 4)
+
+                self._write_data(data)
+                self._update_strategies_stats(data)
+
+            logger.info(
+                f"[{strategy_id}][{symbol}] ♻️ Cross Recycling accounted: Burned ${burn_vol_usdt:.2f}, "
+                f"Loss Absorbed ${actual_burn_loss:.2f}, Rem: {rem_pos_qty:.4f}"
+            )
+        except Exception as e:
+            logger.error(f"[record_cross_recycling] Error recording cross recycling: {e}")
 
     async def deep_sync_analytics(self, client, cached_prices: dict = None):
         """
@@ -1463,6 +1695,30 @@ class AnalyticsManager:
                 strat_data["trade_velocity"] = self._strat_velocity_engines[strat_id].calculate_velocity(strat_data)
             except Exception as sve:
                 logger.warning(f"[ANALYTICS] Error calculating trade velocity for {strat_id}: {sve}")
+
+            # Toxic Defense Aggregation for Strategy
+            strat_peel_cnt = sum(c.get("peeling", {}).get("events_count", 0) for c in strat_per_coin.values())
+            strat_peel_vol = sum(c.get("peeling", {}).get("total_peeled_usdt", 0.0) for c in strat_per_coin.values())
+            strat_peel_pnl = sum(c.get("peeling", {}).get("locked_micro_pnl_usdt", 0.0) for c in strat_per_coin.values())
+
+            strat_rec_cnt = sum(c.get("cross_recycling", {}).get("events_count", 0) for c in strat_per_coin.values())
+            strat_rec_vol = sum(c.get("cross_recycling", {}).get("burned_volume_usdt", 0.0) for c in strat_per_coin.values())
+            strat_rec_spent = sum(c.get("cross_recycling", {}).get("profit_spent_usdt", 0.0) for c in strat_per_coin.values())
+            strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
+
+            strat_data["toxic_defense"] = {
+                "subgrid_peeling": {
+                    "events_count": strat_peel_cnt,
+                    "total_peeled_usdt": round(strat_peel_vol, 4),
+                    "locked_micro_pnl_usdt": round(strat_peel_pnl, 4)
+                },
+                "cross_recycling": {
+                    "events_count": strat_rec_cnt,
+                    "burned_volume_usdt": round(strat_rec_vol, 4),
+                    "profit_spent_usdt": round(strat_rec_spent, 4),
+                    "loss_absorbed_usdt": round(strat_rec_absorbed, 4)
+                }
+            }
 
             Utils.atomic_write_json(strat_file, strat_data, indent=4)
 

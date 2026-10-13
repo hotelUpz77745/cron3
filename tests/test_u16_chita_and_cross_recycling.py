@@ -582,6 +582,91 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("6", skipped)
         self.assertNotIn("7", skipped)
 
+    def test_defense_bookkeeping_and_leaderboard(self):
+        """Проверка бухгалтерского учета: peels_ledger, recycling_ledger, JSON и витрины leaderboard."""
+        from ANALYTICS.analytics import AnalyticsManager
+        from ANALYTICS.leaderboard import LeaderboardEngine
+        import tempfile
+        import shutil
+
+        temp_dir = Path(tempfile.mkdtemp())
+        try:
+            stats_d = temp_dir / "STATS"
+            ledgers_d = temp_dir / "LEDGERS"
+            stats_d.mkdir(parents=True)
+            ledgers_d.mkdir(parents=True)
+
+            mgr = AnalyticsManager()
+            mgr.stats_dir = stats_d
+            mgr.ledgers_dir = ledgers_d
+            mgr.log_file = stats_d / "analytics.json"
+            mgr.txt_file = ledgers_d / "trades_ledger.txt"
+            mgr.peels_ledger = ledgers_d / "peels_ledger.txt"
+            mgr.recycling_ledger = ledgers_d / "recycling_ledger.txt"
+            mgr._ensure_files()
+            # Чистый изолированный стейт для теста
+            mgr._write_data({"start_balance_usdt": 150.0, "total_trades": 0, "net_profit_usdt": 0.0, "per_coin": {}})
+
+            # 1. Записываем Sub-grid Peel
+            mgr.record_subgrid_peel(
+                strategy_id="u16_test",
+                symbol="STRKUSDT",
+                side="LONG",
+                level="3",
+                fill_price=0.08946,
+                peel_price=0.09055,
+                rebound_pct=1.22,
+                peel_qty=268.3,
+                rem_pos_qty=1674.9
+            )
+
+            self.assertTrue(mgr.peels_ledger.exists())
+            peel_content = mgr.peels_ledger.read_text(encoding="utf-8")
+            self.assertIn("STRKUSDT", peel_content)
+            self.assertIn("L3", peel_content)
+
+            # 2. Записываем Cross-Side Recycling
+            mgr.record_cross_recycling(
+                strategy_id="u16_test",
+                symbol="STRKUSDT",
+                winning_side="LONG",
+                realized_profit=20.0,
+                losing_side="SHORT",
+                losing_level=4,
+                losing_dd_pct=-15.0,
+                burn_qty=100.0,
+                current_price=1.10,
+                actual_burn_loss=5.0,
+                burn_budget=10.0,
+                rem_pos_qty=900.0
+            )
+
+            self.assertTrue(mgr.recycling_ledger.exists())
+            rec_content = mgr.recycling_ledger.read_text(encoding="utf-8")
+            self.assertIn("STRKUSDT", rec_content)
+            self.assertIn("L4", rec_content)
+
+            # 3. Проверяем JSON аналитику
+            data = mgr._read_data()
+            self.assertIn("toxic_defense", data)
+            self.assertEqual(data["toxic_defense"]["subgrid_peeling"]["events_count"], 1)
+            self.assertEqual(data["toxic_defense"]["cross_recycling"]["events_count"], 1)
+
+            # 4. Проверяем LeaderboardEngine
+            engine = LeaderboardEngine(analytics_dir=temp_dir, stats_dir=stats_d)
+            meta = {"name": "Test Strategy", "enabled": True}
+            summary = engine.calculate_universe_summary("u16_test", meta=meta, analytics_data=data)
+            self.assertEqual(summary["peel_events"], 1)
+            self.assertEqual(summary["rec_events"], 1)
+            self.assertEqual(summary["defense_badge"], "1P/1R")
+
+            tbl = engine.format_table([summary], evaluated_coins_count=1)
+            self.assertIn("Def (P/R)", tbl)
+            self.assertIn("1P/1R", tbl)
+            self.assertIn("[DEFENSE BOOKKEEPING]", tbl)
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
 
 if __name__ == "__main__":
     unittest.main()
