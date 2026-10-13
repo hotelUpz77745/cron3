@@ -171,6 +171,135 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(res, "Рециркуляция обязана отсекаться, если уровень 1 < min_burn_level 2!")
 
+    async def test_cross_recycler_multiaccount_and_full_burn_cleanup(self):
+        """Проверка: рециркуляция использует get_client_for_symbol и отменяет ордера при полном сжигании объема."""
+        mock_universe = MagicMock()
+        mock_universe.cross_recycling_cfg = {
+            "enabled": True,
+            "recycle_ratio": 0.50,
+            "min_burn_level": 2,
+            "min_drawdown_pct": 3.0,
+            "max_slice_pct": 100.0  # разрешаем 100% срезку для проверки полного сжигания
+        }
+        mock_universe.universe_id = "u16_chita"
+
+        sym_client = MagicMock()
+        sym_client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        sym_client.fetch_positions = AsyncMock(return_value=[
+            {"symbol": "STRKUSDT", "positionSide": "SHORT", "positionAmt": "0.0"}
+        ])
+        sym_client.cancel_orders_for_side = AsyncMock(return_value=MagicMock(success=True))
+        mock_universe.get_client_for_symbol = MagicMock(return_value=sym_client)
+
+        spec = {"tick_size": 0.0001, "step_size": 1.0, "min_qty": 1.0}
+        short_state = PositionState("STRKUSDT", "SHORT")
+        short_state.set_in_position(True)
+        short_state.avg_entry_price = 1.00
+        short_state.total_volume = -10.0
+        short_state.grid = {
+            "0": {"is_active": True},
+            "1": {"is_active": True},
+            "2": {"is_active": True},
+        }
+
+        mock_universe.fsm_states = {"STRKUSDT": {"SHORT": short_state}}
+
+        res = await CrossSideProfitRecycler.maybe_recycle(
+            universe=mock_universe,
+            symbol="STRKUSDT",
+            winning_side="LONG",
+            realized_profit=20.0,
+            current_price=2.00,
+            spec_data=spec
+        )
+
+        self.assertIsNotNone(res)
+        mock_universe.get_client_for_symbol.assert_called_with("STRKUSDT")
+        sym_client.make_order.assert_called_once()
+        self.assertFalse(short_state.in_position)
+        self.assertTrue(short_state.is_finished)
+        self.assertEqual(short_state.total_volume, 0.0)
+        # Проверяем, что при полном сжигании вызвана отмена ордеров
+        sym_client.cancel_orders_for_side.assert_called_once_with("STRKUSDT", "SHORT")
+
+    async def test_chita_cross_recycling_l3_skip_and_l4_execution(self):
+        """Проверка: в Chita с min_burn_level=4 шорт на L3 пропускается, а на L4 кормится прибылью лонга."""
+        mock_universe = MagicMock()
+        mock_universe.cross_recycling_cfg = {
+            "enabled": True,
+            "recycle_ratio": 0.50,
+            "min_burn_level": 4,
+            "min_drawdown_pct": 3.0,
+            "max_slice_pct": 25.0
+        }
+        mock_universe.universe_id = "u16_chita"
+
+        client = MagicMock()
+        client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        client.fetch_positions = AsyncMock(return_value=[
+            {"symbol": "STRKUSDT", "positionSide": "SHORT", "positionAmt": "-750.0"}
+        ])
+        mock_universe.client = client
+        mock_universe.tp_manager = MagicMock()
+        mock_universe.tp_manager.place_take_profit = AsyncMock()
+
+        spec = {"tick_size": 0.0001, "step_size": 1.0, "min_qty": 1.0}
+        short_state = PositionState("STRKUSDT", "SHORT")
+        short_state.set_in_position(True)
+        short_state.avg_entry_price = 1.00
+        short_state.total_volume = -1000.0
+        # Сетка на уровне 3
+        short_state.grid = {
+            "0": {"is_active": True},
+            "1": {"is_active": True},
+            "2": {"is_active": True},
+            "3": {"is_active": True},
+            "4": {"is_active": False},
+        }
+
+        mock_universe.fsm_states = {"STRKUSDT": {"SHORT": short_state}}
+
+        # 1. Попытка рециркуляции на L3 -> должна быть пропущена (min_burn_level=4)
+        res_l3 = await CrossSideProfitRecycler.maybe_recycle(
+            universe=mock_universe,
+            symbol="STRKUSDT",
+            winning_side="LONG",
+            realized_profit=200.0,
+            current_price=1.20,
+            spec_data=spec
+        )
+        self.assertIsNone(res_l3, "На уровне L3 при min_burn_level=4 рециркуляция должна быть отсечена!")
+
+        # 2. Активируем колено L4
+        short_state.grid["4"]["is_active"] = True
+
+        # Попытка рециркуляции на L4 -> должна сработать!
+        # Прибыль лонга = $200.0, бюджет = 50% = $100.0
+        # loss_per_unit = 1.20 - 1.00 = 0.20
+        # raw_qty = 100 / 0.20 = 500
+        # max_allowed = 1000 * 25% = 250
+        # actual_qty = min(500, 250) = 250
+        res_l4 = await CrossSideProfitRecycler.maybe_recycle(
+            universe=mock_universe,
+            symbol="STRKUSDT",
+            winning_side="LONG",
+            realized_profit=200.0,
+            current_price=1.20,
+            spec_data=spec
+        )
+        self.assertIsNotNone(res_l4, "На уровне L4 рециркуляция обязана исполниться!")
+        self.assertEqual(res_l4["burned_qty"], 250.0)
+        self.assertEqual(res_l4["burn_budget"], 100.0)
+        self.assertAlmostEqual(res_l4["burn_loss"], 50.0, places=4)  # 250 * 0.20
+        client.make_order.assert_called_once_with(
+            symbol="STRKUSDT",
+            qty=250.0,
+            side="BUY",
+            position_side="SHORT",
+            market_type="MARKET"
+        )
+        mock_universe.tp_manager.place_take_profit.assert_called_once()
+
     def _create_mock_grid_and_client(self, behavior: str):
         avg_mgr = AverageManager()
         state = PositionState("STRKUSDT", "LONG")

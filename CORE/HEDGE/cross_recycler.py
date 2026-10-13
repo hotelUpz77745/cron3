@@ -120,19 +120,30 @@ class CrossSideProfitRecycler:
             f"(Budget: ${burn_budget:.2f}, Slice loss: -${actual_burn_loss:.2f}, Lvl {cur_level}, DD: -{drawdown_pct:.1f}%)"
         )
 
-        res = await universe.client.make_order(
+        client = None
+        if hasattr(type(universe), "get_client_for_symbol") or "get_client_for_symbol" in universe.__dict__:
+            try:
+                client = universe.get_client_for_symbol(symbol)
+            except Exception:
+                pass
+        if client is None:
+            client = getattr(universe, "client", None)
+
+        res = client.make_order(
             symbol=symbol,
             qty=rounded_qty,
             side=order_side,
             position_side=losing_side,
             market_type="MARKET",
         )
+        if asyncio.iscoroutine(res):
+            res = await res
 
         if res.success:
             # Синхронизируем фактический объем позиции с биржи/эмулятора без слепой ручной арифметики
             synced = False
             try:
-                positions = universe.client.fetch_positions(symbol)
+                positions = client.fetch_positions(symbol)
                 if asyncio.iscoroutine(positions):
                     positions = await positions
                 side_pos = next((p for p in positions if p.get("positionSide") == losing_side), None)
@@ -173,7 +184,7 @@ class CrossSideProfitRecycler:
                     try:
                         opposite_state = fsm_states.get(symbol, {}).get(winning_side)
                         res_tp = universe.tp_manager.place_take_profit(
-                            client=universe.client,
+                            client=client,
                             symbol=symbol,
                             side=losing_side,
                             current_price=current_price,
@@ -185,6 +196,15 @@ class CrossSideProfitRecycler:
                             await res_tp
                     except Exception as e:
                         logger.warning(f"[{strat_id}][{symbol}] Failed to refresh TP limit order after burn: {e}")
+            else:
+                # Позиция полностью сожжена: отменяем старые лимитные ордера этой стороны на бирже
+                try:
+                    if hasattr(client, "cancel_orders_for_side"):
+                        res_c = client.cancel_orders_for_side(symbol, losing_side)
+                        if asyncio.iscoroutine(res_c):
+                            await res_c
+                except Exception as e:
+                    logger.warning(f"[{strat_id}][{symbol}] Failed to cancel orders for fully burned side: {e}")
 
             return {
                 "symbol": symbol,

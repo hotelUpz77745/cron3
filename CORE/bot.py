@@ -698,6 +698,8 @@ class BotCore:
                 closed_entry = getattr(states[side], "last_closed_avg_price", 0.0)
                 price_data = self.prices.get(symbol)
                 cur_price = price_data[0] if isinstance(price_data, tuple) else price_data
+                if (not cur_price or cur_price <= 0) and getattr(states[side], "tp_price", None):
+                    cur_price = states[side].tp_price
 
                 if closed_vol > 0 and closed_entry > 0 and cur_price and cur_price > 0:
                     realized_pnl = (cur_price - closed_entry) * closed_vol if side == "LONG" else (closed_entry - cur_price) * closed_vol
