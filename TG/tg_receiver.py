@@ -2251,9 +2251,12 @@ class TelegramReceiver:
 
                 toxic_def = data.get("toxic_defense", {})
                 peel_def = toxic_def.get("subgrid_peeling", {})
-                rec_def = toxic_def.get("cross_recycling", {})
-                lines.append(f"  Defense (Subgrid Peels): {peel_def.get('events_count', 0)} events | Vol: {peel_def.get('total_peeled_usdt', 0.0):,.2f} USDT | Locked: {peel_def.get('locked_micro_pnl_usdt', 0.0):+,.2f} USDT")
-                lines.append(f"  Defense (Cross-Recycling): {rec_def.get('events_count', 0)} events | Vol: {rec_def.get('burned_volume_usdt', 0.0):,.2f} USDT | Absorbed: {rec_def.get('loss_absorbed_usdt', 0.0):+,.2f} USDT\n")
+                p_loss = peel_def.get('loss_absorbed_usdt', 0.0)
+                p_metric = f"Absorbed: {p_loss:,.2f} USDT" if p_loss > 1.0 else f"Locked: {peel_def.get('locked_micro_pnl_usdt', 0.0):+,.2f} USDT"
+                r_pnl = rec_def.get('locked_micro_pnl_usdt', 0.0)
+                r_metric = f"Locked: {r_pnl:+,.2f} USDT" if r_pnl > 0.0 else f"Absorbed: {rec_def.get('loss_absorbed_usdt', 0.0):+,.2f} USDT"
+                lines.append(f"  Defense (Subgrid Peels): {peel_def.get('events_count', 0)} events | Vol: {peel_def.get('total_peeled_usdt', 0.0):,.2f} USDT | {p_metric}")
+                lines.append(f"  Defense (Cross-Recycling): {rec_def.get('events_count', 0)} events | Vol: {rec_def.get('burned_volume_usdt', 0.0):,.2f} USDT | {r_metric}\n")
                 
                 if "per_coin" in data:
                     lines.append("="*50)
@@ -3527,7 +3530,7 @@ class TelegramReceiver:
                         grid = new_base[side].get("grid", {})
                         tp_map = new_base[side].get("tp_map", {})
                         is_u10 = strat_id.startswith("u10")
-                        if tp_purpose != "neutral" and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
+                        if tp_purpose not in ("neutral", "self") and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
                             await message.answer(f"❌ ОШИБКА КОНФИГУРАЦИИ ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)}).\nШаблон НЕ сохранен!")
                             return
                             

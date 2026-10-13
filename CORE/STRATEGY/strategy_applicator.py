@@ -180,6 +180,67 @@ class StrategyApplicator:
 
         return side_cfgs
 
+    @staticmethod
+    def resolve_executed_grid_levels(strategy: StrategyConfig, symbol: str, side: str, new_side: dict, exist_side: dict):
+        """
+        Универсально определяет исполненные уровни сетки по FSM-состоянию позиции и конфигу стратегии.
+        Полный отказ от хардкодов имен символов и номеров уровней.
+        Все правила читаются из конфига стратегии 'fsm_level_resolution'.
+        """
+        if not (exist_side.get("in_position", False) or abs(float(exist_side.get("total_volume", 0.0))) > 1e-6):
+            return
+
+        raw_meta = getattr(strategy, "raw_meta", {}) if hasattr(strategy, "raw_meta") else {}
+        resolution_cfg = raw_meta.get("fsm_level_resolution")
+        if not resolution_cfg:
+            resolution_cfg = {"enabled": True, "mode": "cumulative_volume_threshold", "volume_tolerance_pct": 10.0}
+
+        if not resolution_cfg.get("enabled", True):
+            return
+
+        tolerance_pct = float(resolution_cfg.get("volume_tolerance_pct", 10.0))
+        tolerance_factor = 1.0 - (tolerance_pct / 100.0)
+
+        current_vol = abs(float(exist_side.get("total_volume", 0.0)))
+        entry_price = float(exist_side.get("avg_entry_price", 0.0))
+        current_notional = current_vol * entry_price
+        invest_size = float(new_side.get("invest_size", 0.0))
+        if invest_size <= 0:
+            return
+
+        grid = new_side.get("grid", {})
+        exist_grid = exist_side.get("grid", {})
+        trailing_state = new_side.get("trailing_grid_state", {})
+        armed_dict = trailing_state.get("armed_levels", {}) if isinstance(trailing_state, dict) else {}
+
+        # Сортируем уровни по числовому индексу (0, 1, 2, ...)
+        sorted_level_keys = sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else 999)
+
+        cumulative_planned_usdt = 0.0
+        for lvl_key in sorted_level_keys:
+            lvl_cfg = grid[lvl_key]
+            vol_pct = float(lvl_cfg.get("volume", 0.0))
+            planned_lvl_usdt = invest_size * (vol_pct / 100.0)
+            cumulative_planned_usdt += planned_lvl_usdt
+
+            # Уровень считается исполненным, если:
+            # 1. Он уже был помечен is_active=True в предыдущем FSM
+            # 2. Либо накопленный объем позиции покрывает этот уровень по сетке с учетом допуска
+            was_active = bool(exist_grid.get(lvl_key, {}).get("is_active", False))
+            covered_by_volume = current_notional >= (cumulative_planned_usdt * tolerance_factor)
+
+            if was_active or covered_by_volume:
+                lvl_cfg["is_active"] = True
+                lvl_cfg["is_armed"] = False
+                lvl_cfg.pop("armed_at_drawdown", None)
+                lvl_cfg.pop("armed_timestamp", None)
+                if isinstance(armed_dict, dict) and lvl_key in armed_dict:
+                    armed_dict.pop(lvl_key, None)
+            else:
+                # Последующие неисполненные ступени
+                lvl_cfg["is_active"] = False
+                lvl_cfg["is_armed"] = False
+
     def build_runtime_for_symbol(
         self,
         symbol: str,
@@ -325,24 +386,8 @@ class StrategyApplicator:
                                     if isinstance(armed_dict, dict) and g_idx in armed_dict:
                                         armed_dict.pop(g_idx, None)
 
-                # Жесткий инвариант для STRKUSDT SHORT в позиции:
-                # Уровни 0, 1, 2, 3, 4 уже исполнены и сокращены.
-                # Следующие активные ступени строго L5 (-144%/-155%) и L6 (-340%/-360%).
-                if symbol.upper() == "STRKUSDT" and side == "SHORT" and (new_side.get("in_position") or abs(float(new_side.get("total_volume", 0.0))) > 1e-6):
-                    for executed_lvl in ("0", "1", "2", "3", "4"):
-                        if executed_lvl in new_side.get("grid", {}):
-                            new_side["grid"][executed_lvl]["is_active"] = True
-                            new_side["grid"][executed_lvl]["is_armed"] = False
-                            new_side["grid"][executed_lvl].pop("armed_at_drawdown", None)
-                            new_side["grid"][executed_lvl].pop("armed_timestamp", None)
-                            if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
-                                armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
-                                if isinstance(armed_dict, dict) and executed_lvl in armed_dict:
-                                    armed_dict.pop(executed_lvl, None)
-                    for future_lvl in ("5", "6"):
-                        if future_lvl in new_side.get("grid", {}):
-                            new_side["grid"][future_lvl]["is_active"] = False
-                            new_side["grid"][future_lvl]["is_armed"] = False
+                # Универсальное определение исполненных уровней сетки по FSM-состоянию и конфигу (без хардкодов символов)
+                self.resolve_executed_grid_levels(strategy, symbol, side, new_side, exist_side)
 
                 if "tp_map" in exist_side and "tp_map" in new_side:
                     for tp_idx, tp_val in exist_side["tp_map"].items():

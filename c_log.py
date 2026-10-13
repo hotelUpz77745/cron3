@@ -146,7 +146,11 @@ class UnifiedLogger:
             if LOG_TO_FILE:
                 # Единый лог-файл: боевой all.log или tests.log при прогоне тестов (без загрязнения боевого лога)
                 argv_str = " ".join(sys.argv).lower()
-                is_testing = "unittest" in argv_str or "pytest" in argv_str or "discover" in argv_str
+                is_testing = (
+                    any(k in argv_str for k in ("unittest", "pytest", "discover", "tests\\", "tests/"))
+                    or ("unittest" in sys.modules and any("test" in a.lower() for a in sys.argv))
+                    or "pytest" in sys.modules
+                )
                 log_filename = "tests.log" if is_testing else "all.log"
 
                 all_log_path = os.path.join(log_dir, log_filename)
@@ -162,7 +166,13 @@ class UnifiedLogger:
 
             # Console
             if LOG_TO_CONSOLE:
-                console_handler = logging.StreamHandler(sys.stdout)
+                stream = sys.stdout
+                if hasattr(stream, "reconfigure"):
+                    try:
+                        stream.reconfigure(errors="replace")
+                    except Exception:
+                        pass
+                console_handler = logging.StreamHandler(stream)
                 console_handler.setLevel(desired_level)
                 console_handler.setFormatter(formatter)
                 logger.addHandler(console_handler)

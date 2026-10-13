@@ -266,53 +266,58 @@ class TestStrategySystem(unittest.TestCase):
 
     def test_runtime_builder_integration(self):
         """Интеграционный тест сборки рантаймов build_runtime_caches."""
-        from RUNTIME_FSM.runtime_builder import build_runtime_caches, RUNTIME_DIR
+        import tempfile
+        from RUNTIME_FSM.runtime_builder import build_runtime_caches
         from c_utils import Utils
 
         registry = StrategyRegistry()
         test_syms = registry.get_all_active_symbols()
-        build_runtime_caches(symbols=test_syms, registry=registry)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            test_rt_dir = Path(tmp_dir)
+            build_runtime_caches(symbols=test_syms, registry=registry, target_runtime_dir=test_rt_dir)
 
-        for sym in test_syms:
-            # Символ может лежать либо в корне runtime/ (legacy fallback), либо под куполом стратегии
-            strat = registry.get_strategy_for_symbol(sym)
-            if strat:
-                cfg_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
-            else:
-                cfg_path = RUNTIME_DIR / f"{sym.lower()}.json"
-            self.assertTrue(cfg_path.exists(), f"Рантайм файл {cfg_path} должен существовать!")
-            data = Utils.read_json_file(cfg_path)
-            for side in ("LONG", "SHORT"):
-                self.assertIn(side, data)
-                self.assertIn("grid", data[side])
-                self.assertIn("tp_map", data[side])
-                # Проверка соблюдения Rule 11 (min TP >= 0.50%)
-                for tp_step in data[side]["tp_map"].values():
-                    if "indent" in tp_step and tp_step["indent"] is not None:
-                        self.assertGreaterEqual(float(tp_step["indent"]), MIN_TAKE_PROFIT_PCT)
-                    if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
-                        self.assertGreaterEqual(float(tp_step["fallback_indent"]), MIN_TAKE_PROFIT_PCT)
+            for sym in test_syms:
+                strat = registry.get_strategy_for_symbol(sym)
+                if strat:
+                    cfg_path = test_rt_dir / strat.strategy_id / f"{sym.lower()}.json"
+                else:
+                    cfg_path = test_rt_dir / f"{sym.lower()}.json"
+                self.assertTrue(cfg_path.exists(), f"Рантайм файл {cfg_path} должен существовать!")
+                data = Utils.read_json_file(cfg_path)
+                for side in ("LONG", "SHORT"):
+                    self.assertIn(side, data)
+                    self.assertIn("grid", data[side])
+                    self.assertIn("tp_map", data[side])
+                    # Проверка соблюдения Rule 11 (min TP >= 0.50%)
+                    for tp_step in data[side]["tp_map"].values():
+                        if "indent" in tp_step and tp_step["indent"] is not None:
+                            self.assertGreaterEqual(float(tp_step["indent"]), MIN_TAKE_PROFIT_PCT)
+                        if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
+                            self.assertGreaterEqual(float(tp_step["fallback_indent"]), MIN_TAKE_PROFIT_PCT)
 
     def test_runtime_under_strategy_domes(self):
         """Тест изоляции файлов рантайма под куполами стратегий (вселенных)."""
+        import tempfile
         from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
-        from RUNTIME_FSM.runtime_builder import build_runtime_caches, RUNTIME_DIR
+        from RUNTIME_FSM.runtime_builder import build_runtime_caches
 
         registry = StrategyRegistry()
-        mgr = RuntimeFsmManager(strategy_registry=registry)
-
-        # Проверяем для текущих активных символов в registry
         active_syms = registry.get_all_active_symbols()
         self.assertGreaterEqual(len(active_syms), 1)
-        build_runtime_caches(symbols=active_syms, registry=registry)
 
-        for sym in active_syms:
-            strat = registry.get_strategy_for_symbol(sym)
-            if strat:
-                dome_path = RUNTIME_DIR / strat.strategy_id / f"{sym.lower()}.json"
-                self.assertTrue(dome_path.exists(), f"Файл рантайма .json под куполом {strat.strategy_id} должен существовать: {dome_path}")
-                resolved = mgr.get_runtime_path(sym)
-                self.assertEqual(resolved, dome_path)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            test_rt_dir = Path(tmp_dir)
+            mgr = RuntimeFsmManager(strategy_registry=registry)
+            mgr.runtime_dir = test_rt_dir
+            build_runtime_caches(symbols=active_syms, registry=registry, target_runtime_dir=test_rt_dir)
+
+            for sym in active_syms:
+                strat = registry.get_strategy_for_symbol(sym)
+                if strat:
+                    dome_path = test_rt_dir / strat.strategy_id / f"{sym.lower()}.json"
+                    self.assertTrue(dome_path.exists(), f"Файл рантайма .json под куполом {strat.strategy_id} должен существовать: {dome_path}")
+                    resolved = mgr.get_runtime_path(sym)
+                    self.assertEqual(resolved, dome_path)
 
     def test_structured_analytics_and_leaderboard(self):
         """Тест структурированной аналитики в STATS/, LEDGERS/, и витрины leaderboard."""

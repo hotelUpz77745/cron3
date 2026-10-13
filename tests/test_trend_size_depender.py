@@ -149,6 +149,7 @@ class TestTrendSizeDepender(unittest.TestCase):
     def test_runtime_manager_eff_invest_roundtrip(self):
         """Проверка синхронизации eff_invest через RuntimeManager (FSM -> кэш -> FSM)."""
         rm = RuntimeFsmManager()
+        rm.save_cache = AsyncMock()
         symbol = "STRKUSDT"
         rm.caches[symbol] = {
             "LONG": {"invest_size": 600.0, "eff_invest": 720.0},
@@ -172,6 +173,7 @@ class TestTrendSizeDepender(unittest.TestCase):
         import asyncio
         asyncio.run(rm.sync_with_fsm(fsm_states, force_save=False))
         self.assertEqual(rm.caches[symbol]["LONG"]["eff_invest"], 750.0)
+        rm.save_cache.assert_called_once_with(symbol)
 
     @patch("CORE.GRID.avg_manager.Utils.wait_for_fsm_sync", new_callable=AsyncMock)
     def test_avg_manager_inherits_eff_invest(self, mock_wait_sync):

@@ -121,15 +121,6 @@ class AverageManager:
                         if lvl_k in armed_dict:
                             armed_dict.pop(lvl_k, None)
 
-        # Жесткий инвариант для STRKUSDT SHORT в позиции (L0..L4 уже исполнены и сокращены)
-        if symbol.upper() == "STRKUSDT" and side == "SHORT" and state.in_position:
-            for past_lvl in ("0", "1", "2", "3", "4"):
-                if past_lvl in grid:
-                    grid[past_lvl]["is_active"] = True
-                    grid[past_lvl]["is_armed"] = False
-                    if isinstance(armed_dict, dict) and past_lvl in armed_dict:
-                        armed_dict.pop(past_lvl, None)
-
         # 3. Трейлинг оценка сетки через BaseTrailingSystem
         prev_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys())
         candidate_level, skipped_levels, info = BaseTrailingSystem.evaluate_trailing_grid(

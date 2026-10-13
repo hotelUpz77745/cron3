@@ -51,10 +51,14 @@ class StrategyConfig:
         self.raw_meta: Dict[str, Any] = copy.deepcopy(raw_meta)
 
         meta_overrides = raw_meta.get("overrides") or {}
-        long_inv = (raw_meta.get("LONG") or meta_overrides.get("LONG") or {}).get("invest_size")
-        short_inv = (raw_meta.get("SHORT") or meta_overrides.get("SHORT") or {}).get("invest_size")
+        raw_long_cfg = raw_meta.get("LONG") or meta_overrides.get("LONG") or {}
+        raw_short_cfg = raw_meta.get("SHORT") or meta_overrides.get("SHORT") or {}
+        long_inv = raw_long_cfg.get("invest_size")
+        short_inv = raw_short_cfg.get("invest_size")
 
         if long_inv is not None and short_inv is not None:
+            self.invest_size_long: float = float(long_inv)
+            self.invest_size_short: float = float(short_inv)
             if float(long_inv) == float(short_inv):
                 self.invest_size = float(long_inv)
             else:
@@ -62,14 +66,24 @@ class StrategyConfig:
         elif "invest_size" in raw_meta:
             raw_inv = raw_meta["invest_size"]
             if isinstance(raw_inv, dict):
+                self.invest_size_long = float(raw_inv["LONG"])
+                self.invest_size_short = float(raw_inv["SHORT"])
                 self.invest_size = {k.upper(): float(v) for k, v in raw_inv.items()}
             else:
+                self.invest_size_long = float(raw_inv)
+                self.invest_size_short = float(raw_inv)
                 self.invest_size = float(raw_inv)
         elif long_inv is not None:
+            self.invest_size_long = float(long_inv)
+            self.invest_size_short = float(long_inv)
             self.invest_size = float(long_inv)
         elif short_inv is not None:
+            self.invest_size_long = float(short_inv)
+            self.invest_size_short = float(short_inv)
             self.invest_size = float(short_inv)
         else:
+            self.invest_size_long = 400.0
+            self.invest_size_short = 400.0
             self.invest_size = 400.0
 
         raw_lev = raw_meta.get("leverage", 20)

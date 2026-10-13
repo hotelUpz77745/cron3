@@ -7,9 +7,10 @@ import json
 import os
 import time
 from pathlib import Path
+import csv
 from typing import Dict, List, Any, Optional
 
-from consts import ANALYTICS_DIR, ANALYTICS_STATS_DIR
+from consts import ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 
@@ -41,6 +42,7 @@ class LeaderboardEngine:
     def __init__(self, analytics_dir: Optional[Path] = None, stats_dir: Optional[Path] = None):
         self.analytics_dir = analytics_dir or ANALYTICS_DIR
         self.stats_dir = stats_dir or ANALYTICS_STATS_DIR
+        self.ledgers_dir = ANALYTICS_LEDGERS_DIR
         self.leaderboard_file = self.analytics_dir / "leaderboard.txt"
         self.portfolio_file = self.stats_dir / "analytics_all.json"
 
@@ -171,16 +173,81 @@ class LeaderboardEngine:
             sizing_mode = "static"
             sizing_badge = "[STATIC]"
 
+        # Источник истины для Toxic Defense: Ledger-First подход
+        peel_events, peel_vol, peel_pnl = 0, 0.0, 0.0
+        rec_events, rec_vol, rec_loss, rec_spent = 0, 0.0, 0.0, 0.0
+
+        strat_peel_txt = self.ledgers_dir / f"peels_ledger_{universe_id}.txt"
+        if not strat_peel_txt.exists():
+            strat_peel_txt = self.ledgers_dir / "peels_ledger.txt"
+
+        strat_rec_txt = self.ledgers_dir / f"recycling_ledger_{universe_id}.txt"
+        if not strat_rec_txt.exists():
+            strat_rec_txt = self.ledgers_dir / "recycling_ledger.txt"
+
+        if strat_peel_txt.exists():
+            try:
+                with open(strat_peel_txt, "r", encoding="utf-8") as pf:
+                    r = csv.reader(pf, delimiter=';')
+                    next(r, None)
+                    for row in r:
+                        if len(row) >= 12:
+                            if strat_peel_txt.name == "peels_ledger.txt" and len(row) > 2:
+                                if row[2] and row[2] != universe_id and universe_id != "default":
+                                    continue
+                            peel_events += 1
+                            peel_vol += float(row[10])
+                            peel_pnl += float(row[11])
+            except Exception:
+                pass
+
+        if strat_rec_txt.exists():
+            try:
+                with open(strat_rec_txt, "r", encoding="utf-8") as rf:
+                    r = csv.reader(rf, delimiter=';')
+                    next(r, None)
+                    for row in r:
+                        if len(row) >= 13:
+                            if strat_rec_txt.name == "recycling_ledger.txt" and len(row) > 2:
+                                if row[2] and row[2] != universe_id and universe_id != "default":
+                                    continue
+                            rec_events += 1
+                            rec_vol += float(row[10])
+                            rec_loss += float(row[11])
+                            rec_spent += float(row[12])
+            except Exception:
+                pass
+
+        # Фолбэк на in-memory / json toxic_defense, если леджеры пусты
         toxic_def = data.get("toxic_defense", {})
-        peel_def = toxic_def.get("subgrid_peeling", {})
-        rec_def = toxic_def.get("cross_recycling", {})
-        peel_events = int(peel_def.get("events_count", 0))
-        peel_vol = float(peel_def.get("total_peeled_usdt", 0.0))
-        peel_pnl = float(peel_def.get("locked_micro_pnl_usdt", 0.0))
-        rec_events = int(rec_def.get("events_count", 0))
-        rec_vol = float(rec_def.get("burned_volume_usdt", 0.0))
-        rec_loss = float(rec_def.get("loss_absorbed_usdt", 0.0))
-        rec_spent = float(rec_def.get("profit_spent_usdt", 0.0))
+        if peel_events == 0:
+            peel_def = toxic_def.get("subgrid_peeling", {})
+            peel_events = int(peel_def.get("events_count", 0))
+            peel_vol = float(peel_def.get("total_peeled_usdt", 0.0))
+            peel_pnl = float(peel_def.get("locked_micro_pnl_usdt", 0.0))
+
+        if rec_events == 0:
+            rec_def = toxic_def.get("cross_recycling", {})
+            rec_events = int(rec_def.get("events_count", 0))
+            rec_vol = float(rec_def.get("burned_volume_usdt", 0.0))
+            rec_loss = float(rec_def.get("loss_absorbed_usdt", 0.0))
+            rec_spent = float(rec_def.get("profit_spent_usdt", 0.0))
+
+        toxic_def = {
+            "subgrid_peeling": {
+                "events_count": peel_events,
+                "total_peeled_usdt": round(peel_vol, 4),
+                "loss_absorbed_usdt": round(peel_pnl, 4),
+                "locked_micro_pnl_usdt": round(peel_pnl, 4)
+            },
+            "cross_recycling": {
+                "events_count": rec_events,
+                "burned_volume_usdt": round(rec_vol, 4),
+                "profit_spent_usdt": round(rec_spent, 4),
+                "loss_absorbed_usdt": round(rec_loss, 4),
+                "locked_micro_pnl_usdt": round(rec_loss, 4)
+            }
+        }
         def_badge = f"{peel_events}P/{rec_events}R"
 
         return {
@@ -317,9 +384,11 @@ class LeaderboardEngine:
             peel_pnl_sum = sum(item.get("peel_pnl_usdt", 0.0) for item in entries)
             rec_burn_sum = sum(item.get("rec_burn_usdt", 0.0) for item in entries)
             rec_loss_sum = sum(item.get("rec_loss_usdt", 0.0) for item in entries)
+            peel_desc = f"{peel_pnl_sum:.2f}$ loss absorbed" if peel_pnl_sum > 1.0 else f"{peel_pnl_sum:+.2f}$ locked pnl"
+            rec_desc = f"{rec_loss_sum:.2f}$ loss absorbed" if rec_loss_sum > 1.0 and rec_burn_sum > 50 else f"+{rec_loss_sum:.2f}$ locked pnl"
             notes_lines.append(
-                f"[DEFENSE BOOKKEEPING]: Subgrid Peels: {tot_peels} ({peel_vol_sum:.1f}$ vol, {peel_pnl_sum:+.2f}$ locked pnl) | "
-                f"Cross-Recycling: {tot_recs} ({rec_burn_sum:.1f}$ vol burned, {rec_loss_sum:.2f}$ loss absorbed)"
+                f"[DEFENSE BOOKKEEPING]: Subgrid Peels: {tot_peels} ({peel_vol_sum:.1f}$ vol, {peel_desc}) | "
+                f"Cross-Recycling: {tot_recs} ({rec_burn_sum:.1f}$ vol burned, {rec_desc})"
             )
 
         footer = "=" * total_width

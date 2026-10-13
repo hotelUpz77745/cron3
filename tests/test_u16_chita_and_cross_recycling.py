@@ -64,8 +64,8 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
         )
 
         # 3. Cross-Side Profit Recycling
-        self.assertEqual(cfg["cross_side_recycling"]["min_burn_level"], 4)
-        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio"], 0.5)
+        self.assertEqual(cfg["cross_side_recycling"]["min_burn_level"], 2)
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio"], 0.75)
 
         # 4. Сетка: 7 уровней и маркеры
         grid = cfg["LONG"]["grid"]

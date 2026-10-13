@@ -413,9 +413,15 @@ class AutoCloser:
             # Исполнение выбранного режима автозакрытия
             if mode != "off":
                 r_cfg = pos_cfg.get("trailing_ratchet") or {}
-                invest_size = float(getattr(strat_cfg, "invest_size", 600.0))
+                if hasattr(strat_cfg, "invest_size_long") and hasattr(strat_cfg, "invest_size_short"):
+                    eff_invest_ref = (float(strat_cfg.invest_size_long) + float(strat_cfg.invest_size_short)) / 2.0
+                elif isinstance(getattr(strat_cfg, "invest_size", None), dict):
+                    raw_inv = strat_cfg.invest_size
+                    eff_invest_ref = (float(raw_inv["LONG"]) + float(raw_inv["SHORT"])) / 2.0
+                else:
+                    eff_invest_ref = float(getattr(strat_cfg, "invest_size", 600.0))
                 quant_ref = float(pos_cfg.get("quant_reference_size", 600.0))
-                scale_factor = max(0.1, invest_size / quant_ref) if quant_ref > 0 else 1.0
+                scale_factor = max(0.1, eff_invest_ref / quant_ref) if quant_ref > 0 else 1.0
 
                 r_state = self._trailing_ratchet_state.setdefault(strat_id, {})
                 if r_state.get("iteration_index") != iter_idx:

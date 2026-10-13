@@ -1404,6 +1404,50 @@ class AnalyticsManager:
         now_ms = int(time.time() * 1000)
         per_coin_global = global_data.get("per_coin", {})
 
+        # Aggregation of Global Toxic Defense from Source of Truth Ledgers
+        g_peel_cnt, g_peel_vol, g_peel_pnl = 0, 0.0, 0.0
+        if self.peels_ledger.exists():
+            try:
+                with open(self.peels_ledger, "r", encoding="utf-8") as pf:
+                    r = csv.reader(pf, delimiter=';')
+                    next(r, None)
+                    for row in r:
+                        if len(row) >= 12:
+                            g_peel_cnt += 1
+                            g_peel_vol += float(row[10])
+                            g_peel_pnl += float(row[11])
+            except Exception:
+                pass
+
+        g_rec_cnt, g_rec_vol, g_rec_spent, g_rec_absorbed = 0, 0.0, 0.0, 0.0
+        if self.recycling_ledger.exists():
+            try:
+                with open(self.recycling_ledger, "r", encoding="utf-8") as rf:
+                    r = csv.reader(rf, delimiter=';')
+                    next(r, None)
+                    for row in r:
+                        if len(row) >= 13:
+                            g_rec_cnt += 1
+                            g_rec_vol += float(row[10])
+                            g_rec_absorbed += float(row[11])
+                            g_rec_spent += float(row[12])
+            except Exception:
+                pass
+
+        global_data["toxic_defense"] = {
+            "subgrid_peeling": {
+                "events_count": g_peel_cnt,
+                "total_peeled_usdt": round(g_peel_vol, 4),
+                "locked_micro_pnl_usdt": round(g_peel_pnl, 4)
+            },
+            "cross_recycling": {
+                "events_count": g_rec_cnt,
+                "burned_volume_usdt": round(g_rec_vol, 4),
+                "profit_spent_usdt": round(g_rec_spent, 4),
+                "loss_absorbed_usdt": round(g_rec_absorbed, 4)
+            }
+        }
+
         for strat_id, strat_cfg in self.strategy_registry.active_strategies.items():
             strat_file = self.stats_dir / f"analytics_{strat_id}.json"
             strat_data = {}
@@ -1696,15 +1740,47 @@ class AnalyticsManager:
             except Exception as sve:
                 logger.warning(f"[ANALYTICS] Error calculating trade velocity for {strat_id}: {sve}")
 
-            # Toxic Defense Aggregation for Strategy
-            strat_peel_cnt = sum(c.get("peeling", {}).get("events_count", 0) for c in strat_per_coin.values())
-            strat_peel_vol = sum(c.get("peeling", {}).get("total_peeled_usdt", 0.0) for c in strat_per_coin.values())
-            strat_peel_pnl = sum(c.get("peeling", {}).get("locked_micro_pnl_usdt", 0.0) for c in strat_per_coin.values())
+            # Toxic Defense Aggregation for Strategy (Source of Truth: Strategy Ledgers)
+            strat_peel_txt = self.ledgers_dir / f"peels_ledger_{strat_id}.txt"
+            strat_rec_txt = self.ledgers_dir / f"recycling_ledger_{strat_id}.txt"
 
-            strat_rec_cnt = sum(c.get("cross_recycling", {}).get("events_count", 0) for c in strat_per_coin.values())
-            strat_rec_vol = sum(c.get("cross_recycling", {}).get("burned_volume_usdt", 0.0) for c in strat_per_coin.values())
-            strat_rec_spent = sum(c.get("cross_recycling", {}).get("profit_spent_usdt", 0.0) for c in strat_per_coin.values())
-            strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
+            strat_peel_cnt, strat_peel_vol, strat_peel_pnl = 0, 0.0, 0.0
+            if strat_peel_txt.exists():
+                try:
+                    with open(strat_peel_txt, "r", encoding="utf-8") as pf:
+                        r = csv.reader(pf, delimiter=';')
+                        next(r, None)
+                        for row in r:
+                            if len(row) >= 12:
+                                strat_peel_cnt += 1
+                                strat_peel_vol += float(row[10])
+                                strat_peel_pnl += float(row[11])
+                except Exception:
+                    pass
+            if strat_peel_cnt == 0:
+                strat_peel_cnt = sum(c.get("peeling", {}).get("events_count", 0) for c in strat_per_coin.values())
+                strat_peel_vol = sum(c.get("peeling", {}).get("total_peeled_usdt", 0.0) for c in strat_per_coin.values())
+                strat_peel_pnl = sum(c.get("peeling", {}).get("locked_micro_pnl_usdt", 0.0) for c in strat_per_coin.values())
+
+            strat_rec_cnt, strat_rec_vol, strat_rec_spent, strat_rec_absorbed = 0, 0.0, 0.0, 0.0
+            if strat_rec_txt.exists():
+                try:
+                    with open(strat_rec_txt, "r", encoding="utf-8") as rf:
+                        r = csv.reader(rf, delimiter=';')
+                        next(r, None)
+                        for row in r:
+                            if len(row) >= 13:
+                                strat_rec_cnt += 1
+                                strat_rec_vol += float(row[10])
+                                strat_rec_absorbed += float(row[11])
+                                strat_rec_spent += float(row[12])
+                except Exception:
+                    pass
+            if strat_rec_cnt == 0:
+                strat_rec_cnt = sum(c.get("cross_recycling", {}).get("events_count", 0) for c in strat_per_coin.values())
+                strat_rec_vol = sum(c.get("cross_recycling", {}).get("burned_volume_usdt", 0.0) for c in strat_per_coin.values())
+                strat_rec_spent = sum(c.get("cross_recycling", {}).get("profit_spent_usdt", 0.0) for c in strat_per_coin.values())
+                strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
 
             strat_data["toxic_defense"] = {
                 "subgrid_peeling": {
@@ -1766,12 +1842,31 @@ class AnalyticsManager:
         async with self._lock:
             data = self._read_data()
             if not data:
-                return
+                return False
                 
             success = await self._update_drawdowns(client, data, is_lightweight=True)
             if success:
                 data["last_updated_ts"] = int(time.time() * 1000)
                 self._write_data(data, mark_backup=False)
+                # Live sync: update per-strategy JSON stats and live leaderboard.txt
+                try:
+                    self._update_strategies_stats(data)
+                    universes_meta = {
+                        sid: {
+                            **getattr(scfg, "raw_meta", {}),
+                            "name": scfg.name,
+                            "enabled": True,
+                            "sizing_mode": getattr(scfg, "sizing_mode", "static"),
+                            "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))
+                        }
+                        for sid, scfg in self.strategy_registry.get_active_strategies().items()
+                    }
+                    entries = self.leaderboard_engine.generate_leaderboard(universes_meta)
+                    evaluated_coins = len(self.strategy_registry.get_all_active_symbols())
+                    self.leaderboard_engine.save_portfolio(entries, evaluated_coins_count=evaluated_coins)
+                except Exception as lbe:
+                    logger.debug(f"[ANALYTICS] Lightweight leaderboard refresh: {lbe}")
+            return success
 
     def start_realtime_tracker(self, client):
         if hasattr(self, "_tracker_task") and self._tracker_task:
@@ -1789,6 +1884,7 @@ class AnalyticsManager:
 
     async def _realtime_tracker_loop(self, client):
         logger.info(f"[ANALYTICS] Started real-time absolute drawdown tracker (polls every {BG_UNREALIZED_POLL_FREQ_SEC}s)")
+        last_deep_sync_ts = time.time()
         while getattr(self, '_is_tracker_running', True):
             await asyncio.sleep(BG_UNREALIZED_POLL_FREQ_SEC)
             try:
@@ -1805,7 +1901,35 @@ class AnalyticsManager:
                     # Don't call REST at all while banned — just skip this tick silently
                     continue
 
+                # 1. Легковесный сбор плавающего PnL и мгновенное обновление витрины leaderboard.txt
                 await self.sync_lightweight_unrealized_pnl(client)
+
+                # 2. Непрерывная проверка расхождения кеша (Wallet Balance Drift) и периодический Deep Sync
+                now = time.time()
+                should_deep_sync = False
+                if (now - last_deep_sync_ts) >= 120.0:
+                    should_deep_sync = True
+
+                if not should_deep_sync and client and hasattr(client, "fetch_account_info"):
+                    try:
+                        acc_res = await client.fetch_account_info()
+                        if acc_res and acc_res.success and isinstance(acc_res.data, dict):
+                            remote_wallet = float(acc_res.data.get("totalWalletBalance", 0.0))
+                            data = self._read_data()
+                            if data and remote_wallet > 0:
+                                local_wallet = float(data.get("cur_balance_usdt", 0.0)) - float(data.get("unrealized_pnl_usdt", 0.0))
+                                if abs(remote_wallet - local_wallet) > 0.05:
+                                    logger.info(
+                                        f"[ANALYTICS] Wallet balance drift detected: Binance ${remote_wallet:.2f} "
+                                        f"vs Local ${local_wallet:.2f} (diff ${abs(remote_wallet - local_wallet):.2f}). Auto-triggering Deep Sync!"
+                                    )
+                                    should_deep_sync = True
+                    except Exception as drift_e:
+                        logger.debug(f"[ANALYTICS] Drift check failed: {drift_e}")
+
+                if should_deep_sync and client:
+                    last_deep_sync_ts = now
+                    await self.deep_sync_analytics(client)
             except Exception as e:
                 logger.error(f"Realtime tracker error: {e}")
 

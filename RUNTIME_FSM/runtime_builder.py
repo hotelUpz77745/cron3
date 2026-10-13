@@ -26,9 +26,11 @@ def _ensure_dirs():
 
 def build_runtime_caches(
     symbols: Optional[List[str]] = None,
-    registry: Optional[StrategyRegistry] = None
+    registry: Optional[StrategyRegistry] = None,
+    target_runtime_dir: Optional[Path] = None
 ) -> bool:
-    _ensure_dirs()
+    rt_dir = target_runtime_dir or RUNTIME_DIR
+    rt_dir.mkdir(parents=True, exist_ok=True)
     created_new = False
 
     if registry is None:
@@ -51,7 +53,7 @@ def build_runtime_caches(
             tp_purpose = base_data[side].get("tp_purpose", "self")
             grid = base_data[side].get("grid", {})
             tp_map = base_data[side].get("tp_map", {})
-            if tp_purpose != "neutral" and grid and tp_map and len(grid) != len(tp_map):
+            if tp_purpose not in ("neutral", "self") and grid and tp_map and len(grid) != len(tp_map):
                 raise ValueError(f"[_base.json] {side} ОШИБКА КОНФИГУРАЦИИ БАЗОВОГО ШАБЛОНА: Количество уровней grid ({len(grid)}) не совпадает с количеством уровней tp_map ({len(tp_map)}). Проверьте файл _base.json!")
 
     for symbol in symbols:
@@ -59,15 +61,15 @@ def build_runtime_caches(
         strat = registry.get_strategy_for_symbol(symbol) if registry else None
 
         if strat:
-            target_dir = RUNTIME_DIR / strat.strategy_id
+            target_dir = rt_dir / strat.strategy_id
             target_file = target_dir / f"{sym_lower}.json"
             was_existing = target_file.exists()
             applicator.build_runtime_for_symbol(symbol, strat, target_dir=target_dir)
             if not was_existing and target_file.exists():
                 created_new = True
         else:
-            target_file = RUNTIME_DIR / f"{sym_lower}.json"
-            target_pkl = RUNTIME_DIR / f"{sym_lower}.pkl"
+            target_file = rt_dir / f"{sym_lower}.json"
+            target_pkl = rt_dir / f"{sym_lower}.pkl"
             if not target_file.exists():
                 if target_pkl.exists():
                     import pickle

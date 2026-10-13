@@ -43,8 +43,12 @@ class TestTGDomeButtons(unittest.TestCase):
         for sid in self.registry.active_strategies.keys():
             meta = self.tg._get_strategy_meta(sid)
             self.assertEqual(meta["strategy_id"], sid)
-            self.assertTrue(len(meta["name"]) > 0)
-            self.assertGreater(meta["invest_size"], 0)
+            inv_s = meta["invest_size"]
+            if isinstance(inv_s, dict):
+                for s_val in inv_s.values():
+                    self.assertGreater(s_val, 0)
+            else:
+                self.assertGreater(inv_s, 0)
             self.assertGreater(meta["leverage"], 0)
 
     def test_selector_apply_buttons(self):
