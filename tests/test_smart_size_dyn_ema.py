@@ -303,5 +303,29 @@ class TestSmartSizeDynEma(unittest.TestCase):
                     self.assertGreaterEqual(float(cfg["fallback_indent"]), 1.0, f"Level {lvl} fallback_indent < 1.0")
 
 
+    def test_smart_grace_breathing_increments(self):
+        """Проверка динамического окна Smart Grace: база 150с + increments_card (25, 40, 25, 0)."""
+        registry = StrategyRegistry()
+        strat = registry.get_strategy("u16_chita__classic")
+        sg_cfg = strat.smart_grace_cfg
+
+        self.assertEqual(sg_cfg.get("start_period_sec"), 150)
+
+        # closed_count == 0: 150 + 0 = 150s
+        self.assertEqual(MomentumEngine.calculate_smart_grace(0, sg_cfg), 150.0)
+
+        # closed_count == 1: 150 + 25 = 175s
+        self.assertEqual(MomentumEngine.calculate_smart_grace(1, sg_cfg), 175.0)
+
+        # closed_count == 2: 150 + 40 = 190s
+        self.assertEqual(MomentumEngine.calculate_smart_grace(2, sg_cfg), 190.0)
+
+        # closed_count == 3: 150 + 25 = 175s
+        self.assertEqual(MomentumEngine.calculate_smart_grace(3, sg_cfg), 175.0)
+
+        # closed_count >= 4: 150 + 0 = 150s
+        self.assertEqual(MomentumEngine.calculate_smart_grace(4, sg_cfg), 150.0)
+
+
 if __name__ == "__main__":
     unittest.main()
