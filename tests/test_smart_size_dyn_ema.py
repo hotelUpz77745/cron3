@@ -167,8 +167,8 @@ class TestSmartSizeDynEma(unittest.TestCase):
         # 400 * 95% = 380 USDT
         self.assertAlmostEqual(total_grid_avg_usdt, 380.0, places=1)
 
-    def test_white_noise_factor_sleep(self):
-        """Проверка работы white_noise_factor: рандомный слип в диапазоне [3, 13]с перед входом."""
+    def test_brownian_noise_factor_sleep(self):
+        """Проверка работы brownian_noise_factor: броуновский джиттер [3, 13]с перед входом."""
         import asyncio
         from unittest.mock import MagicMock
         from CORE.bot import BotCore
@@ -176,8 +176,8 @@ class TestSmartSizeDynEma(unittest.TestCase):
 
         registry = StrategyRegistry()
         strat = registry.get_strategy("u16_chita__classic")
-        wn = strat.smart_grace_cfg.get("white_noise_factor")
-        self.assertEqual(wn, [3, 13])
+        bn = strat.smart_grace_cfg.get("brownian_noise_factor")
+        self.assertEqual(bn, [3, 13])
 
         # Создаем мок бота
         bot = MagicMock(spec=BotCore)
@@ -214,15 +214,18 @@ class TestSmartSizeDynEma(unittest.TestCase):
             "grid": {"0": {"volume": 5.0}}
         }
 
-        # Проверяем, что вызывается random.randint(3, 13) и asyncio.sleep(sleep_val)
-        with patch("CORE.bot.random.randint", return_value=7) as mock_rand, \
+        # Проверяем, что вызывается secrets.SystemRandom().uniform(3, 13) и asyncio.sleep(sleep_val)
+        mock_sys_random = MagicMock()
+        mock_sys_random.uniform.return_value = 7.34
+
+        with patch("CORE.bot.secrets.SystemRandom", return_value=mock_sys_random), \
              patch("CORE.bot.asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
              patch("CORE.bot.BinancePublic.get_last_price", new_callable=AsyncMock, return_value=1.05):
 
             asyncio.run(BotCore._process_signal(bot, "STRKUSDT", "LONG", side_cfg, 1.0))
 
-            mock_rand.assert_called_once_with(3, 13)
-            mock_sleep.assert_called_once_with(7)
+            mock_sys_random.uniform.assert_called_once_with(3.0, 13.0)
+            mock_sleep.assert_called_once_with(7.34)
             # Ордер отправлен
             mock_client.make_order.assert_called_once()
 

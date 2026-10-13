@@ -13,6 +13,7 @@ import os
 import time
 import json
 import random
+import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -505,13 +506,17 @@ class BotCore:
 
             strat = self.strategy_registry.get_strategy_for_symbol(symbol)
             if strat and getattr(strat, "smart_grace_cfg", None):
-                wn_factor = strat.smart_grace_cfg.get("white_noise_factor")
-                if isinstance(wn_factor, (list, tuple)) and len(wn_factor) == 2:
-                    low = int(min(wn_factor))
-                    high = int(max(wn_factor))
+                bn_factor = (
+                    strat.smart_grace_cfg.get("brownian_noise_factor")
+                    or strat.smart_grace_cfg.get("white_noise_factor")
+                )
+                if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
+                    low = float(min(bn_factor))
+                    high = float(max(bn_factor))
                     if high > 0 and high >= low:
-                        noise_sleep = random.randint(low, high)
-                        logger.info(f"[{symbol}] {side} White Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) before entry.")
+                        # Дробный джиттер броуновского шума через аппаратную энтропию secrets
+                        noise_sleep = round(secrets.SystemRandom().uniform(low, high), 2)
+                        logger.info(f"[{symbol}] {side} Brownian Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) before entry.")
                         await asyncio.sleep(noise_sleep)
                         if (
                             getattr(self, 'is_paused', False) is True 
@@ -520,7 +525,7 @@ class BotCore:
                             or getattr(state, "is_closing", False) is True
                             or getattr(state, "in_position", False) is True
                         ):
-                            logger.warning(f"[{symbol}] {side}: Entry aborted after white noise sleep.")
+                            logger.warning(f"[{symbol}] {side}: Entry aborted after brownian noise sleep.")
                             state.in_position_papper = False
                             return
                         p_fresh = await BinancePublic.get_last_price(symbol)
