@@ -533,6 +533,49 @@ class TestStrategySystem(unittest.TestCase):
             self.assertIn("enabled", u_meta["super_grid"], f"Strategy {uid} must have super_grid.enabled")
             self.assertIsInstance(u_meta["super_grid"]["enabled"], bool)
 
+    def test_randomized_shift_interval_resolution_and_caching(self):
+        """Проверка работы рандомизированного shift_interval_sec: secrets.SystemRandom [5, 16] и кэширование внутри свечи."""
+        from CORE.ENTRY.signal import TimeControl
+
+        # 1. Проверка разрешения диапазона [5, 16]
+        samples = [TimeControl.resolve_shift_interval([5, 16]) for _ in range(50)]
+        for s in samples:
+            self.assertGreaterEqual(s, 5.0)
+            self.assertLessEqual(s, 16.0)
+            self.assertIsInstance(s, float)
+        # Проверяем наличие дробных квантов (не строго целые числа)
+        has_fractional = any(s != int(s) for s in samples)
+        self.assertTrue(has_fractional, "Рандомизация должна выдавать дробные кванты (uniform random float)!")
+
+        # 2. Проверка инвертированного диапазона [16, 5]
+        s_inv = TimeControl.resolve_shift_interval([16, 5])
+        self.assertGreaterEqual(s_inv, 5.0)
+        self.assertLessEqual(s_inv, 16.0)
+
+        # 3. Проверка скаляра (обратная совместимость)
+        self.assertEqual(TimeControl.resolve_shift_interval(13), 13.0)
+
+        # 4. Проверка стабильности внутри одной свечи (кэширование ID свечи)
+        tc = TimeControl(interval="5m", smart_grace_cfg={"shift_interval_sec": [5, 16], "start_period_sec": 150})
+        tc._candle_shifts.clear()
+        
+        # Симулируем 10 тиков внутри одного 5m интервала
+        res1, _ = tc.is_new_interval(0)
+        cached_shift = list(tc._candle_shifts.values())[0]
+        self.assertGreaterEqual(cached_shift, 5.0)
+        self.assertLessEqual(cached_shift, 16.0)
+
+        for _ in range(10):
+            tc.is_new_interval(0)
+            self.assertEqual(list(tc._candle_shifts.values())[0], cached_shift, "Сдвиг должен быть стабилен внутри одной свечи!")
+
+        # 5. Проверка загрузки из u16_chita
+        registry = StrategyRegistry()
+        chita_meta = registry.universes_db.get("u16_chita")
+        self.assertIsNotNone(chita_meta)
+        chita_strat = StrategyConfig("u16_chita", chita_meta, ["STRKUSDT"])
+        self.assertEqual(chita_strat.smart_grace_cfg["shift_interval_sec"], [5, 16])
+
 
 if __name__ == "__main__":
     unittest.main()

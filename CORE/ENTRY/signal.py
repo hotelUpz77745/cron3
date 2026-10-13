@@ -17,6 +17,7 @@ import pytz
 import copy
 from datetime import datetime, timezone
 import time
+import secrets
 from typing import Dict, Any, Optional
 
 from consts import (
@@ -34,10 +35,11 @@ class TimeControl:
         self.interval = interval
         self.interval_seconds = self.interval_to_seconds(interval)
         self.smart_grace_cfg = copy.deepcopy(smart_grace_cfg) if smart_grace_cfg is not None else copy.deepcopy(DEFAULT_SMART_GRACE)
-        self.shift_interval_sec = int(self.smart_grace_cfg.get("shift_interval_sec", DEFAULT_SHIFT_INTERVAL_SEC))
+        self.shift_interval_sec = self.smart_grace_cfg.get("shift_interval_sec", DEFAULT_SHIFT_INTERVAL_SEC)
         self.start_period_sec = float(self.smart_grace_cfg.get("start_period_sec", DEFAULT_START_PERIOD_SEC))
         self.last_fetch_timestamp = None
         self.window_open_until = 0
+        self._candle_shifts: Dict[tuple, float] = {}
 
     @property
     def interval_sec(self) -> int:
@@ -98,6 +100,29 @@ class TimeControl:
             pass
         return False
 
+    @classmethod
+    def resolve_shift_interval(cls, shift_cfg: Any) -> float:
+        """
+        Разрешает интервал сдвига сердцебиения (shift_interval_sec).
+        Поддерживает:
+        1. Рандомизированный диапазон [low, high] или [high, low] (например, [5, 16] или [16, 5]):
+           генерирует криптографически стойкое равномерное случайное число (uniform random)
+           с дробными квантами (до 2 знаков) через аппаратную энтропию secrets.SystemRandom().
+        2. Фиксированное число (int / float, например, 13).
+        """
+        if isinstance(shift_cfg, (list, tuple)) and len(shift_cfg) == 2:
+            try:
+                low = float(min(shift_cfg))
+                high = float(max(shift_cfg))
+                if high > 0 and high >= low:
+                    return round(secrets.SystemRandom().uniform(low, high), 2)
+            except (ValueError, TypeError):
+                pass
+        try:
+            return float(shift_cfg)
+        except (ValueError, TypeError):
+            return float(DEFAULT_SHIFT_INTERVAL_SEC)
+
     def is_new_interval(self, closed_count: int = 0, smart_grace_cfg: Optional[Dict[str, Any]] = None) -> tuple[bool, float]:
         """
         Возвращает (is_signal, current_grace_period), где is_signal == True, если текущее время 
@@ -108,7 +133,7 @@ class TimeControl:
 
         cfg = smart_grace_cfg if smart_grace_cfg is not None else self.smart_grace_cfg
         base_period = float(cfg.get("start_period_sec", self.start_period_sec))
-        shift_interval = int(cfg.get("shift_interval_sec", self.shift_interval_sec))
+        shift_cfg = cfg.get("shift_interval_sec", self.shift_interval_sec)
         increments = cfg.get("increments_card", {})
 
         matched_increment = 0.0
@@ -121,10 +146,22 @@ class TimeControl:
         grace_period = base_period + matched_increment
 
         now = datetime.now(timezone.utc)
-        current_timestamp = int(now.timestamp())
+        current_timestamp = now.timestamp()
+
+        # Кэширование сдвига на ID текущей свечи (интервала) для стабильного порога внутри одной свечи
+        candle_id = int(current_timestamp // self.interval_seconds)
+        cfg_key = (candle_id, tuple(shift_cfg) if isinstance(shift_cfg, (list, tuple)) else shift_cfg)
+
+        if cfg_key in self._candle_shifts:
+            shift_interval = self._candle_shifts[cfg_key]
+        else:
+            if len(self._candle_shifts) > 20:
+                self._candle_shifts.clear()
+            shift_interval = self.resolve_shift_interval(shift_cfg)
+            self._candle_shifts[cfg_key] = shift_interval
 
         virtual_time = current_timestamp + shift_interval
-        nearest_timestamp = (virtual_time // self.interval_seconds) * self.interval_seconds
+        nearest_timestamp = (int(virtual_time) // self.interval_seconds) * self.interval_seconds
 
         return (virtual_time - nearest_timestamp) < grace_period, grace_period
 
