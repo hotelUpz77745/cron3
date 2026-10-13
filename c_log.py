@@ -144,8 +144,12 @@ class UnifiedLogger:
             
             
             if LOG_TO_FILE:
-                # Единый лог-файл all.log для всех модулей ядра (без распыления на 25 файлов)
-                all_log_path = os.path.join(log_dir, "all.log")
+                # Единый лог-файл: боевой all.log или tests.log при прогоне тестов (без загрязнения боевого лога)
+                argv_str = " ".join(sys.argv).lower()
+                is_testing = "unittest" in argv_str or "pytest" in argv_str or "discover" in argv_str
+                log_filename = "tests.log" if is_testing else "all.log"
+
+                all_log_path = os.path.join(log_dir, log_filename)
                 all_handler = UnlockedRotatingFileHandler(
                     all_log_path,
                     maxBytes=max_bytes * 5,
