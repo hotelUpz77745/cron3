@@ -135,13 +135,19 @@ class StrategyApplicator:
             if tp_map_override:
                 side_data["tp_map"] = copy.deepcopy(tp_map_override)
 
-            # Принудительное ограничение TP снизу: строго не менее 0.50%
+            # Принудительное ограничение TP снизу: строго не менее 0.50% (или min_tp_indent стратегии)
+            min_tp_floor = MIN_TAKE_PROFIT_PCT
+            if getattr(strategy, "min_tp_indent", None) is not None:
+                min_tp_floor = max(MIN_TAKE_PROFIT_PCT, float(strategy.min_tp_indent))
+            elif hasattr(strategy, "raw_meta") and strategy.raw_meta.get("min_tp_indent") is not None:
+                min_tp_floor = max(MIN_TAKE_PROFIT_PCT, float(strategy.raw_meta["min_tp_indent"]))
+
             if "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
                 for tp_step in side_data["tp_map"].values():
                     if "indent" in tp_step and tp_step["indent"] is not None:
-                        tp_step["indent"] = max(MIN_TAKE_PROFIT_PCT, float(tp_step["indent"]))
+                        tp_step["indent"] = max(min_tp_floor, float(tp_step["indent"]))
                     if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
-                        tp_step["fallback_indent"] = max(MIN_TAKE_PROFIT_PCT, float(tp_step["fallback_indent"]))
+                        tp_step["fallback_indent"] = max(min_tp_floor, float(tp_step["fallback_indent"]))
 
             # 7. Применение tp_purpose и margin_type
             if "tp_purpose" in side_dict:

@@ -328,6 +328,8 @@ class StrategyConfig:
         if st_cfg and isinstance(st_cfg, dict):
             base_smart_tp.update(st_cfg)
         self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
+        raw_min_tp = raw_meta.get("min_tp_indent") or self.overrides.get("min_tp_indent")
+        self.min_tp_indent: float = float(raw_min_tp) if raw_min_tp is not None else 0.50
         self.dynamic_atr_tp_cfg: Dict[str, Any] = copy.deepcopy(raw_meta.get("dynamic_atr_tp") or self.overrides.get("dynamic_atr_tp") or {})
         if self.dynamic_atr_tp_cfg.get("enabled"):
             for req_k in ("timeframe", "period", "cache_ttl_sec", "min_guaranteed_floor_pct", "max_ceiling_pct", "fallback_atr_pct", "level_multipliers"):

@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch, AsyncMock
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
+from CORE.STRATEGY.strategy_applicator import StrategyApplicator
 from CORE._utils import TradeMath
 
 
@@ -224,6 +225,61 @@ class TestSmartSizeDynEma(unittest.TestCase):
             mock_sleep.assert_called_once_with(7)
             # Ордер отправлен
             mock_client.make_order.assert_called_once()
+
+    def test_smart_tp_trend_alignment(self):
+        """Проверка расчета Smart TP с привязкой к EMA-тренду и колоколом Тюринга."""
+        registry = StrategyRegistry()
+        strat = registry.get_strategy("u16_chita__classic")
+        tp_cfg = strat.smart_tp_cfg
+
+        self.assertTrue(tp_cfg.get("enabled"))
+        self.assertEqual(tp_cfg.get("trend_determ"), "ema_trend")
+
+        # 1. LONG по восходящему тренду (UP) -> множитель по карточке
+        mult_1 = MomentumEngine.calculate_smart_tp_multiplier(1, tp_cfg, side="LONG", trend_state="UP")
+        self.assertEqual(mult_1, 1.14)
+
+        mult_2 = MomentumEngine.calculate_smart_tp_multiplier(2, tp_cfg, side="LONG", trend_state="UP")
+        self.assertEqual(mult_2, 1.28)
+
+        mult_3 = MomentumEngine.calculate_smart_tp_multiplier(3, tp_cfg, side="LONG", trend_state="UP")
+        self.assertEqual(mult_3, 1.42)
+
+        mult_4 = MomentumEngine.calculate_smart_tp_multiplier(4, tp_cfg, side="LONG", trend_state="UP")
+        self.assertEqual(mult_4, 1.14)
+
+        # 2. LONG по нисходящему тренду (DOWN, контртренд) -> нейтральный 1.00x
+        mult_ct = MomentumEngine.calculate_smart_tp_multiplier(2, tp_cfg, side="LONG", trend_state="DOWN")
+        self.assertEqual(mult_ct, 1.00)
+
+        # 3. SHORT по нисходящему тренду (DOWN) -> совпадение!
+        mult_short = MomentumEngine.calculate_smart_tp_multiplier(2, tp_cfg, side="SHORT", trend_state="DOWN")
+        self.assertEqual(mult_short, 1.28)
+
+        # 4. SHORT по восходящему тренду (UP, контртренд) -> нейтральный 1.00x
+        mult_short_ct = MomentumEngine.calculate_smart_tp_multiplier(2, tp_cfg, side="SHORT", trend_state="UP")
+        self.assertEqual(mult_short_ct, 1.00)
+
+        # 5. Бестрендовый режим (trend_determ = null) -> расчет без оглядки на тренд
+        legacy_cfg = {"enabled": True, "increments_tp": {"==2": 1.28}}
+        self.assertEqual(MomentumEngine.calculate_smart_tp_multiplier(2, legacy_cfg, side="LONG", trend_state="DOWN"), 1.28)
+
+    def test_min_tp_indent_enforcement(self):
+        """Проверка минимального гарантированного пола для тейк-профита (min_tp_indent >= 1.0)."""
+        registry = StrategyRegistry()
+        strat = registry.get_strategy("u16_chita__classic")
+        self.assertEqual(strat.min_tp_indent, 1.0)
+
+        applicator = StrategyApplicator()
+        side_cfgs = applicator.build_side_configs(strat)
+
+        for side in ("LONG", "SHORT"):
+            tp_map = side_cfgs[side]["tp_map"]
+            for lvl, cfg in tp_map.items():
+                if cfg.get("indent") is not None:
+                    self.assertGreaterEqual(float(cfg["indent"]), 1.0, f"Level {lvl} indent < 1.0")
+                if cfg.get("fallback_indent") is not None:
+                    self.assertGreaterEqual(float(cfg["fallback_indent"]), 1.0, f"Level {lvl} fallback_indent < 1.0")
 
 
 if __name__ == "__main__":

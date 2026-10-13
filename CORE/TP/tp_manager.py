@@ -96,19 +96,48 @@ class TakeProfitManager:
                     recent = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
                     closed_cnt = len(recent)
                     if closed_cnt > 0:
-                        tp_mult = MomentumEngine.calculate_smart_tp_multiplier(closed_cnt, strat.smart_tp_cfg)
+                        trend_state = None
+                        trend_determ = strat.smart_tp_cfg.get("trend_determ") or strat.smart_tp_cfg.get("dynamic_sizing_mode")
+                        if trend_determ:
+                            ema_cfg = strat.smart_tp_cfg.get("ema_trend")
+                            if not ema_cfg and getattr(strat, "smart_size_cfg", None):
+                                ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                            trend_state = await MomentumEngine.get_ema_trend_state(
+                                symbol=symbol,
+                                ema_cfg=ema_cfg,
+                                client=client
+                            )
+
+                        tp_mult = MomentumEngine.calculate_smart_tp_multiplier(
+                            closed_count=closed_cnt,
+                            smart_tp_cfg=strat.smart_tp_cfg,
+                            side=side,
+                            trend_state=trend_state
+                        )
                         if tp_mult > 1.0:
                             orig_tp = tp_indent
                             tp_indent = round(float(tp_indent) * tp_mult, 4)
+                            trend_tag = f" [Trend: {trend_state}]" if trend_state else ""
                             logger.info(
-                                f"[{symbol}][{strat.strategy_id}] {side} Smart TP x{tp_mult:.2f} applied: "
+                                f"[{symbol}][{strat.strategy_id}] {side} Smart TP x{tp_mult:.2f}{trend_tag} applied: "
                                 f"{orig_tp}% -> {tp_indent}% (recent closes: {closed_cnt})"
                             )
             except Exception as e:
                 logger.debug(f"[{symbol}] Smart TP calculation error: {e}")
 
-        # Строгое соблюдение Правила 11: минимальный тейк не менее 0.50%
-        tp_indent = max(0.50, float(tp_indent))
+        # Строгое соблюдение минимального тейка (Правило 11: не менее 0.50%, либо min_tp_indent стратегии)
+        min_tp = 0.50
+        if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
+            try:
+                strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                if strat:
+                    if getattr(strat, "min_tp_indent", None) is not None:
+                        min_tp = max(0.50, float(strat.min_tp_indent))
+                    elif hasattr(strat, "raw_meta") and strat.raw_meta.get("min_tp_indent") is not None:
+                        min_tp = max(0.50, float(strat.raw_meta["min_tp_indent"]))
+            except Exception:
+                pass
+        tp_indent = max(min_tp, float(tp_indent))
 
         # Расчет цены TP (строго от средней цены входа, а не от плавающего тикера)
         base_price = state.avg_entry_price if state.avg_entry_price > 0 else current_price

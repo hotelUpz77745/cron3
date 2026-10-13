@@ -251,11 +251,25 @@ class MomentumEngine:
         return opposite_closed_count >= int(threshold if threshold is not None else 2)
 
     @classmethod
-    def calculate_smart_tp_multiplier(cls, closed_count: int, smart_tp_cfg: Optional[Dict[str, Any]]) -> float:
+    def calculate_smart_tp_multiplier(
+        cls,
+        closed_count: int,
+        smart_tp_cfg: Optional[Dict[str, Any]],
+        side: Optional[str] = None,
+        trend_state: Optional[str] = None
+    ) -> float:
         """
         Рассчитывает множитель Take-Profit (и страховочного Fallback TP)
         в зависимости от частоты закрытий в пределах eval_window_sec.
         Если closed_count == 0 (спокойный рынок) -> 1.00x.
+
+        Если trend_determ задан (например, 'ema_trend'):
+          - Применяем множитель ТОЛЬКО если сторона ордера совпадает с текущим EMA-трендом
+            (LONG при UP или SHORT при DOWN).
+          - Если тренд не совпадает (контртренд, флэт, нестабилен) -> строго 1.00x.
+
+        Если trend_determ не задан (null):
+          - Классический бестрендовый расчет строго по closed_count.
         """
         if not smart_tp_cfg or not smart_tp_cfg.get("enabled", True) or closed_count == 0:
             return 1.00
@@ -263,6 +277,21 @@ class MomentumEngine:
         increments = smart_tp_cfg.get("increments_tp", {})
         if not increments:
             return 1.00
+
+        # Проверка флага привязки к тренду (trend_determ: "ema_trend")
+        trend_determ = smart_tp_cfg.get("trend_determ") or smart_tp_cfg.get("dynamic_sizing_mode")
+        if trend_determ:
+            is_aligned = False
+            if side and trend_state:
+                norm_side = str(side).upper().strip()
+                norm_trend = str(trend_state).upper().strip()
+                if norm_side == "LONG" and norm_trend == "UP":
+                    is_aligned = True
+                elif norm_side == "SHORT" and norm_trend == "DOWN":
+                    is_aligned = True
+
+            if not is_aligned:
+                return 1.00
 
         matched_multiplier = 1.00
         for rule, mult in increments.items():
@@ -272,3 +301,4 @@ class MomentumEngine:
                     matched_multiplier = mult_val
 
         return matched_multiplier
+
