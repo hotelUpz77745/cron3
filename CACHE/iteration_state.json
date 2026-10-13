@@ -148,7 +148,7 @@
         "historical_peak_net_profit_usdt": 25.0,
         "historical_peak_net_ts": 1791743297543,
         "historical_max_drawdown_usdt": -5.0,
-        "updated_at": "2026-10-13 00:44:40 UTC"
+        "updated_at": "2026-10-13 00:49:41 UTC"
     },
     "u16_chita__classic": {
         "iteration_index": 1,
@@ -161,6 +161,6 @@
         "historical_peak_net_profit_usdt": 0.0318,
         "historical_peak_net_ts": 1791568189161,
         "historical_max_drawdown_usdt": -97.0085,
-        "updated_at": "2026-10-13 00:44:52 UTC"
+        "updated_at": "2026-10-13 00:49:43 UTC"
     }
 }

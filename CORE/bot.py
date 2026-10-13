@@ -505,7 +505,20 @@ class BotCore:
             logger.info(f"[{symbol}] Signal triggered for {side}.")
 
             strat = self.strategy_registry.get_strategy_for_symbol(symbol)
-            if strat and getattr(strat, "smart_grace_cfg", None):
+
+            # Актуализация закрытий стороны в пределах окна (по умолчанию 300с)
+            now = time.time()
+            eval_w = 300.0
+            if strat and getattr(strat, "smart_grace_cfg", None) and strat.smart_grace_cfg.get("eval_window_sec"):
+                eval_w = float(strat.smart_grace_cfg["eval_window_sec"])
+            elif strat and getattr(strat, "smart_size_cfg", None) and strat.smart_size_cfg.get("eval_window_sec"):
+                eval_w = float(strat.smart_size_cfg["eval_window_sec"])
+            state.recent_closes = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
+            closed_count = len(state.recent_closes)
+
+            # Броуновский шум применяется ИСКЛЮЧИТЕЛЬНО между ордерами сильной руки (когда в окне закрылся хотя бы 1 ордер).
+            # Первый сигнальный ордер (closed_count == 0) открывается строго по штатному таймингу без задержки!
+            if strat and getattr(strat, "smart_grace_cfg", None) and closed_count >= 1:
                 bn_factor = (
                     strat.smart_grace_cfg.get("brownian_noise_factor")
                     or strat.smart_grace_cfg.get("white_noise_factor")
@@ -516,7 +529,10 @@ class BotCore:
                     if high > 0 and high >= low:
                         # Дробный джиттер броуновского шума через аппаратную энтропию secrets
                         noise_sleep = round(secrets.SystemRandom().uniform(low, high), 2)
-                        logger.info(f"[{symbol}] {side} Brownian Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) before entry.")
+                        logger.info(
+                            f"[{symbol}] {side} Brownian Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) "
+                            f"between strong-hand orders (closed orders in window: {closed_count})."
+                        )
                         await asyncio.sleep(noise_sleep)
                         if (
                             getattr(self, 'is_paused', False) is True 
@@ -550,10 +566,6 @@ class BotCore:
             invest_size = base_invest
 
             if strat and strat.smart_size_cfg:
-                now = time.time()
-                eval_w = float(strat.smart_size_cfg.get("eval_window_sec", 300))
-                state.recent_closes = [t for t in state.recent_closes if now - t <= eval_w]
-                closed_count = len(state.recent_closes)
 
                 trend_state = None
                 trend_determ = strat.smart_size_cfg.get("trend_determ") or strat.smart_size_cfg.get("dynamic_sizing_mode")

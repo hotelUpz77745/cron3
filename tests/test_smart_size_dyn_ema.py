@@ -214,7 +214,8 @@ class TestSmartSizeDynEma(unittest.TestCase):
             "grid": {"0": {"volume": 5.0}}
         }
 
-        # Проверяем, что вызывается secrets.SystemRandom().uniform(3, 13) и asyncio.sleep(sleep_val)
+        # ТЕСТ 1: Первый вход (closed_count == 0) — броуновский шум НЕ применяется!
+        state.recent_closes = []
         mock_sys_random = MagicMock()
         mock_sys_random.uniform.return_value = 7.34
 
@@ -224,9 +225,26 @@ class TestSmartSizeDynEma(unittest.TestCase):
 
             asyncio.run(BotCore._process_signal(bot, "STRKUSDT", "LONG", side_cfg, 1.0))
 
+            # Слип НЕ должен вызываться на первом входе
+            mock_sleep.assert_not_called()
+            mock_sys_random.uniform.assert_not_called()
+            mock_client.make_order.assert_called_once()
+
+        # ТЕСТ 2: Повторный вход сильной руки (closed_count >= 1) — броуновский шум применяется!
+        import time
+        state.in_position = False
+        state.recent_closes = [time.time()]
+        mock_client.make_order.reset_mock()
+
+        with patch("CORE.bot.secrets.SystemRandom", return_value=mock_sys_random), \
+             patch("CORE.bot.asyncio.sleep", new_callable=AsyncMock) as mock_sleep, \
+             patch("CORE.bot.BinancePublic.get_last_price", new_callable=AsyncMock, return_value=1.05):
+
+            asyncio.run(BotCore._process_signal(bot, "STRKUSDT", "LONG", side_cfg, 1.0))
+
+            # Слип вызывается между ордерами сильной руки
             mock_sys_random.uniform.assert_called_once_with(3.0, 13.0)
             mock_sleep.assert_called_once_with(7.34)
-            # Ордер отправлен
             mock_client.make_order.assert_called_once()
 
     def test_smart_tp_trend_alignment(self):
