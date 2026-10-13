@@ -92,6 +92,7 @@ class AnalyticsManager:
         self._background_tasks = set()
         self._sync_locks = set()
         self._sync_in_progress = asyncio.Lock()
+        self._symbol_fsm_positions = {}
         self._ensure_files()
 
         # Sync start balance from config upon restart
@@ -1091,29 +1092,31 @@ class AnalyticsManager:
             if not config_symbols:
                 config_symbols = list(coin_details.keys())
                 
-            # SECONDARY RACE CONDITION FIX: 
-            # Deep check for REST vs Local State desync (Partial/Full Closes)
-            if is_lightweight:
-                for sym in config_symbols:
-                    rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
-                    if rt_path.exists():
-                        try:
-                            import json as _json_local
-                            rt_data = _json_local.loads(rt_path.read_text(encoding="utf-8"))
-                            local_long_vol = float(rt_data.get("LONG", {}).get("volume") or 0.0)
-                            local_short_vol = float(rt_data.get("SHORT", {}).get("volume") or 0.0)
-                            
-                            rest_details = coin_details.get(sym, {})
-                            rest_long_amt = abs(rest_details.get("long_amt", 0.0))
-                            rest_short_amt = abs(rest_details.get("short_amt", 0.0))
-                            
-                            if (local_long_vol > 0 and rest_long_amt < local_long_vol * 0.99) or \
-                               (local_short_vol > 0 and rest_short_amt < local_short_vol * 0.99):
-                                logger.info(f"[ANALYTICS] Sync race condition detected for {sym}! REST amt < Local vol. Aborting lightweight sync.")
-                                return False
-                        except Exception:
-                            pass
-                
+            # FSM Position Transition Detector for tracked symbols:
+            # Monitors positions of the bot's configured coins strictly on exchange.
+            # When a position reduction (close, cut, peel) is detected, automatically triggers
+            # asynchronous income reconciliation via /fapi/v1/income without any balance dependency.
+            for sym in config_symbols:
+                details = coin_details.get(sym, {})
+                for side in ("LONG", "SHORT"):
+                    amt_key = "long_amt" if side == "LONG" else "short_amt"
+                    curr_amt = float(details.get(amt_key, 0.0))
+                    fsm_key = (sym, side)
+
+                    if fsm_key not in self._symbol_fsm_positions:
+                        self._symbol_fsm_positions[fsm_key] = curr_amt
+                    else:
+                        prev_amt = self._symbol_fsm_positions[fsm_key]
+                        if abs(curr_amt - prev_amt) > 1e-4:
+                            self._symbol_fsm_positions[fsm_key] = curr_amt
+                            # Detect position reduction (closure, peel, cut on exchange)
+                            if abs(curr_amt) < abs(prev_amt) and fsm_key not in self._sync_locks:
+                                logger.info(
+                                    f"[ANALYTICS][FSM] Position reduction detected on {sym} {side} "
+                                    f"({prev_amt} -> {curr_amt}). Scheduling income sync via /fapi/v1/income."
+                                )
+                                self.record_finished_position(client, sym, side, 0, int(time.time() * 1000))
+
             if "per_coin" not in data:
                 data["per_coin"] = {}
 
@@ -1904,32 +1907,11 @@ class AnalyticsManager:
                 # 1. Легковесный сбор плавающего PnL и мгновенное обновление витрины leaderboard.txt
                 await self.sync_lightweight_unrealized_pnl(client)
 
-                # 2. Непрерывная проверка расхождения кеша (Wallet Balance Drift) и периодический Deep Sync
+                # 2. Периодический фоновый Heartbeat для сверки income (включая Funding Fees каждые 8ч) строго по монетам бота
                 now = time.time()
-                should_deep_sync = False
-                if (now - last_deep_sync_ts) >= 120.0:
-                    should_deep_sync = True
-
-                if not should_deep_sync and client and hasattr(client, "fetch_account_info"):
-                    try:
-                        acc_res = await client.fetch_account_info()
-                        if acc_res and acc_res.success and isinstance(acc_res.data, dict):
-                            remote_wallet = float(acc_res.data.get("totalWalletBalance", 0.0))
-                            data = self._read_data()
-                            if data and remote_wallet > 0:
-                                local_wallet = float(data.get("cur_balance_usdt", 0.0)) - float(data.get("unrealized_pnl_usdt", 0.0))
-                                if abs(remote_wallet - local_wallet) > 0.05:
-                                    logger.info(
-                                        f"[ANALYTICS] Wallet balance drift detected: Binance ${remote_wallet:.2f} "
-                                        f"vs Local ${local_wallet:.2f} (diff ${abs(remote_wallet - local_wallet):.2f}). Auto-triggering Deep Sync!"
-                                    )
-                                    should_deep_sync = True
-                    except Exception as drift_e:
-                        logger.debug(f"[ANALYTICS] Drift check failed: {drift_e}")
-
-                if should_deep_sync and client:
+                if (now - last_deep_sync_ts) >= 180.0 and client:
                     last_deep_sync_ts = now
-                    await self.deep_sync_analytics(client)
+                    asyncio.create_task(self.deep_sync_analytics(client))
             except Exception as e:
                 logger.error(f"Realtime tracker error: {e}")
 

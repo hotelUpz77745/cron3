@@ -2251,6 +2251,7 @@ class TelegramReceiver:
 
                 toxic_def = data.get("toxic_defense", {})
                 peel_def = toxic_def.get("subgrid_peeling", {})
+                rec_def = toxic_def.get("cross_recycling", {})
                 p_loss = peel_def.get('loss_absorbed_usdt', 0.0)
                 p_metric = f"Absorbed: {p_loss:,.2f} USDT" if p_loss > 1.0 else f"Locked: {peel_def.get('locked_micro_pnl_usdt', 0.0):+,.2f} USDT"
                 r_pnl = rec_def.get('locked_micro_pnl_usdt', 0.0)

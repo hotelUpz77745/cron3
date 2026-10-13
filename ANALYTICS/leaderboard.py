@@ -384,8 +384,8 @@ class LeaderboardEngine:
             peel_pnl_sum = sum(item.get("peel_pnl_usdt", 0.0) for item in entries)
             rec_burn_sum = sum(item.get("rec_burn_usdt", 0.0) for item in entries)
             rec_loss_sum = sum(item.get("rec_loss_usdt", 0.0) for item in entries)
-            peel_desc = f"{peel_pnl_sum:.2f}$ loss absorbed" if peel_pnl_sum > 1.0 else f"{peel_pnl_sum:+.2f}$ locked pnl"
-            rec_desc = f"{rec_loss_sum:.2f}$ loss absorbed" if rec_loss_sum > 1.0 and rec_burn_sum > 50 else f"+{rec_loss_sum:.2f}$ locked pnl"
+            peel_desc = f"{peel_pnl_sum:.2f}$ loss absorbed" if peel_pnl_sum > 0.0 else f"{peel_pnl_sum:+.2f}$ locked pnl"
+            rec_desc = f"{rec_loss_sum:.2f}$ loss absorbed" if (rec_loss_sum > 1.0 and rec_burn_sum > 50) else f"+{rec_loss_sum:.2f}$ locked pnl"
             notes_lines.append(
                 f"[DEFENSE BOOKKEEPING]: Subgrid Peels: {tot_peels} ({peel_vol_sum:.1f}$ vol, {peel_desc}) | "
                 f"Cross-Recycling: {tot_recs} ({rec_burn_sum:.1f}$ vol burned, {rec_desc})"
