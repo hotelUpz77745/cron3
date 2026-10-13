@@ -1091,12 +1091,15 @@ class AnalyticsManager:
                 config_symbols = list(data.get("per_coin", {}).keys())
             if not config_symbols:
                 config_symbols = list(coin_details.keys())
+
+            # Tracked symbols: currently configured PLUS historically traded coins
+            tracked_symbols = list(dict.fromkeys(config_symbols + list(data.get("per_coin", {}).keys()) + list(data.get("historical_symbols", []))))
                 
             # FSM Position Transition Detector for tracked symbols:
             # Monitors positions of the bot's configured coins strictly on exchange.
             # When a position reduction (close, cut, peel) is detected, automatically triggers
             # asynchronous income reconciliation via /fapi/v1/income without any balance dependency.
-            for sym in config_symbols:
+            for sym in tracked_symbols:
                 details = coin_details.get(sym, {})
                 for side in ("LONG", "SHORT"):
                     amt_key = "long_amt" if side == "LONG" else "short_amt"
@@ -1656,7 +1659,9 @@ class AnalyticsManager:
             s_net = float(strat_data.get("net_profit_usdt", 0.0))
             iter_idx = int(strat_data.get("iteration_index") or iter_cache.get("iteration_index") or 1)
             
-            if "iteration_start_net_profit_usdt" in strat_data:
+            if iter_idx == 1:
+                iter_start_net = 0.0
+            elif "iteration_start_net_profit_usdt" in strat_data:
                 iter_start_net = float(strat_data["iteration_start_net_profit_usdt"])
             elif "iteration_start_net_profit_usdt" in iter_cache:
                 iter_start_net = float(iter_cache["iteration_start_net_profit_usdt"])
@@ -1684,7 +1689,9 @@ class AnalyticsManager:
             strat_data["iteration_net_velocity"] = round(iter_net / iter_active_h, 2)
 
             # Iteration Realized PnL (реализованный PnL конкретно в текущей итерации)
-            if "iteration_start_realized_pnl_usdt" in strat_data:
+            if iter_idx == 1:
+                iter_start_real = 0.0
+            elif "iteration_start_realized_pnl_usdt" in strat_data:
                 iter_start_real = float(strat_data["iteration_start_realized_pnl_usdt"])
             elif "iteration_start_realized_pnl_usdt" in iter_cache:
                 iter_start_real = float(iter_cache["iteration_start_realized_pnl_usdt"])

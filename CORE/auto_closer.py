@@ -547,7 +547,7 @@ class AutoCloser:
                     # Считываем свежие данные аналитики после закрытия ордеров
                     fresh_strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else strat_analytics
                     settled_net = round(float(fresh_strat_analytics.get("net_profit_usdt", strat_net)), 4)
-                    settled_realized = round(float(fresh_strat_analytics.get("realized_pnl_usdt", 0.0)), 4)
+                    settled_realized = round(float(fresh_strat_analytics.get("realized_pnl_net_usdt", fresh_strat_analytics.get("realized_pnl_usdt", 0.0))), 4)
 
                     now_ms = int(time.time() * 1000)
                     fresh_strat_analytics["iteration_index"] = next_iter_idx

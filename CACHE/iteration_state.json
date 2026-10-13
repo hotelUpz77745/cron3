@@ -78,12 +78,12 @@
         "updated_at": "2026-10-09 13:49:51 UTC"
     },
     "__global__": {
-        "iteration_index": 2,
-        "iteration_start_net_profit_usdt": -25.7603,
-        "iteration_start_ts": 1791933880791,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791933880791,
-        "updated_at": "2026-10-13 23:24:40 UTC"
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_ts": 1791555703128,
+        "iteration_peak_net_profit_usdt": 0.8489,
+        "iteration_peak_ts": 1791926920285,
+        "updated_at": "2026-10-14 02:40:00 UTC"
     },
     "u16_titan_universal_alpha__fixed": {
         "iteration_index": 1,
@@ -148,19 +148,19 @@
         "historical_peak_net_profit_usdt": 25.0,
         "historical_peak_net_ts": 1791743297543,
         "historical_max_drawdown_usdt": -5.0,
-        "updated_at": "2026-10-13 23:30:35 UTC"
+        "updated_at": "2026-10-13 23:41:00 UTC"
     },
     "u16_chita__classic": {
-        "iteration_index": 2,
-        "iteration_start_net_profit_usdt": -25.7603,
-        "iteration_start_realized_pnl_usdt": 11.8086,
-        "iteration_realized_pnl_usdt": -37.8915,
-        "iteration_start_ts": 1791933880745,
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1791934860624,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1791933880745,
+        "iteration_peak_ts": 1791934860624,
         "historical_peak_net_profit_usdt": 0.8489,
         "historical_peak_net_ts": 1791926920285,
         "historical_max_drawdown_usdt": -97.0085,
-        "updated_at": "2026-10-13 23:31:24 UTC"
+        "updated_at": "2026-10-13 23:41:00 UTC"
     }
 }

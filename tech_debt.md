@@ -150,3 +150,15 @@
         - В `tests/test_trend_size_depender.py` вызов сохранения кеша на диск изолирован через `rm.save_cache = AsyncMock()`.
         - Боевой файл `CFG/runtime/u16_chita__classic/strkusdt.json` восстановлен и верифицирован через универсальный `StrategyApplicator` в строгом соответствии с фактической биржевой позицией (1413 монет, L0..L2 `is_active: true`, L3..L6 `is_active: false`).
 
+  11. **Устранение фантомных смещений итераций аналитики (Iter Real vs Realized) и полный учет исторических монет (14.10.2026):**
+      - **Коренная причина проблемы:**
+        - Для итерации цикла (#1) чтение `iteration_start_realized_pnl_usdt` и `iteration_start_net_profit_usdt` из кеша/стейта могло подхватывать неактуальный оффсет (например, `+11.8086 $`), в результате чего `Iter Real` вычислялся как `Realized - 11.8086` (демонстрируя `-37.89 $` при истинном кумулятивном реализованном результате `-26.08 $`).
+        - В методах сброса итераций (`BotCore.reset_strategy_iteration` и `AutoCloser`) база реализованного PnL считывалась из поля валового PnL `realized_pnl_usdt` вместо чистого PnL `realized_pnl_net_usdt`, накапливая расхождение на величину комиссий и фандинга.
+        - В `_update_drawdowns` мониторинг позиций FSM был сужен только до `config_symbols` из `app.json`, что отсекало монеты, которые торговались ранее и оставили след в аналитике (`RLCUSDT`).
+      - **Архитектурное решение:**
+        - В `ANALYTICS/analytics.py` введена безусловная нормализация: если `iter_idx == 1`, то `iter_start_net = 0.0` и `iter_start_real = 0.0`. Фантомные смещения на первом цикле физически исключены.
+        - В `CORE/bot.py` и `CORE/auto_closer.py` фиксация базы реализованного PnL для последующих циклов переведена на `realized_pnl_net_usdt` (fallback `realized_pnl_usdt`).
+        - В `_update_drawdowns` пул отслеживаемых FSM монет расширен объединением активных символов и всех монет из истории аналитики (`tracked_symbols = list(dict.fromkeys(config_symbols + list(data.get("per_coin", {}).keys()) + list(data.get("historical_symbols", []))))`). Исторические монеты сохраняют свой след, PnL и безопасность.
+        - Таблица лидерборда `leaderboard.txt` полностью синхронизирована с фактическим результатом остановки бота оператором:
+          `Net Profit: -26.08 USDT`, `Iter Net: -26.08 $ (#1)`, `Realized: -26.08 $`, `Iter Real: -26.08 $`, `Floating: +0.00 $`.
+
