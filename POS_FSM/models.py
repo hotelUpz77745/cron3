@@ -87,6 +87,12 @@ class PositionState:
             v.pop("armed_timestamp", None)
             v.pop("peeled", None)
             v.pop("peeled_count", None)
+            v.pop("_skipped", None)
+            v.pop("_skip_policy", None)
+            v.pop("_skip_status", None)
+            v.pop("_skip_desc", None)
+            v.pop("_skipped_by_level", None)
+            v.pop("_skipped_levels_handled", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

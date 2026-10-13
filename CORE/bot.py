@@ -12,6 +12,7 @@ import logging
 import os
 import time
 import json
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -501,6 +502,30 @@ class BotCore:
 
         try:
             logger.info(f"[{symbol}] Signal triggered for {side}.")
+
+            strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+            if strat and getattr(strat, "smart_grace_cfg", None):
+                wn_factor = strat.smart_grace_cfg.get("white_noise_factor")
+                if isinstance(wn_factor, (list, tuple)) and len(wn_factor) == 2:
+                    low = int(min(wn_factor))
+                    high = int(max(wn_factor))
+                    if high > 0 and high >= low:
+                        noise_sleep = random.randint(low, high)
+                        logger.info(f"[{symbol}] {side} White Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) before entry.")
+                        await asyncio.sleep(noise_sleep)
+                        if (
+                            getattr(self, 'is_paused', False) is True 
+                            or getattr(self, 'entry_blocked', False) is True
+                            or sym_upper in getattr(self, "_closing_symbols", set())
+                            or getattr(state, "is_closing", False) is True
+                            or getattr(state, "in_position", False) is True
+                        ):
+                            logger.warning(f"[{symbol}] {side}: Entry aborted after white noise sleep.")
+                            state.in_position_papper = False
+                            return
+                        p_fresh = await BinancePublic.get_last_price(symbol)
+                        if p_fresh and p_fresh > 0:
+                            current_price = p_fresh
             
             sym_client = self.get_client_for_symbol(symbol)
             # 1. Установка плеча и маржи (использует кеш, 0 наносекунд если уже установлено)
@@ -520,11 +545,31 @@ class BotCore:
             invest_size = base_invest
 
             if strat and strat.smart_size_cfg:
+                now = time.time()
+                eval_w = float(strat.smart_size_cfg.get("eval_window_sec", 300))
+                state.recent_closes = [t for t in state.recent_closes if now - t <= eval_w]
                 closed_count = len(state.recent_closes)
-                size_mult = MomentumEngine.calculate_smart_size_multiplier(closed_count, strat.smart_size_cfg)
+
+                trend_state = None
+                trend_determ = strat.smart_size_cfg.get("trend_determ") or strat.smart_size_cfg.get("dynamic_sizing_mode")
+                if trend_determ:
+                    ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                    trend_state = await MomentumEngine.get_ema_trend_state(
+                        symbol=symbol,
+                        ema_cfg=ema_cfg,
+                        client=sym_client
+                    )
+
+                size_mult = MomentumEngine.calculate_smart_size_multiplier(
+                    closed_count=closed_count,
+                    smart_size_cfg=strat.smart_size_cfg,
+                    side=side,
+                    trend_state=trend_state
+                )
                 if size_mult != 1.0:
                     invest_size *= size_mult
-                    logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied: x{size_mult:.2f} -> invest_size={invest_size:.2f} USDT (closes: {closed_count})")
+                    trend_tag = f" [Trend: {trend_state}]" if trend_state else ""
+                    logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied: x{size_mult:.2f}{trend_tag} -> invest_size={invest_size:.2f} USDT (closes: {closed_count})")
 
             grid_0 = side_cfg["grid"]["0"]
             volume_pct = float(grid_0.get("volume") or 0.0)

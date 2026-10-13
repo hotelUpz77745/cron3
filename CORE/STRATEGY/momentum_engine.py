@@ -3,8 +3,12 @@
 # ROLE: Mathematical engine for Smart Grace, Smart Size, Knife Blocker, and Smart TP
 # ============================================================
 
-from typing import Dict, Any, Optional
+import time
+import asyncio
+from typing import Dict, Any, Optional, Tuple, List
 from c_log import UnifiedLogger
+from API.BINANCE.public import BinancePublic
+from CORE.STRATEGY.trend_size_depender import TrendCalculator
 
 logger = UnifiedLogger("MomentumEngine")
 
@@ -13,10 +17,101 @@ class MomentumEngine:
     """
     Чистый математический движок для расчета импульсных адаптивных параметров:
     - Smart Grace: расчет длительности окна по карточке приращений
-    - Smart Size: расчет коэффициента объема позиции
+    - Smart Size: расчет коэффициента объема позиции (включая dynamic_sizing_mode по EMA)
     - Knife Blocker: блокировка входа на противоположном пампе/дампе
     - Smart TP: динамическое расширение тейк-профита при частом исполнении
     """
+
+    # Кэш тренда: (symbol, timeframe) -> (trend_state, cached_at_ts)
+    _trend_cache: Dict[Tuple[str, str], Tuple[str, float]] = {}
+    _trend_lock: Optional[asyncio.Lock] = None
+
+    @classmethod
+    def _get_trend_lock(cls) -> asyncio.Lock:
+        if cls._trend_lock is None:
+            cls._trend_lock = asyncio.Lock()
+        return cls._trend_lock
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """Сброс кэша макро-тренда (для тестов и рестарта сессий)."""
+        cls._trend_cache.clear()
+
+    @classmethod
+    async def get_ema_trend_state(
+        cls,
+        symbol: str,
+        ema_cfg: Optional[Dict[str, Any]] = None,
+        client: Optional[Any] = None,
+        cache_ttl_sec: int = 120
+    ) -> str:
+        """
+        Изолированно определяет текущий макро-тренд (UP / DOWN / FLAT / UNSTABLE)
+        по правилу Dual EMA (по умолчанию 4h, 10/30, confirmation=5, require_rising=True)
+        с потокобезопасным TTL-кэшированием свечей.
+        """
+        cfg = ema_cfg or {}
+        timeframe = str(cfg.get("timeframe", "4h")).strip()
+        cache_key = (symbol.upper(), timeframe)
+        now = time.time()
+
+        cached = cls._trend_cache.get(cache_key)
+        if cached is not None:
+            trend_val, ts = cached
+            if now - ts < cache_ttl_sec:
+                return trend_val
+
+        async with cls._get_trend_lock():
+            cached = cls._trend_cache.get(cache_key)
+            if cached is not None:
+                trend_val, ts = cached
+                if now - ts < cache_ttl_sec:
+                    return trend_val
+
+            try:
+                sma_slow = int(cfg.get("sma_slow", 30))
+                confirmation = int(cfg.get("confirmation_candles", 5))
+                limit = max(35, sma_slow + confirmation + 5)
+
+                klines = await BinancePublic.get_klines(symbol, timeframe, limit)
+                if not klines and client and hasattr(client, "get_klines"):
+                    klines = await client.get_klines(symbol, timeframe, limit)
+
+                if not klines or len(klines) < 15:
+                    logger.debug(
+                        f"[MomentumEngine][{symbol}] Not enough {timeframe} klines "
+                        f"({len(klines) if klines else 0}) for EMA trend, fallback to FLAT"
+                    )
+                    return "FLAT"
+
+                closes: List[float] = []
+                for k in klines:
+                    if isinstance(k, dict):
+                        closes.append(float(k.get("close", 0.0)))
+                    elif isinstance(k, (list, tuple)) and len(k) > 4:
+                        closes.append(float(k[4]))
+
+                trend_calc_cfg = {
+                    "is_active": True,
+                    "timeframe": timeframe,
+                    "sma_fast": int(cfg.get("sma_fast", 10)),
+                    "sma_slow": sma_slow,
+                    "confirmation_candles": confirmation,
+                    "require_rising": bool(cfg.get("require_rising", True))
+                }
+                calc = TrendCalculator(trend_calc_cfg)
+                trend_state = calc.calculate(closes)
+
+                cls._trend_cache[cache_key] = (trend_state, now)
+                logger.debug(
+                    f"[MomentumEngine][{symbol}] Evaluated EMA trend "
+                    f"({timeframe} {cfg.get('sma_fast', 10)}/{sma_slow}): {trend_state}"
+                )
+                return trend_state
+
+            except Exception as e:
+                logger.warning(f"[MomentumEngine][{symbol}] Error evaluating EMA trend ({e}), fallback to FLAT")
+                return "FLAT"
 
     @classmethod
     def match_rule(cls, rule: str, count: int) -> bool:
@@ -64,11 +159,24 @@ class MomentumEngine:
         return start_period + max_extra
 
     @classmethod
-    def calculate_smart_size_weight(cls, closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> float:
+    def calculate_smart_size_weight(
+        cls,
+        closed_count: int,
+        smart_size_cfg: Optional[Dict[str, Any]],
+        side: Optional[str] = None,
+        trend_state: Optional[str] = None
+    ) -> float:
         """
         Рассчитывает множитель объема сетки на основе профитабельности стороны.
         По умолчанию 1.00x.
-        Пример карточки: <2 -> 1.00, ==2 -> 1.25, ==3 -> 1.35, >=4 -> 0.75.
+        
+        Если включен dynamic_sizing_mode (например, 'dyn_ema_71'):
+          - Применяем множитель из profiting_size_weights ТОЛЬКО если сторона ордера
+            совпадает с текущим EMA-трендом (LONG при UP или SHORT при DOWN).
+          - Если тренд не совпадает (контртренд, флэт, нестабилен) -> строго 1.00x.
+          
+        Если dynamic_sizing_mode выключен или null:
+          - Классический бестрендовый расчет строго по closed_count.
         """
         if not smart_size_cfg:
             return 1.00
@@ -77,6 +185,21 @@ class MomentumEngine:
         if not weights_card:
             return 1.00
 
+        # Проверка флага привязки к тренду (trend_determ: "ema_trend")
+        trend_determ = smart_size_cfg.get("trend_determ") or smart_size_cfg.get("dynamic_sizing_mode")
+        if trend_determ:
+            is_aligned = False
+            if side and trend_state:
+                norm_side = str(side).upper().strip()
+                norm_trend = str(trend_state).upper().strip()
+                if norm_side == "LONG" and norm_trend == "UP":
+                    is_aligned = True
+                elif norm_side == "SHORT" and norm_trend == "DOWN":
+                    is_aligned = True
+
+            if not is_aligned:
+                return 1.00
+
         for rule, weight in weights_card.items():
             if cls.match_rule(rule, closed_count):
                 return float(weight)
@@ -84,9 +207,20 @@ class MomentumEngine:
         return 1.00
 
     @classmethod
-    def calculate_smart_size_multiplier(cls, closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> float:
+    def calculate_smart_size_multiplier(
+        cls,
+        closed_count: int,
+        smart_size_cfg: Optional[Dict[str, Any]],
+        side: Optional[str] = None,
+        trend_state: Optional[str] = None
+    ) -> float:
         """Алиас для calculate_smart_size_weight для полной совместимости с bot.py."""
-        return cls.calculate_smart_size_weight(closed_count, smart_size_cfg)
+        return cls.calculate_smart_size_weight(
+            closed_count=closed_count,
+            smart_size_cfg=smart_size_cfg,
+            side=side,
+            trend_state=trend_state
+        )
 
     @classmethod
     def is_knife_blocked(cls, opposite_closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> bool:

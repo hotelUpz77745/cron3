@@ -169,6 +169,27 @@ class AverageManager:
                 grid[sk]["is_active"] = True
                 grid[sk]["activated_at"] = now_sec
                 grid[sk]["timestamp"] = int(now_sec * 1000)
+                grid[sk]["_skipped"] = True
+                grid[sk]["_skip_policy"] = behavior
+                grid[sk]["_skipped_by_level"] = str(candidate_level)
+                if behavior == "mark_executed":
+                    grid[sk]["_skip_status"] = "burnt"
+                    grid[sk]["_skip_desc"] = (
+                        f"Пропущен и сожжен по политике mark_executed при сработке L{candidate_level} "
+                        f"(объем сгорел без маржинальной нагрузки)"
+                    )
+                elif behavior == "accumulate_current":
+                    grid[sk]["_skip_status"] = f"accumulated_into_L{candidate_level}"
+                    grid[sk]["_skip_desc"] = (
+                        f"Пропущен, объем перенесен в колено L{candidate_level} (политика accumulate_current)"
+                    )
+                elif behavior in ("distribute_remaining", "distribute_within_zone"):
+                    grid[sk]["_skip_status"] = "distributed_remaining"
+                    grid[sk]["_skip_desc"] = (
+                        f"Пропущен, объем распределен по оставшимся ступеням (политика distribute_remaining)"
+                    )
+
+            level_data["_skipped_levels_handled"] = list(skipped_levels)
 
             # Режим 2: accumulate_current — вливаем весь пропущенный объем в ближайший сработавший уровень
             if behavior == "accumulate_current":

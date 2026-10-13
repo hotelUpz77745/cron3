@@ -1,6 +1,6 @@
 {
   "name": "🐆 U16: Chita (8-Lvl Asymmetric Heavy Artillery + Half-Peel 50% + Mark Executed)",
-  "description": "Эволюционная модель Чита (U16 Chita): 1) Разряженная 8-уровневая асимметричная Фибо-сетка с защитой от ракет (Зона 1 скальп L0..L2: 0%/-3%/-8%, 16% объема; Зона 2 буфер разворота L3..L4: Long -21%/-34%, Short +21%/+55%, 19% объема; Зона 3 тяжелая артиллерия L5: Long -55%, Short +144%, 15% объема; Бункер L6..L7: Short +360%/+900%, Long L6..L7 зарезервированы enabled: false); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5, peel_num = 1 на активных уровнях Зоны 2-3); 3) Политика пропущенного объема: mark_executed (объем сгорает без перегрузки депозита); 4) Cross-Side Profit Recycling с 4-го колена усреднения (L4); 5) Knife Blocker = 1; 6) Динамический сайзинг dyn_ema_71 (1.14 / 1.28 / 1.42 / 1.0); 7) Smart Grace 150s (0/0/0/0).",
+  "description": "Эволюционная модель Чита (U16 Chita): 1) Разряженная 8-уровневая асимметричная Фибо-сетка с защитой от ракет (Зона 1 скальп L0..L2: 0%/-3%/-8%, 16% объема; Зона 2 буфер разворота L3..L4: Long -21%/-34%, Short +21%/+55%, 19% объема; Зона 3 тяжелая артиллерия L5: Long -55%, Short +144%, 15% объема; Бункер L6..L7: Short +360%/+900%, Long L6..L7 зарезервированы enabled: false); 2) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5, peel_num = 1 на активных уровнях Зоны 2-3); 3) Политика пропущенного объема: mark_executed (объем сгорает без перегрузки депозита); 4) Cross-Side Profit Recycling с 4-го колена усреднения (L4); 5) Knife Blocker = 1; 6) Динамический трендовый сайзинг trend_determ: ema_trend (колокол Тюринга: 1.14 / 1.28 / 1.42 / 1.28 / 1.14 строго для ступени grid_0; при null — классический бестрендовый расчет); 7) Smart Grace 150s (0/0/0/0).",
   "leverage": 20,
   "timeframe": "5m",
   "tp_purpose": "self",
@@ -10,6 +10,7 @@
     "accumulate_current": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
     "mark_executed": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
   },
+  "_avg_free_volume_runtime_note": "В рантайме пропущенные уровни наглядно помечаются метаполями: _skipped: true, _skip_policy: 'mark_executed', _skip_status: 'burnt', _skip_desc: '...', _skipped_by_level: '...', чтобы оператор сразу видел сгоревшие ступени.",
   "super_grid": {
     "enabled": false
   },
@@ -20,6 +21,7 @@
       3,
       13
     ],
+    "_white_noise_factor_desc": "Рандомизированная задержка (слип) в секундах между 3 и 13 включительно перед отправкой рыночного ордера на вход (анти-синхронизация и защита от биржевого фронтраннинга).",
     "eval_window_sec": 300,
     "increments_card": {
       "==1": 0,
@@ -30,16 +32,31 @@
   },
   "smart_size": {
     "eval_window_sec": 300,
-    "dynamic_sizing_mode": "dyn_ema_71",
-    "profiting_size_weights": {
-      "==1": 1.14,
-      "==2": 1.28,
-      "==3": 1.42,
-      ">=4": 1.0
+    "trend_determ": "ema_trend",
+    "_trend_determ_modes": {
+      "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 4h Dual EMA тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
+      "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
     },
+    "ema_trend": {
+      "timeframe": "4h",
+      "sma_fast": 10,
+      "sma_slow": 30,
+      "confirmation_candles": 5,
+      "require_rising": true,
+      "trend_positive": true
+    },
+    "profiting_size_weights": {
+      "==0": 1.14,
+      "==1": 1.28,
+      "==2": 1.42,
+      "==3": 1.28,
+      ">=4": 1.14
+    },
+    "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
     "knife_blocker_enabled": true,
     "knife_blocker_threshold": 1,
-    "omni_size_all_zones": false
+    "omni_size_all_zones": false,
+    "_omni_size_all_zones_desc": "false = множители применяются строго к ордеру grid_0; true = распространялись бы на всю сетку усреднения (выключено для защиты депозита)."
   },
   "smart_tp": {
     "enabled": false,

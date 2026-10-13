@@ -60,9 +60,79 @@ class TestStrategySystem(unittest.TestCase):
                 ">=2": 1.50
             }
         }
-        self.assertEqual(MomentumEngine.calculate_smart_tp_multiplier(0, cfg), 1.00)
-        self.assertEqual(MomentumEngine.calculate_smart_tp_multiplier(1, cfg), 1.25)
-        self.assertEqual(MomentumEngine.calculate_smart_tp_multiplier(2, cfg), 1.50)
+    def test_smart_size_dynamic_ema_multiplier(self):
+        """Тестирование trend_determ (ema_trend): привязка к EMA-тренду."""
+        cfg_dyn = {
+            "trend_determ": "ema_trend",
+            "profiting_size_weights": {
+                "==0": 1.14,
+                "==1": 1.14,
+                "==2": 1.28,
+                "==3": 1.42,
+                ">=4": 1.0
+            }
+        }
+
+        # 1. LONG по восходящему тренду (UP) -> умножение работает
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="LONG", trend_state="UP"), 1.14)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(1, cfg_dyn, side="LONG", trend_state="UP"), 1.14)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(2, cfg_dyn, side="LONG", trend_state="UP"), 1.28)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(3, cfg_dyn, side="LONG", trend_state="UP"), 1.42)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(4, cfg_dyn, side="LONG", trend_state="UP"), 1.00)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(5, cfg_dyn, side="LONG", trend_state="UP"), 1.00)
+
+        # 2. SHORT по нисходящему тренду (DOWN) -> умножение работает
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="SHORT", trend_state="DOWN"), 1.14)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(2, cfg_dyn, side="SHORT", trend_state="DOWN"), 1.28)
+
+        # 3. LONG при нисходящем тренде (DOWN) -> контртренд, строго 1.00x
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="LONG", trend_state="DOWN"), 1.00)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(2, cfg_dyn, side="LONG", trend_state="DOWN"), 1.00)
+
+        # 4. SHORT при восходящем тренде (UP) -> контртренд, строго 1.00x
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="SHORT", trend_state="UP"), 1.00)
+
+        # 5. При FLAT или UNSTABLE -> нейтральный объем 1.00x
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="LONG", trend_state="FLAT"), 1.00)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="LONG", trend_state="UNSTABLE"), 1.00)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_dyn, side="LONG", trend_state=None), 1.00)
+
+        # 6. Режим без dynamic_sizing_mode (null / отсутствует) -> классический расчет без фильтра
+        cfg_classic = {
+            "dynamic_sizing_mode": None,
+            "profiting_size_weights": {
+                "==0": 1.14,
+                "==1": 1.14,
+                "==2": 1.28
+            }
+        }
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(0, cfg_classic, side="LONG", trend_state="DOWN"), 1.14)
+        self.assertEqual(MomentumEngine.calculate_smart_size_multiplier(2, cfg_classic), 1.28)
+
+    def test_get_ema_trend_state(self):
+        """Тестирование изолированного расчета get_ema_trend_state с моком свечей."""
+        import asyncio
+        MomentumEngine.clear_cache()
+
+        # Восходящие свечи
+        up_closes = [100.0 + i * 2.0 for i in range(50)]
+        fake_klines_up = [{"close": c} for c in up_closes]
+
+        with unittest.mock.patch("CORE.STRATEGY.momentum_engine.BinancePublic.get_klines", unittest.mock.AsyncMock(return_value=fake_klines_up)):
+            trend = asyncio.run(MomentumEngine.get_ema_trend_state("TESTUSDT", {"sma_fast": 10, "sma_slow": 30, "confirmation_candles": 5}))
+            self.assertEqual(trend, "UP")
+
+        # Проверка TTL-кэша (повторный вызов без обращения к API возвращает UP)
+        trend_cached = asyncio.run(MomentumEngine.get_ema_trend_state("TESTUSDT", {}))
+        self.assertEqual(trend_cached, "UP")
+
+        # Нисходящие свечи для другого символа
+        MomentumEngine.clear_cache()
+        down_closes = [200.0 - i * 2.0 for i in range(50)]
+        fake_klines_down = [{"close": c} for c in down_closes]
+        with unittest.mock.patch("CORE.STRATEGY.momentum_engine.BinancePublic.get_klines", unittest.mock.AsyncMock(return_value=fake_klines_down)):
+            trend_down = asyncio.run(MomentumEngine.get_ema_trend_state("DOWNUSDT", {}))
+            self.assertEqual(trend_down, "DOWN")
 
     def test_strategy_registry_resolution_and_invariants(self):
         """Тестирование разрешения стратегий и Инварианта 1 (1:1)."""

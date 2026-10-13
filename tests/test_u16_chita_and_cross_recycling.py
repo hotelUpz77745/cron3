@@ -332,8 +332,12 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
             current_price=45.0, spec_data=spec, tp_manager=tp_mgr
         )
 
-        # L3 помечен исполненным
+        # L3 помечен исполненным со специальными метаполями рантайма
         self.assertTrue(state.grid["3"]["is_active"])
+        self.assertTrue(state.grid["3"].get("_skipped"))
+        self.assertEqual(state.grid["3"].get("_skip_policy"), "mark_executed")
+        self.assertEqual(state.grid["3"].get("_skip_status"), "burnt")
+        self.assertEqual(state.grid["3"].get("_skipped_by_level"), "4")
         # L4 сохранил свой объем 12.0%
         self.assertEqual(state.grid["4"]["volume"], 12.0)
         # L5 и L6 не изменились (объем сгорел)
