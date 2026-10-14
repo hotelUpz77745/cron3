@@ -581,6 +581,41 @@ class TestStrategySystem(unittest.TestCase):
         chita_strat = StrategyConfig("u16_chita", chita_meta, ["STRKUSDT"])
         self.assertEqual(chita_strat.smart_grace_cfg["shift_interval_sec"], [5, 16])
 
+    def test_shift_interval_triggers_before_candle_close(self):
+        """
+        Проверка, что shift_interval_sec вычитается от времени закрытия 5-минутной свечи,
+        обеспечивая вход за 5..16 секунд ДО закрытия свечи (а не после ее начала).
+        """
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+        from CORE.ENTRY.signal import TimeControl
+
+        tc = TimeControl(interval="5m", smart_grace_cfg={"shift_interval_sec": 13, "start_period_sec": 150})
+        # Граница 5-минутки: 300 секунд (12:05:00 UTC)
+        # При shift = 13:
+        # t = 280 (12:04:40, 20с до закрытия) -> False
+        # t = 287 (12:04:47, ровно 13с до закрытия) -> True (старт окна!)
+        # t = 295 (12:04:55, 5с до закрытия) -> True
+
+        def make_dt(timestamp: float):
+            return datetime.fromtimestamp(timestamp, tz=timezone.utc)
+
+        with patch("CORE.ENTRY.signal.datetime") as mock_dt:
+            # 1. За 20 секунд до закрытия свечи -> False
+            mock_dt.now.return_value = make_dt(280.0)
+            is_sig, _ = tc.is_new_interval(0)
+            self.assertFalse(is_sig, "За 20с до закрытия окно еще должно быть закрыто!")
+
+            # 2. Ровно за 13 секунд до закрытия свечи -> True
+            mock_dt.now.return_value = make_dt(287.0)
+            is_sig, _ = tc.is_new_interval(0)
+            self.assertTrue(is_sig, "Ровно за 13с до закрытия свечи окно должно открыться!")
+
+            # 3. За 5 секунд до закрытия свечи -> True
+            mock_dt.now.return_value = make_dt(295.0)
+            is_sig, _ = tc.is_new_interval(0)
+            self.assertTrue(is_sig, "За 5с до закрытия свечи окно должно быть открыто!")
+
 
 if __name__ == "__main__":
     unittest.main()
