@@ -364,7 +364,14 @@ class StrategyConfig:
             )
             if not has_ratio:
                 raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling ratio: either 'recycle_ratio_tiers' (дискретная карта) or 'recycle_ratio' (скаляр)")
-            for req_k in ("min_burn_level", "min_drawdown_pct", "max_slice_pct"):
+            has_burn_level = (
+                "min_burn_level" in self.cross_recycling_cfg
+                or "recycle_ratio_tiers" in self.cross_recycling_cfg
+                or "recycle_ratio_map" in self.cross_recycling_cfg
+            )
+            if not has_burn_level:
+                raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: 'min_burn_level' (или дискретная карта 'recycle_ratio_tiers')")
+            for req_k in ("min_drawdown_pct", "max_slice_pct"):
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 

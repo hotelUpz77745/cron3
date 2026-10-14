@@ -99,7 +99,52 @@ class CrossSideProfitRecycler:
 
         if fallback_ratio is not None:
             return fallback_ratio
-        return 0.50
+        return 0.0
+
+    @staticmethod
+    def resolve_min_burn_level(recycling_cfg: Dict[str, Any]) -> int:
+        """
+        Определяет минимальный уровень сетки для сжигания (min_burn_level).
+        Если задана дискретная карта tiers/map — берет минимальный уровень из карты
+        (устраняя необходимость дублирования 'min_burn_level' в конфиге).
+        Если явно передан 'min_burn_level', использует его (обратная совместимость).
+        """
+        if "min_burn_level" in recycling_cfg and recycling_cfg["min_burn_level"] is not None:
+            return int(recycling_cfg["min_burn_level"])
+
+        tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
+        if tiers and isinstance(tiers, dict):
+            levels = []
+            for pat in tiers.keys():
+                p = str(pat).strip()
+                if "-" in p or ".." in p:
+                    delim = ".." if ".." in p else "-"
+                    parts = p.split(delim)
+                    try:
+                        levels.append(int(parts[0].strip()))
+                    except ValueError:
+                        pass
+                elif p.endswith("+"):
+                    try:
+                        levels.append(int(p[:-1].strip()))
+                    except ValueError:
+                        pass
+                elif p.startswith(">="):
+                    try:
+                        levels.append(int(p[2:].strip()))
+                    except ValueError:
+                        pass
+                elif p.startswith(">"):
+                    try:
+                        levels.append(int(p[1:].strip()) + 1)
+                    except ValueError:
+                        pass
+                elif p.isdigit():
+                    levels.append(int(p))
+            if levels:
+                return min(levels)
+
+        return 2
 
     @classmethod
     async def maybe_recycle(
@@ -153,7 +198,7 @@ class CrossSideProfitRecycler:
                 f"[{strat_id}][{symbol}] Missing recycle ratio definition: "
                 f"either 'recycle_ratio_tiers' (карта) or 'recycle_ratio' (скаляр) must be defined"
             )
-        min_burn_level = int(recycling_cfg["min_burn_level"])
+        min_burn_level = cls.resolve_min_burn_level(recycling_cfg)
         min_drawdown_pct = float(recycling_cfg["min_drawdown_pct"])
         max_slice_pct = float(recycling_cfg["max_slice_pct"])
 
@@ -188,6 +233,8 @@ class CrossSideProfitRecycler:
             return None
 
         effective_ratio = cls.resolve_recycle_ratio(recycling_cfg, cur_level)
+        if effective_ratio <= 0.0:
+            return None
         burn_budget = realized_profit * effective_ratio
         raw_qty = burn_budget / loss_per_unit
         max_allowed_qty = pos_vol * (max_slice_pct / 100.0)
