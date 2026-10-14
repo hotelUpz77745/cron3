@@ -219,10 +219,13 @@ class StrategyApplicator:
     @staticmethod
     def resolve_first_order_volume(regime_cfg: Any, side: str, default_vol: float) -> float:
         """
-        Разрешает объем первого ордера grid_0 для стороны side (LONG / SHORT).
+        «Правило кулака Сильной руки» (Strong Hand Fist Rule):
+        Разрешает объем капитала стартового удара (grid_0) для стороны side (LONG / SHORT).
+        ВНИМАНИЕ: Управляет ИСКЛЮЧИТЕЛЬНО первым ордером (grid_0), уровни усреднения сетки (L1+) не затрагиваются.
         Поддерживает:
         - Литералы: 'bullish' (12% Long / 7% Short), 'neutral' (9% Long / 9% Short), 'bearish' (7% Long / 12% Short).
         - Числа: 1 (bullish), 0 (neutral), -1 (bearish).
+        - Авто-режим: 'auto' / 'auto_ema' (динамический выбор по глобальной EMA).
         - Структурированный словарь с 'mode' и 'presets'.
         """
         mode = "bullish"

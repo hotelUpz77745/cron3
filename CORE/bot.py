@@ -623,9 +623,13 @@ class BotCore:
                         side=side,
                         default_vol=volume_pct
                     )
-                    if dyn_vol != volume_pct:
-                        logger.info(f"[{symbol}][{strat.strategy_id}] {side} Grid 0 Auto-EMA regime [{trend_st} -> {resolved_mode}]: volume_pct {volume_pct}% -> {dyn_vol}%")
-                        volume_pct = dyn_vol
+                    tf_label = ema_trend_cfg.get("timeframe", "1d") if isinstance(ema_trend_cfg, dict) else "1d"
+                    logger.info(
+                        f"[{symbol}][{strat.strategy_id}] [КУЛАК СИЛЬНОЙ РУКИ / Auto-EMA {tf_label}]: "
+                        f"Global Trend={trend_st} -> Режим '{resolved_mode}'. "
+                        f"{side} Grid 0 (Кулак): {volume_pct:.1f}% -> {dyn_vol:.1f}% (Сетка усреднения L1+ без изменений)"
+                    )
+                    volume_pct = dyn_vol
 
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
             
