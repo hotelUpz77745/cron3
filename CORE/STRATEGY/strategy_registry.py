@@ -549,7 +549,7 @@ class StrategyRegistry:
             raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'fixed', 'classic', 'toxic', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _common.json."""
+        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _common.json с поддержкой наследования base_template."""
         data: Dict[str, Dict[str, Any]] = {}
         self.common_defaults: Dict[str, Any] = {}
         universes_dir = self.universes_path.parent / "universes"
@@ -576,16 +576,28 @@ class StrategyRegistry:
             raise FileNotFoundError(
                 f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены в {universes_dir}!"
             )
+
+        # Поддержка наследования шаблонов: base_template / template в файле вселенной
+        for u_id, u_meta in list(data.items()):
+            if isinstance(u_meta, dict):
+                base_ref = u_meta.get("base_template") or u_meta.get("template")
+                if base_ref and base_ref in data and base_ref != u_id:
+                    parent_meta = copy.deepcopy(data[base_ref])
+                    data[u_id] = deep_merge_dict(parent_meta, u_meta)
+
         return data
 
     @classmethod
     def resolve_template_id(cls, raw_id: str, universes_db: Dict[str, Any]) -> Optional[str]:
         """
-        Интеллектуальное разрешение алиасов стратегий в канонический universe_id:
-        1. Точное совпадение с ключом в universes_db
-        2. Каноническая таблица общепринятых алиасов (u16, u6, u96, omen, copper_snake, chita, medny_zmey и т.д.)
-        3. Префиксный поиск (например, 'u6' среди ['u6_symbiosis_gamma_fortress35'])
-        4. Нечувствительный к регистру поиск по подстроке.
+        Интеллектуальное и гибкое разрешение алиасов, версий и суффиксов стратегий в канонический universe_id:
+        1. Точное совпадение с ключом в universes_db (с учетом и без учета регистра).
+        2. Каноническая таблица версий и алиасов (u16, u16_v30, u16_v31, u6, u96, omen, copper_snake, chita, medny_zmey и т.д.).
+        3. Гибкий матчинг пользовательских суффиксов (например, 'u16_chita_v31_client1' -> 'u16_chita_v31').
+        4. Гибкий матчинг пользовательских префиксов (например, 'client_alex_u16_chita_v31' -> 'u16_chita_v31').
+        5. Токенный поиск по компонентам имени ('alex_u16' -> 'u16_chita', 'friend_u6' -> 'u6_symbiosis_gamma_fortress35').
+        6. Префиксный поиск (например, 'u6' среди ['u6_symbiosis_gamma_fortress35']).
+        7. Нечувствительный к регистру поиск по подстроке.
         """
         if not raw_id:
             return None
@@ -597,7 +609,25 @@ class StrategyRegistry:
             return target_lower
 
         ALIAS_MAP = {
-            # U16 Чита
+            # U16 Чита v3.1 (Hybrid Snake Bridge + Panic Damper)
+            "u16_v31": "u16_chita_v31",
+            "u16_31": "u16_chita_v31",
+            "u16_chita_v31": "u16_chita_v31",
+            "chita_v31": "u16_chita_v31",
+            "chita_31": "u16_chita_v31",
+            "chita31": "u16_chita_v31",
+            "cheetah_v31": "u16_chita_v31",
+            "cheetah_31": "u16_chita_v31",
+            "cheetah31": "u16_chita_v31",
+            "чита_v31": "u16_chita_v31",
+            "чита_31": "u16_chita_v31",
+            "чита31": "u16_chita_v31",
+            "чита_3.1": "u16_chita_v31",
+            "чита 3.1": "u16_chita_v31",
+            "chita_3.1": "u16_chita_v31",
+            "chita 3.1": "u16_chita_v31",
+
+            # U16 Чита v3.0 (Каноническая броня)
             "u16": "u16_chita",
             "chita": "u16_chita",
             "cheetah": "u16_chita",
@@ -605,6 +635,16 @@ class StrategyRegistry:
             "u16_titan": "u16_chita",
             "u16_apex": "u16_chita",
             "чита": "u16_chita",
+            "u16_v30": "u16_chita",
+            "u16_30": "u16_chita",
+            "chita_v30": "u16_chita",
+            "chita_30": "u16_chita",
+            "chita30": "u16_chita",
+            "чита_v30": "u16_chita",
+            "чита_30": "u16_chita",
+            "чита30": "u16_chita",
+            "чита_3.0": "u16_chita",
+            "chita_3.0": "u16_chita",
 
             # U6 Медный Змей (Gamma Fortress 35)
             "u6": "u6_symbiosis_gamma_fortress35",
@@ -633,6 +673,36 @@ class StrategyRegistry:
             cand = ALIAS_MAP[target_lower]
             if cand in universes_db:
                 return cand
+
+        # Поиск по началу строки: база + суффикс (например, 'u16_chita_v31_client1' -> 'u16_chita_v31')
+        # Сортируем по убыванию длины, чтобы более специфичные имена (u16_chita_v31) имели приоритет перед (u16_chita)
+        sorted_keys = sorted(universes_db.keys(), key=len, reverse=True)
+        for k in sorted_keys:
+            if target_lower.startswith(k.lower() + "_"):
+                return k
+
+        # Поиск по окончанию строки: префикс + база (например, 'client_alex_u16_chita_v31' -> 'u16_chita_v31')
+        for k in sorted_keys:
+            if target_lower.endswith("_" + k.lower()):
+                return k
+
+        # Проверяем вхождение известных составных алиасов (сортируем по длине убывания, чтобы 'u16_v31' / 'chita_v31' проверялись раньше 'u16' / 'chita')
+        for alias_key in sorted(ALIAS_MAP.keys(), key=len, reverse=True):
+            if "_" in alias_key or len(alias_key) >= 4:
+                if alias_key in target_lower:
+                    cand = ALIAS_MAP[alias_key]
+                    if cand in universes_db:
+                        return cand
+
+        # Токенный поиск по компонентам (разделенным '_') среди известных алиасов
+        tokens = target_lower.split("_")
+        for tok in tokens:
+            if tok in ALIAS_MAP:
+                cand = ALIAS_MAP[tok]
+                if cand in universes_db:
+                    return cand
+            if tok in universes_db:
+                return tok
 
         # Префиксный поиск (например, 'u6' среди ['u6_symbiosis_gamma_fortress35'])
         matching_prefix = [k for k in universes_db if k.lower().startswith(target_lower + "_") or k.lower() == target_lower]

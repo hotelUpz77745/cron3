@@ -633,14 +633,26 @@ class TestStrategySystem(unittest.TestCase):
         self.assertEqual(registry.resolve_template_id("omen", db), "u96_omni_zenith_apex")
         self.assertEqual(registry.resolve_template_id("omni", db), "u96_omni_zenith_apex")
 
-        # 3. Проверка алиасов Читы
+        # 3. Проверка алиасов Читы v3.0 и v3.1
         self.assertEqual(registry.resolve_template_id("u16", db), "u16_chita")
         self.assertEqual(registry.resolve_template_id("chita", db), "u16_chita")
         self.assertEqual(registry.resolve_template_id("cheetah", db), "u16_chita")
+        self.assertEqual(registry.resolve_template_id("u16_chita_v31", db), "u16_chita_v31")
+        self.assertEqual(registry.resolve_template_id("u16_v31", db), "u16_chita_v31")
+        self.assertEqual(registry.resolve_template_id("chita_v31", db), "u16_chita_v31")
+        self.assertEqual(registry.resolve_template_id("chita31", db), "u16_chita_v31")
 
-        # 4. Проверка одновременной параллельной регистрации всех 3 стратегий
+        # 4. Проверка гибкого нейминга с клиентскими префиксами и суффиксами
+        self.assertEqual(registry.resolve_template_id("u16_chita_v31_client_alex", db), "u16_chita_v31")
+        self.assertEqual(registry.resolve_template_id("client_alex_u16_chita_v31", db), "u16_chita_v31")
+        self.assertEqual(registry.resolve_template_id("client_alex_u16", db), "u16_chita")
+        self.assertEqual(registry.resolve_template_id("friend_bob_u6", db), "u6_symbiosis_gamma_fortress35")
+        self.assertEqual(registry.resolve_template_id("investor_omen", db), "u96_omni_zenith_apex")
+
+        # 5. Проверка одновременной параллельной регистрации всех 4 боевых вселенных
         test_active_cfg = {
             "u16__classic": {"enabled": True, "symbols": ["STRKUSDT"]},
+            "u16_v31__classic": {"enabled": True, "symbols": ["PUMPUSDT"]},
             "u6__classic": {"enabled": True, "symbols": ["ENAUSDT"]},
             "u96__classic": {"enabled": True, "symbols": ["NEARUSDT"]},
         }
@@ -648,12 +660,14 @@ class TestStrategySystem(unittest.TestCase):
         test_reg.active_cfg = test_active_cfg
         test_reg._resolve_and_validate()
 
-        self.assertEqual(len(test_reg.active_strategies), 3)
+        self.assertEqual(len(test_reg.active_strategies), 4)
         self.assertIn("u16__classic", test_reg.active_strategies)
+        self.assertIn("u16_v31__classic", test_reg.active_strategies)
         self.assertIn("u6__classic", test_reg.active_strategies)
         self.assertIn("u96__classic", test_reg.active_strategies)
 
         self.assertEqual(test_reg.get_strategy_for_symbol("STRKUSDT").name, test_reg.universes_db["u16_chita"]["name"])
+        self.assertEqual(test_reg.get_strategy_for_symbol("PUMPUSDT").name, test_reg.universes_db["u16_chita_v31"]["name"])
         self.assertEqual(test_reg.get_strategy_for_symbol("ENAUSDT").name, test_reg.universes_db["u6_symbiosis_gamma_fortress35"]["name"])
         self.assertEqual(test_reg.get_strategy_for_symbol("NEARUSDT").name, test_reg.universes_db["u96_omni_zenith_apex"]["name"])
 
