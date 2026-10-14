@@ -222,13 +222,15 @@ class StrategyConfig:
         self.auto_closing_mode: str = self.mode
 
         # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго строковый тип ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
-        raw_tsd = raw_meta.get("trend_size_depender") or {}
-        if not isinstance(raw_tsd, dict):
-            raw_tsd = {}
+        raw_tsd = raw_meta.get("trend_size_depender")
+        tsd_mode = raw_tsd if isinstance(raw_tsd, str) else (raw_tsd.get("mode") if isinstance(raw_tsd, dict) else None)
+        active_tsd = self.active_settings.get("trend_size_depender")
+        active_tsd_mode = active_tsd if isinstance(active_tsd, str) else (active_tsd.get("mode") if isinstance(active_tsd, dict) else None)
 
         sizing_mode_val = (
             self.active_settings.get("sizing_mode")
-            or raw_tsd.get("mode")
+            or active_tsd_mode
+            or tsd_mode
             or raw_meta.get("sizing_mode")
             or self.overrides.get("sizing_mode")
         )
@@ -318,7 +320,10 @@ class StrategyConfig:
             or self.active_settings.get("overrides", {}).get("trend_size_depender")
             or self.overrides.get("trend_size_depender")
         )
-        if user_tsd_override and isinstance(user_tsd_override, dict):
+        if isinstance(user_tsd_override, str):
+            self.trend_size_cfg["mode"] = user_tsd_override
+            self.trend_size_cfg["enabled"] = (user_tsd_override != "static")
+        elif user_tsd_override and isinstance(user_tsd_override, dict):
             self.trend_size_cfg.update(user_tsd_override)
 
         # Конфигурация Smart Grace

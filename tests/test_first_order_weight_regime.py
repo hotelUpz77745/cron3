@@ -119,6 +119,20 @@ class TestFirstOrderWeightRegime(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(side_cfgs_bear["LONG"]["grid"]["0"]["volume"], 7.0)
             self.assertEqual(side_cfgs_bear["SHORT"]["grid"]["0"]["volume"], 12.0)
 
+    def test_disabled_or_off_regimes(self):
+        """Проверка отключения фичи через 'off', 'null', None — базовый объем сетки не меняется."""
+        # 1. Строка 'off'
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume("off", "LONG", 12.0), 12.0)
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume("off", "SHORT", 7.0), 7.0)
+
+        # 2. Строка 'null' / 'none'
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume("null", "LONG", 12.0), 12.0)
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume(None, "SHORT", 7.0), 7.0)
+
+        # 3. Словарь с mode='off'
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume({"mode": "off"}, "LONG", 12.0), 12.0)
+        self.assertEqual(StrategyApplicator.resolve_first_order_volume({"mode": None}, "SHORT", 7.0), 7.0)
+
     @patch("CORE.STRATEGY.momentum_engine.MomentumEngine.get_ema_trend_state")
     async def test_auto_ema_regime_mapping(self, mock_trend):
         """Проверка логики Auto-EMA: динамический выбор пресетов по тренду."""

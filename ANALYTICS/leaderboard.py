@@ -154,9 +154,11 @@ class LeaderboardEngine:
                 mode = "off"
                 mode_badge = "[OFF]"
 
+        tsd_val = meta.get("trend_size_depender")
+        tsd_mode = tsd_val if isinstance(tsd_val, str) else (tsd_val.get("mode") if isinstance(tsd_val, dict) else None)
         raw_sm = (
             meta.get("sizing_mode")
-            or (meta.get("trend_size_depender") or {}).get("mode")
+            or tsd_mode
             or meta.get("trend_size_mode")
         )
         sm_str = str(raw_sm).lower().strip() if raw_sm else "static"

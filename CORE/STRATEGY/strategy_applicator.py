@@ -129,7 +129,7 @@ class StrategyApplicator:
             )
             if regime_cfg and "grid" in side_data and "0" in side_data["grid"]:
                 mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
-                if mode_val not in ("auto", "auto_ema", "ema_trend"):
+                if mode_val not in ("auto", "auto_ema", "ema_trend", "off", "null", "none", False, None):
                     resolved_vol = StrategyApplicator.resolve_first_order_volume(
                         regime_cfg=regime_cfg,
                         side=side,
@@ -242,6 +242,10 @@ class StrategyApplicator:
                         presets[str(k).lower()] = {s.upper(): float(vol) for s, vol in v.items()}
         elif isinstance(regime_cfg, (str, int)):
             mode = regime_cfg
+
+        # Отключение фичи: off / null / none / false / disabled -> возврат базового объема из сетки
+        if mode is None or str(mode).lower().strip() in ("off", "null", "none", "false", "disabled"):
+            return default_vol
 
         # Нормализация режима
         if mode in (1, "1", "bull", "bullish", "long_heavy"):
