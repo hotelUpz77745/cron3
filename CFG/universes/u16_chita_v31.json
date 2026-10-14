@@ -137,46 +137,46 @@
         "enabled": true,
         "levels": [
           {
-            "activation": 12.0,
+            "activation": 13.0,
             "floor": 8.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L0: Стартовый трейлинг ($12 -> $8, мгновенная защита прибыли без задержки)"
+            "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"
           },
           {
-            "activation": 20.0,
-            "floor": 16.0,
+            "activation": 21.0,
+            "floor": 13.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L1: Elevated start ($20 -> $16)"
+            "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"
           },
           {
-            "activation": 32.0,
-            "floor": 26.0,
+            "activation": 34.0,
+            "floor": 21.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L2: Confident Fibo wave ($32 -> $26)"
+            "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"
           },
           {
-            "activation": 50.0,
-            "floor": 42.0,
+            "activation": 55.0,
+            "floor": 34.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L3: Strong trend ($50 -> $42)"
+            "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"
           },
           {
-            "activation": 80.0,
-            "floor": 68.0,
+            "activation": 89.0,
+            "floor": 55.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L4: Impulse pump ($80 -> $68)"
+            "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"
           },
           {
-            "activation": 120.0,
-            "floor": 120.0,
+            "activation": 144.0,
+            "floor": 144.0,
             "min_age_hours": 0.0,
             "enabled": true,
-            "_desc": "L5: Mega rally ($120 -> $105)"
+            "_desc": "L5: F12 ($144 instant Mega rally)"
           }
         ]
       }
