@@ -151,16 +151,16 @@
         "updated_at": "2026-10-14 19:00:11 UTC"
     },
     "u16_chita__classic": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_index": 2,
+        "iteration_start_net_profit_usdt": -26.0829,
+        "iteration_start_realized_pnl_usdt": -26.0829,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792004411565,
+        "iteration_start_ts": 1791934860624,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792004411565,
+        "iteration_peak_ts": 1791934860624,
         "historical_peak_net_profit_usdt": 0.8489,
         "historical_peak_net_ts": 1791926920285,
         "historical_max_drawdown_usdt": -97.0085,
-        "updated_at": "2026-10-14 19:00:11 UTC"
+        "updated_at": "2026-10-14 19:36:52 UTC"
     }
 }
