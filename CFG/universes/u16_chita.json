@@ -90,9 +90,10 @@
       "timeframe": "1d",
       "sma_fast": 10,
       "sma_slow": 30,
-      "confirmation_candles": 2,
-      "require_rising": false,
-      "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной -> Bullish (12/7), ниже -> Bearish (7/12), консолидация -> Neutral (9/9)."
+      "confirmation_candles": 3,
+      "require_rising": true,
+      "trend_positive": true,
+      "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
     }
   },
   "trend_size_depender": {

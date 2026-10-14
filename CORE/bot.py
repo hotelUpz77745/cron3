@@ -600,9 +600,12 @@ class BotCore:
 
             if regime_cfg:
                 mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
-                if mode_val in ("auto", "auto_ema"):
+                if mode_val in ("auto", "auto_ema", "ema_trend"):
                     from CORE.STRATEGY.strategy_applicator import StrategyApplicator
-                    ema_trend_cfg = regime_cfg.get("auto_ema") if isinstance(regime_cfg, dict) else None
+                    ema_trend_cfg = (
+                        regime_cfg.get("auto_ema") or regime_cfg.get("ema_trend")
+                        if isinstance(regime_cfg, dict) else None
+                    )
                     if not ema_trend_cfg and strat and strat.smart_size_cfg:
                         ema_trend_cfg = strat.smart_size_cfg.get("ema_trend")
                     trend_st = await MomentumEngine.get_ema_trend_state(
