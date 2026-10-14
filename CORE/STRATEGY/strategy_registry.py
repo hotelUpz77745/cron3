@@ -578,6 +578,74 @@ class StrategyRegistry:
             )
         return data
 
+    @classmethod
+    def resolve_template_id(cls, raw_id: str, universes_db: Dict[str, Any]) -> Optional[str]:
+        """
+        Интеллектуальное разрешение алиасов стратегий в канонический universe_id:
+        1. Точное совпадение с ключом в universes_db
+        2. Каноническая таблица общепринятых алиасов (u16, u6, u96, omen, copper_snake, chita, medny_zmey и т.д.)
+        3. Префиксный поиск (например, 'u6' среди ['u6_symbiosis_gamma_fortress35'])
+        4. Нечувствительный к регистру поиск по подстроке.
+        """
+        if not raw_id:
+            return None
+        target = str(raw_id).strip()
+        if target in universes_db:
+            return target
+        target_lower = target.lower()
+        if target_lower in universes_db:
+            return target_lower
+
+        ALIAS_MAP = {
+            # U16 Чита
+            "u16": "u16_chita",
+            "chita": "u16_chita",
+            "cheetah": "u16_chita",
+            "u16_chita": "u16_chita",
+            "u16_titan": "u16_chita",
+            "u16_apex": "u16_chita",
+            "чита": "u16_chita",
+
+            # U6 Медный Змей (Gamma Fortress 35)
+            "u6": "u6_symbiosis_gamma_fortress35",
+            "u6_symbiosis": "u6_symbiosis_gamma_fortress35",
+            "u6_gamma": "u6_symbiosis_gamma_fortress35",
+            "u6_fortress": "u6_symbiosis_gamma_fortress35",
+            "copper_snake": "u6_symbiosis_gamma_fortress35",
+            "medny_zmey": "u6_symbiosis_gamma_fortress35",
+            "medny": "u6_symbiosis_gamma_fortress35",
+            "змея": "u6_symbiosis_gamma_fortress35",
+            "змей": "u6_symbiosis_gamma_fortress35",
+            "медный": "u6_symbiosis_gamma_fortress35",
+            "медный_змей": "u6_symbiosis_gamma_fortress35",
+
+            # U96 Омен (Omni Zenith Apex)
+            "u96": "u96_omni_zenith_apex",
+            "u9": "u96_omni_zenith_apex",
+            "u96_omni": "u96_omni_zenith_apex",
+            "omen": "u96_omni_zenith_apex",
+            "omen96": "u96_omni_zenith_apex",
+            "omni": "u96_omni_zenith_apex",
+            "омен": "u96_omni_zenith_apex",
+            "омен96": "u96_omni_zenith_apex",
+        }
+        if target_lower in ALIAS_MAP:
+            cand = ALIAS_MAP[target_lower]
+            if cand in universes_db:
+                return cand
+
+        # Префиксный поиск (например, 'u6' среди ['u6_symbiosis_gamma_fortress35'])
+        matching_prefix = [k for k in universes_db if k.lower().startswith(target_lower + "_") or k.lower() == target_lower]
+        if len(matching_prefix) == 1:
+            return matching_prefix[0]
+
+        # Поиск по подстроке
+        matching_substr = [k for k in universes_db if target_lower in k.lower()]
+        if len(matching_substr) == 1:
+            return matching_substr[0]
+
+        return None
+
     def _resolve_and_validate(self) -> None:
         """
         Проверяет наличие объявленных стратегий в базе и регистрирует символы.
@@ -599,31 +667,32 @@ class StrategyRegistry:
             if not is_enabled:
                 continue
 
-            # Поиск спецификации базового шаблона стратегии
-            template_id = strat_settings.get("template")
-            if not template_id:
-                if strat_id in self.universes_db:
-                    template_id = strat_id
-                elif "__" in strat_id and strat_id.split("__")[0] in self.universes_db:
-                    template_id = strat_id.split("__")[0]
-                else:
-                    clean_id = strat_id
-                    for sfx in ("__off", "__classic", "__fixed", "__toxic"):
-                        if clean_id.endswith(sfx):
-                            clean_id = clean_id[:-len(sfx)]
-                            break
-                    if clean_id in self.universes_db:
-                        template_id = clean_id
-                    else:
-                        raise KeyError(
-                            f"[StrategyRegistry] Спецификация стратегии '{clean_id}' (для купола '{strat_id}') "
-                            f"отсутствует в CFG/universes/*.json!"
-                        )
-            elif template_id not in self.universes_db:
-                raise KeyError(
-                    f"[StrategyRegistry] Указанный шаблон стратегии '{template_id}' (для купола '{strat_id}') "
-                    f"отсутствует в CFG/universes/*.json!"
-                )
+            # Поиск спецификации базового шаблона стратегии с поддержкой алиасов
+            raw_template = strat_settings.get("template")
+            resolved_template = None
+            if raw_template:
+                resolved_template = self.resolve_template_id(raw_template, self.universes_db)
+                if not resolved_template:
+                    raise KeyError(
+                        f"[StrategyRegistry] Указанный шаблон стратегии '{raw_template}' (для купола '{strat_id}') "
+                        f"отсутствует в CFG/universes/*.json (доступно: {list(self.universes_db.keys())})!"
+                    )
+            else:
+                clean_id = strat_id
+                for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                    if clean_id.endswith(sfx):
+                        clean_id = clean_id[:-len(sfx)]
+                        break
+                resolved_template = self.resolve_template_id(clean_id, self.universes_db)
+                if not resolved_template and "__" in strat_id:
+                    part_0 = strat_id.split("__")[0]
+                    resolved_template = self.resolve_template_id(part_0, self.universes_db)
+                if not resolved_template:
+                    raise KeyError(
+                        f"[StrategyRegistry] Спецификация стратегии для купола '{strat_id}' (чистый ID: '{clean_id}') "
+                        f"отсутствует в CFG/universes/*.json (доступно: {list(self.universes_db.keys())})!"
+                    )
+            template_id = resolved_template
 
             # Определяем целевой строковый режим автозакрытия
             raw_mode = strat_settings.get("mode")

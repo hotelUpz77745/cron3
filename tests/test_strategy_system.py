@@ -616,6 +616,47 @@ class TestStrategySystem(unittest.TestCase):
             is_sig, _ = tc.is_new_interval(0)
             self.assertTrue(is_sig, "За 5с до закрытия свечи окно должно быть открыто!")
 
+    def test_alias_resolution_multi_strategy(self):
+        """Проверка интеллектуального разрешения алиасов (u6, u96, u16, omen, copper_snake, chita)."""
+        registry = StrategyRegistry()
+        db = registry.universes_db
+
+        # 1. Проверка алиасов Медного Змея
+        self.assertEqual(registry.resolve_template_id("u6", db), "u6_symbiosis_gamma_fortress35")
+        self.assertEqual(registry.resolve_template_id("copper_snake", db), "u6_symbiosis_gamma_fortress35")
+        self.assertEqual(registry.resolve_template_id("medny_zmey", db), "u6_symbiosis_gamma_fortress35")
+        self.assertEqual(registry.resolve_template_id("u6_gamma", db), "u6_symbiosis_gamma_fortress35")
+
+        # 2. Проверка алиасов Омена-96
+        self.assertEqual(registry.resolve_template_id("u96", db), "u96_omni_zenith_apex")
+        self.assertEqual(registry.resolve_template_id("u9", db), "u96_omni_zenith_apex")
+        self.assertEqual(registry.resolve_template_id("omen", db), "u96_omni_zenith_apex")
+        self.assertEqual(registry.resolve_template_id("omni", db), "u96_omni_zenith_apex")
+
+        # 3. Проверка алиасов Читы
+        self.assertEqual(registry.resolve_template_id("u16", db), "u16_chita")
+        self.assertEqual(registry.resolve_template_id("chita", db), "u16_chita")
+        self.assertEqual(registry.resolve_template_id("cheetah", db), "u16_chita")
+
+        # 4. Проверка одновременной параллельной регистрации всех 3 стратегий
+        test_active_cfg = {
+            "u16__classic": {"enabled": True, "symbols": ["STRKUSDT"]},
+            "u6__classic": {"enabled": True, "symbols": ["ENAUSDT"]},
+            "u96__classic": {"enabled": True, "symbols": ["NEARUSDT"]},
+        }
+        test_reg = StrategyRegistry()
+        test_reg.active_cfg = test_active_cfg
+        test_reg._resolve_and_validate()
+
+        self.assertEqual(len(test_reg.active_strategies), 3)
+        self.assertIn("u16__classic", test_reg.active_strategies)
+        self.assertIn("u6__classic", test_reg.active_strategies)
+        self.assertIn("u96__classic", test_reg.active_strategies)
+
+        self.assertEqual(test_reg.get_strategy_for_symbol("STRKUSDT").name, test_reg.universes_db["u16_chita"]["name"])
+        self.assertEqual(test_reg.get_strategy_for_symbol("ENAUSDT").name, test_reg.universes_db["u6_symbiosis_gamma_fortress35"]["name"])
+        self.assertEqual(test_reg.get_strategy_for_symbol("NEARUSDT").name, test_reg.universes_db["u96_omni_zenith_apex"]["name"])
+
 
 if __name__ == "__main__":
     unittest.main()
