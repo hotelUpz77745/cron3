@@ -63,12 +63,11 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
             "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
         )
 
-        # 3. Cross-Side Profit Recycling (дискретная карта L2..L4: 0.33, L5+: 0.66)
+        # 3. Cross-Side Profit Recycling (дискретная карта L2..L4: 0.50, L5+: 0.75 — единый источник истины)
         self.assertEqual(cfg["cross_side_recycling"]["min_burn_level"], 2)
-        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio"], 0.33)
         self.assertIn("recycle_ratio_tiers", cfg["cross_side_recycling"])
-        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"]["2-4"], 0.33)
-        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"][">=5"], 0.66)
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"]["2-4"], 0.50)
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"][">=5"], 0.75)
 
         # 4. Сетка: 7 уровней и маркеры
         grid = cfg["LONG"]["grid"]
@@ -699,6 +698,19 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 2), 0.25)
         self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 3), 0.40)
         self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 4), 0.50)
+
+        # Проверка ЕДИНОГО ИСТОЧНИКА ИСТИНЫ: только tiers, без поля recycle_ratio
+        cfg_tiers_only = {
+            "recycle_ratio_tiers": {
+                "2-4": 0.50,
+                ">=5": 0.75
+            }
+        }
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_tiers_only, 2), 0.50)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_tiers_only, 4), 0.50)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_tiers_only, 5), 0.75)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_tiers_only, 6), 0.75)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_tiers_only, 0), 0.50)  # fallback без ошибки
 
 
 if __name__ == "__main__":

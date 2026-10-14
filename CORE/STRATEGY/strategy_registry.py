@@ -357,7 +357,14 @@ class StrategyConfig:
 
         self.cross_recycling_cfg: Dict[str, Any] = copy.deepcopy(raw_meta.get("cross_side_recycling") or self.overrides.get("cross_side_recycling") or {})
         if self.cross_recycling_cfg.get("enabled"):
-            for req_k in ("recycle_ratio", "min_burn_level", "min_drawdown_pct", "max_slice_pct"):
+            has_ratio = (
+                "recycle_ratio" in self.cross_recycling_cfg
+                or "recycle_ratio_tiers" in self.cross_recycling_cfg
+                or "recycle_ratio_map" in self.cross_recycling_cfg
+            )
+            if not has_ratio:
+                raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling ratio: either 'recycle_ratio_tiers' (дискретная карта) or 'recycle_ratio' (скаляр)")
+            for req_k in ("min_burn_level", "min_drawdown_pct", "max_slice_pct"):
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 

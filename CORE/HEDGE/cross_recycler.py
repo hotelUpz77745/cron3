@@ -33,10 +33,10 @@ class CrossSideProfitRecycler:
         2. 'recycle_ratio_map': например {"2": 0.33, "3": 0.33, "4": 0.33, "5": 0.66}
         3. 'recycle_ratio': базовый fallback, если дискретная карта не задана или уровень не совпал.
         """
-        fallback_ratio = float(recycling_cfg["recycle_ratio"])
+        fallback_ratio = float(recycling_cfg["recycle_ratio"]) if ("recycle_ratio" in recycling_cfg and recycling_cfg["recycle_ratio"] is not None) else None
         tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
         if not tiers or not isinstance(tiers, dict):
-            return fallback_ratio
+            return fallback_ratio if fallback_ratio is not None else 0.50
 
         lvl_str = str(level)
         if lvl_str in tiers:
@@ -97,7 +97,9 @@ class CrossSideProfitRecycler:
                 except ValueError:
                     pass
 
-        return fallback_ratio
+        if fallback_ratio is not None:
+            return fallback_ratio
+        return 0.50
 
     @classmethod
     async def maybe_recycle(
@@ -141,8 +143,16 @@ class CrossSideProfitRecycler:
         if not strat_id:
             strat_id = "BOT"
 
-        # Строгое соблюдение Протокола: читаем напрямую через [''], без скрытых дефолтов!
-        recycle_ratio = float(recycling_cfg["recycle_ratio"])
+        # Строгое соблюдение Протокола: единый источник истины (дискретная карта или скаляр)
+        if (
+            "recycle_ratio" not in recycling_cfg
+            and "recycle_ratio_tiers" not in recycling_cfg
+            and "recycle_ratio_map" not in recycling_cfg
+        ):
+            raise KeyError(
+                f"[{strat_id}][{symbol}] Missing recycle ratio definition: "
+                f"either 'recycle_ratio_tiers' (карта) or 'recycle_ratio' (скаляр) must be defined"
+            )
         min_burn_level = int(recycling_cfg["min_burn_level"])
         min_drawdown_pct = float(recycling_cfg["min_drawdown_pct"])
         max_slice_pct = float(recycling_cfg["max_slice_pct"])
