@@ -184,5 +184,15 @@
         "_desc_benchmark_trades_per_coin": "Benchmark number of trades per coin for specified timeframe_hours.",
         "top_coins_slice": null,
         "_desc_top_coins_slice": "Coin slice: null for all coins (recommended), or integer N for top N coins."
+    },
+    "fsm_level_resolution": {
+        "enabled": true,
+        "_desc_enabled": "Глобальный предохранитель от повторных/ложных усреднений при перезапусках, восстановлении из кэша и реконсиляции с биржей.",
+        "mode": "cumulative_volume_threshold",
+        "_desc_mode": "Метод определения отработанных колен: 'cumulative_volume_threshold' сравнивает текущий номинал позиции с кумулятивным планом сетки.",
+        "volume_tolerance_pct": 10.0,
+        "_desc_volume_tolerance_pct": "Допустимый люфт объема в процентах (10.0%) для компенсации проскальзывания, округления шага лота и комиссий.",
+        "auto_mark_executed": true,
+        "_desc_auto_mark_executed": "Автоматически помечать ступени сетки is_active=True при REST-синхронизации, если их объем уже находится в позиции."
     }
 }

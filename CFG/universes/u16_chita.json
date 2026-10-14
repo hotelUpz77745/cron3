@@ -11,12 +11,6 @@
     "mark_executed": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
   },
   "_avg_free_volume_runtime_note": "В рантайме пропущенные уровни наглядно помечаются метаполями: _skipped: true, _skip_policy: 'mark_executed', _skip_status: 'burnt', _skip_desc: '...', _skipped_by_level: '...', чтобы оператор сразу видел сгоревшие ступени.",
-  "fsm_level_resolution": {
-    "enabled": true,
-    "mode": "cumulative_volume_threshold",
-    "volume_tolerance_pct": 10.0,
-    "auto_mark_executed": true
-  },
   "super_grid": {
     "enabled": false
   },

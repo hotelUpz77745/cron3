@@ -998,7 +998,16 @@ class BotCore:
         # Строгая гарантия: забираем начальный стейт позиций по REST всегда (WS не шлет стейт при старте)
         await self.pos_monitor.sync_from_rest(self.client, self.symbols)
 
-        
+        # Синхронизируем уровни сетки с реальными биржевыми объемами для всех активных позиций
+        for sym in self.symbols:
+            strat = self.strategy_registry.get_strategy_for_symbol(sym) if hasattr(self, "strategy_registry") and self.strategy_registry else None
+            for s_side in ("LONG", "SHORT"):
+                st = self.fsm_states.get(sym, {}).get(s_side)
+                if st and st.in_position and abs(st.total_volume) > 1e-6:
+                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    cur_p = self.prices.get(sym, (0.0, 0))[0] if sym in self.prices else None
+                    StrategyApplicator.resolve_position_state_grid(st, strategy=strat, current_price=cur_p)
+
         # ШАГ 3. Синхронизация рантаймов с реальностью FSM
         logger.info("Streams and REST synced! Running initial RuntimeFSM Sync...")
         await self.runtime_manager.sync_with_fsm(self.fsm_states)

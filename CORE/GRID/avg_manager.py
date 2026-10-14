@@ -225,6 +225,48 @@ class AverageManager:
         trigger_tag = "🌀 [GRID REBOUND EXECUTED]" if is_trailing else "⚡ [GRID STATIC EXECUTED]"
         logger.info(f"[{symbol}] {side} {trigger_tag} Level {candidate_level} triggered at price {current_price} ({info})")
 
+        # 4.5. Институциональный предохранитель от повторного/ложного усреднения:
+        # Если позиция на бирже УЖЕ содержит объем сработавшего уровня (например, после перезапуска бота
+        # или ручных вмешательств оператора), ордер НЕ отправляется! Уровень маркируется отработанным.
+        invest_size = float(getattr(state, "eff_invest", 0.0) or 0.0)
+        if invest_size <= 0:
+            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+                side_c = runtime_manager.caches[symbol].get(side, {})
+                invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
+            else:
+                invest_size = 100.0
+
+        if invest_size > 0:
+            cand_idx = int(candidate_level) if candidate_level.isdigit() else 999
+            sorted_keys = sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else 999)
+            cum_planned_usdt = sum(
+                invest_size * (float(grid[k].get("volume", 0.0)) / 100.0)
+                for k in sorted_keys if (int(k) if k.isdigit() else 999) <= cand_idx
+            )
+            tolerance_factor = 0.90  # 10% volume tolerance
+            cur_entry = state.avg_entry_price if state.avg_entry_price > 0 else current_price
+            current_notional = abs(float(state.total_volume)) * cur_entry
+
+            if current_notional >= (cum_planned_usdt * tolerance_factor):
+                logger.warning(
+                    f"[{symbol}] {side} 🛡️ [GRID RECONCILIATION GUARD] Level {candidate_level} was already covered by position volume "
+                    f"(${current_notional:.2f} >= ${cum_planned_usdt * tolerance_factor:.2f} threshold). "
+                    f"Marking level active without placing duplicate market order!"
+                )
+                level_data["is_active"] = True
+                level_data["is_armed"] = False
+                level_data.pop("armed_at_drawdown", None)
+                level_data.pop("armed_timestamp", None)
+                armed_dict = state.trailing_grid_state.get("armed_levels", {})
+                if isinstance(armed_dict, dict) and candidate_level in armed_dict:
+                    armed_dict.pop(candidate_level, None)
+                if skipped_levels:
+                    for sk in skipped_levels:
+                        if sk in grid and isinstance(grid[sk], dict):
+                            grid[sk]["is_active"] = True
+                            grid[sk]["is_armed"] = False
+                return
+
         # 5. Взводим флаги исполнения
         state.pending_avg = True
         state.pre_avg_price = state.avg_entry_price

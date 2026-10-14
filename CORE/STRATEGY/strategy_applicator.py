@@ -181,20 +181,36 @@ class StrategyApplicator:
         return side_cfgs
 
     @staticmethod
+    def _get_fsm_resolution_cfg(strategy: Optional[StrategyConfig] = None) -> dict:
+        """
+        Получает настройки fsm_level_resolution:
+        1. Из конфига стратегии/вселенной (raw_meta), если заданы индивидуально.
+        2. Из глобального CFG/app.json ('fsm_level_resolution').
+        3. Безопасные дефолты (enabled=True, mode='cumulative_volume_threshold', volume_tolerance_pct=10.0).
+        """
+        raw_meta = getattr(strategy, "raw_meta", {}) if hasattr(strategy, "raw_meta") and strategy else {}
+        cfg = raw_meta.get("fsm_level_resolution")
+        if not cfg or not isinstance(cfg, dict):
+            try:
+                from consts import _CFG
+                cfg = _CFG.get("fsm_level_resolution")
+            except Exception:
+                cfg = None
+        if not cfg or not isinstance(cfg, dict):
+            cfg = {"enabled": True, "mode": "cumulative_volume_threshold", "volume_tolerance_pct": 10.0}
+        return cfg
+
+    @staticmethod
     def resolve_executed_grid_levels(strategy: StrategyConfig, symbol: str, side: str, new_side: dict, exist_side: dict):
         """
-        Универсально определяет исполненные уровни сетки по FSM-состоянию позиции и конфигу стратегии.
+        Универсально определяет исполненные уровни сетки по FSM-состоянию позиции и конфигу стратегии/app.json.
         Полный отказ от хардкодов имен символов и номеров уровней.
-        Все правила читаются из конфига стратегии 'fsm_level_resolution'.
+        Все правила читаются из 'fsm_level_resolution' (app.json / strategy).
         """
         if not (exist_side.get("in_position", False) or abs(float(exist_side.get("total_volume", 0.0))) > 1e-6):
             return
 
-        raw_meta = getattr(strategy, "raw_meta", {}) if hasattr(strategy, "raw_meta") else {}
-        resolution_cfg = raw_meta.get("fsm_level_resolution")
-        if not resolution_cfg:
-            resolution_cfg = {"enabled": True, "mode": "cumulative_volume_threshold", "volume_tolerance_pct": 10.0}
-
+        resolution_cfg = StrategyApplicator._get_fsm_resolution_cfg(strategy)
         if not resolution_cfg.get("enabled", True):
             return
 
@@ -240,6 +256,90 @@ class StrategyApplicator:
                 # Последующие неисполненные ступени
                 lvl_cfg["is_active"] = False
                 lvl_cfg["is_armed"] = False
+
+    @classmethod
+    def resolve_position_state_grid(
+        cls,
+        state: Any,
+        strategy: Optional[Any] = None,
+        invest_size: Optional[float] = None,
+        tolerance_pct: Optional[float] = None,
+        current_price: Optional[float] = None,
+    ) -> bool:
+        """
+        Универсально синхронизирует сетку PositionState с реальной позицией на бирже.
+        Помечает исполненными (is_active=True) все ступени сетки, которые покрыты
+        текущим объемом позиции с учетом допустимого отклонения (tolerance_pct).
+        Предотвращает повторные и ложные срабатывания усреднений при перезапусках,
+        восстановлениях и сбоях стрима.
+        Возвращает True, если хотя бы один уровень был обновлен.
+        """
+        if not getattr(state, "in_position", False) and abs(float(getattr(state, "total_volume", 0.0) or 0.0)) <= 1e-6:
+            return False
+
+        grid = getattr(state, "grid", None)
+        if not grid or not isinstance(grid, dict):
+            return False
+
+        resolution_cfg = StrategyApplicator._get_fsm_resolution_cfg(strategy)
+        if resolution_cfg.get("enabled", True) is False:
+            return False
+
+        tol_pct = tolerance_pct
+        if tol_pct is None:
+            tol_pct = float(resolution_cfg.get("volume_tolerance_pct", 10.0))
+        tolerance_factor = 1.0 - (tol_pct / 100.0)
+
+        eff_invest = invest_size
+        if eff_invest is None or eff_invest <= 0:
+            eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
+        if (eff_invest is None or eff_invest <= 0) and strategy and hasattr(strategy, "sides"):
+            side_cfg = strategy.sides.get(getattr(state, "side", ""), {})
+            eff_invest = float(side_cfg.get("invest_size", 0.0) or 0.0)
+        if eff_invest is None or eff_invest <= 0:
+            return False
+
+        current_vol = abs(float(getattr(state, "total_volume", 0.0) or 0.0))
+        entry_price = float(getattr(state, "avg_entry_price", 0.0) or 0.0)
+        if entry_price <= 0:
+            entry_price = float(getattr(state, "initial_entry_price", 0.0) or 0.0)
+        if entry_price <= 0 and current_price and current_price > 0:
+            entry_price = float(current_price)
+
+        if entry_price <= 0:
+            return False
+
+        current_notional = current_vol * entry_price
+        trailing_state = getattr(state, "trailing_grid_state", {})
+        armed_dict = trailing_state.get("armed_levels", {}) if isinstance(trailing_state, dict) else {}
+
+        sorted_keys = sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else 999)
+        cumulative_planned_usdt = 0.0
+        updated = False
+
+        for lvl_key in sorted_keys:
+            lvl_cfg = grid[lvl_key]
+            if not isinstance(lvl_cfg, dict):
+                continue
+            vol_pct = float(lvl_cfg.get("volume", 0.0) or 0.0)
+            planned_lvl_usdt = eff_invest * (vol_pct / 100.0)
+            cumulative_planned_usdt += planned_lvl_usdt
+
+            was_active = bool(lvl_cfg.get("is_active", False))
+            covered_by_volume = current_notional >= (cumulative_planned_usdt * tolerance_factor)
+
+            if was_active or covered_by_volume:
+                if not was_active:
+                    lvl_cfg["is_active"] = True
+                    updated = True
+                lvl_cfg["is_armed"] = False
+                lvl_cfg.pop("armed_at_drawdown", None)
+                lvl_cfg.pop("armed_timestamp", None)
+                if isinstance(armed_dict, dict) and lvl_key in armed_dict:
+                    armed_dict.pop(lvl_key, None)
+                    updated = True
+
+        return updated
 
     def build_runtime_for_symbol(
         self,
@@ -310,6 +410,7 @@ class StrategyApplicator:
                 backup_latest = BASE_DIR / "CACHE" / "backups" / "runtime_backup_latest.json"
                 if backup_latest.exists():
                     try:
+                        b_raw = Utils.read_json_file(backup_latest) or {}
                         strategies_pool = b_raw.get("strategies", b_raw) if isinstance(b_raw, dict) else {}
                         for d_name, d_syms in strategies_pool.items():
                             if isinstance(d_syms, dict) and symbol.lower() in d_syms:

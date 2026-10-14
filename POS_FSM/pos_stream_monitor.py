@@ -137,6 +137,15 @@ class PositionMonitor:
 
                 self.update_from_stream(sym, side, pos_amt, entry_price)
 
+                # Универсальная синхронизация сетки с биржей: если есть позиция,
+                # размечаем все покрытые объемом уровни как исполненные (is_active=True)
+                if state and state.in_position and abs(state.total_volume) > 1e-6:
+                    try:
+                        from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                        StrategyApplicator.resolve_position_state_grid(state)
+                    except Exception:
+                        pass
+
     def update_from_stream(self, symbol: str, side: str, pos_amt: float, entry_price: float):
         if symbol not in self.states:
             self.states[symbol] = {
@@ -178,7 +187,8 @@ class PositionMonitor:
                 # Сбрасываем кэши от прошлых сделок, если позиция была открыта вручную или из-за рассинхрона
                 state.fallback_price = None
                 state.next_avg_price = None
-                state.initial_entry_price = 0.0
+                if getattr(state, "initial_entry_price", 0.0) <= 0:
+                    state.initial_entry_price = entry_price
             
             # Позиция активна: set_in_position(True) автоматически сбросит in_position_papper в False
             state.set_in_position(True)
