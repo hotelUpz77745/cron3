@@ -121,6 +121,22 @@ class StrategyApplicator:
             if grid_override:
                 side_data["grid"] = copy.deepcopy(grid_override)
 
+            # 4.1. Адаптация веса первого ордера grid_0 по режиму рынка (Bullish 12/7, Neutral 9/9, Bearish 7/12)
+            regime_cfg = (
+                getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
+                or (getattr(strategy, "overrides", {}) or {}).get("first_order_weight_regime")
+                or (getattr(strategy, "raw_meta", {}) or {}).get("first_order_weight_regime")
+            )
+            if regime_cfg and "grid" in side_data and "0" in side_data["grid"]:
+                mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
+                if mode_val not in ("auto", "auto_ema"):
+                    resolved_vol = StrategyApplicator.resolve_first_order_volume(
+                        regime_cfg=regime_cfg,
+                        side=side,
+                        default_vol=float(side_data["grid"]["0"].get("volume", 0.0))
+                    )
+                    side_data["grid"]["0"]["volume"] = resolved_vol
+
             # 5. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
             if not strategy.super_grid_enabled and "grid" in side_data:
                 for lvl_data in side_data["grid"].values():
@@ -199,6 +215,45 @@ class StrategyApplicator:
         if not cfg or not isinstance(cfg, dict):
             cfg = {"enabled": True, "mode": "cumulative_volume_threshold", "volume_tolerance_pct": 10.0}
         return cfg
+
+    @staticmethod
+    def resolve_first_order_volume(regime_cfg: Any, side: str, default_vol: float) -> float:
+        """
+        Разрешает объем первого ордера grid_0 для стороны side (LONG / SHORT).
+        Поддерживает:
+        - Литералы: 'bullish' (12% Long / 7% Short), 'neutral' (9% Long / 9% Short), 'bearish' (7% Long / 12% Short).
+        - Числа: 1 (bullish), 0 (neutral), -1 (bearish).
+        - Структурированный словарь с 'mode' и 'presets'.
+        """
+        mode = "bullish"
+        presets = {
+            "bullish": {"LONG": 12.0, "SHORT": 7.0},
+            "neutral": {"LONG": 9.0, "SHORT": 9.0},
+            "bearish": {"LONG": 7.0, "SHORT": 12.0},
+        }
+        if isinstance(regime_cfg, dict):
+            mode = regime_cfg.get("mode", "bullish")
+            if "presets" in regime_cfg and isinstance(regime_cfg["presets"], dict):
+                for k, v in regime_cfg["presets"].items():
+                    if isinstance(v, dict):
+                        presets[str(k).lower()] = {s.upper(): float(vol) for s, vol in v.items()}
+        elif isinstance(regime_cfg, (str, int)):
+            mode = regime_cfg
+
+        # Нормализация режима
+        if mode in (1, "1", "bull", "bullish", "long_heavy"):
+            mode_key = "bullish"
+        elif mode in (0, "0", "flat", "neutral", "symmetric"):
+            mode_key = "neutral"
+        elif mode in (-1, "-1", "bear", "bearish", "short_heavy"):
+            mode_key = "bearish"
+        else:
+            mode_key = str(mode).lower()
+
+        preset = presets.get(mode_key)
+        if preset and side.upper() in preset:
+            return float(preset[side.upper()])
+        return default_vol
 
     @staticmethod
     def resolve_executed_grid_levels(strategy: StrategyConfig, symbol: str, side: str, new_side: dict, exist_side: dict):

@@ -24,6 +24,81 @@ class CrossSideProfitRecycler:
     4. recycle_ratio: расходуется только часть прибыли (например 50%), гарантируя чистый плюс на балансе.
     """
 
+    @staticmethod
+    def resolve_recycle_ratio(recycling_cfg: Dict[str, Any], level: int) -> float:
+        """
+        Дискретно определяет долю рециркуляции прибыли (recycle_ratio) по уровню просадки (колену сетки).
+        Поддерживает:
+        1. 'recycle_ratio_tiers': например {"2-4": 0.33, ">=5": 0.66} или {"2..4": 0.33, "5+": 0.66}
+        2. 'recycle_ratio_map': например {"2": 0.33, "3": 0.33, "4": 0.33, "5": 0.66}
+        3. 'recycle_ratio': базовый fallback, если дискретная карта не задана или уровень не совпал.
+        """
+        fallback_ratio = float(recycling_cfg["recycle_ratio"])
+        tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
+        if not tiers or not isinstance(tiers, dict):
+            return fallback_ratio
+
+        lvl_str = str(level)
+        if lvl_str in tiers:
+            return float(tiers[lvl_str])
+
+        for pattern, val in tiers.items():
+            pat = str(pattern).strip()
+            if "-" in pat or ".." in pat:
+                delim = ".." if ".." in pat else "-"
+                parts = pat.split(delim)
+                if len(parts) == 2:
+                    try:
+                        low, high = int(parts[0].strip()), int(parts[1].strip())
+                        if low <= level <= high:
+                            return float(val)
+                    except ValueError:
+                        pass
+            elif pat.endswith("+"):
+                try:
+                    thresh = int(pat[:-1].strip())
+                    if level >= thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+            elif pat.startswith(">="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level >= thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+            elif pat.startswith(">"):
+                try:
+                    thresh = int(pat[1:].strip())
+                    if level > thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+            elif pat.startswith("<="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level <= thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+            elif pat.startswith("<"):
+                try:
+                    thresh = int(pat[1:].strip())
+                    if level < thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+            elif pat.startswith("=="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level == thresh:
+                        return float(val)
+                except ValueError:
+                    pass
+
+        return fallback_ratio
+
     @classmethod
     async def maybe_recycle(
         cls,
@@ -102,7 +177,8 @@ class CrossSideProfitRecycler:
             )
             return None
 
-        burn_budget = realized_profit * recycle_ratio
+        effective_ratio = cls.resolve_recycle_ratio(recycling_cfg, cur_level)
+        burn_budget = realized_profit * effective_ratio
         raw_qty = burn_budget / loss_per_unit
         max_allowed_qty = pos_vol * (max_slice_pct / 100.0)
         actual_qty = min(raw_qty, max_allowed_qty)
@@ -117,7 +193,7 @@ class CrossSideProfitRecycler:
         logger.info(
             f"[{strat_id}][{symbol}] [CROSS-SIDE RECYCLING] "
             f"Winning {winning_side} (+${realized_profit:.2f}) sponsors burn of {rounded_qty} {losing_side} "
-            f"(Budget: ${burn_budget:.2f}, Slice loss: -${actual_burn_loss:.2f}, Lvl {cur_level}, DD: -{drawdown_pct:.1f}%)"
+            f"(Ratio: {effective_ratio:.2f}, Budget: ${burn_budget:.2f}, Slice loss: -${actual_burn_loss:.2f}, Lvl {cur_level}, DD: -{drawdown_pct:.1f}%)"
         )
 
         client = None
@@ -246,3 +322,7 @@ class CrossSideProfitRecycler:
                 f"[{strat_id}][{symbol}] Cross-side recycling order failed: {res.error_msg}"
             )
             return None
+
+
+CrossRecycler = CrossSideProfitRecycler
+

@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 
-from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler
+from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler, CrossRecycler
 from POS_FSM.models import PositionState
 from CORE.GRID.avg_manager import AverageManager
 from ANALYTICS.analytics import AnalyticsManager
@@ -63,9 +63,12 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
             "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
         )
 
-        # 3. Cross-Side Profit Recycling
+        # 3. Cross-Side Profit Recycling (дискретная карта L2..L4: 0.33, L5+: 0.66)
         self.assertEqual(cfg["cross_side_recycling"]["min_burn_level"], 2)
-        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio"], 0.75)
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio"], 0.33)
+        self.assertIn("recycle_ratio_tiers", cfg["cross_side_recycling"])
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"]["2-4"], 0.33)
+        self.assertEqual(cfg["cross_side_recycling"]["recycle_ratio_tiers"][">=5"], 0.66)
 
         # 4. Сетка: 7 уровней и маркеры
         grid = cfg["LONG"]["grid"]
@@ -667,6 +670,37 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)
 
+    def test_discrete_recycle_ratio_tiers(self):
+        """Институциональная проверка: дискретная карта рециркуляции прибыли по коленам сетки."""
+        cfg = {
+            "recycle_ratio": 0.50,
+            "recycle_ratio_tiers": {
+                "2-4": 0.33,
+                ">=5": 0.66
+            }
+        }
+        # L0 и L1: вне карты -> fallback 0.50
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 0), 0.50)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 1), 0.50)
+        # L2..L4: 0.33
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 2), 0.33)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 3), 0.33)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 4), 0.33)
+        # L5+: 0.66
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 5), 0.66)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 6), 0.66)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg, 7), 0.66)
+
+        # Проверка прямого map словаря {"2": 0.25, "3": 0.40}
+        cfg_direct = {
+            "recycle_ratio": 0.50,
+            "recycle_ratio_map": {"2": 0.25, "3": 0.40}
+        }
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 2), 0.25)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 3), 0.40)
+        self.assertEqual(CrossRecycler.resolve_recycle_ratio(cfg_direct, 4), 0.50)
+
 
 if __name__ == "__main__":
     unittest.main()
+

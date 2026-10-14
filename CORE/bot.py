@@ -590,6 +590,43 @@ class BotCore:
 
             grid_0 = side_cfg["grid"]["0"]
             volume_pct = float(grid_0.get("volume") or 0.0)
+
+            # Проверка динамического авто-режима по старшему таймфрейму (auto_ema)
+            regime_cfg = (
+                getattr(strat, "active_settings", {}).get("first_order_weight_regime")
+                or getattr(strat, "overrides", {}).get("first_order_weight_regime")
+                or getattr(strat, "raw_meta", {}).get("first_order_weight_regime")
+            ) if strat else None
+
+            if regime_cfg:
+                mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
+                if mode_val in ("auto", "auto_ema"):
+                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    ema_trend_cfg = regime_cfg.get("auto_ema") if isinstance(regime_cfg, dict) else None
+                    if not ema_trend_cfg and strat and strat.smart_size_cfg:
+                        ema_trend_cfg = strat.smart_size_cfg.get("ema_trend")
+                    trend_st = await MomentumEngine.get_ema_trend_state(
+                        symbol=symbol,
+                        ema_cfg=ema_trend_cfg,
+                        client=sym_client
+                    )
+                    # UP -> bullish (12/7), DOWN -> bearish (7/12), FLAT/UNSTABLE -> neutral (9/9)
+                    if trend_st == "UP":
+                        resolved_mode = "bullish"
+                    elif trend_st == "DOWN":
+                        resolved_mode = "bearish"
+                    else:
+                        resolved_mode = "neutral"
+
+                    dyn_vol = StrategyApplicator.resolve_first_order_volume(
+                        regime_cfg={"mode": resolved_mode, "presets": regime_cfg.get("presets", {})} if isinstance(regime_cfg, dict) else resolved_mode,
+                        side=side,
+                        default_vol=volume_pct
+                    )
+                    if dyn_vol != volume_pct:
+                        logger.info(f"[{symbol}][{strat.strategy_id}] {side} Grid 0 Auto-EMA regime [{trend_st} -> {resolved_mode}]: volume_pct {volume_pct}% -> {dyn_vol}%")
+                        volume_pct = dyn_vol
+
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
             
             order_side = "BUY" if side == "LONG" else "SELL"
