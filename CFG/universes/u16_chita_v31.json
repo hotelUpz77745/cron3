@@ -132,7 +132,7 @@
       "enabled": true,
       "mode": "iter_net_classic",
       "quant_base_usdt": 10.0,
-      "quant_reference_size": 600.0,
+      "quant_reference_size": 400.0,
       "trailing_ratchet": {
         "enabled": true,
         "levels": [
