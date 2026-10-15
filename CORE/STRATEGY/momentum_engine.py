@@ -114,6 +114,78 @@ class MomentumEngine:
                 return "FLAT"
 
     @classmethod
+    async def get_kernel_trend_state(
+        cls,
+        symbol: str,
+        kernel_cfg: Optional[Dict[str, Any]] = None,
+        client: Optional[Any] = None,
+        cache_ttl_sec: int = 120
+    ) -> str:
+        """
+        Определяет макро-тренд (UP / DOWN / FLAT) с использованием непараметрической
+        ядерной регрессии Надарая-Ватсона (NWKR) без фазового запаздывания.
+        """
+        cfg = kernel_cfg or {}
+        timeframe = str(cfg.get("timeframe", "1d")).strip()
+        cache_key = (symbol.upper(), f"kernel_{timeframe}")
+        now = time.time()
+
+        cached = cls._trend_cache.get(cache_key)
+        if cached is not None:
+            trend_val, ts = cached
+            if now - ts < cache_ttl_sec:
+                return trend_val
+
+        async with cls._get_trend_lock():
+            cached = cls._trend_cache.get(cache_key)
+            if cached is not None:
+                trend_val, ts = cached
+                if now - ts < cache_ttl_sec:
+                    return trend_val
+
+            try:
+                window_size = int(cfg.get("window_size", 30))
+                bandwidth = float(cfg.get("bandwidth", 8.0))
+                kernel_type = str(cfg.get("kernel_type", "rational_quadratic"))
+                envelope_mult = float(cfg.get("envelope_multiplier", 1.5))
+                slope_threshold_pct = float(cfg.get("slope_threshold_pct", 0.05))
+
+                limit = max(35, window_size + 15)
+                klines = await BinancePublic.get_klines(symbol, timeframe, limit)
+                if not klines and client and hasattr(client, "get_klines"):
+                    klines = await client.get_klines(symbol, timeframe, limit)
+
+                if not klines or len(klines) < 15:
+                    logger.debug(
+                        f"[MomentumEngine][{symbol}] Not enough {timeframe} klines "
+                        f"({len(klines) if klines else 0}) for Kernel regression, fallback to FLAT"
+                    )
+                    return "FLAT"
+
+                from CORE.STRATEGY.kernel_regression import KernelForecastEngine
+                regime = KernelForecastEngine.evaluate_klines_regime(
+                    klines=klines,
+                    bandwidth=bandwidth,
+                    window_size=window_size,
+                    kernel_type=kernel_type,
+                    envelope_multiplier=envelope_mult,
+                    slope_threshold_pct=slope_threshold_pct
+                )
+                trend_state = regime.get("trend_state", "FLAT")
+
+                cls._trend_cache[cache_key] = (trend_state, now)
+                logger.info(
+                    f"[MomentumEngine][{symbol}] Evaluated Kernel Forecast "
+                    f"({timeframe} h={bandwidth}, W={window_size}): {trend_state} "
+                    f"(Slope: {regime.get('slope_pct'):+.3f}%, Smoothed: {regime.get('smoothed')})"
+                )
+                return trend_state
+
+            except Exception as e:
+                logger.warning(f"[MomentumEngine][{symbol}] Error evaluating Kernel Forecast ({e}), fallback to FLAT")
+                return "FLAT"
+
+    @classmethod
     def match_rule(cls, rule: str, count: int) -> bool:
         """
         Проверяет соответствие числа закрытых сделок правилу строки.

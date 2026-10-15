@@ -728,19 +728,37 @@ class BotCore:
 
             if regime_cfg:
                 mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
-                if mode_val in ("auto", "auto_ema", "ema_trend"):
+                if mode_val in ("auto", "auto_ema", "ema_trend", "kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson"):
                     from CORE.STRATEGY.strategy_applicator import StrategyApplicator
-                    ema_trend_cfg = (
-                        regime_cfg.get("auto_ema") or regime_cfg.get("ema_trend")
-                        if isinstance(regime_cfg, dict) else None
-                    )
-                    if not ema_trend_cfg and strat and strat.smart_size_cfg:
-                        ema_trend_cfg = strat.smart_size_cfg.get("ema_trend")
-                    trend_st = await MomentumEngine.get_ema_trend_state(
-                        symbol=symbol,
-                        ema_cfg=ema_trend_cfg,
-                        client=sym_client
-                    )
+                    if mode_val in ("kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson"):
+                        kernel_cfg = (
+                            regime_cfg.get("kernel_forecast")
+                            or regime_cfg.get("nadaraya_watson")
+                            or regime_cfg.get("kernel")
+                            if isinstance(regime_cfg, dict) else None
+                        )
+                        trend_st = await MomentumEngine.get_kernel_trend_state(
+                            symbol=symbol,
+                            kernel_cfg=kernel_cfg,
+                            client=sym_client
+                        )
+                        tf_label = kernel_cfg.get("timeframe", "1d") if isinstance(kernel_cfg, dict) else "1d"
+                        regime_name = f"ЯДЕРНЫЙ FORECAST (Nadaraya-Watson {tf_label})"
+                    else:
+                        ema_trend_cfg = (
+                            regime_cfg.get("auto_ema") or regime_cfg.get("ema_trend")
+                            if isinstance(regime_cfg, dict) else None
+                        )
+                        if not ema_trend_cfg and strat and strat.smart_size_cfg:
+                            ema_trend_cfg = strat.smart_size_cfg.get("ema_trend")
+                        trend_st = await MomentumEngine.get_ema_trend_state(
+                            symbol=symbol,
+                            ema_cfg=ema_trend_cfg,
+                            client=sym_client
+                        )
+                        tf_label = ema_trend_cfg.get("timeframe", "1d") if isinstance(ema_trend_cfg, dict) else "1d"
+                        regime_name = f"Auto-EMA {tf_label}"
+
                     # UP -> bullish (12/7), DOWN -> bearish (7/12), FLAT/UNSTABLE -> neutral (9/9)
                     if trend_st == "UP":
                         resolved_mode = "bullish"
@@ -754,9 +772,8 @@ class BotCore:
                         side=side,
                         default_vol=volume_pct
                     )
-                    tf_label = ema_trend_cfg.get("timeframe", "1d") if isinstance(ema_trend_cfg, dict) else "1d"
                     logger.info(
-                        f"[{symbol}][{strat.strategy_id}] [КУЛАК СИЛЬНОЙ РУКИ / Auto-EMA {tf_label}]: "
+                        f"[{symbol}][{strat.strategy_id}] [КУЛАК СИЛЬНОЙ РУКИ / {regime_name}]: "
                         f"Global Trend={trend_st} -> Режим '{resolved_mode}'. "
                         f"{side} Grid 0 (Кулак): {volume_pct:.1f}% -> {dyn_vol:.1f}% (Сетка усреднения L1+ без изменений)"
                     )
