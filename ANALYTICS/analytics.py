@@ -1001,7 +1001,7 @@ class AnalyticsManager:
                     # Save after drawdown update
                     self._write_data(data)
                 
-                logger.info(f"Absolute Deep Sync completed. PnL: {total_pnl}, Comm: {total_comm}")
+                # logger.info(f"Absolute Deep Sync completed. PnL: {total_pnl}, Comm: {total_comm}")
                 
             except Exception as e:
                 logger.error(f"Absolute Deep Sync error: {e}")
@@ -1912,11 +1912,12 @@ class AnalyticsManager:
                 # 1. Легковесный сбор плавающего PnL и мгновенное обновление витрины leaderboard.txt
                 await self.sync_lightweight_unrealized_pnl(client)
 
-                # 2. Периодический фоновый Heartbeat для сверки income (включая Funding Fees каждые 8ч) строго по монетам бота
-                now = time.time()
-                if (now - last_deep_sync_ts) >= 180.0 and client:
-                    last_deep_sync_ts = now
-                    asyncio.create_task(self.deep_sync_analytics(client))
+                # 2. Периодический фоновый Heartbeat отключен по требованию оператора (лишние ресурсы и спам в логах).
+                # Сверка income надежно происходит по закрытию сделок (_do_fetch_and_record) и по команде /sync.
+                # now = time.time()
+                # if (now - last_deep_sync_ts) >= 3600.0 and client:
+                #     last_deep_sync_ts = now
+                #     asyncio.create_task(self.deep_sync_analytics(client))
             except Exception as e:
                 logger.error(f"Realtime tracker error: {e}")
 
