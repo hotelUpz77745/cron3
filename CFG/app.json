@@ -121,7 +121,7 @@
     "alpha_coin_selector": {
         "enabled": true,
         "_desc_enabled": "Alpha coin selector toggle (Wiggle & NATR ranking).",
-        "target_count": 4,
+        "target_count": 15,
         "_desc_target_count": "Default top coins count to select.",
         "timeframe": "15m",
         "_desc_timeframe": "Candle timeframe for alpha metrics calculation.",

@@ -1,7 +1,6 @@
 {
     "name": "🐆 U16: Chita v3.2 Turbo Scalp [Stagnation Trigger | Fast Scalp 0.85% | Heavy Artillery + Half-Peel 50%]",
     "description": "Флагманское поколение Chita v3.2 Turbo Scalp: 1) Отвязка smart_size от запаздывающего тренда (trend_determ: null); 2) Параметр степени усредненности стагнирующей стороны (stagnation_min_step = 2): если противоположная страдальная сторона застряла на >= 2 коленах, профитная сторона форсирует объем (1.28x..1.42x) и сбрасывает тейк-профит до турбо-скальпа 0.85%..0.90% для пулеметного сбора прибыли и форсирования кросс-ресайклинга; 3) Асимметричная Фибо-сетка с Мостиком Змея L3 (-13.5%); 4) Half-Peel Subgrid 50%; 5) Panic Damper TP с полом 0.85%.",
-    "start_balance_usdt": 449.0,
     "leverage": 20,
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",

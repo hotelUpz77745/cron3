@@ -1,7 +1,6 @@
 {
     "name": "🐆 U16: Chita v3.5 Quantum Kernel Apex [Nadaraya-Watson Forecast | Rational Quadratic | Zero-Lag Dynamic Sizing]",
     "description": "Пятое квантовое поколение Chita v3.5 Quantum Kernel Apex: 1) Интеграция непараметрической ядерной регрессии Надарая-Ватсона (NWKR) с ядром Rational Quadratic (zero-lag forecast) вместо запаздывающего Dual EMA дефендера; 2) Динамическое «Правило кулака Сильной руки»: мгновенная перебалансировка первого ордера (12/7 Long в UP-тренде, 7/12 Short в DOWN-тренде, 9/9 во флэте); 3) Демпфер волатильного конверта (MAE Envelope 1.5x) для защиты от перекупленности/перепроданности; 4) Проверенная временем гранитная броня Читы 3.3: Мостик Змея L3 (-13.5%), Half-Peel 50%, mark_executed сжигание объема, Дискретный кросс-ресайклинг (50%/75%), Фибо-храповик iter_net_classic и Golden Mean Scalp 1.05%.",
-    "start_balance_usdt": 449.0,
     "leverage": 20,
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",

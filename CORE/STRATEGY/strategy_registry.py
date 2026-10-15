@@ -128,16 +128,14 @@ class StrategyConfig:
                         self.overrides[side_k] = {}
                     self.overrides[side_k].update(self.active_settings[side_k])
 
-        # 1. Купол Аналитики (Analytics Dome)
-        strat_analytics = (
-            self.active_settings.get("analytics")
-            or raw_meta.get("analytics")
-            or self.overrides.get("analytics")
-        )
-        if strat_analytics and isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
+        # 1. Купол Аналитики (Analytics Dome): канонически из app.json -> active_strategies[strategy_id]["analytics"]
+        strat_analytics = self.active_settings.get("analytics")
+        if isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
             self.start_balance_usdt: float = float(strat_analytics["start_balance_usdt"])
         elif "start_balance_usdt" in self.active_settings:
             self.start_balance_usdt: float = float(self.active_settings["start_balance_usdt"])
+        elif "analytics" in raw_meta and isinstance(raw_meta["analytics"], dict) and "start_balance_usdt" in raw_meta["analytics"]:
+            self.start_balance_usdt: float = float(raw_meta["analytics"]["start_balance_usdt"])
         elif "start_balance_usdt" in raw_meta:
             self.start_balance_usdt: float = float(raw_meta["start_balance_usdt"])
         else:
