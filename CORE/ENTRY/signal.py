@@ -54,7 +54,8 @@ class TimeControl:
         dt = datetime.fromtimestamp(seconds, timezone.utc)
         return dt.strftime("%Y-%m-%d %H:%M:%S") + f".{int(milliseconds % 1000):03d} UTC"
 
-    def interval_to_seconds(self, interval):
+    @staticmethod
+    def interval_to_seconds(interval: str) -> int:
         """
         Преобразует строковый интервал Binance в количество секунд.
         """

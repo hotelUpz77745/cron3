@@ -926,9 +926,17 @@ class TelegramReceiver:
             if target == "all":
                 msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=self._get_main_keyboard())
                 try:
+                    active_tfrs = []
+                    if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                        for s in self.bot_core.strategy_registry.active_strategies.values():
+                            t = getattr(s, "signal_heartbeat_tfr", None)
+                            if t and t not in active_tfrs:
+                                active_tfrs.append(t)
+                    tfr_all_label = "/".join(active_tfrs) if active_tfrs else "5m"
+
                     lines = [
                         "✅ <b>Все купола закрыты, лимитные ордера отменены!</b>",
-                        "🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой 5-минутной свечи (защита от дергания)."
+                        f"🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой свечи ({tfr_all_label}) (защита от дергания)."
                     ]
                     if reset_report:
                         lines.append("\n🔄 <b>Сброс циклов куполов (Positive Auto-Closing):</b>")
@@ -947,6 +955,7 @@ class TelegramReceiver:
                 strat_id = target
                 strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
                 strat_name = strat.name if strat else strat_id
+                tfr_strat_label = getattr(strat, "signal_heartbeat_tfr", "5m") if strat else "5m"
                 msg = await message.answer(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", reply_markup=self._get_main_keyboard(), parse_mode="HTML")
                 try:
                     await self.bot_core.close_strategy_positions(strat_id)
@@ -955,7 +964,7 @@ class TelegramReceiver:
                         f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
                         f"Позиции монет закрыты по рынку, ордера отменены.",
                         f"🔄 Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)",
-                        f"🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой 5-минутной свечи (защита от дергания).",
+                        f"🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой свечи ({tfr_strat_label}) (защита от дергания).",
                         "\n📊 Лидерборд и аналитика обновлены."
                     ]
                     await msg.edit_text("\n".join(lines), parse_mode="HTML")

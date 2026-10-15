@@ -41,7 +41,9 @@ class TestSmartSizeDynEma(unittest.TestCase):
 
     def test_u16_chita_config_loaded(self):
         """Проверка, что u16_chita загружается с обновленной конфигурацией smart_size и колоколом Тюринга."""
-        registry = StrategyRegistry()
+        registry = StrategyRegistry(active_strategies_cfg={
+            "u16_chita__classic": {"template": "u16_chita_v31", "enabled": True, "symbols": ["STRKUSDT"]}
+        })
         strat = registry.get_strategy("u16_chita__classic")
         self.assertIsNotNone(strat)
         ss = strat.smart_size_cfg
@@ -249,7 +251,9 @@ class TestSmartSizeDynEma(unittest.TestCase):
 
     def test_smart_tp_trend_alignment(self):
         """Проверка расчета Smart TP с привязкой к EMA-тренду и колоколом Тюринга."""
-        registry = StrategyRegistry()
+        registry = StrategyRegistry(active_strategies_cfg={
+            "u16_chita__classic": {"template": "u16_chita_v31", "enabled": True, "symbols": ["STRKUSDT"]}
+        })
         strat = registry.get_strategy("u16_chita__classic")
         tp_cfg = strat.smart_tp_cfg
 
@@ -287,7 +291,9 @@ class TestSmartSizeDynEma(unittest.TestCase):
 
     def test_min_tp_indent_enforcement(self):
         """Проверка минимального гарантированного пола для тейк-профита (min_tp_indent >= 1.0)."""
-        registry = StrategyRegistry()
+        registry = StrategyRegistry(active_strategies_cfg={
+            "u16_chita__classic": {"template": "u16_chita_v31", "enabled": True, "symbols": ["STRKUSDT"]}
+        })
         strat = registry.get_strategy("u16_chita__classic")
         self.assertEqual(strat.min_tp_indent, 1.0)
 

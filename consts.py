@@ -186,7 +186,12 @@ STREAMER_LOCK_NAME: str = str(_CFG["streamer"]["lock_name"])
 # SIGNAL, SMART GRACE, SMART SIZE & SMART TP FALLBACK DECLARATIONS
 # ============================================================
 _SIG_CFG: Dict[str, Any] = _CFG.get("signal") or {}
-DEFAULT_HEARTBEAT_TFR: str = str(_SIG_CFG.get("heartbeat_tfr", _SIG_CFG.get("timeframe", "5m")))
+DEFAULT_HEARTBEAT_TFR: str = str(
+    _SIG_CFG.get("signal_heartbeat_tfr")
+    or _SIG_CFG.get("heartbeat_tfr")
+    or _SIG_CFG.get("timeframe")
+    or "5m"
+)
 DEFAULT_TIMEFRAME: str = DEFAULT_HEARTBEAT_TFR
 DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
     "start_period_sec": 57,

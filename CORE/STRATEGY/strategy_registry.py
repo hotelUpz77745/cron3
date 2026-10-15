@@ -375,14 +375,31 @@ class StrategyConfig:
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 
-        # Персональный пульс/хартбит стратегии (по умолчанию 5m)
-        self.heartbeat_tfr: str = str(
-            raw_meta.get("heartbeat_tfr")
-            or self.overrides.get("heartbeat_tfr")
-            or raw_meta.get("timeframe")
-            or self.overrides.get("timeframe", DEFAULT_TIMEFRAME)
-        )
-        self.timeframe: str = self.heartbeat_tfr
+        # Персональный пульс/хартбит стратегии: прямое чтение 'signal_heartbeat_tfr'
+        # с поддержкой легаси-алиасов ('heartbeat_tfr', 'timeframe') по Протоколу №2 (без скрытых дефолтов)
+        tfr_val = None
+        for key in ("signal_heartbeat_tfr", "heartbeat_tfr", "timeframe"):
+            if key in raw_meta and raw_meta[key]:
+                tfr_val = str(raw_meta[key])
+                break
+            elif key in self.overrides and self.overrides[key]:
+                tfr_val = str(self.overrides[key])
+                break
+
+        if not tfr_val:
+            if DEFAULT_TIMEFRAME:
+                tfr_val = DEFAULT_TIMEFRAME
+            else:
+                raise KeyError(
+                    f"[StrategyConfig][{self.strategy_id}] Отсутствует обязательный параметр "
+                    f"'signal_heartbeat_tfr' (или алиасы 'heartbeat_tfr' / 'timeframe') в конфиге стратегии!"
+                )
+
+        self.signal_heartbeat_tfr: str = tfr_val
+        self.heartbeat_tfr: str = tfr_val
+        self.timeframe: str = tfr_val
+        from CORE.ENTRY.signal import TimeControl
+        self.heartbeat_seconds: int = TimeControl.interval_to_seconds(self.signal_heartbeat_tfr)
 
         # Мультиаккаунтность: привязка стратегии к ключам в .env
         self.api_key_name: Optional[str] = self.active_settings.get("api_key_name")
@@ -563,6 +580,15 @@ class StrategyRegistry:
                         self.common_defaults = Utils.read_json_file(jf) or {}
                     continue
                 data[jf.stem] = Utils.read_json_file(jf)
+
+            # Архивные/классические шаблоны из CFG/artifacts/classic_tribute/*.json (для обратной совместимости и бэктестов)
+            artifacts_tribute_dir = self.universes_path.parent / "artifacts" / "classic_tribute"
+            if artifacts_tribute_dir.exists() and artifacts_tribute_dir.is_dir():
+                for jf in sorted(artifacts_tribute_dir.glob("*.json")):
+                    if not jf.stem.startswith("_") and jf.stem not in data:
+                        tribute_content = Utils.read_json_file(jf)
+                        if isinstance(tribute_content, dict) and "name" in tribute_content:
+                            data[jf.stem] = tribute_content
 
         # Fallback к universes.json (для обратной совместимости внешних утилит)
         if not data and self.universes_path.exists():

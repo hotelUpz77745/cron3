@@ -30,13 +30,15 @@ class TestCloseIdempotent5mCooldown(unittest.TestCase):
         self.bot.client = MagicMock()
         self.bot.client.cancel_all_orders = AsyncMock()
         self.bot.client.fetch_positions = AsyncMock(return_value=[])
+        self.bot.get_strategy_heartbeat_seconds = lambda strategy_id=None, symbol=None: BotCore.get_strategy_heartbeat_seconds(self.bot, strategy_id, symbol)
 
     def test_close_strategy_activates_5m_cooldown(self):
-        """Проверяет, что закрытие стратегии рассчитывает ровную границу 5m свечи и блокирует входы."""
+        """Проверяет, что закрытие стратегии рассчитывает ровную границу свечи хартбита и блокирует входы."""
         active_sid = list(self.registry.active_strategies.keys())[0]
         strat = self.registry.get_strategy(active_sid)
         now = time.time()
-        expected_boundary = ((int(now) // 300) + 1) * 300 + 5.0
+        heartbeat_sec = strat.heartbeat_seconds
+        expected_boundary = ((int(now) // heartbeat_sec) + 1) * heartbeat_sec + 5.0
 
         asyncio.run(BotCore.close_strategy_positions(self.bot, active_sid))
 
@@ -49,13 +51,14 @@ class TestCloseIdempotent5mCooldown(unittest.TestCase):
             self.assertAlmostEqual(sym_block, expected_boundary, delta=2.0)
             is_blocked, reason, rem = BotCore.check_entry_block(self.bot, sym)
             self.assertTrue(is_blocked, f"Entry for {sym} must be blocked!")
-            self.assertIn("5m candle window cooldown active", reason)
+            self.assertIn("candle window cooldown active", reason)
 
     def test_close_all_activates_cooldown_for_all(self):
-        """Проверяет, что глобальный Close All активирует 5m кулдаун для всех монет портфеля."""
+        """Проверяет, что глобальный Close All активирует кулдаун хартбита для всех монет портфеля."""
         self.bot.symbols = self.registry.get_all_active_symbols()
         now = time.time()
-        expected_boundary = ((int(now) // 300) + 1) * 300 + 5.0
+        heartbeat_sec = BotCore.get_strategy_heartbeat_seconds(self.bot)
+        expected_boundary = ((int(now) // heartbeat_sec) + 1) * heartbeat_sec + 5.0
 
         asyncio.run(BotCore.close_all_positions(self.bot, reset_iterations=False))
 
@@ -65,7 +68,22 @@ class TestCloseIdempotent5mCooldown(unittest.TestCase):
         for sym in self.bot.symbols:
             is_blocked, reason, rem = BotCore.check_entry_block(self.bot, sym)
             self.assertTrue(is_blocked)
-            self.assertIn("5m candle window cooldown active", reason)
+            self.assertIn("candle window cooldown active", reason)
+
+    def test_dynamic_cooldown_for_arbitrary_timeframes(self):
+        """Проверяет, что calc_heartbeat_window_cooldown адаптируется под любой таймфрейм (10m, 15m, 1m)."""
+        now = 1000.0
+        # 10m = 600s: следующее окно 1200 + 5.0 = 1205.0
+        cd_10m = BotCore.calc_heartbeat_window_cooldown(now, 600)
+        self.assertEqual(cd_10m, 1205.0)
+
+        # 15m = 900s: следующее окно 1800 + 5.0 = 1805.0
+        cd_15m = BotCore.calc_heartbeat_window_cooldown(now, 900)
+        self.assertEqual(cd_15m, 1805.0)
+
+        # 1m = 60s: следующее окно 1020 + 5.0 = 1025.0, но min cooldown = now + 30.0 = 1030.0
+        cd_1m = BotCore.calc_heartbeat_window_cooldown(now, 60)
+        self.assertEqual(cd_1m, 1030.0)
 
     def test_cooldown_expires_cleanly_on_new_candle(self):
         """Проверяет, что после истечения метки времени блокировка снимается автоматически."""

@@ -3,6 +3,7 @@
   "description": "Канонический Монарх Капитала. Первый вход на -3.5%, 9-уровневая сетка Фибоначчи строго до -89.0%, Panic Damper TP (2.2% -> 0.65%), максимальный денежный поток в режиме [OFF] (руками не лапать). Альтернативные режимы: __classic, __fixed, __toxic.",
   "leverage": 20,
   "tp_purpose": "self",
+  "signal_heartbeat_tfr": "5m",
   "super_grid": {
     "enabled": false
   },

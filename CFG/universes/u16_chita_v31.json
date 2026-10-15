@@ -3,7 +3,7 @@
   "description": "Флагманское гибридное поколение Chita v3.1 (Universal Alpha Hybrid Champion): 1) Разряженная асимметричная Фибо-сетка с Мостиком Змея L3 (-13.5%), устраняющим мертвую зону между скальпом и буфером; 2) Пропорционально перераспределенный объем: L0 (12%) + L1 (8%) + L2 (9%) + L3 (11%) = 40% до отметки -13.5% (эквивалент 43% до -21% в Чите 3.0); 3) Panic Damper TP (1.2% -> 1.8% -> 1.4% -> 1.2% -> 1.1% -> 1.0%) с гарантированным полом min_tp_indent: 1.0% для мгновенного сброса зависших объемов при первом отскоке; 4) Однократный Half-Peel Subgrid Peeling (peel_ratio = 0.5, peel_num = 1 на активных ступенях Зоны 2-3); 5) Политика пропущенного объема: mark_executed (объем сгорает без перегрузки депозита); 6) Дискретный Cross-Side Profit Recycling (ступенчатая карта: L2..L4 сжигают 50% встречной прибыли, L5+ сжигают 75% для тяжелой артиллерии и экстренной защиты от зависаний); 7) «Правило кулака Сильной руки» (Strong Hand Fist Rule) для стартового ордера grid_0: динамический режим Auto-EMA по дневным свечам 1d (10d vs 30d EMA, conf=3, require_rising=True: UP -> Bullish 12/7, FLAT -> Neutral 9/9, DOWN -> Bearish 7/12) с поддержкой фиксированных пресетов и off/null; 8) Smart Grace 150s с броуновским шумом [3, 13]s и knife blocker = 1; 9) Автозакрытие iter_net_classic с Фибо-лестницей трейлинг-храповика (старт от $12 с полом $8 при min_age_hours = 0.0 без задержки).",
   "start_balance_usdt": 449.0,
   "leverage": 20,
-  "timeframe": "5m",
+  "signal_heartbeat_tfr": "5m",
   "tp_purpose": "self",
   "avg_free_volume_behavior": "mark_executed",
   "_avg_free_volume_behavior_modes": {

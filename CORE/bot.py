@@ -469,10 +469,14 @@ class BotCore:
         return self._symbol_locks[sym]
 
     @staticmethod
-    def calc_5m_window_cooldown(now: float, interval_raw: Any = 300) -> float:
-        """Вычисляет временную метку окончания кулдауна до открытия следующей 5-минутной свечи."""
+    def calc_heartbeat_window_cooldown(now: float, interval_sec: Any) -> float:
+        """
+        Вычисляет временную метку окончания кулдауна до открытия следующего окна свечи
+        согласно персональному таймфрейму пульса стратегии (signal_heartbeat_tfr).
+        Гарантирует защиту от преждевременного переоткрытия позиций (идемпотентность).
+        """
         try:
-            interval = int(interval_raw)
+            interval = int(interval_sec)
             if interval <= 0:
                 interval = 300
         except (TypeError, ValueError):
@@ -482,24 +486,52 @@ class BotCore:
         except (TypeError, ValueError):
             now_f = time.time()
         next_candle_start = ((int(now_f) // interval) + 1) * interval
-        return max(next_candle_start + 5.0, now_f + 30.0)
+        return max(next_candle_start + 5.0, now_f + min(30.0, float(interval)))
+
+    # Обратная совместимость алиаса для legacy вызовов и тестов
+    calc_5m_window_cooldown = calc_heartbeat_window_cooldown
+
+    def get_strategy_heartbeat_seconds(self, strategy_id: Optional[str] = None, symbol: Optional[str] = None) -> int:
+        """
+        Возвращает интервал пульса стратегии в секундах (signal_heartbeat_tfr),
+        строго извлекая его из объекта активной стратегии (StrategyConfig) без скрытых магических констант.
+        """
+        strat_obj = None
+        if hasattr(self, "strategy_registry") and self.strategy_registry:
+            if strategy_id and hasattr(self.strategy_registry, "get_strategy"):
+                strat_obj = self.strategy_registry.get_strategy(strategy_id)
+            elif symbol and hasattr(self.strategy_registry, "get_strategy_for_symbol"):
+                strat_obj = self.strategy_registry.get_strategy_for_symbol(symbol)
+            if not strat_obj and hasattr(self.strategy_registry, "active_strategies"):
+                active_strats = list(self.strategy_registry.active_strategies.values())
+                if active_strats:
+                    strat_obj = active_strats[0]
+
+        if strat_obj is not None:
+            if hasattr(strat_obj, "heartbeat_seconds") and strat_obj.heartbeat_seconds is not None:
+                return int(strat_obj.heartbeat_seconds)
+            if hasattr(strat_obj, "signal_heartbeat_tfr") and strat_obj.signal_heartbeat_tfr:
+                from CORE.ENTRY.signal import TimeControl
+                return TimeControl.interval_to_seconds(strat_obj.signal_heartbeat_tfr)
+
+        tc = getattr(self, "time_control", None)
+        if tc and hasattr(tc, "interval_seconds") and tc.interval_seconds:
+            return int(tc.interval_seconds)
+
+        from consts import DEFAULT_HEARTBEAT_TFR
+        from CORE.ENTRY.signal import TimeControl
+        return TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
 
     def _get_interval_seconds(self) -> int:
-        """Безопасное получение интервала свечи в секундах (по умолчанию 300с / 5m)."""
-        tc = getattr(self, "time_control", None)
-        raw = getattr(tc, "interval_seconds", 300)
-        try:
-            val = int(raw)
-            return val if val > 0 else 300
-        except (TypeError, ValueError):
-            return 300
+        """Безопасное получение интервала свечи в секундах через heartbeat_seconds стратегии."""
+        return self.get_strategy_heartbeat_seconds()
 
     @staticmethod
     def check_entry_block(bot_core: Any, symbol: str, strategy_id: Optional[str] = None) -> tuple[bool, str, float]:
         """
         Проверяет, заблокирован ли вход для монеты/стратегии.
         Возвращает (is_blocked, reason, remaining_seconds).
-        Гарантирует защиту от преждевременного переоткрытия позиций до начала новой пятиминутной свечи.
+        Гарантирует защиту от преждевременного переоткрытия позиций до начала новой свечи хартбита стратегии.
         """
         now_ts = time.time()
         sym_upper = symbol.upper()
@@ -539,7 +571,15 @@ class BotCore:
 
         if effective_until > now_ts:
             rem = effective_until - now_ts
-            return True, f"5m candle window cooldown active ({int(rem)}s remaining)", rem
+            tfr_desc = "heartbeat"
+            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+                try:
+                    s_obj = bot_core.strategy_registry.get_strategy(strategy_id) if strategy_id else bot_core.strategy_registry.get_strategy_for_symbol(symbol)
+                    if s_obj and hasattr(s_obj, "signal_heartbeat_tfr"):
+                        tfr_desc = s_obj.signal_heartbeat_tfr
+                except Exception:
+                    pass
+            return True, f"Heartbeat ({tfr_desc}) candle window cooldown active ({int(rem)}s remaining)", rem
 
         if getattr(bot_core, 'entry_blocked', False) is True:
             if global_blocked > 0 and now_ts >= global_blocked:
@@ -1345,10 +1385,14 @@ class BotCore:
                             if s_side in self.fsm_states[sym]:
                                 self.fsm_states[sym][s_side].recent_closes = []
 
-        # Кулдаун авто-закрытия и блокировка входов до открытия новой 5-минутной свечи
+        # Кулдаун авто-закрытия и блокировка входов до открытия новой свечи хартбита
         now = time.time()
-        raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
-        cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+        heartbeat_raw = self.get_strategy_heartbeat_seconds(strategy_id=strategy_id)
+        try:
+            heartbeat_sec = int(heartbeat_raw)
+        except (TypeError, ValueError):
+            heartbeat_sec = 300
+        cooldown_until = BotCore.calc_heartbeat_window_cooldown(now, heartbeat_sec)
 
         if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
             self.symbol_blocked_until = {}
@@ -1385,9 +1429,11 @@ class BotCore:
             self.auto_closer._last_close_ts[strategy_id] = time.time()
 
         rem_s = int(cooldown_until - now)
+        raw_tfr = getattr(strat_cfg, "signal_heartbeat_tfr", None)
+        tfr_label = str(raw_tfr) if isinstance(raw_tfr, str) and raw_tfr else f"{heartbeat_sec}s"
         logger.info(
             f"[{strategy_id}] Manual iteration reset: Cycle #{cur_iter_idx} -> #{next_iter_idx}. "
-            f"Base Net: {new_iter_start_net:+.2f} USDT. Idempotent cooldown locked until {cooldown_until} ({rem_s}s until next 5m window)."
+            f"Base Net: {new_iter_start_net:+.2f} USDT. Idempotent cooldown locked until {cooldown_until} ({rem_s}s until next {tfr_label} window)."
         )
 
         return {
@@ -1423,8 +1469,12 @@ class BotCore:
                                 self.fsm_states[sym][s_side].is_closing = True
 
             now = time.time()
-            raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
-            cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+            heartbeat_raw = self.get_strategy_heartbeat_seconds()
+            try:
+                heartbeat_sec = int(heartbeat_raw)
+            except (TypeError, ValueError):
+                heartbeat_sec = 300
+            cooldown_until = BotCore.calc_heartbeat_window_cooldown(now, heartbeat_sec)
 
             curr_block = getattr(self, 'block_until_timestamp', 0.0)
             if not isinstance(curr_block, (int, float)):
@@ -1449,7 +1499,7 @@ class BotCore:
                     self.strategy_blocked_until[sid] = max(prev_strat_block, cooldown_until)
 
             rem_s = int(cooldown_until - now)
-            logger.warning(f"🛑 [CLOSE_ALL] Idempotent entry cooldown activated until timestamp {cooldown_until} (next 5m window, {rem_s}s) for symbols: {symbols}")
+            logger.warning(f"🛑 [CLOSE_ALL] Idempotent entry cooldown activated until timestamp {cooldown_until} (next heartbeat window {heartbeat_sec}s, {rem_s}s remaining) for symbols: {symbols}")
 
             try:
                 # 2. Помонетная отмена ордеров и закрытие позиций строго по обойме
@@ -1604,8 +1654,12 @@ class BotCore:
         logger.info(f"[{strategy_id}] Closing positions and orders for strategy symbols: {symbols_set}")
 
         now = time.time()
-        raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
-        cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+        heartbeat_raw = self.get_strategy_heartbeat_seconds(strategy_id=strategy_id)
+        try:
+            heartbeat_sec = int(heartbeat_raw)
+        except (TypeError, ValueError):
+            heartbeat_sec = 300
+        cooldown_until = BotCore.calc_heartbeat_window_cooldown(now, heartbeat_sec)
 
         if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
             self.symbol_blocked_until = {}
@@ -1637,9 +1691,11 @@ class BotCore:
             self.entry_blocked = True
 
         rem_s = int(cooldown_until - now)
+        raw_tfr = getattr(strat, "signal_heartbeat_tfr", None)
+        tfr_label = str(raw_tfr) if isinstance(raw_tfr, str) and raw_tfr else f"{heartbeat_sec}s"
         logger.warning(
             f"🛑 [{strategy_id}] Idempotent entry cooldown activated until timestamp {cooldown_until} "
-            f"(next 5m candle window, {rem_s}s) for symbols: {symbols_set}"
+            f"(next {tfr_label} candle window, {rem_s}s) for symbols: {symbols_set}"
         )
 
         async with self._close_lock:
