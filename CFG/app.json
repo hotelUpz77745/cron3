@@ -35,19 +35,20 @@
     "active_strategies": {
         "u16_chita__classic": {
             "_comment_alias": "🐆 U16: Chita v3.0 [Auto-EMA 1d | Дискретный 0.50/0.75] (7-Lvl Fibonacci Heavy Artillery + Half-Peel 50% + Mark Executed) [CLASSIC]",
-            "template": "u16_chita",
+            "template": "u16_chita_v31",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
             "symbols": [
-                "STRKUSDT",
-                "PUMPUSDT",
-                "METUSDT"
+                "GTCUSDT",
+                "AVAUSDT",
+                "BEAMXUSDT",
+                "CKBUSDT"
             ],
             "mode": "classic",
             "sizing_mode": "static",
             "analytics": {
-                "start_balance_usdt": 151.0
+                "start_balance_usdt": 449.0
             }
         }
     },
