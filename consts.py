@@ -169,7 +169,7 @@ def _resolve_analytics_start_balance() -> float:
                 total += float(sdata["analytics"]["start_balance_usdt"])
             elif "start_balance_usdt" in sdata:
                 total += float(sdata["start_balance_usdt"])
-    return total if total > 0 else 150.0
+    return total if total > 0 else 449.0
 
 ANALYTICS_START_BALANCE_USDT: float = _resolve_analytics_start_balance()
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])

@@ -161,5 +161,6 @@
   "SHORT": {
     "enabled": true,
     "_inheritance_base_side": true
-  }
+  },
+  "start_balance_usdt": 449.0
 }

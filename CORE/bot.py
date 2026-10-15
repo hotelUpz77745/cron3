@@ -296,7 +296,7 @@ class BotCore:
                         "update_interval_hours": 24
                     },
                     "analytics": {
-                        "start_balance_usdt": u_meta.get("start_balance_usdt", 50.0)
+                        "start_balance_usdt": u_meta.get("start_balance_usdt", 449.0)
                     },
                     "notifications": {
                         "enabled": True,

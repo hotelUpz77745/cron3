@@ -141,7 +141,7 @@ class StrategyConfig:
         elif "start_balance_usdt" in raw_meta:
             self.start_balance_usdt: float = float(raw_meta["start_balance_usdt"])
         else:
-            self.start_balance_usdt: float = 150.0
+            self.start_balance_usdt: float = 449.0
         self.analytics_cfg: Dict[str, Any] = {"start_balance_usdt": self.start_balance_usdt}
 
         # 2. Купол Super Grid (Volatility Grid Dome)
