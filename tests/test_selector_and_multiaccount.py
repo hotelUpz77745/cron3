@@ -132,6 +132,11 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
         self.assertGreater(target_count, 0)
         self.assertIn(selector_type, ("alpha_coin_selector", "samsonov_funnel"))
 
+        alpha_count = service.get_configured_target_count("alpha_coin_selector")
+        sam_count = service.get_configured_target_count("samsonov_funnel")
+        self.assertEqual(alpha_count, 15)
+        self.assertEqual(sam_count, 4)
+
     def test_coin_selection_service_alpha_top_coins(self):
         """Проверка работы get_alpha_top_coins с моком AlphaCoinSelector."""
         service = CoinSelectionService()

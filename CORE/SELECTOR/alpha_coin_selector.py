@@ -112,38 +112,37 @@ class AlphaCoinSelector:
 
     @classmethod
     def _get_config(cls) -> Dict[str, Any]:
-        """Считывает конфигурацию альфа-селектора и волатильности из app.json."""
-        default_cfg = {
-            "enabled": True,
-            "target_count": 4,
-            "timeframe": "15m",
-            "candles_limit": 96,
-            "use_volatility_scanner_pool": True,
-            "min_natr_threshold": 0.25,
-            "max_parabolic_pump_pct": 60.0,
-            "max_death_spiral_dump_pct": -45.0,
+        """Считывает актуальную конфигурацию альфа-селектора динамически из app.json строго напрямую по Протоколу 2."""
+        app_path = DATA_DIR / "app.json"
+        if not app_path.exists():
+            raise FileNotFoundError(f"[AlphaCoinSelector] Файл конфигурации не найден: {app_path}")
+
+        data = Utils.read_json_file(app_path)
+        if not data or "alpha_coin_selector" not in data:
+            raise KeyError(f"[AlphaCoinSelector] Секция 'alpha_coin_selector' отсутствует в {app_path}!")
+
+        raw_cfg = data["alpha_coin_selector"]
+        cfg = {
+            "enabled": bool(raw_cfg.get("enabled", True)),
+            "target_count": int(raw_cfg["target_count"]),
+            "timeframe": str(raw_cfg.get("timeframe", "15m")),
+            "candles_limit": int(raw_cfg.get("candles_limit", 96)),
+            "use_volatility_scanner_pool": bool(raw_cfg.get("use_volatility_scanner_pool", True)),
+            "min_natr_threshold": float(raw_cfg.get("min_natr_threshold", 0.25)),
+            "max_parabolic_pump_pct": float(raw_cfg.get("max_parabolic_pump_pct", 60.0)),
+            "max_death_spiral_dump_pct": float(raw_cfg.get("max_death_spiral_dump_pct", -45.0)),
             "klines_cache_ttl_sec": 300.0,
         }
-        app_path = DATA_DIR / "app.json"
-        if app_path.exists():
-            try:
-                data = Utils.read_json_file(app_path)
-                if data and "alpha_coin_selector" in data:
-                    default_cfg.update(data["alpha_coin_selector"])
-                if data and "volatility_scanner" in data:
-                    vs = data["volatility_scanner"]
-                    if "klines_cache_ttl_sec" in vs:
-                        default_cfg["klines_cache_ttl_sec"] = float(vs["klines_cache_ttl_sec"])
-            except Exception as e:
-                logger.error(f"[AlphaCoinSelector] Error reading config: {e}")
-        return default_cfg
+        if "volatility_scanner" in data and "klines_cache_ttl_sec" in data["volatility_scanner"]:
+            cfg["klines_cache_ttl_sec"] = float(data["volatility_scanner"]["klines_cache_ttl_sec"])
+        return cfg
 
     @classmethod
     def rank_symbols(
         cls,
         symbols: List[str],
         candles_dict: Dict[str, Dict[str, np.ndarray]],
-        top_k: int = 4,
+        top_k: Optional[int] = None,
         min_natr_threshold: float = 0.25,
         max_parabolic_pump_pct: float = 60.0,
         max_death_spiral_dump_pct: float = -45.0,
@@ -167,7 +166,9 @@ class AlphaCoinSelector:
             results.append(metrics)
 
         results.sort(key=lambda x: (x["eligible"], x["score"]), reverse=True)
-        return results[:top_k]
+        if top_k is not None:
+            return results[:top_k]
+        return results
 
     @classmethod
     def calculate_coin_metrics(cls, symbol: str, klines: List[Any]) -> Dict[str, Any]:
@@ -213,7 +214,7 @@ class AlphaCoinSelector:
         строго из отфильтрованного результата VolatilityScanner.
         """
         cfg = cls._get_config()
-        effective_count = target_count if target_count is not None else int(cfg.get("target_count", 4))
+        effective_count = int(target_count) if target_count is not None else int(cfg["target_count"])
         effective_interval = interval or str(cfg.get("timeframe", "15m"))
         effective_limit = limit if limit is not None else int(cfg.get("candles_limit", 96))
         use_vol_pool = use_volatility_pool if use_volatility_pool is not None else bool(cfg.get("use_volatility_scanner_pool", True))
@@ -324,7 +325,7 @@ class AlphaCoinSelector:
     @classmethod
     def select_top_coins_sync(
         cls,
-        target_count: int = 4,
+        target_count: Optional[int] = None,
         universe_filter: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Синхронный фасад для запуска без async boilerplate."""

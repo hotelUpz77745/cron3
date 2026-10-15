@@ -43,21 +43,89 @@ class CoinSelectionService:
                 p = (BASE_DIR / p).resolve()
             self.radar_stats_dir = p / "ANALYTICS" / "STATS"
 
-    def get_configured_target_count(self) -> int:
-        """Читает target_coins_count строго из auto_closing.positive.radar_rotation_on_close (с поддержкой radar_synergy для тестов)."""
-        rot_cfg = _CFG.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close") or _CFG.get("radar_synergy", {})
-        val = rot_cfg.get("target_coins_count", 4)
-        if val is None:
-            raise ValueError("[CoinSelectionService] target_coins_count в app.json не может быть None!")
-        return int(val)
+    @staticmethod
+    def _load_app_cfg() -> Dict[str, Any]:
+        """Динамическое чтение app.json для обеспечения 100% операторской управляемости на лету."""
+        app_path = DATA_DIR / "app.json"
+        if app_path.exists():
+            try:
+                data = Utils.read_json_file(app_path)
+                if data and isinstance(data, dict):
+                    return data
+            except Exception as e:
+                logger.error(f"[CoinSelectionService] Ошибка динамического чтения {app_path}: {e}")
+        return _CFG
+
+    def get_configured_target_count(self, selector_type: Optional[str] = None) -> int:
+        """
+        Читает target_count строго напрямую из app.json в зависимости от selector_type:
+        - alpha_coin_selector -> app_cfg['alpha_coin_selector']['target_count']
+        - samsonov_funnel -> app_cfg['samsonov_funnel']['target_count']
+        - volatility_scanner -> app_cfg['volatility_scanner']['target_count'] (или alpha_coin_selector)
+        - radar_rotation -> rot_cfg['target_coins_count']
+        Никаких скрытых магических дефолтов (Протоколы 2, 2.1, 2.2, 3).
+        """
+        app_cfg = self._load_app_cfg()
+        sel = selector_type or self.get_configured_selector_type()
+
+        if sel == "alpha_coin_selector":
+            if "alpha_coin_selector" in app_cfg and "target_count" in app_cfg["alpha_coin_selector"]:
+                val = app_cfg["alpha_coin_selector"]["target_count"]
+                if val is not None:
+                    return int(val)
+
+        elif sel == "samsonov_funnel":
+            if "samsonov_funnel" in app_cfg and "target_count" in app_cfg["samsonov_funnel"]:
+                val = app_cfg["samsonov_funnel"]["target_count"]
+                if val is not None:
+                    return int(val)
+
+        elif sel == "volatility_scanner":
+            if "volatility_scanner" in app_cfg and "target_count" in app_cfg["volatility_scanner"]:
+                val = app_cfg["volatility_scanner"]["target_count"]
+                if val is not None:
+                    return int(val)
+            if "alpha_coin_selector" in app_cfg and "target_count" in app_cfg["alpha_coin_selector"]:
+                val = app_cfg["alpha_coin_selector"]["target_count"]
+                if val is not None:
+                    return int(val)
+
+        # Проверяем блок ротации auto_closing.positive.radar_rotation_on_close или radar_synergy
+        rot_cfg = (
+            app_cfg.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close")
+            or app_cfg.get("radar_synergy", {})
+        )
+        if "target_coins_count" in rot_cfg and rot_cfg["target_coins_count"] is not None:
+            return int(rot_cfg["target_coins_count"])
+        if "target_count" in rot_cfg and rot_cfg["target_count"] is not None:
+            return int(rot_cfg["target_count"])
+
+        # Fallback если sel был None или не подошел, но alpha_coin_selector есть в app_cfg
+        if "alpha_coin_selector" in app_cfg and "target_count" in app_cfg["alpha_coin_selector"]:
+            val = app_cfg["alpha_coin_selector"]["target_count"]
+            if val is not None:
+                return int(val)
+
+        raise ValueError(f"[CoinSelectionService] target_count для селектора '{sel}' не настроен в app.json!")
 
     def get_configured_selector_type(self) -> str:
-        """Читает selector_type строго из auto_closing.positive.radar_rotation_on_close (с поддержкой radar_synergy для тестов)."""
-        rot_cfg = _CFG.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close") or _CFG.get("radar_synergy", {})
-        val = rot_cfg.get("selector_type", "alpha_coin_selector")
-        if val is None:
-            raise ValueError("[CoinSelectionService] selector_type в app.json не может быть None!")
-        return str(val)
+        """Читает selector_type строго напрямую из app.json."""
+        app_cfg = self._load_app_cfg()
+        rot_cfg = (
+            app_cfg.get("auto_closing", {}).get("positive", {}).get("radar_rotation_on_close")
+            or app_cfg.get("radar_synergy", {})
+        )
+        if "selector_type" in rot_cfg and rot_cfg["selector_type"] is not None:
+            return str(rot_cfg["selector_type"])
+
+        if app_cfg.get("alpha_coin_selector", {}).get("enabled", False):
+            return "alpha_coin_selector"
+        if app_cfg.get("samsonov_funnel", {}).get("enabled", False):
+            return "samsonov_funnel"
+        if app_cfg.get("volatility_scanner", {}).get("enabled", False):
+            return "volatility_scanner"
+
+        return "alpha_coin_selector"
 
     async def get_alpha_top_coins(
         self,
@@ -68,7 +136,7 @@ class CoinSelectionService:
         Запрашивает актуальный институциональный Top-N монет через AlphaCoinSelector.
         Обогащает результат текущим статусом активности в боте.
         """
-        limit = target_count if target_count is not None else self.get_configured_target_count()
+        limit = target_count if target_count is not None else self.get_configured_target_count("alpha_coin_selector")
         results = await AlphaCoinSelector.select_top_coins(target_count=limit, universe_filter=universe_filter)
         self._enrich_with_bot_status(results)
         return results
@@ -82,14 +150,14 @@ class CoinSelectionService:
         Запрашивает актуальный Top-N монет по воронке Самсонова из статистики полигона Радара.
         Обогащает результат текущим статусом активности в боте.
         """
-        limit = target_count if target_count is not None else self.get_configured_target_count()
+        limit = target_count if target_count is not None else self.get_configured_target_count("samsonov_funnel")
         target_universe = universe_id
         if target_universe is None:
             if self.bot_core and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
                 active_strats = list(self.bot_core.strategy_registry.active_strategies.keys())
                 target_universe = active_strats[0] if active_strats else "u6_symbiosis_gamma_fortress35__off"
             else:
-                app_data = _CFG.get("active_strategies", {})
+                app_data = self._load_app_cfg().get("active_strategies", {})
                 active_strats = [sid for sid, scfg in app_data.items() if isinstance(scfg, dict) and scfg.get("enabled", False)]
                 target_universe = active_strats[0] if active_strats else "u6_symbiosis_gamma_fortress35__off"
 
@@ -122,7 +190,7 @@ class CoinSelectionService:
         Запрашивает актуальный срез монет из VolatilityScanner.
         Обогащает результат текущим статусом активности в боте.
         """
-        limit = target_count if target_count is not None else self.get_configured_target_count()
+        limit = target_count if target_count is not None else self.get_configured_target_count("volatility_scanner")
         output_path = DATA_DIR / "volatile_symbols.json"
 
         if not output_path.exists():
@@ -166,7 +234,7 @@ class CoinSelectionService:
         Универсальный фасад получения среза монет по указанному или настроенному селектору.
         """
         sel = selector_type if selector_type is not None else self.get_configured_selector_type()
-        cnt = target_count if target_count is not None else self.get_configured_target_count()
+        cnt = target_count if target_count is not None else self.get_configured_target_count(sel)
 
         if sel == "samsonov_funnel":
             return await self.get_samsonov_top_coins(target_count=cnt, universe_id=universe_id)

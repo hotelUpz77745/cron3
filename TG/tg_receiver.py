@@ -3878,7 +3878,7 @@ class TelegramReceiver:
             try:
                 from CORE.SELECTOR.coin_selection_service import CoinSelectionService
                 service = CoinSelectionService(bot_core=self.bot_core)
-                target_count = service.get_configured_target_count()
+                target_count = service.get_configured_target_count(selector_type=selector_type)
 
                 if selector_type == "volatility_scanner":
                     import importlib

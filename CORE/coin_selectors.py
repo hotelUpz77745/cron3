@@ -58,7 +58,7 @@ class AgentMarketSelector:
 
     async def select_top_coins(
         self,
-        target_count: int = 4,
+        target_count: Optional[int] = None,
         universe_filter: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """
@@ -124,11 +124,13 @@ class AgentMarketSelector:
         # Ранжирование по суточному размаху волатильности (первичный критерий)
         # с вторичным учетом объема торгов
         candidates.sort(key=lambda x: (x["range_pct"], x["volume_usdt"]), reverse=True)
-        return candidates[:target_count]
+        if target_count is not None:
+            return candidates[:target_count]
+        return candidates
 
     def select_top_coins_sync(
         self,
-        target_count: int = 4,
+        target_count: Optional[int] = None,
         universe_filter: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Синхронный фасад для мгновенного вызова без async boilerplate."""
@@ -193,15 +195,20 @@ class SamsonovFunnelSelector:
     def get_funnel_stages(
         self,
         universe_id: str = "u0_fat_swing123",
-        target_count: int = 4,
+        target_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Возвращает детальную разбивку всех этапов воронки."""
         empty_notice_str = "Пусто, выросла капуста"
+        effective_count = target_count
         try:
             from consts import DATA_DIR
             app_cfg = Utils.read_json_file(DATA_DIR / "app.json") if (DATA_DIR / "app.json").exists() else {}
-            if "samsonov_funnel" in app_cfg and "empty_notice" in app_cfg["samsonov_funnel"]:
-                empty_notice_str = str(app_cfg["samsonov_funnel"]["empty_notice"])
+            if "samsonov_funnel" in app_cfg:
+                sf = app_cfg["samsonov_funnel"]
+                if "empty_notice" in sf:
+                    empty_notice_str = str(sf["empty_notice"])
+                if effective_count is None and "target_count" in sf:
+                    effective_count = int(sf["target_count"])
         except Exception:
             pass
 
@@ -268,7 +275,7 @@ class SamsonovFunnelSelector:
 
         # ШАГ 3: Ранжирование по Trade Velocity (число сделок) -> целевой ТОП-N
         step3_sorted = sorted(step2_pool, key=lambda x: x["trades"], reverse=True)
-        final_targets = step3_sorted[:target_count]
+        final_targets = step3_sorted[:effective_count] if effective_count is not None else step3_sorted
 
         return {
             "total_input": total_input,
@@ -282,7 +289,7 @@ class SamsonovFunnelSelector:
     def run_samsonov_funnel(
         self,
         universe_id: str = "u0_fat_swing123",
-        target_count: int = 4,
+        target_count: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Алиас для get_funnel_stages."""
         return self.get_funnel_stages(universe_id=universe_id, target_count=target_count)
