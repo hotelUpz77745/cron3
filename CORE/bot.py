@@ -125,6 +125,9 @@ class BotCore:
             self.is_paused = False
             
         self.entry_blocked = False
+        self.block_until_timestamp = 0.0
+        self.symbol_blocked_until: Dict[str, float] = {}
+        self.strategy_blocked_until: Dict[str, float] = {}
         
         spec_cache_path = CACHE_DIR / "specifications.json"
         self.spec_data = Utils.read_json_file(spec_cache_path) if spec_cache_path.exists() else {}
@@ -465,25 +468,97 @@ class BotCore:
             self._symbol_locks[sym] = asyncio.Lock()
         return self._symbol_locks[sym]
 
+    @staticmethod
+    def calc_5m_window_cooldown(now: float, interval_raw: Any = 300) -> float:
+        """Вычисляет временную метку окончания кулдауна до открытия следующей 5-минутной свечи."""
+        try:
+            interval = int(interval_raw)
+            if interval <= 0:
+                interval = 300
+        except (TypeError, ValueError):
+            interval = 300
+        try:
+            now_f = float(now)
+        except (TypeError, ValueError):
+            now_f = time.time()
+        next_candle_start = ((int(now_f) // interval) + 1) * interval
+        return max(next_candle_start + 5.0, now_f + 30.0)
+
+    def _get_interval_seconds(self) -> int:
+        """Безопасное получение интервала свечи в секундах (по умолчанию 300с / 5m)."""
+        tc = getattr(self, "time_control", None)
+        raw = getattr(tc, "interval_seconds", 300)
+        try:
+            val = int(raw)
+            return val if val > 0 else 300
+        except (TypeError, ValueError):
+            return 300
+
+    @staticmethod
+    def check_entry_block(bot_core: Any, symbol: str, strategy_id: Optional[str] = None) -> tuple[bool, str, float]:
+        """
+        Проверяет, заблокирован ли вход для монеты/стратегии.
+        Возвращает (is_blocked, reason, remaining_seconds).
+        Гарантирует защиту от преждевременного переоткрытия позиций до начала новой пятиминутной свечи.
+        """
+        now_ts = time.time()
+        sym_upper = symbol.upper()
+
+        if getattr(bot_core, 'is_paused', False) is True:
+            return True, "Bot is paused", 0.0
+
+        if sym_upper in getattr(bot_core, "_closing_symbols", set()):
+            return True, "Symbol is in closing sequence", 0.0
+
+        sym_blocked = 0.0
+        s_blocked_dict = getattr(bot_core, 'symbol_blocked_until', None)
+        if isinstance(s_blocked_dict, dict):
+            sym_blocked = s_blocked_dict.get(sym_upper, 0.0)
+
+        strat_blocked = 0.0
+        if not strategy_id and hasattr(bot_core, 'strategy_registry'):
+            try:
+                s_obj = bot_core.strategy_registry.get_strategy_for_symbol(symbol) if hasattr(bot_core.strategy_registry, "get_strategy_for_symbol") else None
+                if s_obj and hasattr(s_obj, "strategy_id"):
+                    strategy_id = s_obj.strategy_id
+            except Exception:
+                strategy_id = None
+        st_blocked_dict = getattr(bot_core, 'strategy_blocked_until', None)
+        if strategy_id and isinstance(st_blocked_dict, dict):
+            strat_blocked = st_blocked_dict.get(strategy_id, 0.0)
+
+        global_blocked = getattr(bot_core, 'block_until_timestamp', 0.0)
+        if not isinstance(global_blocked, (int, float)):
+            global_blocked = 0.0
+        if not isinstance(sym_blocked, (int, float)):
+            sym_blocked = 0.0
+        if not isinstance(strat_blocked, (int, float)):
+            strat_blocked = 0.0
+
+        effective_until = max(global_blocked, sym_blocked, strat_blocked)
+
+        if effective_until > now_ts:
+            rem = effective_until - now_ts
+            return True, f"5m candle window cooldown active ({int(rem)}s remaining)", rem
+
+        if getattr(bot_core, 'entry_blocked', False) is True:
+            if global_blocked > 0 and now_ts >= global_blocked:
+                bot_core.entry_blocked = False
+            else:
+                return True, "Entry blocked flag is set", 0.0
+
+        return False, "", 0.0
+
+    def get_entry_block_reason(self, symbol: str, strategy_id: Optional[str] = None) -> tuple[bool, str, float]:
+        return BotCore.check_entry_block(self, symbol, strategy_id)
+
     async def _process_signal(self, symbol: str, side: str, side_cfg: dict, current_price: float, concurrent_mode: bool = False):
         """Обработка сигнала входа для символа и стороны."""
         sym_upper = symbol.upper()
 
-        if getattr(self, 'is_paused', False) is True:
-            logger.warning(f"[{symbol}] {side}: Entry aborted — Bot is paused.")
-            return
-
-        if getattr(self, 'entry_blocked', False) is True:
-            logger.warning(f"[{symbol}] {side}: Entry aborted — Close All block is currently active.")
-            return
-
-        if sym_upper in getattr(self, "_closing_symbols", set()):
-            logger.warning(f"[{symbol}] {side}: Entry aborted — symbol is currently in closing sequence.")
-            return
-
-        block_ts = getattr(self, 'block_until_timestamp', 0)
-        if isinstance(block_ts, (int, float)) and block_ts > time.time():
-            logger.warning(f"[{symbol}] {side}: Entry aborted — Close All cooldown is currently active.")
+        is_blocked, reason, _ = BotCore.check_entry_block(self, symbol)
+        if is_blocked:
+            logger.warning(f"[{symbol}] {side}: Entry aborted — {reason}.")
             return
 
         if hasattr(self, "radar_navigator") and self.radar_navigator:
@@ -504,7 +579,14 @@ class BotCore:
         try:
             logger.info(f"[{symbol}] Signal triggered for {side}.")
 
-            strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+            strat = None
+            if hasattr(self, "strategy_registry"):
+                try:
+                    strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+                except Exception:
+                    active = getattr(self.strategy_registry, "active_strategies", {})
+                    if active and isinstance(active, dict):
+                        strat = next(iter(active.values()), None)
 
             # Актуализация закрытий стороны в пределах окна (по умолчанию 300с)
             now = time.time()
@@ -554,7 +636,13 @@ class BotCore:
 
             # 1.5. Открытие позиции по маркету
             base_invest = float(side_cfg["invest_size"])
-            strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+            if not strat and hasattr(self, "strategy_registry"):
+                try:
+                    strat = self.strategy_registry.get_strategy_for_symbol(symbol)
+                except Exception:
+                    active = getattr(self.strategy_registry, "active_strategies", {})
+                    if active and isinstance(active, dict):
+                        strat = next(iter(active.values()), None)
             if strat and getattr(strat, "trend_size_cfg", {}).get("enabled"):
                 from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
                 eff = await TrendSizeDepender.get_effective_invest_size(
@@ -642,19 +730,9 @@ class BotCore:
             sym_lock = BotCore._get_symbol_lock(self, symbol)
             async with sym_lock:
                 # Защита от race condition: проверка непосредственно перед отправкой рыночного ордера
-                if (
-                    getattr(self, 'is_paused', False) is True 
-                    or getattr(self, 'entry_blocked', False) is True
-                    or sym_upper in getattr(self, "_closing_symbols", set())
-                    or getattr(state, "is_closing", False) is True
-                ):
-                    logger.warning(f"[{symbol}] {side}: Entry aborted right before market order — bot paused/entry blocked/is closing.")
-                    state.in_position_papper = False
-                    return
-
-                block_ts = getattr(self, 'block_until_timestamp', 0)
-                if isinstance(block_ts, (int, float)) and block_ts > time.time():
-                    logger.warning(f"[{symbol}] {side}: Entry aborted right before market order — Close All cooldown is active.")
+                is_blocked, reason, _ = BotCore.check_entry_block(self, symbol)
+                if is_blocked or getattr(state, "is_closing", False) is True:
+                    logger.warning(f"[{symbol}] {side}: Entry aborted right before market order — {reason or 'state is closing'}.")
                     state.in_position_papper = False
                     return
 
@@ -883,23 +961,24 @@ class BotCore:
                         logger.info(f"[{symbol}] {strat_tag}{side} Smart Grace Window changed: {state.last_grace_period}s -> {current_grace}s (Recent closes: {closed_count})")
                     state.last_grace_period = current_grace
 
-                if is_signal and not BLOCK_ENTRY and getattr(self, 'entry_blocked', False) is not True and not getattr(self, 'is_paused', False) and symbol not in getattr(self, "_closing_symbols", set()) and getattr(state, "is_closing", False) is not True:
-                    block_ts = getattr(self, 'block_until_timestamp', 0)
+                # Идемпотентная защита от дергания до нового окна пятиминутки
+                is_blocked, reason, rem = BotCore.check_entry_block(self, symbol, strat.strategy_id if strat else None)
+                if is_blocked:
+                    if not hasattr(self, '_last_blocked_log'):
+                        self._last_blocked_log = {}
+                    last_log = self._last_blocked_log.get(symbol, {}).get(side, 0.0)
                     now_ts = time.time()
-                    if isinstance(block_ts, (int, float)) and block_ts > now_ts:
-                        if not hasattr(self, '_last_blocked_log'):
-                            self._last_blocked_log = {}
-                        last_log = self._last_blocked_log.get(symbol, {}).get(side, 0.0)
-                        if now_ts - last_log >= 30.0:
-                            self._last_blocked_log.setdefault(symbol, {})[side] = now_ts
-                            rem_s = int(block_ts - now_ts)
-                            logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked due to Close All cooldown ({rem_s}s remaining).")
-                    else:
-                        strat_tag = f"[{strat.strategy_id}] " if strat else ""
-                        logger.info(f"[{symbol}] {strat_tag}{side}: Signal is TRUE! Entering position...")
-                        # Ставим временный флаг идемпотентности
-                        state.in_position_papper = True
-                        signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
+                    if now_ts - last_log >= 30.0:
+                        self._last_blocked_log.setdefault(symbol, {})[side] = now_ts
+                        logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked: {reason}.")
+                    continue
+
+                if is_signal and not BLOCK_ENTRY and not getattr(self, 'is_paused', False) and getattr(state, "is_closing", False) is not True:
+                    strat_tag = f"[{strat.strategy_id}] " if strat else ""
+                    logger.info(f"[{symbol}] {strat_tag}{side}: Signal is TRUE! Entering position...")
+                    # Ставим временный флаг идемпотентности
+                    state.in_position_papper = True
+                    signal_tasks.append(self._process_signal(symbol, side, side_cfg, current_price, concurrent_mode=is_concurrent))
             
             else:
                 # Позиция уже открыта (или в процессе in_position_papper)
@@ -1266,13 +1345,49 @@ class BotCore:
                             if s_side in self.fsm_states[sym]:
                                 self.fsm_states[sym][s_side].recent_closes = []
 
-        # Кулдаун авто-закрытия
+        # Кулдаун авто-закрытия и блокировка входов до открытия новой 5-минутной свечи
+        now = time.time()
+        raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
+        cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+
+        if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
+            self.symbol_blocked_until = {}
+        if not isinstance(getattr(self, "strategy_blocked_until", None), dict):
+            self.strategy_blocked_until = {}
+
+        prev_strat_block = self.strategy_blocked_until.get(strategy_id, 0.0)
+        if not isinstance(prev_strat_block, (int, float)):
+            prev_strat_block = 0.0
+        self.strategy_blocked_until[strategy_id] = max(prev_strat_block, cooldown_until)
+
+        if strat_cfg and hasattr(strat_cfg, "symbols") and isinstance(strat_cfg.symbols, (list, set, tuple)):
+            for sym in strat_cfg.symbols:
+                prev_sym_block = self.symbol_blocked_until.get(sym.upper(), 0.0)
+                if not isinstance(prev_sym_block, (int, float)):
+                    prev_sym_block = 0.0
+                self.symbol_blocked_until[sym.upper()] = max(prev_sym_block, cooldown_until)
+
+        all_active_syms = set()
+        if hasattr(self, "strategy_registry") and hasattr(self.strategy_registry, "get_all_active_symbols"):
+            try:
+                all_active_syms = {s.upper() for s in self.strategy_registry.get_all_active_symbols()}
+            except Exception:
+                all_active_syms = set()
+        strat_syms = {s.upper() for s in strat_cfg.symbols} if (strat_cfg and hasattr(strat_cfg, "symbols") and isinstance(strat_cfg.symbols, (list, set, tuple))) else set()
+        if not all_active_syms or strat_syms >= all_active_syms:
+            curr_block = getattr(self, 'block_until_timestamp', 0.0)
+            if not isinstance(curr_block, (int, float)):
+                curr_block = 0.0
+            self.block_until_timestamp = max(curr_block, cooldown_until)
+            self.entry_blocked = True
+
         if hasattr(self, "auto_closer") and self.auto_closer:
             self.auto_closer._last_close_ts[strategy_id] = time.time()
 
+        rem_s = int(cooldown_until - now)
         logger.info(
             f"[{strategy_id}] Manual iteration reset: Cycle #{cur_iter_idx} -> #{next_iter_idx}. "
-            f"Base Net: {new_iter_start_net:+.2f} USDT, Iter Net reset to 0.0."
+            f"Base Net: {new_iter_start_net:+.2f} USDT. Idempotent cooldown locked until {cooldown_until} ({rem_s}s until next 5m window)."
         )
 
         return {
@@ -1308,10 +1423,33 @@ class BotCore:
                                 self.fsm_states[sym][s_side].is_closing = True
 
             now = time.time()
-            interval = getattr(self.time_control, "interval_seconds", 300)
+            raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
+            cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+
+            curr_block = getattr(self, 'block_until_timestamp', 0.0)
+            if not isinstance(curr_block, (int, float)):
+                curr_block = 0.0
             self.entry_blocked = True
-            self.block_until_timestamp = max(getattr(self, 'block_until_timestamp', 0), ((now // interval) + 1) * interval + 60.0, now + interval)
-            logger.warning(f"🛑 [CLOSE_ALL] Entry block activated until timestamp {self.block_until_timestamp} for symbols: {symbols}")
+            self.block_until_timestamp = max(curr_block, cooldown_until)
+
+            if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
+                self.symbol_blocked_until = {}
+            if not isinstance(getattr(self, "strategy_blocked_until", None), dict):
+                self.strategy_blocked_until = {}
+            for sym in symbols_set:
+                prev_sym_block = self.symbol_blocked_until.get(sym, 0.0)
+                if not isinstance(prev_sym_block, (int, float)):
+                    prev_sym_block = 0.0
+                self.symbol_blocked_until[sym] = max(prev_sym_block, cooldown_until)
+            if hasattr(self, "strategy_registry") and hasattr(self.strategy_registry, "active_strategies") and isinstance(self.strategy_registry.active_strategies, dict):
+                for sid in self.strategy_registry.active_strategies.keys():
+                    prev_strat_block = self.strategy_blocked_until.get(sid, 0.0)
+                    if not isinstance(prev_strat_block, (int, float)):
+                        prev_strat_block = 0.0
+                    self.strategy_blocked_until[sid] = max(prev_strat_block, cooldown_until)
+
+            rem_s = int(cooldown_until - now)
+            logger.warning(f"🛑 [CLOSE_ALL] Idempotent entry cooldown activated until timestamp {cooldown_until} (next 5m window, {rem_s}s) for symbols: {symbols}")
 
             try:
                 # 2. Помонетная отмена ордеров и закрытие позиций строго по обойме
@@ -1383,7 +1521,7 @@ class BotCore:
                                         self.avg_manager.reset(sym, s_side)
             finally:
                 self._closing_symbols.difference_update(symbols_set)
-                if not getattr(self, "is_paused", False):
+                if not getattr(self, "is_paused", False) and time.time() >= getattr(self, "block_until_timestamp", 0.0):
                     self.entry_blocked = False
 
         # 3. Синхронизация итераций и лидерборда
@@ -1464,6 +1602,45 @@ class BotCore:
 
         symbols_set = {s.upper() for s in strat.symbols}
         logger.info(f"[{strategy_id}] Closing positions and orders for strategy symbols: {symbols_set}")
+
+        now = time.time()
+        raw_int = getattr(getattr(self, "time_control", None), "interval_seconds", 300)
+        cooldown_until = BotCore.calc_5m_window_cooldown(now, raw_int)
+
+        if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
+            self.symbol_blocked_until = {}
+        if not isinstance(getattr(self, "strategy_blocked_until", None), dict):
+            self.strategy_blocked_until = {}
+
+        prev_strat_block = self.strategy_blocked_until.get(strategy_id, 0.0)
+        if not isinstance(prev_strat_block, (int, float)):
+            prev_strat_block = 0.0
+        self.strategy_blocked_until[strategy_id] = max(prev_strat_block, cooldown_until)
+        for sym in symbols_set:
+            prev_sym_block = self.symbol_blocked_until.get(sym, 0.0)
+            if not isinstance(prev_sym_block, (int, float)):
+                prev_sym_block = 0.0
+            self.symbol_blocked_until[sym] = max(prev_sym_block, cooldown_until)
+
+        # Если это единственная активная стратегия или она покрывает весь боевой пул, ставим и глобальный блок
+        all_active_syms = set()
+        if hasattr(self, "strategy_registry") and hasattr(self.strategy_registry, "get_all_active_symbols"):
+            try:
+                all_active_syms = {s.upper() for s in self.strategy_registry.get_all_active_symbols()}
+            except Exception:
+                all_active_syms = set()
+        if not all_active_syms or symbols_set >= all_active_syms:
+            curr_block = getattr(self, 'block_until_timestamp', 0.0)
+            if not isinstance(curr_block, (int, float)):
+                curr_block = 0.0
+            self.block_until_timestamp = max(curr_block, cooldown_until)
+            self.entry_blocked = True
+
+        rem_s = int(cooldown_until - now)
+        logger.warning(
+            f"🛑 [{strategy_id}] Idempotent entry cooldown activated until timestamp {cooldown_until} "
+            f"(next 5m candle window, {rem_s}s) for symbols: {symbols_set}"
+        )
 
         async with self._close_lock:
             self._closing_strategies.add(strategy_id)

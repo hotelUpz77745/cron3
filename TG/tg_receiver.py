@@ -926,8 +926,10 @@ class TelegramReceiver:
             if target == "all":
                 msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=self._get_main_keyboard())
                 try:
-                    reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
-                    lines = ["✅ <b>Все купола закрыты, лимитные ордера отменены!</b>"]
+                    lines = [
+                        "✅ <b>Все купола закрыты, лимитные ордера отменены!</b>",
+                        "🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой 5-минутной свечи (защита от дергания)."
+                    ]
                     if reset_report:
                         lines.append("\n🔄 <b>Сброс циклов куполов (Positive Auto-Closing):</b>")
                         for strat_id, info in reset_report.items():
@@ -953,6 +955,7 @@ class TelegramReceiver:
                         f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
                         f"Позиции монет закрыты по рынку, ордера отменены.",
                         f"🔄 Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)",
+                        f"🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой 5-минутной свечи (защита от дергания).",
                         "\n📊 Лидерборд и аналитика обновлены."
                     ]
                     await msg.edit_text("\n".join(lines), parse_mode="HTML")

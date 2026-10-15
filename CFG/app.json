@@ -11,7 +11,7 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": true
+        "auto_start": false
     },
     "paths": {
         "shared_api_dir": "../API",
@@ -34,8 +34,8 @@
     "_avg_free_volume_behavior_doc": "Available avg_free_volume_behavior modes: 1) 'distribute_remaining' (равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки); 2) 'accumulate_current' (объем пропущенных уровней суммируется и переносится в текущее сработавшее колено, пропущенные помечаются исполненными); 3) 'mark_executed' (сжигание объема: пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится).",
     "active_strategies": {
         "u16_chita__classic": {
-            "_comment_alias": "🐆 U16: Chita v3.0 [Auto-EMA 1d | Дискретный 0.50/0.75] (7-Lvl Fibonacci Heavy Artillery + Half-Peel 50% + Mark Executed) [CLASSIC]",
-            "template": "u16_chita_v31",
+            "_comment_alias": "🐆 U16: Chita v3.3 [Hybrid Apex | Golden Mean TP 1.0-1.2% | Balanced Stepping | Defense Cross-Recycling 97% + Half-Peel 50%] [CLASSIC]",
+            "template": "u16_chita_v33",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",

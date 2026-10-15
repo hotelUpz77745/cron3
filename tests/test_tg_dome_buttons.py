@@ -67,9 +67,10 @@ class TestTGDomeButtons(unittest.TestCase):
         self.assertIn(f"add_pick_strat_{symbol}_{first_sid}", callbacks)
 
 
-    def test_close_strategy_positions_no_entry_block(self):
-        """Проверяет, что закрытие позиций стратегии НЕ активирует глобальный entry block."""
+    def test_close_strategy_positions_idempotent_cooldown(self):
+        """Проверяет, что закрытие позиций стратегии активирует идемпотентный кулдаун до нового окна пятиминутки."""
         import asyncio
+        import time
         from CORE.bot import BotCore
 
         mock_bot = MagicMock()
@@ -80,6 +81,10 @@ class TestTGDomeButtons(unittest.TestCase):
         mock_bot.fsm_states = {}
         mock_bot.entry_blocked = False
         mock_bot.block_until_timestamp = 0
+        mock_bot.symbol_blocked_until = {}
+        mock_bot.strategy_blocked_until = {}
+        mock_bot.time_control = MagicMock()
+        mock_bot.time_control.interval_seconds = 300
         mock_bot.client = MagicMock()
         mock_bot.client.cancel_all_orders = AsyncMock()
         mock_bot.client.fetch_positions = AsyncMock(return_value=[])
@@ -88,9 +93,12 @@ class TestTGDomeButtons(unittest.TestCase):
         active_sid = list(self.registry.active_strategies.keys())[0]
         asyncio.run(BotCore.close_strategy_positions(mock_bot, active_sid))
 
-        # Блокировка входов НЕ должна быть активирована
-        self.assertFalse(mock_bot.entry_blocked)
-        self.assertEqual(mock_bot.block_until_timestamp, 0)
+        # Идемпотентный кулдаун ДОЛЖЕН быть активирован для стратегии и ее монет
+        now = time.time()
+        self.assertGreater(mock_bot.strategy_blocked_until.get(active_sid, 0), now)
+        strat = self.registry.get_strategy(active_sid)
+        for sym in strat.symbols:
+            self.assertGreater(mock_bot.symbol_blocked_until.get(sym.upper(), 0), now)
 
     def test_close_all_confirm_state_exists(self):
         """Проверяет наличие стейта ожидания подтверждения закрытия."""
