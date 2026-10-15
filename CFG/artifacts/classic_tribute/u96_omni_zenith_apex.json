@@ -53,7 +53,7 @@
     "mode": "static"
   },
   "LONG": {
-    "invest_size": 400.0,
+    "invest_size": 151.0,
     "grid": {
       "0": {
         "indent": 0.0,
@@ -161,5 +161,6 @@
   "SHORT": {
     "enabled": true,
     "_inheritance_base_side": true
-  }
+  },
+  "start_balance_usdt": 449.0
 }

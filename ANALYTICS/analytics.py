@@ -1346,9 +1346,9 @@ class AnalyticsManager:
             data["peak_balance_usdt"] = round(peak, 4)
             data["_current_trough_usdt"] = round(trough, 4)
             data["min_balance_usdt"] = round(min_bal, 4)
-                
-            max_drawdown = trough - peak
-            data["max_drawdown_usdt"] = round(min(data.get("max_drawdown_usdt", 0.0), max_drawdown), 4)
+            # Кумулятивная просадка по Net Profit глобального портфеля
+            max_drawdown = min(0.0, round(min_bal - initial, 4))
+            data["max_drawdown_usdt"] = round(max_drawdown, 4)
             
             max_perf = peak - initial
             data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)
@@ -1706,9 +1706,11 @@ class AnalyticsManager:
             if cur_peak > hist_peak:
                 hist_peak = cur_peak
                 hist_peak_ts = strat_data.get("peak_net_ts", now_ms)
-            cur_max_dd = strat_data.get("max_drawdown_usdt", 0.0)
-            if cur_max_dd < hist_max_dd:
-                hist_max_dd = cur_max_dd
+            # Кумулятивная просадка по чистому Net Profit (только когда баланс уходит в минус относительно старта)
+            net_dd = min(0.0, round(s_min - s_init, 4))
+            hist_max_dd = net_dd
+            calc_dd = net_dd
+            strat_data["max_drawdown_usdt"] = calc_dd
 
             # Сохраняем состояние итерации и исторические рекорды в кеш
             self._save_iteration_cache(strat_id, {
@@ -1725,10 +1727,6 @@ class AnalyticsManager:
                 "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
             })
 
-            s_dd = s_trough - s_peak
-            calc_dd = min(float(strat_data.get("max_drawdown_usdt", 0.0)), s_dd)
-            if hist_max_dd < 0:
-                calc_dd = min(calc_dd, hist_max_dd)
             strat_data["max_drawdown_usdt"] = round(calc_dd, 4)
 
             if s_init > 0:
