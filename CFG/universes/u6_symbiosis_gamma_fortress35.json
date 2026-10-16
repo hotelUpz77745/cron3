@@ -1,142 +1,269 @@
 {
-  "name": "👑 Медный Змей (Gamma Fortress 35)",
-  "description": "Канонический Монарх Капитала. Первый вход на -3.5%, 9-уровневая сетка Фибоначчи строго до -89.0%, Panic Damper TP (2.2% -> 0.65%), максимальный денежный поток в режиме [OFF] (руками не лапать). Альтернативные режимы: __classic, __fixed, __toxic.",
-  "leverage": 20,
-  "tp_purpose": "self",
-  "signal_heartbeat_tfr": "5m",
-  "super_grid": {
-    "enabled": false
-  },
-  "smart_grace": {
-    "start_period_sec": 57,
-    "shift_interval_sec": 13,
-    "eval_window_sec": 300,
-    "increments_card": {
-      "==1": 30,
-      "==2": 90,
-      "==3": 140,
-      ">=4": 170
-    }
-  },
-  "smart_size": {
-    "eval_window_sec": 300,
-    "profiting_size_weights": {
-      "<2": 1.0,
-      "==2": 1.15,
-      "==3": 0.85,
-      ">=4": 0.6
+    "name": "👑 Медный Змей (Gamma Fortress 35)",
+    "description": "Канонический Монарх Капитала. Первый вход на -3.5%, 9-уровневая сетка Фибоначчи строго до -89.0%, Panic Damper TP (2.2% -> 0.65%), максимальный денежный поток в режиме [OFF] (руками не лапать). Альтернативные режимы: __classic, __fixed, __toxic.",
+    "leverage": 20,
+    "tp_purpose": "self",
+    "signal_heartbeat_tfr": "5m",
+    "super_grid": {
+        "enabled": false
     },
-    "knife_blocker_enabled": true,
-    "knife_blocker_threshold": 1
-  },
-  "LONG": {
-    "invest_size": 600.0,
-    "grid": {
-      "0": {
-        "indent": 0.0,
-        "volume": 7.36,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "1": {
-        "indent": -3.5,
-        "volume": 8.1,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "2": {
-        "indent": -5.5,
-        "volume": 8.91,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "3": {
-        "indent": -8.0,
-        "volume": 9.8,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "4": {
-        "indent": -13.0,
-        "volume": 10.78,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "5": {
-        "indent": -21.0,
-        "volume": 11.86,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "6": {
-        "indent": -34.0,
-        "volume": 13.05,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "7": {
-        "indent": -55.0,
-        "volume": 14.35,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      },
-      "8": {
-        "indent": -89.0,
-        "volume": 15.79,
-        "super_indent": null,
-        "activated_at": null,
-        "timestamp": null
-      }
+    "smart_grace": {
+        "start_period_sec": 57,
+        "shift_interval_sec": 13,
+        "eval_window_sec": 300,
+        "increments_card": {
+            "==1": 30,
+            "==2": 90,
+            "==3": 140,
+            ">=4": 170
+        }
     },
-    "tp_map": {
-      "0": {
-        "indent": 2.2,
-        "fallback_indent": 3.0
-      },
-      "1": {
-        "indent": 1.6,
-        "fallback_indent": 2.4
-      },
-      "2": {
-        "indent": 1.2,
-        "fallback_indent": 1.9
-      },
-      "3": {
-        "indent": 1.0,
-        "fallback_indent": 1.6
-      },
-      "4": {
-        "indent": 0.8,
-        "fallback_indent": 1.3
-      },
-      "5": {
-        "indent": 0.65,
-        "fallback_indent": 1.1
-      },
-      "6": {
-        "indent": 0.65,
-        "fallback_indent": 1.05
-      },
-      "7": {
-        "indent": 0.65,
-        "fallback_indent": 1.0
-      },
-      "8": {
-        "indent": 0.65,
-        "fallback_indent": 0.95
-      }
+    "smart_size": {
+        "eval_window_sec": 300,
+        "profiting_size_weights": {
+            "<2": 1.0,
+            "==2": 1.15,
+            "==3": 0.85,
+            ">=4": 0.6
+        },
+        "knife_blocker_enabled": true,
+        "knife_blocker_threshold": 1
+    },
+    "LONG": {
+        "invest_size": 600.0,
+        "grid": {
+            "0": {
+                "role": "L0: Grid Step 0",
+                "enabled": true,
+                "indent": 0.0,
+                "activation": null,
+                "volume": 7.36,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "1": {
+                "role": "L1: Grid Step 1",
+                "enabled": true,
+                "indent": -3.5,
+                "activation": null,
+                "volume": 8.1,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "2": {
+                "role": "L2: Grid Step 2",
+                "enabled": true,
+                "indent": -5.5,
+                "activation": null,
+                "volume": 8.91,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "3": {
+                "role": "L3: Grid Step 3",
+                "enabled": true,
+                "indent": -8.0,
+                "activation": null,
+                "volume": 9.8,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "4": {
+                "role": "L4: Grid Step 4",
+                "enabled": true,
+                "indent": -13.0,
+                "activation": null,
+                "volume": 10.78,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "5": {
+                "role": "L5: Grid Step 5",
+                "enabled": true,
+                "indent": -21.0,
+                "activation": null,
+                "volume": 11.86,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "6": {
+                "role": "L6: Grid Step 6",
+                "enabled": true,
+                "indent": -34.0,
+                "activation": null,
+                "volume": 13.05,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "7": {
+                "role": "L7: Grid Step 7",
+                "enabled": true,
+                "indent": -55.0,
+                "activation": null,
+                "volume": 14.35,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            },
+            "8": {
+                "role": "L8: Grid Step 8",
+                "enabled": true,
+                "indent": -89.0,
+                "activation": null,
+                "volume": 15.79,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": null
+            }
+        },
+        "tp_map": {
+            "0": {
+                "indent": 2.2,
+                "fallback_indent": 3.0,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "1": {
+                "indent": 1.6,
+                "fallback_indent": 2.4,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "2": {
+                "indent": 1.2,
+                "fallback_indent": 1.9,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "3": {
+                "indent": 1.0,
+                "fallback_indent": 1.6,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "4": {
+                "indent": 0.8,
+                "fallback_indent": 1.3,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "5": {
+                "indent": 0.65,
+                "fallback_indent": 1.1,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "6": {
+                "indent": 0.65,
+                "fallback_indent": 1.05,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "7": {
+                "indent": 0.65,
+                "fallback_indent": 1.0,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "8": {
+                "indent": 0.65,
+                "fallback_indent": 0.95,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            }
+        }
+    },
+    "SHORT": {
+        "enabled": true,
+        "_inheritance_base_side": true
+    },
+    "cross_side_recycling": {
+        "enabled": false,
+        "recycle_ratio_tiers": {
+            "2-4": 0.0,
+            ">=5": 0.0
+        },
+        "_desc_recycle_ratio_tiers": "Дискретная карта сжигания токсина отключена (enabled: false).",
+        "min_drawdown_pct": 3.0,
+        "max_slice_pct": 35.0
     }
-  },
-  "SHORT": {
-    "enabled": true,
-    "_inheritance_base_side": true
-  }
 }

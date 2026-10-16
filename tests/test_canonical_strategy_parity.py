@@ -115,17 +115,15 @@ class TestCanonicalStrategyParity(unittest.TestCase):
         self.assertEqual(float(l3_long["peel_tp_pct"]), 1.20)
         self.assertEqual(int(l3_long["peel_num"]), 1)
 
-    def test_base_and_common_template_alias_identity(self):
-        """Проверяет, что шаблоны _common и _base разрешаются идентично в каноническом процессоре."""
-        common_cfg = CanonicalStrategyProcessor.resolve_universe("_common")
+    def test_base_template_canonical_resolution(self):
+        """Проверяет, что базовый шаблон _base.json корректно разрешается в каноническом процессоре."""
         base_cfg = CanonicalStrategyProcessor.resolve_universe("_base")
-        self.assertEqual(common_cfg["invest_size"], base_cfg["invest_size"])
-        self.assertEqual(common_cfg["leverage"], base_cfg["leverage"])
-        self.assertEqual(common_cfg["min_tp_indent"], base_cfg["min_tp_indent"])
-        self.assertEqual(common_cfg["cross_side_recycling"], base_cfg["cross_side_recycling"])
-        self.assertEqual(common_cfg["first_order_weight_regime"], base_cfg["first_order_weight_regime"])
-        self.assertEqual(common_cfg["grid_long"], base_cfg["grid_long"])
-        self.assertEqual(common_cfg["grid_short"], base_cfg["grid_short"])
+        self.assertEqual(base_cfg["invest_size"], 400.0)
+        self.assertEqual(base_cfg["leverage"], 20)
+        self.assertEqual(base_cfg["min_tp_indent"], 0.50)
+        self.assertEqual(base_cfg["avg_free_volume_behavior"], "mark_executed")
+        self.assertIn("0", base_cfg["grid_long"])
+        self.assertIn("0", base_cfg["tp_map_long"])
 
     def test_paper_bridge_parity(self):
         """Проверяет паритет через модуль-мост бумажного полигона."""

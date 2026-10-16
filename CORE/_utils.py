@@ -160,6 +160,53 @@ class TakeProfitConfigResolver:
        }
     """
     @staticmethod
+    def get_nearest_level_key(target_level: Union[int, str], tp_map: Dict[str, Any]) -> str:
+        """
+        Возвращает точный ключ уровня из tp_map либо ближайший доступный числовой уровень.
+        Если сетка глубже тейк-карты (или запрошен отсутствующий шаг),
+        выбирается ключ с минимальной дистанцией |k - target|.
+        """
+        if not tp_map or not isinstance(tp_map, dict):
+            return "0"
+        s_key = str(target_level)
+        if s_key in tp_map:
+            return s_key
+        numeric_keys = [int(k) for k in tp_map.keys() if str(k).isdigit()]
+        if not numeric_keys:
+            sorted_keys = sorted(tp_map.keys())
+            return sorted_keys[-1] if sorted_keys else "0"
+        target_int = int(target_level) if str(target_level).isdigit() else 0
+        nearest = min(numeric_keys, key=lambda k: abs(k - target_int))
+        return str(nearest)
+
+    @classmethod
+    def get_resolved_level(
+        cls,
+        tp_map: Dict[str, Any],
+        target_level: Union[int, str],
+        min_tp_indent: Optional[float] = None
+    ) -> dict:
+        """
+        Находит точный или ближайший доступный уровень в tp_map,
+        разрешает его поля и применяет системный (или стратежный) пол тейка.
+        """
+        nearest_key = cls.get_nearest_level_key(target_level, tp_map)
+        lvl_cfg = tp_map.get(nearest_key, {})
+        resolved = cls.resolve_level(lvl_cfg)
+        
+        # Системное правило: минимальный тейк не менее 0.50% (или min_tp_indent стратегии)
+        floor = 0.50
+        if min_tp_indent is not None:
+            floor = max(0.50, float(min_tp_indent))
+            
+        if resolved.get("indent") is not None:
+            resolved["indent"] = max(floor, float(resolved["indent"]))
+        if resolved.get("fallback_indent") is not None:
+            resolved["fallback_indent"] = max(floor, float(resolved["fallback_indent"]))
+        resolved["level_key"] = nearest_key
+        return resolved
+
+    @staticmethod
     def resolve_level(lvl_cfg: dict) -> dict:
         if not isinstance(lvl_cfg, dict):
             return {
@@ -174,7 +221,7 @@ class TakeProfitConfigResolver:
                 "raw": {},
             }
 
-        # Если задана новая сигнатура usual_ / atr_
+        # Если задана устаревшая сигнатура usual_ / atr_
         if "usual_" in lvl_cfg or "atr_" in lvl_cfg:
             atr_block = lvl_cfg.get("atr_") if isinstance(lvl_cfg.get("atr_"), dict) else {}
             usual_block = lvl_cfg.get("usual_") if isinstance(lvl_cfg.get("usual_"), dict) else {}
@@ -219,15 +266,16 @@ class TakeProfitConfigResolver:
                     "raw": lvl_cfg,
                 }
 
-        # Классическая плоская сигнатура
+        # Каноническая плоская сигнатура
+        is_atr_flag = bool(lvl_cfg.get("is_atr")) or (lvl_cfg.get("atr_mult") is not None)
         return {
-            "is_atr": bool(lvl_cfg.get("atr_mult") is not None),
+            "is_atr": is_atr_flag,
             "atr_mult": lvl_cfg.get("atr_mult"),
             "indent": lvl_cfg.get("indent"),
             "fallback_indent": lvl_cfg.get("fallback_indent"),
             "activation": lvl_cfg.get("activation"),
-            "min_floor": lvl_cfg.get("min_guaranteed_floor_pct"),
-            "max_ceil": lvl_cfg.get("max_ceiling_pct"),
+            "min_floor": lvl_cfg.get("min_floor", lvl_cfg.get("min_guaranteed_floor_pct")),
+            "max_ceil": lvl_cfg.get("max_ceil", lvl_cfg.get("max_ceiling_pct")),
             "fallback_atr_pct": lvl_cfg.get("fallback_atr_pct"),
             "raw": lvl_cfg,
         }

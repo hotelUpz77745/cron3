@@ -45,13 +45,9 @@ class TakeProfitManager:
         else:
             active_level_str = level_self
 
-        tp_map = state.tp_map
-        if active_level_str not in tp_map and tp_map:
-            sorted_keys = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
-            if sorted_keys:
-                active_level_str = sorted_keys[-1]
-
-        current_tp = tp_map.get(active_level_str)
+        from CORE._utils import TakeProfitConfigResolver
+        active_level_str = TakeProfitConfigResolver.get_nearest_level_key(active_level_str, state.tp_map)
+        current_tp = state.tp_map.get(active_level_str)
         if not current_tp:
             logger.error(f"[{symbol}] {side} Missing TP config for level {active_level_str} (purpose: {state.tp_purpose})")
             return False

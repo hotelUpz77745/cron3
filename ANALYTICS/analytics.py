@@ -1070,22 +1070,28 @@ class AnalyticsManager:
                 
             bot_unrealized = 0.0
             
-            # Load tracked symbols from app.json (not just per_coin keys)
-            # This ensures unrealized PnL is tracked even before any trades close.
-            try:
-                with open("CFG/app.json", "r", encoding="utf-8") as _f:
-                    _app = json.load(_f)
-                    _active_strats = _app.get("active_strategies", {})
-                    if _active_strats:
-                        config_symbols = []
-                        for _sdata in _active_strats.values():
-                            if _sdata.get("enabled", False):
-                                config_symbols.extend(_sdata.get("symbols", []))
-                    else:
-                        _syms = _app.get("symbols", {})
-                        config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
-            except Exception:
-                config_symbols = []
+            config_symbols = []
+            if self.strategy_registry and hasattr(self.strategy_registry, "get_all_active_symbols"):
+                try:
+                    config_symbols = list(self.strategy_registry.get_all_active_symbols())
+                except Exception:
+                    config_symbols = []
+
+            if not config_symbols:
+                try:
+                    with open("CFG/app.json", "r", encoding="utf-8") as _f:
+                        _app = json.load(_f)
+                        _active_strats = _app.get("active_strategies", {})
+                        if _active_strats:
+                            config_symbols = []
+                            for _sdata in _active_strats.values():
+                                if _sdata.get("enabled", False):
+                                    config_symbols.extend(_sdata.get("symbols", []))
+                        else:
+                            _syms = _app.get("symbols", {})
+                            config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)
+                except Exception:
+                    config_symbols = []
                 
             if not config_symbols:
                 config_symbols = list(data.get("per_coin", {}).keys())

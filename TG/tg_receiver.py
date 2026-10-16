@@ -205,6 +205,11 @@ class TelegramReceiver:
                         break
 
         jf = univ_dir / f"{pure_id}.json"
+        if not jf.exists():
+            art_jf = DATA_DIR / "artifacts" / "classic_tribute" / f"{pure_id}.json"
+            if art_jf.exists():
+                jf = art_jf
+
         if jf.exists():
             u_meta = Utils.read_json_file(jf)
         else:
@@ -3536,17 +3541,6 @@ class TelegramReceiver:
                 new_base = json.loads(json_str)
                 
                 # Валидация шаблона
-                for side in ("LONG", "SHORT"):
-                    if side in new_base:
-                        tp_purpose = new_base[side].get("tp_purpose", "self")
-                        strat_id = str(new_base[side].get("strategy_id", ""))
-                        grid = new_base[side].get("grid", {})
-                        tp_map = new_base[side].get("tp_map", {})
-                        is_u10 = strat_id.startswith("u10")
-                        if tp_purpose not in ("neutral", "self") and not is_u10 and grid and tp_map and len(grid) != len(tp_map):
-                            await message.answer(f"❌ ОШИБКА КОНФИГУРАЦИИ ({side}): Количество уровней grid ({len(grid)}) не совпадает с tp_map ({len(tp_map)}).\nШаблон НЕ сохранен!")
-                            return
-                            
                 Utils.write_json_file(self.template_manager.base_file, new_base)
                 await message.answer("✅ Базовый шаблон успешно обновлен!", reply_markup=self._get_set_coins_keyboard())
                 await state.clear()

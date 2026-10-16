@@ -14,7 +14,7 @@
         "auto_start": false
     },
     "paths": {
-        "shared_api_dir": "../API",
+        "shared_api_dir": "./API",
         "radar_dir": "../cron3PapperUniverses"
     },
     "streamer": {
@@ -30,7 +30,7 @@
         "log_to_console": true,
         "log_to_file": true
     },
-    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_common.json.",
+    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
     "_avg_free_volume_behavior_doc": "Available avg_free_volume_behavior modes: 1) 'distribute_remaining' (равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки); 2) 'accumulate_current' (объем пропущенных уровней суммируется и переносится в текущее сработавшее колено, пропущенные помечаются исполненными); 3) 'mark_executed' (сжигание объема: пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится).",
     "active_strategies": {
         "u16_chita__classic": {

@@ -141,11 +141,8 @@ class FallbackTpManager:
             else:
                 current_level = level_self
                 
-            if current_level not in tp_map and tp_map:
-                sorted_keys = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
-                if sorted_keys:
-                    current_level = sorted_keys[-1]
-
+            from CORE._utils import TakeProfitConfigResolver
+            current_level = TakeProfitConfigResolver.get_nearest_level_key(current_level, tp_map)
             if current_level not in tp_map:
                 return
                 

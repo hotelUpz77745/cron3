@@ -132,14 +132,9 @@ class BaseTrailingSystem:
         if tp_purpose == "neutral":
             levels_to_check = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
         else:
-            if active_grid_level in tp_map:
-                levels_to_check = [active_grid_level]
-            elif tp_map:
-                # Если усреднялка перевалила за последний уровень сетки, берем крайнее высшее значение тейка
-                sorted_keys = sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x)
-                levels_to_check = [sorted_keys[-1]]
-            else:
-                levels_to_check = []
+            from CORE._utils import TakeProfitConfigResolver
+            nearest_lvl = TakeProfitConfigResolver.get_nearest_level_key(active_grid_level, tp_map)
+            levels_to_check = [nearest_lvl] if nearest_lvl in tp_map else []
 
         for lvl_str in levels_to_check:
             lvl_cfg = tp_map.get(lvl_str)

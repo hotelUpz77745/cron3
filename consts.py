@@ -204,7 +204,8 @@ DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
     }
 }
 DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_sec", 57.0))
-DEFAULT_SHIFT_INTERVAL_SEC: int = int(DEFAULT_SMART_GRACE.get("shift_interval_sec", 13))
+_raw_shift = DEFAULT_SMART_GRACE.get("shift_interval_sec", 13)
+DEFAULT_SHIFT_INTERVAL_SEC: int = int(_raw_shift[0] if isinstance(_raw_shift, (list, tuple)) else _raw_shift)
 DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
     "eval_window_sec": 300,
     "knife_blocker_enabled": False,
@@ -215,8 +216,10 @@ DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "eval_window_sec": 300,
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
-_COMMON_CFG: Dict[str, Any] = _read_json(DATA_DIR / "universes" / "_common.json")
-DEFAULT_AUTO_CLOSING: Dict[str, Any] = _COMMON_CFG.get("auto_closing") or _CFG.get("auto_closing", {})
+_BASE_CFG: Dict[str, Any] = _read_json(DATA_DIR / "_base.json")
+if not _BASE_CFG:
+    _BASE_CFG = _read_json(DATA_DIR / "universes" / "_base.json")
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _BASE_CFG.get("auto_closing") or _CFG.get("auto_closing", {})
 if "auto_closing" not in _CFG and DEFAULT_AUTO_CLOSING:
     _CFG["auto_closing"] = DEFAULT_AUTO_CLOSING
 

@@ -55,15 +55,12 @@ class CanonicalStrategyProcessor:
                 clean = clean[:-len(sfx)]
                 break
 
-        # Унификация алиасов базового шаблона: _base <-> _common
-        if clean in ("_common", "_base", "common", "base"):
+        # Канонический базовый шаблон: _base.json
+        if clean in ("_base", "base"):
             base_candidates = [
-                cls.CRON3_DIR / "CFG" / "universes" / "_common.json",
-                cls.CRON3_DIR / "CFG" / "universes" / "_base.json",
+                cls.CRON3_DIR / "CFG" / "_base.json",
                 cls.ROOT_DIR / "cron3PapperUniverses" / "CFG" / "_base.json",
-                cls.ROOT_DIR / "cron3PapperUniverses" / "CFG" / "_common.json",
-                cls.ROOT_DIR / "cron3PapperUniverses" / "CFG" / "universes" / "_base.json",
-                cls.ROOT_DIR / "cron3PapperUniverses" / "CFG" / "universes" / "_common.json",
+                cls.CRON3_DIR / "CFG" / "universes" / "_base.json",
             ]
             for p in base_candidates:
                 if p.exists():
@@ -88,8 +85,8 @@ class CanonicalStrategyProcessor:
 
     @classmethod
     def get_base_template(cls) -> Dict[str, Any]:
-        """Возвращает канонический базовый шаблон _common.json / _base.json."""
-        fpath = cls.find_universe_file("_common")
+        """Возвращает канонический базовый шаблон _base.json."""
+        fpath = cls.find_universe_file("_base")
         with open(fpath, "r", encoding="utf-8") as f:
             return json.load(f)
 
@@ -103,25 +100,28 @@ class CanonicalStrategyProcessor:
         is_base_query = False
         if isinstance(universe_spec, str):
             clean = universe_spec.replace(".json", "").strip()
-            if clean in ("_common", "_base", "common", "base"):
+            if clean in ("_base", "base"):
                 is_base_query = True
             fpath = cls.find_universe_file(universe_spec)
             with open(fpath, "r", encoding="utf-8") as f:
                 raw_cfg = json.load(f)
         else:
             raw_cfg = copy.deepcopy(universe_spec)
-            if raw_cfg.get("name") in ("_common", "_base"):
+            if raw_cfg.get("name") in ("_base", "base"):
                 is_base_query = True
 
-        # Если запрашивается не сам базовый шаблон — наследуем базовый шаблон (_common / _base)
+        # Если запрашивается не сам базовый шаблон и явно указано наследование — наследуем базовый шаблон
         if not is_base_query:
-            base_ref = raw_cfg.get("base_template") or raw_cfg.get("template") or "_common"
-            try:
-                base_path = cls.find_universe_file(base_ref)
-                with open(base_path, "r", encoding="utf-8") as bf:
-                    base_data = json.load(bf)
-                meta = cls.deep_merge(base_data, raw_cfg)
-            except Exception:
+            base_ref = raw_cfg.get("base_template") or raw_cfg.get("template")
+            if base_ref:
+                try:
+                    base_path = cls.find_universe_file(base_ref)
+                    with open(base_path, "r", encoding="utf-8") as bf:
+                        base_data = json.load(bf)
+                    meta = cls.deep_merge(base_data, raw_cfg)
+                except Exception:
+                    meta = copy.deepcopy(raw_cfg)
+            else:
                 meta = copy.deepcopy(raw_cfg)
         else:
             meta = copy.deepcopy(raw_cfg)
@@ -132,7 +132,7 @@ class CanonicalStrategyProcessor:
         long_cfg = meta.get("LONG") or overrides.get("LONG") or {}
         short_cfg = meta.get("SHORT") or overrides.get("SHORT") or {}
 
-        # Сетки уровней
+        # Сетки уровней (приоритет сырого конфига без загрязнения шаблоном)
         grid_long = long_cfg.get("grid") or meta.get("grid") or overrides.get("grid") or {}
         grid_short = short_cfg.get("grid") or meta.get("grid") or overrides.get("grid") or grid_long
 
@@ -144,42 +144,60 @@ class CanonicalStrategyProcessor:
         recycling_cfg = (
             meta.get("cross_side_recycling")
             or overrides.get("cross_side_recycling")
-            or {}
         )
 
         # Режим динамического кулака (Nadaraya-Watson / Dynamic Fist)
         fist_regime = (
             meta.get("first_order_weight_regime")
             or overrides.get("first_order_weight_regime")
-            or {}
         )
 
-        # Сайзинг и плечо
-        invest_size = float(long_cfg.get("invest_size") or meta.get("invest_size", 400.0))
-        leverage = int(meta.get("leverage", 20))
-        min_tp_indent = max(0.50, float(meta.get("min_tp_indent", 1.05)))
-        avg_behavior = meta.get("avg_free_volume_behavior", "mark_executed")
+        # Сайзинг и плечо (Строгий Протокол №2: без скрытых дефолтов)
+        raw_inv = long_cfg.get("invest_size") if long_cfg.get("invest_size") is not None else meta.get("invest_size")
+        if raw_inv is None:
+            raise KeyError(f"[CanonicalStrategyProcessor] Отсутствует обязательный параметр 'invest_size' в стратегии: {meta.get('name')}")
+        invest_size = float(raw_inv)
 
+        raw_lev = meta.get("leverage")
+        if raw_lev is None:
+            raise KeyError(f"[CanonicalStrategyProcessor] Отсутствует обязательный параметр 'leverage' в стратегии: {meta.get('name')}")
+        leverage = int(raw_lev)
+
+        raw_min_tp = meta.get("min_tp_indent")
+        if raw_min_tp is None:
+            raise KeyError(f"[CanonicalStrategyProcessor] Отсутствует обязательный параметр 'min_tp_indent' в стратегии: {meta.get('name')}")
+        min_tp_indent = float(raw_min_tp)
+
+        avg_behavior = meta.get("avg_free_volume_behavior")
+        if not avg_behavior:
+            raise KeyError(f"[CanonicalStrategyProcessor] Отсутствует обязательный параметр 'avg_free_volume_behavior' в стратегии: {meta.get('name')}")
+
+        tp_purpose = meta.get("tp_purpose") or long_cfg.get("tp_purpose")
+        if not tp_purpose:
+            raise KeyError(f"[CanonicalStrategyProcessor] Отсутствует обязательный параметр 'tp_purpose' в стратегии: {meta.get('name')}")
+
+        base_order_type = meta.get("base_order_type", "LIMIT")
+        fallback_order_type = meta.get("fallback_order_type", "MARKET")
         return {
             "name": meta.get("name", "CanonicalStrategy"),
             "invest_size": invest_size,
             "leverage": leverage,
             "min_tp_indent": min_tp_indent,
             "avg_free_volume_behavior": avg_behavior,
-            "base_order_type": meta.get("base_order_type", "LIMIT"),
-            "fallback_order_type": meta.get("fallback_order_type", "MARKET"),
-            "tp_purpose": meta.get("tp_purpose", "self"),
+            "base_order_type": base_order_type,
+            "fallback_order_type": fallback_order_type,
+            "tp_purpose": tp_purpose,
             "grid_long": grid_long,
             "grid_short": grid_short,
             "tp_map_long": tp_map_long,
             "tp_map_short": tp_map_short,
             "cross_side_recycling": recycling_cfg,
             "first_order_weight_regime": fist_regime,
-            "trend_size_depender": meta.get("trend_size_depender") or {},
-            "auto_closing": meta.get("auto_closing") or {},
-            "smart_size": meta.get("smart_size") or overrides.get("smart_size") or {},
-            "smart_tp": meta.get("smart_tp") or overrides.get("smart_tp") or {},
-            "smart_grace": meta.get("smart_grace") or overrides.get("smart_grace") or {},
+            "trend_size_depender": meta.get("trend_size_depender") or overrides.get("trend_size_depender"),
+            "auto_closing": meta.get("auto_closing") or overrides.get("auto_closing"),
+            "smart_size": meta.get("smart_size") or overrides.get("smart_size"),
+            "smart_tp": meta.get("smart_tp") or overrides.get("smart_tp"),
+            "smart_grace": meta.get("smart_grace") or overrides.get("smart_grace"),
             "raw_meta": meta
         }
 
@@ -346,6 +364,11 @@ class CanonicalStrategyProcessor:
 
         loss_per_unit = (opp_avg_price - current_price) if opp_side == "LONG" else (current_price - opp_avg_price)
         if loss_per_unit <= 0.0:
+            return 0.0, 0.0, 0.0
+
+        min_dd = float(recycling_cfg.get("min_drawdown_pct", 3.0))
+        dd_pct = (loss_per_unit / opp_avg_price) * 100.0 if opp_avg_price > 0 else 0.0
+        if dd_pct < min_dd:
             return 0.0, 0.0, 0.0
 
         loss_with_fee = loss_per_unit + (current_price * taker_fee)

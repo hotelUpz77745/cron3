@@ -9,7 +9,8 @@ test/
 !tests/
 logs/
 scratch/
-API/
+API/IPC/streamer.lock
+API/.git_origin_backup/
 ANALYTICS/analytics.json
 ANALYTICS/trades_ledger.txt
 ANALYTICS/STATS/*.json

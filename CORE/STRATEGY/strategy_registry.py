@@ -189,7 +189,7 @@ class StrategyConfig:
                 "positive_threshold": 20.0
             }
 
-        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из raw_meta / _common с переопределениями стратегии
+        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из raw_meta / _base.json с переопределениями стратегии
         raw_ac = raw_meta.get("auto_closing") or self.active_settings.get("auto_closing") or _CFG.get("auto_closing", {})
         base_ac = copy.deepcopy(raw_ac)
         override_ac = (
@@ -493,12 +493,12 @@ class StrategyRegistry:
         self._resolve_and_validate()
 
     def _build_mode_auto_closing(self, mode: str, base_ac: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или _common.json)."""
+        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или _base.json)."""
         mode = mode.lower().strip()
         if base_ac is None:
             base_ac = getattr(self, "common_defaults", {}).get("auto_closing") or _CFG.get("auto_closing", {})
         if not base_ac or not isinstance(base_ac, dict):
-            raise KeyError("[StrategyRegistry] Отсутствует базовый шаблон auto_closing в _common.json или app.json!")
+            raise KeyError("[StrategyRegistry] Отсутствует базовый шаблон auto_closing в _base.json или app.json!")
 
         neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
         pos_base = copy.deepcopy(base_ac.get("positive") or {})
@@ -564,18 +564,18 @@ class StrategyRegistry:
             raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'fixed', 'classic', 'toxic', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _common.json с поддержкой наследования base_template."""
+        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _base.json с поддержкой наследования base_template."""
         data: Dict[str, Dict[str, Any]] = {}
         self.common_defaults: Dict[str, Any] = {}
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
-            common_file = universes_dir / "_common.json"
-            if common_file.exists():
-                self.common_defaults = Utils.read_json_file(common_file) or {}
+            base_file = self.universes_path.parent / "_base.json"
+            if not base_file.exists():
+                base_file = universes_dir / "_base.json"
+            if base_file.exists():
+                self.common_defaults = Utils.read_json_file(base_file) or {}
             for jf in sorted(universes_dir.glob("*.json")):
-                if jf.name == "_common.json" or jf.stem.startswith("_"):
-                    if not self.common_defaults and jf.name == "_common.json":
-                        self.common_defaults = Utils.read_json_file(jf) or {}
+                if jf.name == "_base.json" or jf.stem.startswith("_"):
                     continue
                 data[jf.stem] = Utils.read_json_file(jf)
 
@@ -807,7 +807,7 @@ class StrategyRegistry:
             else:
                 target_mode = "off"
 
-            # Слияние метаданных: _common.json -> universes/<template>.json -> strat_settings (override)
+            # Слияние метаданных: _base.json -> universes/<template>.json -> strat_settings (override)
             base_meta = copy.deepcopy(getattr(self, "common_defaults", {}))
             template_meta = copy.deepcopy(self.universes_db[template_id])
             raw_meta = deep_merge_dict(base_meta, template_meta)
