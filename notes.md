@@ -2216,4 +2216,32 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
   - **Golden-Cut (38.2%)** попадает в золотой карман Фибоначчи первого импульса, взводится и исполняется на откате, быстро стягивая тейк к рынку.
   - **Грейдер Зоны 1** опровергнут: растягивание первых уровней при волатильности убивает быстрый скальп-кэшфлоу и удваивает просадку.
   - **Канон Читы 3.6 утвержден: Фиксированная Зона 1 + Курки Золотого Сечения (38.2%).**
-
+
+
+
+
+
+
+
+
+
+
+
+
+🎯 4 Недельные Альфа-Обоймы (по 10 монет в каждой)
+Окно 1 (Период 4–3 недели назад: 18.09 — 24.09.2026):
+
+🪙 Обойма 1: AVAUSDT, REZUSDT, ARBUSDT, VVVUSDT, NEARUSDT, SIRENUSDT, ARXUSDT, UNIUSDT, DASHUSDT, PUMPUSDT
+Характер рынка: Высокая внутренняя осцилляция альтов с умеренным трендовым дрифтом.
+Окно 2 (Период 3–2 недели назад: 25.09 — 01.10.2026):
+
+🪙 Обойма 2: XPLUSDT, LYNUSDT, ARXUSDT, HUMAUSDT, NEARUSDT, RAREUSDT, DASHUSDT, PLUMEUSDT, ZESTUSDT, RIVERUSDT
+Характер рынка: Смена фазы, приток объемов в высокочастотные альты со сверхплотным Wiggle Ratio.
+Окно 3 (Период 2–1 недели назад: 02.10 — 08.10.2026):
+
+🪙 Обойма 3: GTCUSDT, LYNUSDT, SUPERUSDT, ARXUSDT, ZROUSDT, DEXEUSDT, MONUSDT, HUMAUSDT, MEGAUSDT, PUMPUSDT
+Характер рынка: Экстремальная волатильность (GTC Score 7.48, NATR 4.64%, Wiggle 57.7).
+Окно 4 (Период 1–0 недели назад, до вчера: 09.10 — 15.10.2026):
+
+🪙 Обойма 4: RLCUSDT, OGNUSDT, CTSIUSDT, AIOTUSDT, GTCUSDT, ZROUSDT, LYNUSDT, METUSDT, STRKUSDT, WUSDT
+Характер рынка: Максимальный стресс-тест — агрессивные взрывные пампы и проливы (RLC, OGN, STRK).
