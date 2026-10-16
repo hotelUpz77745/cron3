@@ -34,7 +34,9 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
     def test_u16_chita_config_structure_and_role_markers(self):
         """Проверка конфигурации Chita в live: 7 уровней, роли/маркеры, 97% объема, distribute_remaining, min_burn_level 2, и чистота документации режимов."""
         cfg_path = Path("CFG/universes/u16_chita.json")
-        self.assertTrue(cfg_path.exists(), "u16_chita.json must exist")
+        if not cfg_path.exists():
+            cfg_path = Path("CFG/artifacts/classic_tribute/u16_chita.json")
+        self.assertTrue(cfg_path.exists(), "u16_chita.json must exist in universes or artifacts")
         with open(cfg_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
 

@@ -1,0 +1,513 @@
+{
+    "modes": [
+        "classic",
+        "toxic",
+        "fixed",
+        "off"
+    ],
+    "sizing_modes": [
+        "static"
+    ],
+    "start_balance_usdt": 449.0,
+    "LONG": {
+        "enable": true,
+        "invest_size": 400.0,
+        "leverage": 20,
+        "margin_type": "CROSSED",
+        "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
+        "grid": {
+            "0": {
+                "indent": 0,
+                "volume": 12.96,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "1": {
+                "indent": -5.0,
+                "volume": 14.26,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "2": {
+                "indent": -8.0,
+                "volume": 15.68,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "3": {
+                "indent": -13.0,
+                "volume": 17.25,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "4": {
+                "indent": -21.0,
+                "volume": 18.98,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "5": {
+                "indent": -34.0,
+                "volume": 20.87,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            }
+        },
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
+        "tp_purpose": "both",
+        "tp_map": {
+            "0": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 0.6,
+                    "fallback_indent": 1.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "1": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 0.7,
+                    "fallback_indent": 1.6,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "2": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.0,
+                    "fallback_indent": 2.3,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "3": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.4,
+                    "fallback_indent": 3.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "4": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.9,
+                    "fallback_indent": 3.6,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "5": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 2.5,
+                    "fallback_indent": 4.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            }
+        }
+    },
+    "SHORT": {
+        "enable": true,
+        "invest_size": 400.0,
+        "leverage": 20,
+        "margin_type": "CROSSED",
+        "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
+        "grid": {
+            "0": {
+                "indent": 0,
+                "volume": 12.96,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "1": {
+                "indent": -5.0,
+                "volume": 14.26,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "2": {
+                "indent": -8.0,
+                "volume": 15.68,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "3": {
+                "indent": -13.0,
+                "volume": 17.25,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "4": {
+                "indent": -21.0,
+                "volume": 18.98,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            },
+            "5": {
+                "indent": -34.0,
+                "volume": 20.87,
+                "super_indent": null,
+                "activation": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null
+            }
+        },
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
+        "tp_purpose": "both",
+        "tp_map": {
+            "0": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 0.6,
+                    "fallback_indent": 1.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "1": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 0.7,
+                    "fallback_indent": 1.6,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "2": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.0,
+                    "fallback_indent": 2.3,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "3": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.4,
+                    "fallback_indent": 3.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "4": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 1.9,
+                    "fallback_indent": 3.6,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            },
+            "5": {
+                "usual_": {
+                    "enabled": true,
+                    "indent": 2.5,
+                    "fallback_indent": 4.0,
+                    "activation": null
+                },
+                "atr_": {
+                    "enabled": false,
+                    "mult": null,
+                    "fallback_indent": null
+                }
+            }
+        },
+        "enabled": true
+    },
+    "super_grid": {
+        "enabled": true,
+        "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
+        "timeframe": "1w",
+        "window": 12,
+        "multiplier": 2.0,
+        "min_volatility_pct": 15.0,
+        "max_volatility_pct": null,
+        "update_interval_hours": 24
+    },
+    "heartbeat_tfr": "5m",
+    "base_order_type": "LIMIT",
+    "fallback_order_type": "MARKET",
+    "smart_grace": {
+        "start_period_sec": 57,
+        "shift_interval_sec": 13,
+        "eval_window_sec": 300,
+        "increments_card": {
+            "==1": 0,
+            "==2": 0,
+            "==3": 0,
+            ">=4": 0
+        }
+    },
+    "smart_size": {
+        "eval_window_sec": 300,
+        "profiting_size_weights": {
+            "<2": 1.0,
+            "==2": 1.0,
+            "==3": 1.0,
+            ">=4": 1.0
+        },
+        "knife_blocker_enabled": false,
+        "knife_blocker_threshold": 2
+    },
+    "trend_size_depender": {
+        "mode": "static",
+        "_trend_size_depender_modes": {
+            "static": "(Статический) Сайзинг строго 50/50, макро-оценка тренда 4h выключена.",
+            "dyn_inv_16": "(Bollinger Inverted 16) Контр-трендовый 4h Боллинджер, шкала 16 (коридор 33.3% / 66.7%), 4h-заморозка 50/50 при пробое.",
+            "dyn_ema_16": "(EMA Trend 16) Трендовый фильтр Dual EMA 10/30 (4h), шкала 16 (коридор 33.3% / 66.7%).",
+            "dyn_ema_10": "(EMA Trend 10) Трендовый фильтр Dual EMA 10/30 (4h), мягкая шкала 10 (коридор 40.0% / 60.0%)."
+        },
+        "bb_inverted": {
+            "timeframe": "4h",
+            "window": 20,
+            "multiplier": 2.0,
+            "lockout_duration_sec": 14400.0,
+            "confirmation_candles": 5
+        },
+        "ema_trend": {
+            "timeframe": "4h",
+            "sma_fast": 10,
+            "sma_slow": 30,
+            "confirmation_candles": 5,
+            "require_rising": true,
+            "trend_positive": true
+        },
+        "scale_16": {
+            "scale": 16,
+            "min_side_pct": 33.3333,
+            "max_side_pct": 66.6667
+        },
+        "scale_10": {
+            "scale": 10,
+            "min_side_pct": 40.0,
+            "max_side_pct": 60.0
+        },
+        "timeframe": "4h",
+        "eval_window": 20,
+        "eval_window_bars": 3360,
+        "multiplier": 2.0
+    },
+    "smart_tp": {
+        "enabled": false,
+        "eval_window_sec": 300,
+        "increments_tp": {
+            "<2": 1.0,
+            "==2": 1.0,
+            "==3": 1.0
+        }
+    },
+    "swan_amputator": {
+        "enabled": false,
+        "_desc": "Механизм ампутации черного лебедя: срезка страдающей стороны при просадке >= X% и подтверждении Y колен/тейков на противоположной стороне с сохранением $25 Железного Щита",
+        "min_drawdown_pct": 40.0,
+        "min_opp_grid_steps": 3,
+        "iron_shield_min_realized_usdt": 25.0,
+        "quarantine_bars": null,
+        "quarantine_mode": "lifetime",
+        "shield_scope": "portfolio"
+    },
+    "auto_closing": {
+        "negative": {
+            "threshold": null,
+            "threshold_increment": null
+        },
+        "positive": {
+            "quant_base_usdt": 10.0,
+            "quant_reference_size": 600.0,
+            "fixed_net": {
+                "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
+                "target_net_usdt": 60.0,
+                "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
+                "scale_by_invest_size": false,
+                "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt.",
+                "enabled": true
+            },
+            "toxicity_adaptive": {
+                "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
+                "score_weights": {
+                    "margin_load": 0.35,
+                    "grid_depth": 0.3,
+                    "float_ratio": 0.25,
+                    "delta_recovery": 0.15
+                },
+                "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
+                "panic_toxicity_threshold": 0.7,
+                "emergency_exit_floor_usdt": 3.0,
+                "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
+                "min_panic_recovery": 0.4,
+                "relaxed_toxicity_threshold": 0.35,
+                "moderate_exit_floor_usdt": 8.0,
+                "min_moderate_recovery": 0.2,
+                "relaxed_exit_floor_usdt": 15.0,
+                "enabled": true
+            },
+            "trailing_ratchet": {
+                "_desc": "Mode 1: Reacting skeleton. Pure Fibonacci ladder levels L0..L5. Triggers trailing stop and closes basket on pullback to floor.",
+                "levels": [
+                    {
+                        "activation": 8.0,
+                        "floor": 5.5,
+                        "min_age_hours": 24.0,
+                        "enabled": true,
+                        "_desc": "L0: Prolonged stagnation (24h+)"
+                    },
+                    {
+                        "activation": 15.5,
+                        "floor": 13.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L1: Institutional start (Fibo 13.0)"
+                    },
+                    {
+                        "activation": 24.5,
+                        "floor": 21.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L2: Confident Fibo move (Fibo 21.0)"
+                    },
+                    {
+                        "activation": 39.0,
+                        "floor": 34.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L3: Strong trend (Fibo 34.0)"
+                    },
+                    {
+                        "activation": 63.5,
+                        "floor": 55.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L4: Momentum pump (Fibo 55.0)"
+                    },
+                    {
+                        "activation": 89.0,
+                        "floor": 89.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L5: Mega rally (Fibo 89.0)"
+                    }
+                ],
+                "enabled": true
+            }
+        }
+    },
+    "_comment": "Единый канонический базовый шаблон для боевого (cron3), бумажного (cron3PapperUniverses) и бэктестера (cron3TradeBacktest)",
+    "signal_heartbeat_tfr": "5m",
+    "avg_free_volume_behavior": "mark_executed",
+    "min_tp_indent": 1.05,
+    "cross_side_recycling": {
+        "enabled": true,
+        "min_burn_level": 2,
+        "min_drawdown_pct": 3.0,
+        "max_slice_pct": 35.0,
+        "recycle_ratio_tiers": {
+            "2-4": 0.5,
+            ">=5": 0.75
+        },
+        "taker_fee": 0.0005
+    },
+    "first_order_weight_regime": {
+        "enabled": true,
+        "model": "nadaraya_watson",
+        "presets": {
+            "UP": {
+                "LONG": 12.0,
+                "SHORT": 7.0
+            },
+            "DOWN": {
+                "LONG": 7.0,
+                "SHORT": 12.0
+            },
+            "FLAT": {
+                "LONG": 9.5,
+                "SHORT": 9.5
+            }
+        }
+    }
+}

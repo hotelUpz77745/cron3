@@ -27,124 +27,20 @@ class CrossSideProfitRecycler:
     @staticmethod
     def resolve_recycle_ratio(recycling_cfg: Dict[str, Any], level: int) -> float:
         """
-        Дискретно определяет долю рециркуляции прибыли (recycle_ratio) по уровню просадки (колену сетки).
-        Поддерживает:
-        1. 'recycle_ratio_tiers': например {"2-4": 0.33, ">=5": 0.66} или {"2..4": 0.33, "5+": 0.66}
-        2. 'recycle_ratio_map': например {"2": 0.33, "3": 0.33, "4": 0.33, "5": 0.66}
-        3. 'recycle_ratio': базовый fallback, если дискретная карта не задана или уровень не совпал.
+        Каноническое дискретное определение доли рециркуляции прибыли (burn_ratio).
+        Делегирует в единый CanonicalStrategyProcessor.
         """
-        fallback_ratio = float(recycling_cfg["recycle_ratio"]) if ("recycle_ratio" in recycling_cfg and recycling_cfg["recycle_ratio"] is not None) else None
-        tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
-        if not tiers or not isinstance(tiers, dict):
-            return fallback_ratio if fallback_ratio is not None else 0.50
-
-        lvl_str = str(level)
-        if lvl_str in tiers:
-            return float(tiers[lvl_str])
-
-        for pattern, val in tiers.items():
-            pat = str(pattern).strip()
-            if "-" in pat or ".." in pat:
-                delim = ".." if ".." in pat else "-"
-                parts = pat.split(delim)
-                if len(parts) == 2:
-                    try:
-                        low, high = int(parts[0].strip()), int(parts[1].strip())
-                        if low <= level <= high:
-                            return float(val)
-                    except ValueError:
-                        pass
-            elif pat.endswith("+"):
-                try:
-                    thresh = int(pat[:-1].strip())
-                    if level >= thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-            elif pat.startswith(">="):
-                try:
-                    thresh = int(pat[2:].strip())
-                    if level >= thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-            elif pat.startswith(">"):
-                try:
-                    thresh = int(pat[1:].strip())
-                    if level > thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-            elif pat.startswith("<="):
-                try:
-                    thresh = int(pat[2:].strip())
-                    if level <= thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-            elif pat.startswith("<"):
-                try:
-                    thresh = int(pat[1:].strip())
-                    if level < thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-            elif pat.startswith("=="):
-                try:
-                    thresh = int(pat[2:].strip())
-                    if level == thresh:
-                        return float(val)
-                except ValueError:
-                    pass
-
-        if fallback_ratio is not None:
-            return fallback_ratio
-        return 0.0
+        from CORE.STRATEGY.canonical_strategy_processor import CanonicalStrategyProcessor
+        return CanonicalStrategyProcessor.resolve_recycle_ratio(recycling_cfg, level)
 
     @staticmethod
     def resolve_min_burn_level(recycling_cfg: Dict[str, Any]) -> int:
         """
-        Определяет минимальный уровень сетки для сжигания (min_burn_level).
-        Если задана дискретная карта tiers/map — берет минимальный уровень из карты
-        (устраняя необходимость дублирования 'min_burn_level' в конфиге).
-        Если явно передан 'min_burn_level', использует его (обратная совместимость).
+        Каноническое определение минимального уровня сетки для сжигания (min_burn_level).
+        Делегирует в единый CanonicalStrategyProcessor.
         """
-        if "min_burn_level" in recycling_cfg and recycling_cfg["min_burn_level"] is not None:
-            return int(recycling_cfg["min_burn_level"])
-
-        tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
-        if tiers and isinstance(tiers, dict):
-            levels = []
-            for pat in tiers.keys():
-                p = str(pat).strip()
-                if "-" in p or ".." in p:
-                    delim = ".." if ".." in p else "-"
-                    parts = p.split(delim)
-                    try:
-                        levels.append(int(parts[0].strip()))
-                    except ValueError:
-                        pass
-                elif p.endswith("+"):
-                    try:
-                        levels.append(int(p[:-1].strip()))
-                    except ValueError:
-                        pass
-                elif p.startswith(">="):
-                    try:
-                        levels.append(int(p[2:].strip()))
-                    except ValueError:
-                        pass
-                elif p.startswith(">"):
-                    try:
-                        levels.append(int(p[1:].strip()) + 1)
-                    except ValueError:
-                        pass
-                elif p.isdigit():
-                    levels.append(int(p))
-            if levels:
-                return min(levels)
-
-        return 2
+        from CORE.STRATEGY.canonical_strategy_processor import CanonicalStrategyProcessor
+        return CanonicalStrategyProcessor.resolve_min_burn_level(recycling_cfg)
 
     @classmethod
     async def maybe_recycle(
