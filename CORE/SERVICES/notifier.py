@@ -1,10 +1,11 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\notifier.py
-# Role: notifier.py module
-
-# ==============================================================================
-# Path: CORE/notifier.py
-# Role: Менеджер уведомлений по просадке и профициту
-# ==============================================================================
+# CORE/SERVICES/notifier.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.notifier
+ROLE: Сервис Telegram-уведомлений по просадке и профициту портфеля и куполов
+==============================================================================
+"""
 
 import asyncio
 import os
@@ -12,11 +13,17 @@ import aiohttp
 from consts import DATA_DIR, ANALYTICS_DIR
 from c_utils import Utils
 from c_log import UnifiedLogger
-
 from consts import TG_ALLOWED_USERS
+
 logger = UnifiedLogger("Notifier")
 
+
 class NotifierManager:
+    """
+    Менеджер фоновых Telegram-уведомлений при пересечении порогов просадки / профицита
+    как на уровне всего портфеля, так и в разрезе изолированных куполов стратегий.
+    """
+
     def __init__(self, bot_core=None):
         self.bot_core = bot_core
         self.is_running = False
@@ -232,3 +239,7 @@ class NotifierManager:
             sflags["neg_flag"] = False
             sflags["pos_flag"] = False
         logger.info("[NOTIFIER] Notification flags (portfolio and strategy domes) manually reset.")
+
+
+# Алиас для единообразия сервисов
+Notifier = NotifierManager

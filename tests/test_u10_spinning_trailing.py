@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from CORE.trailing_system import BaseTrailingSystem
+from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 from POS_FSM.models import PositionState
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
 from CORE.STRATEGY.strategy_applicator import StrategyApplicator

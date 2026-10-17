@@ -7,7 +7,7 @@ import json
 import asyncio
 from pathlib import Path
 
-from CORE.auto_closer import AutoCloser
+from CORE.SERVICES.auto_closer import AutoCloser
 
 
 class TestRiskSystem(unittest.TestCase):
@@ -25,8 +25,8 @@ class TestRiskSystem(unittest.TestCase):
         self.auto_closer = AutoCloser(bot_core=self.mock_bot)
 
     @patch("asyncio.sleep", new_callable=AsyncMock)
-    @patch("CORE.auto_closer.Utils.write_json_file")
-    @patch("CORE.auto_closer.Utils.read_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.write_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.read_json_file")
     def test_profit_stop_miami_take_triggers(self, mock_read_json, mock_write_json, mock_sleep):
         """Проверка: при достижении целевого профицита max_balance_threshold_usdt бот фиксирует прибыль в 100% кэш и останавливается."""
         # Моделируем app.json с включенным max_balance_threshold_usdt = 250.0
@@ -71,8 +71,8 @@ class TestRiskSystem(unittest.TestCase):
         mock_write_json.assert_called_once()
 
     @patch("asyncio.sleep", new_callable=AsyncMock)
-    @patch("CORE.auto_closer.Utils.write_json_file")
-    @patch("CORE.auto_closer.Utils.read_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.write_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.read_json_file")
     def test_risk_stop_min_threshold_triggers(self, mock_read_json, mock_write_json, mock_sleep):
         """Проверка: при падении баланса ниже min_balance_threshold_usdt срабатывает глобальный ручник."""
         app_data = {
@@ -108,8 +108,8 @@ class TestRiskSystem(unittest.TestCase):
         self.assertIn("100.00 USDT", alert_msg)
         self.assertFalse(app_data["risk_system"]["enabled"])
 
-    @patch("CORE.auto_closer.Utils.write_json_file")
-    @patch("CORE.auto_closer.Utils.read_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.write_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.read_json_file")
     def test_within_corridor_no_trigger(self, mock_read_json, mock_write_json):
         """Проверка: пока баланс находится внутри коридора [min, max], бот работает штатно."""
         app_data = {
@@ -141,8 +141,8 @@ class TestRiskSystem(unittest.TestCase):
         self.mock_bot.notifier.send_alert.assert_not_called()
         self.assertTrue(app_data["risk_system"]["enabled"])
 
-    @patch("CORE.auto_closer.Utils.write_json_file")
-    @patch("CORE.auto_closer.Utils.read_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.write_json_file")
+    @patch("CORE.SERVICES.auto_closer.Utils.read_json_file")
     def test_disabled_risk_system_no_trigger(self, mock_read_json, mock_write_json):
         """Проверка: если risk_system отключена (enabled=False), триггеры не срабатывают."""
         app_data = {

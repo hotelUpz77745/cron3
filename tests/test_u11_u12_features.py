@@ -8,9 +8,9 @@ import time
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from CORE.ADVANCED.atr_provider import ATRProvider
+from CORE.SERVICES.VOLATILITY.atr_provider import ATRProvider
 from CORE.TP.dynamic_atr_tp_manager import DynamicATRTakeProfitManager
-from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler
+from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
 from POS_FSM.models import PositionState
 from CORE.TP.tp_manager import TakeProfitManager
 

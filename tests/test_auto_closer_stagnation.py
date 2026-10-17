@@ -1,6 +1,6 @@
 import unittest
 import time
-from CORE.auto_closer import AutoCloser
+from CORE.SERVICES.auto_closer import AutoCloser
 
 class TestAutoCloserStagnation(unittest.TestCase):
     def test_match_rule_float(self):

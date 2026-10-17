@@ -1,10 +1,11 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ENTRY\leverage_manager.py
-# Role: leverage_manager.py module
-
-# ==============================================================================
-# Path: CORE/leverage_manager.py
-# Role: Кеширование и установка плеча и типа маржи
-# ==============================================================================
+# CORE/SERVICES/leverage_adapter.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.leverage_adapter
+ROLE: Адаптер настройки плеча и маржинального режима на бирже Binance
+==============================================================================
+"""
 
 import asyncio
 from typing import Dict, Optional
@@ -12,10 +13,16 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from consts import CACHE_DIR
 
-logger = UnifiedLogger("LeverageManager")
+logger = UnifiedLogger("LeverageAdapter")
 CACHE_FILE = CACHE_DIR / "leverage_cache.json"
 
-class LeverageManager:
+
+class LeverageAdapter:
+    """
+    Адаптер настройки кредитного плеча и типа маржи (CROSS / ISOLATED).
+    Обеспечивает потокобезопасное кэширование и предотвращение избыточных сетевых вызовов.
+    """
+
     def __init__(self):
         # Кэш персистентный, сохраняется в CACHE
         self._cache: Dict[str, bool] = self._load_cache()
@@ -110,3 +117,7 @@ class LeverageManager:
                 # Кешируем успешную установку по чистому имени символа и сохраняем на диск
                 self._cache[sym] = True
                 self._save_cache()
+
+
+# Канонический алиас для строгой обратной совместимости вызовов
+LeverageManager = LeverageAdapter

@@ -13,58 +13,64 @@ import os
 import time
 import json
 import random
+from typing import Dict, Any, Optional, Tuple, List, Union
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 
 from consts import (
-    _CFG, DATA_DIR, ANALYTICS_DIR, CACHE_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC, STREAMER_PORT, STREAMER_LOCK_NAME,
-    DEFAULT_TIMEFRAME, DEFAULT_SMART_GRACE
+    _CFG, DATA_DIR, ANALYTICS_DIR, CACHE_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC,
+    STREAMER_PORT, STREAMER_LOCK_NAME, DEFAULT_TIMEFRAME, DEFAULT_HEARTBEAT_TFR,
+    COOLDOWN_POST_CANDLE_BUFFER_SEC, COOLDOWN_MIN_HEARTBEAT_SEC,
+    DEFAULT_SMART_GRACE, TG_ENABLED, BACKUP_ENABLED, API_KEY, API_SECRET,
+    WATCHDOG_TIMEOUT_SEC, WATCHDOG_CHECK_INTERVAL_SEC,
+    WATCHDOG_HEARTBEAT_INTERVAL_SEC, WATCHDOG_HEARTBEAT_AUTODELETE_SEC,
+    REST_FAILSAFE_SEC
 )
-from API.BINANCE.public import BinancePublic
-from API.BINANCE.price_stream import HotPriceTick
-from API.IPC.streamer_hub import CrossProcessHotPriceStream
-from CORE.ENTRY.signal import TimeControl
-from CORE.ENTRY.leverage_manager import LeverageManager
-from CORE._utils import TradeMath
-from API.BINANCE.client_prod import BinanceClient
-from POS_FSM.models import PositionState
-from c_utils import Utils
 
 from c_log import UnifiedLogger
-from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
-from CORE.notifier import NotifierManager
-from CORE.TP.tp_manager import TakeProfitManager
-from CORE.GRID.avg_manager import AverageManager
-from CORE.TP.fallback_tp_manager import FallbackTpManager
-from CORE._utils import SpecManager
-from ANALYTICS.analytics import AnalyticsManager
-from consts import TG_ENABLED, BACKUP_ENABLED
-from consts import API_KEY, API_SECRET
+from c_utils import Utils
 from watchdog import LoopWatchdog
-from consts import (
-    WATCHDOG_TIMEOUT_SEC,
-    WATCHDOG_CHECK_INTERVAL_SEC,
-    WATCHDOG_HEARTBEAT_INTERVAL_SEC,
-    WATCHDOG_HEARTBEAT_AUTODELETE_SEC
-)
-from CORE._utils import TradeMath
-from consts import REST_FAILSAFE_SEC
-from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
-from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
-from POS_FSM.pos_stream import PositionStream
-from CORE.auto_closer import AutoCloser
-from consts import API_KEY
+
 from API.BINANCE.public import BinancePublic
-from CORE.ADVANCED.volatility_manager import VolatilityManager
-from consts import _CFG
+from API.BINANCE.price_stream import HotPriceTick
+from API.BINANCE.client_prod import BinanceClient
+from API.IPC.streamer_hub import CrossProcessHotPriceStream
+
+from POS_FSM.models import PositionState
+from POS_FSM.pos_stream import PositionStream
+from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
+
+from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
+from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
+
+from CORE._utils import TradeMath, SpecManager
+from CORE.SERVICES.auto_closer import AutoCloser
+from CORE.SERVICES.notifier import NotifierManager
+from CORE.SERVICES.leverage_adapter import LeverageAdapter, LeverageManager
+from CORE.SERVICES.VOLATILITY.volatility_manager import VolatilityManager
+from CORE.ENTRY.signal import TimeControl
+from CORE.GRID.avg_manager import AverageManager
+from CORE.TP.tp_manager import TakeProfitManager
+from CORE.TP.fallback_tp_manager import FallbackTpManager
+from CORE.TP.take_profit_restorer import TakeProfitRestorer
+from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
+from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+from CORE.STRATEGY.peeling_manager import PeelingManager
+from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
+from CORE.STRATEGY.strategy_applicator import StrategyApplicator
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
+from ANALYTICS.analytics import AnalyticsManager
 logger = UnifiedLogger("BotCore")
 
 BLOCK_ENTRY = False  # Глобальный флаг блокировки входа в позиции (для отладки)
 
 class BotCore:
+    first_order_regime: FirstOrderRegimeManager
+    brownian_noise: BrownianNoiseController
+
     def __init__(self):
         self.is_running = False
         # Инициализация реестра стратегий и мультивселенных
@@ -94,12 +100,14 @@ class BotCore:
         
         # 2. Менеджеры
         self.leverage_manager = LeverageManager()
+        self.brownian_noise = BrownianNoiseController()
+        self.first_order_regime = FirstOrderRegimeManager()
         
         self.tp_manager = TakeProfitManager(self.runtime_manager)
-        from CORE.TP.take_profit_restorer import TakeProfitRestorer
         self.tp_restorer = TakeProfitRestorer(self)
         
         self.avg_manager = AverageManager()
+        self.peeling_manager = PeelingManager()
         
         self.fallback_tp_manager = FallbackTpManager()
         
@@ -183,8 +191,9 @@ class BotCore:
         )
         
         self.auto_closer = AutoCloser(self)
-        from CORE.radar_navigator import RadarNavigator
-        self.radar_navigator = RadarNavigator(self)
+        self.first_order_regime = FirstOrderRegimeManager()
+        self.brownian_noise = BrownianNoiseController()
+        self.radar_navigator = None
 
     def _init_clients(self):
         """
@@ -324,7 +333,6 @@ class BotCore:
 
         # 1c. Build isolated runtime config using StrategyApplicator if needed
         try:
-            from CORE.STRATEGY.strategy_applicator import StrategyApplicator
             if hasattr(self, "strategy_registry") and self.strategy_registry.is_symbol_active(symbol):
                 strat_cfg = self.strategy_registry.get_strategy_for_symbol(symbol)
                 StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
@@ -475,16 +483,10 @@ class BotCore:
         согласно персональному таймфрейму пульса стратегии (signal_heartbeat_tfr).
         Гарантирует защиту от преждевременного переоткрытия позиций (идемпотентность).
         """
-        try:
-            interval = int(interval_sec)
-            if interval <= 0:
-                interval = 300
-        except (TypeError, ValueError):
-            interval = 300
-        try:
-            now_f = float(now)
-        except (TypeError, ValueError):
-            now_f = time.time()
+        interval = int(interval_sec)
+        if interval <= 0:
+            raise ValueError(f"[BotCore] interval_sec must be positive integer, got: {interval_sec}")
+        now_f = float(now)
         next_candle_start = ((int(now_f) // interval) + 1) * interval
         return max(next_candle_start + 5.0, now_f + min(30.0, float(interval)))
 
@@ -511,16 +513,18 @@ class BotCore:
             if hasattr(strat_obj, "heartbeat_seconds") and strat_obj.heartbeat_seconds is not None:
                 return int(strat_obj.heartbeat_seconds)
             if hasattr(strat_obj, "signal_heartbeat_tfr") and strat_obj.signal_heartbeat_tfr:
-                from CORE.ENTRY.signal import TimeControl
                 return TimeControl.interval_to_seconds(strat_obj.signal_heartbeat_tfr)
 
         tc = getattr(self, "time_control", None)
         if tc and hasattr(tc, "interval_seconds") and tc.interval_seconds:
             return int(tc.interval_seconds)
 
-        from consts import DEFAULT_HEARTBEAT_TFR
-        from CORE.ENTRY.signal import TimeControl
         return TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
+
+    def get_current_time(self) -> float:
+        """Возвращает текущее время: виртуальное время симуляции/бэктеста или системное time.time()."""
+        sim_t = getattr(self, "current_sim_time", None)
+        return float(sim_t) if sim_t is not None else time.time()
 
     def _get_interval_seconds(self) -> int:
         """Безопасное получение интервала свечи в секундах через heartbeat_seconds стратегии."""
@@ -534,6 +538,10 @@ class BotCore:
         Гарантирует защиту от преждевременного переоткрытия позиций до начала новой свечи хартбита стратегии.
         """
         now_ts = time.time()
+        if hasattr(bot_core, "get_current_time"):
+            res = bot_core.get_current_time()
+            if isinstance(res, (int, float)):
+                now_ts = float(res)
         sym_upper = symbol.upper()
 
         if getattr(bot_core, 'is_paused', False) is True:
@@ -601,16 +609,6 @@ class BotCore:
             logger.warning(f"[{symbol}] {side}: Entry aborted — {reason}.")
             return
 
-        if hasattr(self, "radar_navigator") and self.radar_navigator:
-            is_pending = False
-            if hasattr(self.radar_navigator, "is_symbol_pending_rotation"):
-                is_pending = bool(self.radar_navigator.is_symbol_pending_rotation(symbol))
-            elif symbol in getattr(self.radar_navigator, "symbols_pending_rotation", set()):
-                is_pending = True
-            if is_pending:
-                logger.info(f"[{symbol}] Вход в позицию отложен: монета ожидает решения по ротации Штурмана (advisory timeout).")
-                return
-
         state = self.fsm_states[symbol][side]
         if getattr(state, "is_closing", False) is True:
             logger.warning(f"[{symbol}] {side}: Entry aborted — position state is marked as is_closing.")
@@ -628,13 +626,10 @@ class BotCore:
                     if active and isinstance(active, dict):
                         strat = next(iter(active.values()), None)
 
-            # Актуализация закрытий стороны в пределах окна (по умолчанию 300с)
-            now = time.time()
-            eval_w = 300.0
-            if strat and getattr(strat, "smart_grace_cfg", None) and strat.smart_grace_cfg.get("eval_window_sec"):
-                eval_w = float(strat.smart_grace_cfg["eval_window_sec"])
-            elif strat and getattr(strat, "smart_size_cfg", None) and strat.smart_size_cfg.get("eval_window_sec"):
-                eval_w = float(strat.smart_size_cfg["eval_window_sec"])
+            # Актуализация закрытий стороны в пределах окна
+            now = self.get_current_time()
+            smart_grace_cfg = strat.smart_grace_cfg if strat else DEFAULT_SMART_GRACE
+            eval_w = float(smart_grace_cfg["eval_window_sec"])
             state.recent_closes = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
             closed_count = len(state.recent_closes)
 
@@ -684,7 +679,6 @@ class BotCore:
                     if active and isinstance(active, dict):
                         strat = next(iter(active.values()), None)
             if strat and getattr(strat, "trend_size_cfg", {}).get("enabled"):
-                from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
                 eff = await TrendSizeDepender.get_effective_invest_size(
                     sym_client, symbol, side, base_invest, strat.trend_size_cfg
                 )
@@ -719,7 +713,7 @@ class BotCore:
             grid_0 = side_cfg["grid"]["0"]
             volume_pct = float(grid_0.get("volume") or 0.0)
 
-            # Проверка динамического авто-режима по старшему таймфрейму (auto_ema)
+            # Проверка динамического авто-режима по старшему таймфрейму (Правило кулака Сильной руки)
             regime_cfg = (
                 getattr(strat, "active_settings", {}).get("first_order_weight_regime")
                 or getattr(strat, "overrides", {}).get("first_order_weight_regime")
@@ -727,57 +721,14 @@ class BotCore:
             ) if strat else None
 
             if regime_cfg:
-                mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
-                if mode_val in ("auto", "auto_ema", "ema_trend", "kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson"):
-                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
-                    if mode_val in ("kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson"):
-                        kernel_cfg = (
-                            regime_cfg.get("kernel_forecast")
-                            or regime_cfg.get("nadaraya_watson")
-                            or regime_cfg.get("kernel")
-                            if isinstance(regime_cfg, dict) else None
-                        )
-                        trend_st = await MomentumEngine.get_kernel_trend_state(
-                            symbol=symbol,
-                            kernel_cfg=kernel_cfg,
-                            client=sym_client
-                        )
-                        tf_label = kernel_cfg.get("timeframe", "1d") if isinstance(kernel_cfg, dict) else "1d"
-                        regime_name = f"ЯДЕРНЫЙ FORECAST (Nadaraya-Watson {tf_label})"
-                    else:
-                        ema_trend_cfg = (
-                            regime_cfg.get("auto_ema") or regime_cfg.get("ema_trend")
-                            if isinstance(regime_cfg, dict) else None
-                        )
-                        if not ema_trend_cfg and strat and strat.smart_size_cfg:
-                            ema_trend_cfg = strat.smart_size_cfg.get("ema_trend")
-                        trend_st = await MomentumEngine.get_ema_trend_state(
-                            symbol=symbol,
-                            ema_cfg=ema_trend_cfg,
-                            client=sym_client
-                        )
-                        tf_label = ema_trend_cfg.get("timeframe", "1d") if isinstance(ema_trend_cfg, dict) else "1d"
-                        regime_name = f"Auto-EMA {tf_label}"
-
-                    # UP -> bullish (12/7), DOWN -> bearish (7/12), FLAT/UNSTABLE -> neutral (9/9)
-                    if trend_st == "UP":
-                        resolved_mode = "bullish"
-                    elif trend_st == "DOWN":
-                        resolved_mode = "bearish"
-                    else:
-                        resolved_mode = "neutral"
-
-                    dyn_vol = StrategyApplicator.resolve_first_order_volume(
-                        regime_cfg={"mode": resolved_mode, "presets": regime_cfg.get("presets", {})} if isinstance(regime_cfg, dict) else resolved_mode,
-                        side=side,
-                        default_vol=volume_pct
-                    )
-                    logger.info(
-                        f"[{symbol}][{strat.strategy_id}] [КУЛАК СИЛЬНОЙ РУКИ / {regime_name}]: "
-                        f"Global Trend={trend_st} -> Режим '{resolved_mode}'. "
-                        f"{side} Grid 0 (Кулак): {volume_pct:.1f}% -> {dyn_vol:.1f}% (Сетка усреднения L1+ без изменений)"
-                    )
-                    volume_pct = dyn_vol
+                volume_pct = await self.first_order_regime.evaluate_and_resolve_volume(
+                    symbol=symbol,
+                    side=side,
+                    regime_cfg=regime_cfg,
+                    default_vol=volume_pct,
+                    client=sym_client,
+                    strategy_id=strat.strategy_id if strat else "",
+                )
 
             volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.spec_data, symbol)
             
@@ -884,7 +835,6 @@ class BotCore:
                     realized_pnl = (cur_price - closed_entry) * closed_vol if side == "LONG" else (closed_entry - cur_price) * closed_vol
                     if realized_pnl > 0:
                         try:
-                            from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler
                             await CrossSideProfitRecycler.maybe_recycle(
                                 universe=self,
                                 symbol=symbol,
@@ -897,11 +847,12 @@ class BotCore:
                             logger.error(f"[{symbol}] Error during cross-side recycling: {e}")
 
                 # Записываем метку времени для smart_grace
-                states[side].recent_closes.append(time.time())
+                now = self.get_current_time()
+                states[side].recent_closes.append(now)
                 
                 # Вызов аналитики
                 open_time = runtime_cfg.get(side, {}).get("open_time", 0)
-                close_time = int(time.time() * 1000)
+                close_time = int(now * 1000)
                 sym_client = self.get_client_for_symbol(symbol)
                 self.analytics.record_finished_position(sym_client, symbol, side, open_time, close_time)
                 # Снимаем все тейк-профит ордера этой стороны
@@ -990,7 +941,7 @@ class BotCore:
                 smart_size_cfg = strat.smart_size_cfg if strat else None
                 eval_window = smart_grace_cfg["eval_window_sec"]
 
-                now = time.time()
+                now = self.get_current_time()
                 state.recent_closes = [t for t in state.recent_closes if now - t <= eval_window]
                 closed_count = len(state.recent_closes)
 
@@ -1006,10 +957,12 @@ class BotCore:
                 # Защита от спама: если на текущей свече попытка входа завершилась ошибкой биржи,
                 # выдерживаем кулдаун 60 секунд (до закрытия окна grace period этой свечи)
                 failed_ts = getattr(state, "last_failed_entry_ts", 0.0)
-                if time.time() - failed_ts < 60.0:
+                if now - failed_ts < 60.0:
                     continue
 
-                is_signal, current_grace = self.time_control.is_new_interval(closed_count, smart_grace_cfg)
+                is_signal, current_grace = self.time_control.is_new_interval(
+                    closed_count, smart_grace_cfg, current_timestamp=now
+                )
 
                 # Логируем изменения окна благодати
                 if state.last_grace_period != current_grace:
@@ -1062,11 +1015,7 @@ class BotCore:
         """Главный цикл торгового ядра."""
         self.is_running = True
         
-        # ШАГ 0. ХОЛОСТОЙ ХОД И НАЧАЛЬНЫЙ АВТОКОМПЛИТ ШТУРМАНА
-        if hasattr(self, "radar_navigator") and self.radar_navigator.is_enabled():
-            await self.radar_navigator.wait_radar_warmup_and_init()
-
-        # ШАГ 0.1. ПРОВЕРКА НА МОНЕТНОСТЬ
+        # ШАГ 0. ПРОВЕРКА НА МОНЕТНОСТЬ
         while self.is_running and not self.symbols:
             logger.warning("[BotCore] Symbol list is empty. Waiting for symbols to be configured in app.json...")
             await asyncio.sleep(5.0)
@@ -1093,7 +1042,6 @@ class BotCore:
         
         if hasattr(self, 'strategy_registry') and self.strategy_registry:
             try:
-                from CORE.STRATEGY.strategy_applicator import StrategyApplicator
                 StrategyApplicator().build_all_runtimes(self.strategy_registry)
             except Exception as e:
                 logger.warning(f"[BotCore] Startup StrategyApplicator sync warning: {e}")
@@ -1184,7 +1132,6 @@ class BotCore:
             for s_side in ("LONG", "SHORT"):
                 st = self.fsm_states.get(sym, {}).get(s_side)
                 if st and st.in_position and abs(st.total_volume) > 1e-6:
-                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
                     cur_p = self.prices.get(sym, (0.0, 0))[0] if sym in self.prices else None
                     StrategyApplicator.resolve_position_state_grid(st, strategy=strat, current_price=cur_p)
 

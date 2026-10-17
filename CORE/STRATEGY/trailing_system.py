@@ -1,5 +1,5 @@
 # ============================================================
-# FILE: CORE/trailing_system.py
+# FILE: CORE/STRATEGY/trailing_system.py
 # ROLE: Generic and Reusable Base Trailing System (TP, Grid & Ratchet)
 # ============================================================
 

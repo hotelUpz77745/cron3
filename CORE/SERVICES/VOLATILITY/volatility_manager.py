@@ -1,24 +1,25 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\ADVANCED\volatility_manager.py
-# Role: volatility_manager.py module
-
-# ==============================================================================
-# Path: CORE/ADVANCED/volatility_manager.py
-# python -m CORE.ADVANCED.volatility_manager
-# Role: Менеджер динамической волатильности (Super Indent)
-# ==============================================================================
+# CORE/SERVICES/VOLATILITY/volatility_manager.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.VOLATILITY.volatility_manager
+ROLE: Менеджер динамической волатильности сеток (Super Grid Indent)
+==============================================================================
+"""
 
 import asyncio
 import time
 import json
 import pickle
+import sys
 from pathlib import Path
 from c_log import UnifiedLogger
 from consts import DATA_DIR, _CFG
-
 from c_utils import Utils
 from API.BINANCE.client_prod import BinanceClient
-from consts import _CFG
+
 logger = UnifiedLogger("VolatilityManager")
+
 
 class VolatilityManager:
     def __init__(self, bot_core):
@@ -250,21 +251,15 @@ class VolatilityManager:
                     if hasattr(self.bot_core, "fsm_states") and symbol in self.bot_core.fsm_states:
                         for side, state in self.bot_core.fsm_states[symbol].items():
                             if hasattr(state, "grid"):
-                                # Находим свежий grid в rt_data
                                 fresh_grid = rt_data.get(side, {}).get("grid", {})
-                                
-                                # Обновляем in-memory state.grid
                                 for lvl_str, lvl_data in state.grid.items():
-                                    # Подтягиваем новый super_indent всегда
                                     if lvl_str in fresh_grid:
                                         lvl_data["super_indent"] = fresh_grid[lvl_str].get("super_indent")
                                         
                                     if state.in_position and not lvl_data.get("is_active"):
-                                        # Если ордер еще не исполнен, сбрасываем цену, чтобы avg_manager пересчитал
                                         lvl_data["price"] = None
                                 
                                 if state.in_position:
-                                    # Сбрасываем кэш следующей цели
                                     state.next_avg_price = None
                                     logger.info(f"[VolatilityManager] [{symbol}] {side} Горячая подгрузка: неактивные прайсы сброшены на None. Ожидание перерасчета сетки.")
                     
@@ -276,48 +271,3 @@ class VolatilityManager:
         self.bot_core.runtime_configs = self.bot_core.runtime_manager.caches
         
         return stats_output
-
-
-if __name__ == "__main__":
-    
-    root_dir = Path(__file__).parent.parent.parent
-    sys.path.insert(0, str(root_dir))
-    
-
-    class MockRuntimeManager:
-        def __init__(self):
-            self.caches = {}
-            
-        def load_initial_caches(self, symbols):
-            pass
-
-    class MockBotCore:
-        def __init__(self):
-            self.symbols = _CFG["symbols"]
-            # Для получения публичных свечей ключи не нужны, но клиент требует их в конструкторе
-            self.client = BinanceClient("", "")
-            self.runtime_manager = MockRuntimeManager()
-            self.runtime_configs = {}
-    
-    async def test_volatility():
-        print("=== ЗАПУСК БЕЗОПАСНОГО ТЕСТА ВОЛАТИЛЬНОСТИ ===")
-        bot = MockBotCore()
-        vm = VolatilityManager(bot)
-        vm.is_running = True
-        
-        print(f"Запуск расчетов для {len(bot.symbols)} монет...")
-        stats = await vm.process_all()
-        
-        # Save beautifully to test/
-        test_dir = root_dir / "test"
-        test_dir.mkdir(exist_ok=True)
-        dump_path = test_dir / "volatility_test.json"
-        
-        with open(dump_path, "w", encoding="utf-8") as f:
-            json.dump(stats, f, indent=4, ensure_ascii=False)
-            
-        print(f"\n[OK] Результаты расчетов сохранены в файл: {dump_path}")
-        print("=== ТЕСТ ЗАВЕРШЕН ===")
-        await bot.client.shutdown()
-        
-    asyncio.run(test_volatility())

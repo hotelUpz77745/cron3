@@ -1,5 +1,5 @@
 # ==============================================================================
-# Path: CORE/SELECTOR/coin_selection_service.py
+# Path: CORE/SERVICES/SELECTOR/coin_selection_service.py
 # Role: Сервис моментального (on-demand) отбора монет для ротации под купол стратегии
 # ==============================================================================
 
@@ -13,8 +13,8 @@ from typing import Any, Dict, List, Optional
 from consts import BASE_DIR, DATA_DIR, _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE.SELECTOR.alpha_coin_selector import AlphaCoinSelector
-from CORE.coin_selectors import SamsonovFunnelSelector
+from CORE.SERVICES.SELECTOR.alpha_coin_selector import AlphaCoinSelector
+from CORE.SERVICES.SELECTOR.samsonov_funnel import SamsonovFunnelSelector
 
 logger = UnifiedLogger("CoinSelectionService")
 
@@ -194,7 +194,7 @@ class CoinSelectionService:
         output_path = DATA_DIR / "volatile_symbols.json"
 
         if not output_path.exists():
-            from CORE.ADVANCED.volatility_scanner import VolatilityScanner
+            from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
             scanner = VolatilityScanner(client=getattr(self.bot_core, "client", None))
             await scanner.scan()
 

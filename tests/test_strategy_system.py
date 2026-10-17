@@ -387,7 +387,7 @@ class TestStrategySystem(unittest.TestCase):
     def test_notifier_strategy_dome_monitoring(self):
         """Тестирование изоляции флагов уведомлений между куполами стратегий."""
         import asyncio
-        from CORE.notifier import NotifierManager
+        from CORE.SERVICES.notifier import NotifierManager
 
         class DummyBot:
             def __init__(self, reg):

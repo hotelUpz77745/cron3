@@ -39,6 +39,45 @@ class TestDefenseBookkeepingBackfill(unittest.TestCase):
         cls.strat_rec_ledger = ANALYTICS_LEDGERS_DIR / "recycling_ledger_u16_chita__classic.txt"
         cls.all_log_file = BASE_DIR / "logs" / "all.log"
 
+        # Бэкап существующих леджеров перед тестом
+        cls._backups = {}
+        for p in [cls.global_peel_ledger, cls.strat_peel_ledger, cls.global_rec_ledger, cls.strat_rec_ledger]:
+            if p.exists():
+                cls._backups[p] = p.read_bytes()
+
+        # Создание детерминированных тестовых фикстур (30 срезок пилинга и 1 рециклер)
+        peel_hdr = "Id;Timestamp (UTC);Strategy;Symbol;Side;Level;Fill Price;Peel Price;Rebound %;Peel Qty;Peel Vol (USDT);Micro PnL (USDT);Remaining Pos Qty\n"
+        peel_rows = []
+        syms = ["STRKUSDT", "METUSDT", "PUMPUSDT"]
+        v_29 = 27.8981
+        l_29 = 3.1908
+        v_last = round(836.9419 - (29 * v_29), 4)
+        l_last = round(95.7248 - (29 * l_29), 4)
+
+        for i in range(1, 31):
+            sym = syms[i % len(syms)]
+            vol = v_last if i == 30 else v_29
+            loss = l_last if i == 30 else l_29
+            qty = round(vol / 1.5, 4)
+            peel_rows.append(f"{i};2026-10-14 02:{i:02d}:00;u16_chita__classic;{sym};LONG;L3;1.5000;1.5200;+1.33%;{qty};{vol:.4f};{loss:.4f};50.0\n")
+
+        peel_content = peel_hdr + "".join(peel_rows)
+        cls.global_peel_ledger.write_text(peel_content, encoding="utf-8")
+        cls.strat_peel_ledger.write_text(peel_content, encoding="utf-8")
+
+        rec_hdr = "Id;Timestamp (UTC);Strategy;Symbol;Winning Side;Realized Profit (USDT);Losing Side;Losing Level;Losing DD %;Burn Qty;Burn Vol (USDT);Slice Loss (USDT);Burn Budget (USDT);Remaining Pos Qty\n"
+        rec_content = rec_hdr + "1;2026-10-14 02:00:00;u16_chita__classic;STRKUSDT;LONG;1.0000;SHORT;L2;-5.00%;10.0;24.2946;0.2925;0.2925;0.0\n"
+        cls.global_rec_ledger.write_text(rec_content, encoding="utf-8")
+        cls.strat_rec_ledger.write_text(rec_content, encoding="utf-8")
+
+    @classmethod
+    def tearDownClass(cls):
+        for p in [cls.global_peel_ledger, cls.strat_peel_ledger, cls.global_rec_ledger, cls.strat_rec_ledger]:
+            if p in cls._backups:
+                p.write_bytes(cls._backups[p])
+            elif p.exists():
+                p.unlink()
+
     def test_01_historical_backfill_integrity_and_quant_metrics(self):
         """
         Проверка физического наличия и математической точности 30 бэкфилл-сделок пилинга

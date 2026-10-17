@@ -445,8 +445,32 @@ class StrategyConfig:
         return (self.raw_meta.get("LONG") or {}).get("grid") or (self.raw_meta.get("SHORT") or {}).get("grid") or self.overrides.get("grid", {})
 
     @property
+    def grid_long(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("LONG") or {}).get("grid") or self.overrides.get("grid", {})
+
+    @property
+    def grid_short(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("SHORT") or {}).get("grid") or self.overrides.get("grid", {})
+
+    @property
+    def first_order_weight_regime(self) -> Dict[str, Any]:
+        return self.raw_meta.get("first_order_weight_regime") or self.overrides.get("first_order_weight_regime") or {}
+
+    @property
     def tp_map(self) -> Dict[str, Any]:
         return (self.raw_meta.get("LONG") or {}).get("tp_map") or (self.raw_meta.get("SHORT") or {}).get("tp_map") or self.overrides.get("tp_map", {})
+
+    @property
+    def tp_map_long(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("LONG") or {}).get("tp_map") or self.overrides.get("tp_map", {})
+
+    @property
+    def tp_map_short(self) -> Dict[str, Any]:
+        return (self.raw_meta.get("SHORT") or {}).get("tp_map") or self.overrides.get("tp_map", {})
+
+    @property
+    def cross_side_recycling(self) -> Dict[str, Any]:
+        return self.cross_recycling_cfg
 
     @property
     def modes(self) -> List[str]:
@@ -601,13 +625,15 @@ class StrategyRegistry:
                 f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены в {universes_dir}!"
             )
 
-        # Поддержка наследования шаблонов: base_template / template в файле вселенной
+        # Поддержка наследования шаблонов: base_template / template в файле вселенной, либо базовый _base.json
         for u_id, u_meta in list(data.items()):
             if isinstance(u_meta, dict):
                 base_ref = u_meta.get("base_template") or u_meta.get("template")
                 if base_ref and base_ref in data and base_ref != u_id:
                     parent_meta = copy.deepcopy(data[base_ref])
                     data[u_id] = deep_merge_dict(parent_meta, u_meta)
+                elif base_ref in ("_base", "base") and self.common_defaults:
+                    data[u_id] = deep_merge_dict(self.common_defaults, u_meta)
 
         return data
 
@@ -920,7 +946,14 @@ class StrategyRegistry:
             if sid.startswith(f"{strategy_id}__") or strategy_id.startswith(f"{sid}__"):
                 return scfg
         if hasattr(self, "universes_db") and strategy_id in self.universes_db:
-            return self.universes_db[strategy_id]
+            base_meta = copy.deepcopy(getattr(self, "common_defaults", {}))
+            template_meta = copy.deepcopy(self.universes_db[strategy_id])
+            raw_meta = deep_merge_dict(base_meta, template_meta)
+            return StrategyConfig(
+                strategy_id=strategy_id,
+                raw_meta=raw_meta,
+                symbols=[]
+            )
         return None
 
     def reload(self, active_strategies_cfg: Optional[Dict[str, Any]] = None) -> None:

@@ -15,9 +15,9 @@ ROLE: Асимметричный балансир инвестиционных �
    - k = +16 -> 66.67% LONG / 33.33% SHORT (Экстремальный аптренд)
    - k = -16 -> 33.33% LONG / 66.67% SHORT (Экстремальный даунтренд)
 3. Документированные режимы оценки тренда на 4h свечах:
-   - 'adx_di_4h':      ADX / DMI Directional Momentum (нормализация [-50.0, +50.0])
-   - 'bb_deviation_4h': Bollinger Bands Channel Deviation (нормализация [-0.5, +0.5])
-   - 'ema_spread_4h':   Dual EMA 50/200 Spread % (нормализация [-6.0%, +6.0%])
+   - В активном бою строго используются: EMA ('ema_trend', 'dyn_ema_16', 'ema_spread_4h') и Kernel.
+   - BB ('bb_deviation_4h', 'bb_inverted_lockout') отключен/зарезервирован по решению Тим Лида.
+   - ADX ('adx_di_4h') в стадии тестирования.
 """
 
 import math

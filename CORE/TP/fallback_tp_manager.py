@@ -9,7 +9,7 @@
 import time
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath, RiskCalculatingUtils
-from CORE.trailing_system import BaseTrailingSystem
+from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 
 logger = UnifiedLogger("FallbackMarketTP")
 

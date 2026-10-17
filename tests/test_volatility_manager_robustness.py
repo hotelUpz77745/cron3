@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from CORE.ADVANCED.volatility_manager import VolatilityManager
+from CORE.SERVICES.VOLATILITY.volatility_manager import VolatilityManager
 
 
 class TestVolatilityManagerRobustness(unittest.TestCase):

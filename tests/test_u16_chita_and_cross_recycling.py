@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock
 from pathlib import Path
 
-from CORE.HEDGE.cross_recycler import CrossSideProfitRecycler, CrossRecycler
+from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler, CrossRecycler
 from POS_FSM.models import PositionState
 from CORE.GRID.avg_manager import AverageManager
 from ANALYTICS.analytics import AnalyticsManager
@@ -568,7 +568,7 @@ class TestCrossRecyclerAndChitaFeatures(unittest.IsolatedAsyncioTestCase):
 
     def test_disabled_grid_levels_handling(self):
         """Проверка: уровни с enabled: false корректно игнорируются трейлингом и не падают при None отступах."""
-        from CORE.trailing_system import BaseTrailingSystem
+        from CORE.STRATEGY.trailing_system import BaseTrailingSystem
         grid = {
             "0": {"enabled": True, "indent": 0.0, "volume": 5.0, "is_active": True},
             "1": {"enabled": True, "indent": -3.0, "volume": 5.0, "is_active": False},

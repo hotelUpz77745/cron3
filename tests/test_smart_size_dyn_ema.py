@@ -3,11 +3,14 @@
 # ROLE: Dedicated unit tests for U16 Chita Smart Size (Turing Bell & grid_0 isolation)
 # ============================================================
 
+import time
 import unittest
 from unittest.mock import patch, AsyncMock
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
 from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE._utils import TradeMath
 
 
@@ -189,6 +192,9 @@ class TestSmartSizeDynEma(unittest.TestCase):
         bot.entry_blocked = False
         bot._closing_symbols = set()
         bot.block_until_timestamp = 0
+        bot.first_order_regime = FirstOrderRegimeManager()
+        bot.brownian_noise = BrownianNoiseController()
+        bot.get_current_time = time.time
         bot.radar_navigator = None
         bot.spec_data = {"STRKUSDT": {"step_size": 0.01, "min_qty": 0.01, "tick_size": 0.01}}
         bot.leverage_manager = MagicMock()
@@ -233,7 +239,6 @@ class TestSmartSizeDynEma(unittest.TestCase):
             mock_client.make_order.assert_called_once()
 
         # ТЕСТ 2: Повторный вход сильной руки (closed_count >= 1) — броуновский шум применяется!
-        import time
         state.in_position = False
         state.recent_closes = [time.time()]
         mock_client.make_order.reset_mock()

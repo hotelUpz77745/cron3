@@ -6,7 +6,7 @@
 from typing import Tuple, Optional
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath
-from CORE.ADVANCED.atr_provider import ATRProvider
+from CORE.SERVICES.VOLATILITY.atr_provider import ATRProvider
 
 logger = UnifiedLogger("DynamicATRTP")
 

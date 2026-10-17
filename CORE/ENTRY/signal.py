@@ -124,7 +124,12 @@ class TimeControl:
         except (ValueError, TypeError):
             return float(DEFAULT_SHIFT_INTERVAL_SEC)
 
-    def is_new_interval(self, closed_count: int = 0, smart_grace_cfg: Optional[Dict[str, Any]] = None) -> tuple[bool, float]:
+    def is_new_interval(
+        self,
+        closed_count: int = 0,
+        smart_grace_cfg: Optional[Dict[str, Any]] = None,
+        current_timestamp: Optional[float] = None,
+    ) -> tuple[bool, float]:
         """
         Возвращает (is_signal, current_grace_period), где is_signal == True, если текущее время 
         находится в пределах динамического окна с начала текущего интервала (свечи).
@@ -146,8 +151,9 @@ class TimeControl:
 
         grace_period = base_period + matched_increment
 
-        now = datetime.now(timezone.utc)
-        current_timestamp = now.timestamp()
+        if current_timestamp is None:
+            now = datetime.now(timezone.utc)
+            current_timestamp = now.timestamp()
 
         # Кэширование сдвига на ID текущей свечи (интервала) для стабильного порога внутри одной свечи
         candle_id = int(current_timestamp // self.interval_seconds)

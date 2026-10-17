@@ -1,5 +1,5 @@
 import unittest
-from CORE.ADVANCED.volatility_scanner import VolatilityScanner
+from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
 
 class TestVolatilityScanner(unittest.TestCase):
     def test_compute_atr_volatility(self):
@@ -239,7 +239,7 @@ class TestVolatilityScanner(unittest.TestCase):
         self.assertIsNone(res["rsi"])  # RSI was disabled
 
     def test_klines_cache_ttl_and_storage(self):
-        from CORE.ADVANCED.klines_cache import KlinesCache
+        from CORE.SERVICES.VOLATILITY.klines_cache import KlinesCache
         KlinesCache.clear()
         self.assertEqual(KlinesCache.size(), 0)
 

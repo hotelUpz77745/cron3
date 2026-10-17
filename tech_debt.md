@@ -369,6 +369,36 @@
          1. Разработан модуль `cron3TradeBacktest/TB_CORE/ENGINE/c_kernel.py`: JIT-компиляция в нативный машинный код x86-64 через LLVM (`@njit(fastmath=True, nogil=True)`). На реальных тиках Binance Vision скорость достигла **7.66 млн тиков/сек** (40 миллисекунд на 307 тыс. тиков суточного файла вместо 8.5 сек в чистом Python — ускорение в 212 раз).
          2. Созданы файлы C++20 архитектуры: `cron3TradeBacktest/TB_CORE/ENGINE/CPP/chita_engine.hpp`, `chita_engine.cpp` и `CMakeLists.txt` с C ABI экспортом (`extern "C"`) для сборки динамической библиотеки DLL/so.
 
+      - **ADR-22: Каноническая декомпозиция архитектуры на чистые домены СТРАТЕГИЙ и СЕРВИСОВ (Протокол Самсонова Николая, 17.10.2026):**
+        - **Контекст и Архитектурная Проблема:**
+          Исторически в проекте `cron3` образовалось размывание ответственности (нарушение SRP, SOLID):
+          1. Элементы паспорта стратегий (`peeling_manager`, `brownian_noise`, `trailing_system`) были разбросаны по вспомогательным каталогам (`CORE/GRID/`, `CORE/ENTRY/`).
+          2. Сервисные компоненты, адаптеры и утилиты (`leverage_manager`, `auto_closer`, `notifier`, каталоги `tools/` и `CORE/ADVANCED/`) находились на одном уровне с ядром бота или в корне репозитория.
+          3. Появилась ошибочная промежуточная сущность `canonical_strategy_processor.py`, нарушавшая иерархию материнской платы `CORE/bot.py`.
+        - **Архитектурное Решение и Реализация:**
+          1. **Материнская плата (Motherboard / Orchestrator) — строго `CORE/bot.py`:**
+             - Ядро отвечает за жизненный цикл, управление подписками, координацию потоков данных и оркестрацию стратегий.
+             - Ликвидирован лишний слой `canonical_strategy_processor.py`.
+          2. **Чистый Домен Паспорта Стратегий — `CORE/STRATEGY/`:**
+             - Консолидированы все сущности конфигурации и исполнения паспорта стратегий:
+               - `peeling_manager.py` (Subgrid LIFO Peeling),
+               - `brownian_noise.py` (броуновский анти-детект входов),
+               - `cross_side_recycler.py` (кросс-сжигание токсичных позиций),
+               - `trailing_system.py` (универсальный трейлинг пола/курка),
+               - `strategy_config.py`, `strategy_applicator.py`, `strategy_registry.py`,
+               - `momentum_engine.py`, `kernel_engine.py`, `trend_calculator.py`.
+             - В `StrategyConfig` внедрены нативные свойства `tp_map_long`, `tp_map_short` и `cross_side_recycling`.
+          3. **Чистый Домен Сервисов и Адаптеров — `CORE/SERVICES/`:**
+             - `CORE/SERVICES/VOLATILITY/`: менеджер и сканер волатильности, кэш свечей `KlinesCache`, провайдер ATR. (Папка `CORE/ADVANCED/` полностью удалена).
+             - `CORE/SERVICES/TOOLS/`: аудит и очистка ордеров, калькулятор объемов сетки, восстановление TP-ордеров. (Папка `tools/` в корне полностью удалена).
+             - `CORE/SERVICES/leverage_adapter.py`: чистый адаптер биржевого плеча и маржи `LeverageAdapter` (алиас `LeverageManager`). Старый `CORE/ENTRY/leverage_manager.py` удален.
+             - `CORE/SERVICES/auto_closer.py`, `CORE/SERVICES/notifier.py`, `CORE/SERVICES/backup_service.py`.
+             - `CORE/SERVICES/SELECTOR/samsonov_funnel.py`: временно законсервирован понятным баннером технического обслуживания (`⚠️ ВНИМАНИЕ: Сервис 'Воронка Самсонова' временно недоступен...`).
+          4. **Удаление зомби-прокладок (Zero Zombie Shims):**
+             - Все ссылки в боевом коде и тестах переведены напрямую на канонические пути без переходных костылей и устаревших файлов.
+          5. **100% Зеленое Тестирование и Smoke-Test:**
+             - 266 юнит-тестов выполнены за 16.45с (0 errors, 0 failures).
+             - Проведен боевой smoke-тест запуска `python main.py`: инициализация BotCore, загрузка реестра стратегий, подключение потоков цен, FSM-синхронизация и прогрев маржи прошли в штатном режиме. Все процессы штатно остановлены.
 ---
 
 ### Перспективные гипотезы развития:

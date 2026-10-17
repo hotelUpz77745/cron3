@@ -1,7 +1,11 @@
-# ==============================================================================
-# Path: tools/audit_and_cleanup_orders.py
-# Role: Частный утилитный хелпер для аудита и мгновенной очистки лишних ордеров Binance
-# ==============================================================================
+# CORE/SERVICES/TOOLS/audit_and_cleanup_orders.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.TOOLS.audit_and_cleanup_orders
+ROLE: Частный утилитный хелпер для аудита и мгновенной очистки лишних ордеров Binance
+==============================================================================
+"""
 
 import asyncio
 import os
@@ -16,9 +20,8 @@ if hasattr(sys.stdout, "reconfigure"):
         pass
 
 # Setup paths
-root_dir = Path(__file__).resolve().parent.parent
+root_dir = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(root_dir))
-sys.path.insert(0, str(root_dir.parent))
 
 from consts import API_KEY, API_SECRET
 from API.BINANCE.client_prod import BinanceClient

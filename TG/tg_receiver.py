@@ -3870,13 +3870,13 @@ class TelegramReceiver:
             status_msg = await callback.message.answer(f"⏳ Сканирование ({selector_type}), пожалуйста подождите...")
 
             try:
-                from CORE.SELECTOR.coin_selection_service import CoinSelectionService
+                from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
                 service = CoinSelectionService(bot_core=self.bot_core)
                 target_count = service.get_configured_target_count(selector_type=selector_type)
 
                 if selector_type == "volatility_scanner":
                     import importlib
-                    import CORE.ADVANCED.volatility_scanner as vs
+                    import CORE.SERVICES.VOLATILITY.volatility_scanner as vs
                     importlib.reload(vs)
                     scanner = vs.VolatilityScanner(client=getattr(self.bot_core, "client", None))
                     await scanner.scan()

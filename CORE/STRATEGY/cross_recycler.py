@@ -1,10 +1,15 @@
+# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\STRATEGY\cross_recycler.py
+# Role: cross_recycler.py module
+
 # ==============================================================================
-# Path: CORE/HEDGE/cross_recycler.py
+# Path: CORE/STRATEGY/cross_recycler.py
 # Role: Модуль рециркуляции прибыли (Cross-Side Profit Recycling) для хедж-позиций
+#       Доменная сущность паспорта стратегии (cross_side_recycling)
 # ==============================================================================
 
 import asyncio
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
+from consts import DEFAULT_TAKER_FEE_RATE
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath, RiskCalculatingUtils
 
@@ -14,6 +19,8 @@ logger = UnifiedLogger("CrossRecycler")
 class CrossSideProfitRecycler:
     """
     Модуль рециркуляции прибыли (Cross-Side Profit Recycling).
+    Доменная сущность паспорта стратегии: cross_side_recycling.
+
     При закрытии прибыльного тейка сильной стороны направляет долю прибыли
     на рыночное сокращение токсичного объема противоположной страдающей стороны.
 
@@ -28,19 +35,185 @@ class CrossSideProfitRecycler:
     def resolve_recycle_ratio(recycling_cfg: Dict[str, Any], level: int) -> float:
         """
         Каноническое дискретное определение доли рециркуляции прибыли (burn_ratio).
-        Делегирует в единый CanonicalStrategyProcessor.
+        Поддерживает:
+          - диапазоны: "2-4": 0.50, "2..4": 0.50
+          - операторы: ">=5": 0.75, ">4": 0.75, "<=2": 0.30
+          - плюс-нотацию: "5+": 0.75
+          - прямые номера: "2": 0.50
+          - скалярный ключ: 'recycle_ratio'
         """
-        from CORE.STRATEGY.canonical_strategy_processor import CanonicalStrategyProcessor
-        return CanonicalStrategyProcessor.resolve_recycle_ratio(recycling_cfg, level)
+        if not recycling_cfg or not recycling_cfg.get("enabled", True):
+            return 0.0
+
+        fallback = float(recycling_cfg["recycle_ratio"]) if ("recycle_ratio" in recycling_cfg and recycling_cfg["recycle_ratio"] is not None) else None
+        tiers = (
+            recycling_cfg.get("recycle_ratio_tiers")
+            or recycling_cfg.get("recycle_ratio_map")
+            or recycling_cfg.get("step_map")
+        )
+        if not tiers or not isinstance(tiers, dict):
+            return fallback if fallback is not None else 0.50
+
+        step_str = str(level)
+        if step_str in tiers:
+            v = tiers[step_str]
+            return float(v.get("burn_ratio", v)) if isinstance(v, dict) else float(v)
+
+        for pattern, val in tiers.items():
+            pat = str(pattern).strip()
+            v = float(val.get("burn_ratio", val)) if isinstance(val, dict) else float(val)
+
+            if "-" in pat or ".." in pat:
+                delim = ".." if ".." in pat else "-"
+                parts = pat.split(delim)
+                if len(parts) == 2:
+                    try:
+                        low, high = int(parts[0].strip()), int(parts[1].strip())
+                        if low <= level <= high:
+                            return v
+                    except ValueError:
+                        pass
+            elif pat.endswith("+"):
+                try:
+                    thresh = int(pat[:-1].strip())
+                    if level >= thresh:
+                        return v
+                except ValueError:
+                    pass
+            elif pat.startswith(">="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level >= thresh:
+                        return v
+                except ValueError:
+                    pass
+            elif pat.startswith(">"):
+                try:
+                    thresh = int(pat[1:].strip())
+                    if level > thresh:
+                        return v
+                except ValueError:
+                    pass
+            elif pat.startswith("<="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level <= thresh:
+                        return v
+                except ValueError:
+                    pass
+            elif pat.startswith("<"):
+                try:
+                    thresh = int(pat[1:].strip())
+                    if level < thresh:
+                        return v
+                except ValueError:
+                    pass
+            elif pat.startswith("=="):
+                try:
+                    thresh = int(pat[2:].strip())
+                    if level == thresh:
+                        return v
+                except ValueError:
+                    pass
+
+        return fallback if fallback is not None else 0.0
 
     @staticmethod
-    def resolve_min_burn_level(recycling_cfg: Dict[str, Any]) -> int:
+    def resolve_min_burn_level(recycling_cfg: Optional[Dict[str, Any]]) -> int:
+        """Определяет минимальный уровень сетки для начала сжигания объема."""
+        if not recycling_cfg or not recycling_cfg.get("enabled", True):
+            return 999
+        if "min_burn_level" in recycling_cfg and recycling_cfg["min_burn_level"] is not None:
+            return int(recycling_cfg["min_burn_level"])
+
+        tiers = recycling_cfg.get("recycle_ratio_tiers") or recycling_cfg.get("recycle_ratio_map")
+        if tiers and isinstance(tiers, dict):
+            levels = []
+            for pat in tiers.keys():
+                p = str(pat).strip()
+                if "-" in p or ".." in p:
+                    delim = ".." if ".." in p else "-"
+                    parts = p.split(delim)
+                    try:
+                        levels.append(int(parts[0].strip()))
+                    except ValueError:
+                        pass
+                elif p.endswith("+"):
+                    try:
+                        levels.append(int(p[:-1].strip()))
+                    except ValueError:
+                        pass
+                elif p.startswith(">="):
+                    try:
+                        levels.append(int(p[2:].strip()))
+                    except ValueError:
+                        pass
+                elif p.startswith(">"):
+                    try:
+                        levels.append(int(p[1:].strip()) + 1)
+                    except ValueError:
+                        pass
+                elif p.isdigit():
+                    levels.append(int(p))
+            if levels:
+                return min(levels)
+
+        return 2
+
+    @classmethod
+    def calculate_burn_slice(
+        cls,
+        net_profit: float,
+        opp_side: str,
+        opp_avg_price: float,
+        opp_vol_qty: float,
+        opp_cur_step: int,
+        current_price: float,
+        recycling_cfg: Optional[Dict[str, Any]],
+        taker_fee: Optional[float] = None
+    ) -> Tuple[float, float, float]:
         """
-        Каноническое определение минимального уровня сетки для сжигания (min_burn_level).
-        Делегирует в единый CanonicalStrategyProcessor.
+        Канонический математический расчет объема и затрат на срезку:
+        Возвращает: (burned_qty, spent_profit, burned_notional).
+        Строгое прямое чтение параметров без скрытых дефолтов (Правило 2).
         """
-        from CORE.STRATEGY.canonical_strategy_processor import CanonicalStrategyProcessor
-        return CanonicalStrategyProcessor.resolve_min_burn_level(recycling_cfg)
+        if not recycling_cfg or not recycling_cfg.get("enabled", True) or net_profit <= 0:
+            return 0.0, 0.0, 0.0
+
+        min_lvl = cls.resolve_min_burn_level(recycling_cfg)
+        if opp_cur_step < min_lvl or opp_vol_qty <= 0.0:
+            return 0.0, 0.0, 0.0
+
+        burn_ratio = cls.resolve_recycle_ratio(recycling_cfg, opp_cur_step)
+        if burn_ratio <= 0.0:
+            return 0.0, 0.0, 0.0
+
+        loss_per_unit = (opp_avg_price - current_price) if opp_side == "LONG" else (current_price - opp_avg_price)
+        if loss_per_unit <= 0.0:
+            return 0.0, 0.0, 0.0
+
+        # Прямое чтение параметров конфига (Правило 2: никаких скрытых дефолтов!)
+        min_dd = float(recycling_cfg["min_drawdown_pct"])
+        dd_pct = (loss_per_unit / opp_avg_price) * 100.0 if opp_avg_price > 0 else 0.0
+        if dd_pct < min_dd:
+            return 0.0, 0.0, 0.0
+
+        fee_rate = taker_fee if taker_fee is not None else DEFAULT_TAKER_FEE_RATE
+        loss_with_fee = loss_per_unit + (current_price * fee_rate)
+        profit_budget = net_profit * burn_ratio
+        max_burn_qty = profit_budget / loss_with_fee
+
+        max_slice_pct = float(recycling_cfg["max_slice_pct"]) / 100.0
+        allowed_slice_qty = opp_vol_qty * max_slice_pct
+
+        burn_qty = min(max_burn_qty, allowed_slice_qty, opp_vol_qty)
+        if burn_qty <= 0.0:
+            return 0.0, 0.0, 0.0
+
+        spent = burn_qty * loss_with_fee
+        burned_notional = burn_qty * current_price
+
+        return burn_qty, spent, burned_notional
 
     @classmethod
     async def maybe_recycle(
@@ -278,4 +451,3 @@ class CrossSideProfitRecycler:
 
 
 CrossRecycler = CrossSideProfitRecycler
-

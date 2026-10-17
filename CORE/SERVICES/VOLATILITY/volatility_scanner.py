@@ -1,7 +1,11 @@
-# ==============================================================================
-# Path: CORE/ADVANCED/volatility_scanner.py
-# Role: Мультифакторный сканер волатильности и рыночных фильтров для фьючерсов Binance
-# ==============================================================================
+# CORE/SERVICES/VOLATILITY/volatility_scanner.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.VOLATILITY.volatility_scanner
+ROLE: Мультифакторный сканер волатильности и рыночных фильтров для фьючерсов Binance
+==============================================================================
+"""
 
 import asyncio
 import json
@@ -18,7 +22,7 @@ from consts import DATA_DIR
 from c_utils import Utils
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.client_prod import BinanceClient
-from CORE.ADVANCED.klines_cache import KlinesCache
+from CORE.SERVICES.VOLATILITY.klines_cache import KlinesCache
 
 logger = UnifiedLogger("VolatilityScanner")
 

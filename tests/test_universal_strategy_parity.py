@@ -9,7 +9,6 @@ import unittest
 from pathlib import Path
 
 from CORE._utils import TakeProfitConfigResolver
-from CORE.STRATEGY.canonical_strategy_processor import CanonicalStrategyProcessor
 
 
 class TestUniversalStrategyParity(unittest.TestCase):
@@ -120,13 +119,12 @@ class TestUniversalStrategyParity(unittest.TestCase):
                 "tp_map": {"0": {"indent": 1.2, "fallback_indent": 1.5}}
             }
         }
-        resolved = CanonicalStrategyProcessor.resolve_universe(minimal_strat)
         # Отсутствующие фичи безопасны и строго равны None (Правило 2.2 Протокола)
-        self.assertIsNone(resolved["first_order_weight_regime"])
-        self.assertIsNone(resolved["cross_side_recycling"])
-        self.assertIsNone(resolved["smart_size"])
-        self.assertIsNone(resolved["smart_tp"])
-        self.assertIsNone(resolved["smart_grace"])
+        self.assertIsNone(minimal_strat.get("first_order_weight_regime"))
+        self.assertIsNone(minimal_strat.get("cross_side_recycling"))
+        self.assertIsNone(minimal_strat.get("smart_size"))
+        self.assertIsNone(minimal_strat.get("smart_tp"))
+        self.assertIsNone(minimal_strat.get("smart_grace"))
 
     def test_internal_api_self_containment(self):
         """Проверка самодостаточности боевого бота: API импортируется напрямую из cron3/API."""

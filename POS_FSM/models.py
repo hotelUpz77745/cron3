@@ -10,8 +10,8 @@ from dataclasses import dataclass, field
 
 @dataclass
 class PositionState:
-    symbol: str
-    side: str  # "LONG" или "SHORT"
+    symbol: str = ""
+    side: str = ""  # "LONG" или "SHORT"
     
     total_volume: float = 0.0            # суммарный объем позиции
     avg_entry_price: float = 0.0         # Средняя точка входа
@@ -41,15 +41,68 @@ class PositionState:
     last_grace_period: float = 0.0
     last_closed_volume: float = 0.0
     last_closed_avg_price: float = 0.0
-    last_closed_timestamp: float = 0.0
-    
+    cur_step: int = 0
+    fees: float = 0.0
+    peel_filled: bool = False
+    next_grid_p: float = 0.0
+    next_grid_q: float = 0.0
+    next_grid_step: int = 0
+    peel_p: float = 0.0
+    peel_q: float = 0.0
+
+    @property
+    def in_pos(self) -> bool:
+        return self.in_position
+
+    @in_pos.setter
+    def in_pos(self, val: bool):
+        self.in_position = val
+        if not val:
+            self.is_closing = False
+
+    @property
+    def vol_qty(self) -> float:
+        return self.total_volume
+
+    @vol_qty.setter
+    def vol_qty(self, val: float):
+        self.total_volume = val
+
+    @property
+    def avg_price(self) -> float:
+        return self.avg_entry_price
+
+    @avg_price.setter
+    def avg_price(self, val: float):
+        self.avg_entry_price = val
+
+    @property
+    def entry_price(self) -> float:
+        return self.initial_entry_price
+
+    @entry_price.setter
+    def entry_price(self, val: float):
+        self.initial_entry_price = val
+
+    @property
+    def recent_close_ts(self) -> float:
+        return self.last_closed_timestamp
+
+    @recent_close_ts.setter
+    def recent_close_ts(self, val: float):
+        self.last_closed_timestamp = val
+
+    @property
+    def trailing_grid_armed(self) -> dict:
+        return self.trailing_grid_state.setdefault("armed_levels", {})
+
     def set_in_position(self, status: bool):
         self.in_position = status
         self.in_position_papper = False
         if not status:
             self.is_closing = False
             
-    def reset(self):
+    def reset(self, ts_ms: float = 0.0):
         """Сброс до дефолта: обнуление всех метрик и флагов."""
         self.total_volume = 0.0
         self.avg_entry_price = 0.0
@@ -59,7 +112,10 @@ class PositionState:
         self.open_time = 0
         self.last_closed_volume = 0.0
         self.last_closed_avg_price = 0.0
-        self.last_closed_timestamp = 0.0
+        self.last_closed_timestamp = ts_ms
+        self.cur_step = 0
+        self.fees = 0.0
+        self.peel_filled = False
         self.in_position = False
         self.in_position_papper = False
         self.is_finished = False

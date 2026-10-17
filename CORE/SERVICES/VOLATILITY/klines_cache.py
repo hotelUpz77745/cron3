@@ -1,7 +1,11 @@
-# ==============================================================================
-# Path: CORE/ADVANCED/klines_cache.py
-# Role: Высокопроизводительный потокобезопасный кэш свечей (klines) с настраиваемым TTL
-# ==============================================================================
+# CORE/SERVICES/VOLATILITY/klines_cache.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.VOLATILITY.klines_cache
+ROLE: Высокопроизводительный потокобезопасный кэш свечей (klines) с настраиваемым TTL
+==============================================================================
+"""
 
 from __future__ import annotations
 
@@ -98,20 +102,21 @@ class KlinesCache:
             return cached
 
         try:
-            fresh_klines = await fetcher_coro_fn()
-            if fresh_klines:
-                cls.set(symbol, interval, limit, fresh_klines)
-            return fresh_klines
+            klines = await fetcher_coro_fn()
+            if klines and isinstance(klines, list):
+                cls.set(symbol, interval, limit, klines)
+                return klines
+            return None
         except Exception as e:
-            logger.debug(f"[KlinesCache] Error fetching klines for {symbol} ({interval}): {e}")
+            logger.warning(f"[KlinesCache] Ошибка при fetcher для {symbol} {interval}: {e}")
             return None
 
     @classmethod
     def clear(cls) -> None:
-        """Очищает весь кэш свечей."""
+        """Полная очистка кэша свечей (для тестов или сброса сессий)."""
         cls._cache.clear()
 
     @classmethod
     def size(cls) -> int:
-        """Возвращает количество записей в кэше."""
+        """Количество закэшированных серий свечей."""
         return len(cls._cache)

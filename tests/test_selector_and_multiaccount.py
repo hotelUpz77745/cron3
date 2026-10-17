@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
-from CORE.SELECTOR.coin_selection_service import CoinSelectionService
+from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
 from CORE.STRATEGY.strategy_registry import StrategyConfig, StrategyRegistry
 from TG.tg_receiver import TelegramReceiver
 
@@ -146,7 +146,7 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
         ]
 
         async def run_test():
-            with patch("CORE.SELECTOR.alpha_coin_selector.AlphaCoinSelector.select_top_coins", new=AsyncMock(return_value=mock_candidates)):
+            with patch("CORE.SERVICES.SELECTOR.alpha_coin_selector.AlphaCoinSelector.select_top_coins", new=AsyncMock(return_value=mock_candidates)):
                 res = await service.get_alpha_top_coins(target_count=2)
                 self.assertEqual(len(res), 2)
                 self.assertEqual(res[0]["symbol"], "SOLUSDT")
@@ -165,7 +165,7 @@ class TestSelectorAndMultiAccount(unittest.TestCase):
         }
 
         async def run_test():
-            with patch("CORE.coin_selectors.SamsonovFunnelSelector.get_funnel_stages", return_value=mock_funnel_targets):
+            with patch("CORE.SERVICES.SELECTOR.samsonov_funnel.SamsonovFunnelSelector.get_funnel_stages", return_value=mock_funnel_targets):
                 res = await service.get_samsonov_top_coins(target_count=2, universe_id="u6_symbiosis_gamma_fortress35")
                 self.assertEqual(len(res), 2)
                 self.assertEqual(res[0]["symbol"], "GRASSUSDT")

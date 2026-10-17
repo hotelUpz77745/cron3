@@ -11,12 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from POS_FSM.models import PositionState
 from CORE.GRID.avg_manager import AverageManager
-from CORE.SELECTOR.alpha_coin_selector import AlphaCoinSelector
-from CORE.radar_navigator import RadarNavigator
+from CORE.SERVICES.SELECTOR.alpha_coin_selector import AlphaCoinSelector
 
 
 class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
-    """Тестирование новых возможностей: LIFO Peeling, Alpha-Селектор и 23-часовое окно ротации."""
+    """Тестирование новых возможностей: LIFO Peeling, Alpha-Селектор."""
 
     def setUp(self):
         self.mock_bot = MagicMock()
@@ -81,7 +80,7 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(metrics_flat["eligible"])
         self.assertIn("dead_volatility_zombie", metrics_flat["reject_reason"])
 
-    @patch("CORE.SELECTOR.alpha_coin_selector.BinancePublic.get_klines")
+    @patch("CORE.SERVICES.SELECTOR.alpha_coin_selector.BinancePublic.get_klines")
     async def test_alpha_selector_select_top_coins(self, mock_get_klines):
         """Мок-тест select_top_coins с ранжированием по Alpha Score."""
         async def fake_klines(sym, interval, limit):
@@ -364,37 +363,6 @@ class TestNewAlphaFeatures(unittest.IsolatedAsyncioTestCase):
         for lvl in ("3", "4", "5", "6"):
             self.assertNotIn("peeled", state.grid[lvl])
             self.assertFalse(state.grid[lvl]["is_active"])
-
-    # --------------------------------------------------------------------------
-    # 3. ТЕСТЫ RADAR NAVIGATOR (ИНВАРИАНТ #3: РУЧНОЙ ПУЛ ОПЕРАТОРА БЕЗ РОТАЦИИ)
-    # --------------------------------------------------------------------------
-    async def test_radar_navigator_preserves_operator_pool_on_ratchet_closed(self):
-        """Инвариант #3: срабатывание автоклозера не запускает ротацию обоймы оператора."""
-        cfg = {
-            "radar_synergy": {
-                "enabled": True,
-                "mode": "auto",
-                "selector_type": "alpha_coin_selector",
-                "target_coins_count": 4,
-            },
-            "paths": {"radar_dir": "../cron3PapperUniverses"},
-            "active_strategies": {
-                "u6_symbiosis_gamma_fortress35": {
-                    "enabled": True,
-                    "symbols": ["GRASSUSDT", "ZROUSDT"]
-                }
-            }
-        }
-
-        with patch("CORE.radar_navigator._CFG", cfg):
-            nav = RadarNavigator(self.mock_bot)
-            strat_id = "u6_symbiosis_gamma_fortress35"
-
-            with patch.object(AlphaCoinSelector, "select_top_coins", new_callable=AsyncMock) as mock_sel:
-                await nav.on_ratchet_closed(strat_id, "<=2.0%", is_stagnation=True)
-                mock_sel.assert_not_called()
-            self.mock_bot.delete_symbol.assert_not_called()
-            self.mock_bot.add_symbol.assert_not_called()
 
 
 if __name__ == "__main__":

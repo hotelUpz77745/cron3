@@ -5,8 +5,8 @@
 
 import unittest
 from unittest.mock import MagicMock
-from CORE.trailing_system import BaseTrailingSystem, ToxicityEngine
-from CORE.auto_closer import AutoCloser
+from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
+from CORE.SERVICES.auto_closer import AutoCloser
 
 
 class TestAutoCloserToxicityAndModes(unittest.TestCase):

@@ -7,11 +7,11 @@ from unittest.mock import AsyncMock, patch, MagicMock
 import numpy as np
 from consts import DATA_DIR
 from c_utils import Utils
-from CORE.ADVANCED.klines_cache import KlinesCache
-from CORE.ADVANCED.volatility_scanner import VolatilityScanner
-from CORE.SELECTOR.alpha_coin_selector import AlphaCoinSelector
-from CORE.SELECTOR.coin_selection_service import CoinSelectionService
-from CORE.coin_selectors import SamsonovFunnelSelector
+from CORE.SERVICES.VOLATILITY.klines_cache import KlinesCache
+from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
+from CORE.SERVICES.SELECTOR.alpha_coin_selector import AlphaCoinSelector
+from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
+from CORE.SERVICES.SELECTOR.samsonov_funnel import SamsonovFunnelSelector
 
 
 class TestScreenersUnifiedService(unittest.TestCase):
@@ -85,7 +85,7 @@ class TestScreenersUnifiedService(unittest.TestCase):
                     {"open": 10.0 + (i % 2), "high": 12.0, "low": 9.0, "close": 10.5, "volume": 1000.0}
                     for i in range(30)
                 ]
-                with patch("CORE.SELECTOR.alpha_coin_selector.BinancePublic.get_klines", new_callable=AsyncMock) as mock_fetch:
+                with patch("CORE.SERVICES.SELECTOR.alpha_coin_selector.BinancePublic.get_klines", new_callable=AsyncMock) as mock_fetch:
                     mock_fetch.return_value = mock_klines
                     results = await AlphaCoinSelector.select_top_coins(
                         target_count=2, use_volatility_pool=True, volatile_file_path=test_file

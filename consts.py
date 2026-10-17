@@ -193,6 +193,9 @@ DEFAULT_HEARTBEAT_TFR: str = str(
     or "5m"
 )
 DEFAULT_TIMEFRAME: str = DEFAULT_HEARTBEAT_TFR
+COOLDOWN_POST_CANDLE_BUFFER_SEC: float = 5.0
+COOLDOWN_MIN_HEARTBEAT_SEC: float = 30.0
+DEFAULT_TAKER_FEE_RATE: float = 0.0005  # 0.05% Taker fee on Binance Futures (VIP0)
 DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
     "start_period_sec": 57,
     "shift_interval_sec": 13,

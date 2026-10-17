@@ -1,3 +1,12 @@
+# CORE/SERVICES/auto_closer.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.SERVICES.auto_closer
+ROLE: Сервис автоматического закрытия позиций (PnL куполов, таймауты, трейлинг-рэтчет, убытки)
+==============================================================================
+"""
+
 import asyncio
 import json
 import time
@@ -6,11 +15,20 @@ from typing import Any, Optional, Dict
 from consts import DATA_DIR, ANALYTICS_DIR, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE.trailing_system import BaseTrailingSystem, ToxicityEngine
+from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
 
 logger = UnifiedLogger("AutoCloser")
 
+
 class AutoCloser:
+    """
+    Институциональный сервис автоматического мониторинга и закрытия позиций:
+    - Контроль PnL изолированных стратегических куполов (Classic, Toxic, Fixed, Off).
+    - Трейлинг-Храповик (Trailing Ratchet) по шкале чистого Net Profit.
+    - Toxicity Adaptive фиксация просадки.
+    - Аварийный ручник риск-системы (Miami Profit Take / Risk Stop).
+    """
+
     def __init__(self, bot_core):
         self.bot_core = bot_core
         self._is_closing = False

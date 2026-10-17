@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, AsyncMock
 
 from quant_calculator import QuantCalculator
 from CORE._utils import TradeMath, RiskCalculatingUtils
-from CORE.trailing_system import BaseTrailingSystem
+from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 from CORE.GRID.avg_manager import AverageManager
-from tools.grid_volume_calculator import calculate_grid_volumes
+from CORE.SERVICES.TOOLS.grid_volume_calculator import calculate_grid_volumes
 
 
 class TestGridNoneSafety(unittest.IsolatedAsyncioTestCase):
