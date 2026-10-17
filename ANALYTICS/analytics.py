@@ -1949,3 +1949,113 @@ class AnalyticsManager:
             await self._do_fetch_and_record(client, symbol, side, open_time, close_time)
         finally:
             self._sync_locks.discard((symbol, side))
+
+    def reset_strategy_iteration(self, strategy_id: str) -> dict:
+        """
+        Принудительный сброс итерации стратегии и переход на новый цикл.
+        Синхронизирует stats, cache и возвращает метаданные сброса.
+        """
+        now_ms = int(time.time() * 1000)
+        strat_stats_path = self.stats_dir / f"analytics_{strategy_id}.json"
+        strat_analytics = {}
+        if strat_stats_path.exists():
+            strat_analytics = Utils.read_json_file(strat_stats_path) or {}
+        else:
+            strat_analytics = self._read_data() or {}
+
+        strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
+        cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
+        next_iter_idx = cur_iter_idx + 1
+        new_iter_start_net = round(strat_net, 4)
+        new_iter_start_real = round(float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))), 4)
+
+        strat_analytics["iteration_index"] = next_iter_idx
+        strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
+        strat_analytics["iteration_net_profit_usdt"] = 0.0
+        strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
+        strat_analytics["iteration_realized_pnl_usdt"] = 0.0
+        strat_analytics["iteration_start_ts"] = now_ms
+        strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
+        strat_analytics["iteration_peak_ts"] = now_ms
+        strat_analytics["iteration_peak_age_hours"] = 0.0
+        strat_analytics["iteration_net_velocity"] = 0.0
+
+        if strat_stats_path.exists():
+            Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
+
+        # Синхронизация CACHE/iteration_state.json
+        try:
+            c_file = CACHE_DIR / "iteration_state.json"
+            c_dict = {}
+            if c_file.exists():
+                try:
+                    c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                except Exception:
+                    c_dict = {}
+            prev_entry = c_dict.get(strategy_id, {})
+            c_dict[strategy_id] = {
+                "iteration_index": next_iter_idx,
+                "iteration_start_net_profit_usdt": new_iter_start_net,
+                "iteration_start_realized_pnl_usdt": new_iter_start_real,
+                "iteration_realized_pnl_usdt": 0.0,
+                "iteration_start_ts": now_ms,
+                "iteration_peak_net_profit_usdt": 0.0,
+                "iteration_peak_ts": now_ms,
+                "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", strat_net),
+                "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
+                "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            }
+            Utils.atomic_write_json(c_file, c_dict, indent=4)
+        except Exception as ce:
+            logger.error(f"[{strategy_id}] Error saving iteration cache on manual reset: {ce}")
+
+        return {
+            "strategy_id": strategy_id,
+            "prev_iteration": cur_iter_idx,
+            "new_iteration": next_iter_idx,
+            "base_net": new_iter_start_net,
+            "base_realized": new_iter_start_real
+        }
+
+    def reset_global_iteration(self) -> dict:
+        """Сброс глобальной итерации портфеля в analytics.json и CACHE/iteration_state.json."""
+        try:
+            g_path = self.log_file
+            g_data = Utils.read_json_file(g_path) or {}
+            g_net = float(g_data.get("net_profit_usdt", 0.0))
+            g_idx = int(g_data.get("iteration_index", 1))
+            next_g_idx = g_idx + 1
+            now_ms = int(time.time() * 1000)
+
+            g_data["iteration_index"] = next_g_idx
+            g_data["iteration_start_net_profit_usdt"] = round(g_net, 4)
+            g_data["iteration_net_profit_usdt"] = 0.0
+            g_data["iteration_start_ts"] = now_ms
+            g_data["iteration_peak_net_profit_usdt"] = 0.0
+            g_data["iteration_peak_ts"] = now_ms
+            g_data["iteration_peak_age_hours"] = 0.0
+            g_data["iteration_net_velocity"] = 0.0
+            Utils.atomic_write_json(g_path, g_data, indent=4)
+
+            c_file = CACHE_DIR / "iteration_state.json"
+            c_dict = {}
+            if c_file.exists():
+                try:
+                    c_dict = json.loads(c_file.read_text(encoding="utf-8"))
+                except Exception:
+                    c_dict = {}
+            c_dict["__global__"] = {
+                "iteration_index": next_g_idx,
+                "iteration_start_net_profit_usdt": round(g_net, 4),
+                "iteration_start_ts": now_ms,
+                "iteration_peak_net_profit_usdt": 0.0,
+                "iteration_peak_ts": now_ms,
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+            }
+            Utils.atomic_write_json(c_file, c_dict, indent=4)
+            return {"iteration_index": next_g_idx, "base_net": round(g_net, 4)}
+        except Exception as ge:
+            logger.error(f"Error resetting global portfolio iteration: {ge}")
+            return {}
+

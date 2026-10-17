@@ -8,9 +8,71 @@ import math
 from typing import Dict, List, Optional, Tuple, Any, Union
 import numpy as np
 
+try:
+    from numba import njit
+    _HAS_NUMBA = True
+except ImportError:
+    _HAS_NUMBA = False
+    def njit(*args, **kwargs):
+        def decorator(f):
+            return f
+        return decorator
+
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("KernelRegression")
+
+
+@njit(fastmath=True, nogil=True)
+def _estimate_at_bar_jit(arr: np.ndarray, weights: np.ndarray, window_size: int) -> float:
+    """Низкоуровневое машинное вычисление свертки весов ядра и цен без аллокаций Python."""
+    acc = 0.0
+    n = len(arr)
+    for i in range(window_size):
+        acc += weights[i] * arr[n - 1 - i]
+    return acc
+
+
+@njit(fastmath=True, nogil=True)
+def _compute_kernel_mae_jit(arr: np.ndarray, y_cur: float, window_size: int) -> float:
+    """Низкоуровневый машинный расчет MAE за окно W."""
+    acc = 0.0
+    n = len(arr)
+    start = n - window_size
+    for i in range(start, n):
+        acc += abs(arr[i] - y_cur)
+    return acc / float(window_size)
+
+
+@njit(fastmath=True, nogil=True)
+def _compute_ema_series_jit(prices: np.ndarray, period: int) -> np.ndarray:
+    """Низкоуровневый быстрый расчет экспоненциальной скользящей средней EMA."""
+    n = len(prices)
+    res = np.empty(n, dtype=np.float64)
+    if n == 0:
+        return res
+    res[0] = prices[0]
+    alpha = 2.0 / (period + 1.0)
+    for i in range(1, n):
+        res[i] = alpha * prices[i] + (1.0 - alpha) * res[i - 1]
+    return res
+
+
+@njit(fastmath=True, nogil=True)
+def _compute_atr_series_jit(highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int) -> np.ndarray:
+    """Низкоуровневый быстрый расчет индикатора ATR."""
+    n = len(closes)
+    res = np.empty(n, dtype=np.float64)
+    if n == 0:
+        return res
+    res[0] = highs[0] - lows[0]
+    for i in range(1, n):
+        tr1 = highs[i] - lows[i]
+        tr2 = abs(highs[i] - closes[i - 1])
+        tr3 = abs(lows[i] - closes[i - 1])
+        tr = max(tr1, max(tr2, tr3))
+        res[i] = (res[i - 1] * (period - 1) + tr) / period
+    return res
 
 
 class NadarayaWatsonEstimator:
@@ -87,10 +149,8 @@ class NadarayaWatsonEstimator:
                 return 0.0
             return float(np.mean(arr))
 
-        # Текущий бар имеет lag=0 (индекс -1), предыдущий lag=1 (индекс -2) и т.д.
-        # Поэтому разворачиваем крайние W цен и берем скалярное произведение с весами
-        slice_rev = arr[-1 : -self.window_size - 1 : -1]
-        return float(np.dot(self._weights, slice_rev))
+        # Вызываем низкоуровневую JIT/C-функцию свертки
+        return float(_estimate_at_bar_jit(arr, self._weights, self.window_size))
 
     def evaluate_regime(
         self,
@@ -128,10 +188,10 @@ class NadarayaWatsonEstimator:
 
         cur_price = float(arr[-1])
 
-        # 1. Сглаженное значение на текущем баре t
+        # 1. Сглаженное значение на текущем баре t (JIT машинный расчет)
         y_cur = self.estimate_at_bar(arr)
 
-        # 2. Сглаженное значение на предыдущем баре t-1
+        # 2. Сглаженное значение на предыдущем баре t-1 (JIT машинный расчет)
         arr_prev = arr[:-1]
         y_prev = self.estimate_at_bar(arr_prev)
 
@@ -142,10 +202,8 @@ class NadarayaWatsonEstimator:
         # 4. Прогноз на 1 бар вперед (локальная линейная экстраполяция)
         forecast = y_cur + slope
 
-        # 5. Расчет средней абсолютной ошибки (MAE) ядерного конверта за окно W
-        # Вычисляем отклонения цен от ядерной кривой
-        history_slice = arr[-self.window_size :]
-        mae = float(np.mean(np.abs(history_slice - y_cur)))
+        # 5. Расчет средней абсолютной ошибки (MAE) ядерного конверта через JIT
+        mae = float(_compute_kernel_mae_jit(arr, y_cur, self.window_size))
         band_width = max(mae * self.envelope_multiplier, y_cur * 0.002)
 
         upper_band = y_cur + band_width

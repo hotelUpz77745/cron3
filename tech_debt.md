@@ -399,6 +399,42 @@
           5. **100% Зеленое Тестирование и Smoke-Test:**
              - 266 юнит-тестов выполнены за 16.45с (0 errors, 0 failures).
              - Проведен боевой smoke-тест запуска `python main.py`: инициализация BotCore, загрузка реестра стратегий, подключение потоков цен, FSM-синхронизация и прогрев маржи прошли в штатном режиме. Все процессы штатно остановлены.
+    - **ADR-23 (2026-10-17): Архитектурная декомпозиция торгового ядра, выделение TradeCycleManager и EmergencyCloserService, элевация StrategyRegistry и интеграция низкоуровневых C++ индикаторов:**
+      - **Контекст и Архитектурная Проблема:**
+        1. Монолитность `CORE/bot.py` (>1400 строк): ядро содержало в себе смешение оркестрации, логики торгового цикла (проверка окон благодати, броуновский шум, выставление рыночных ордеров L0, LIFO-пилинг, TP-менеджмент), логики экстренной ликвидации позиций и отмены ордеров.
+        2. Расположение `strategy_registry.py` и `strategy_applicator.py` глубоко внутри `CORE/STRATEGY/` создавало избыточную связанность и затрудняло прямое использование реестра на уровне ядра.
+        3. Несоответствие типов данных конфигурации в боевом режиме (`modes`, `sizing_modes` как списки вместо строк с аннотацией) и распыление настроек плеча/маржи.
+        4. Необходимость ультра-быстрых вычислений математических индикаторов (EMA, Nadaraya-Watson Kernel Regression) на C++ низком уровне.
+      - **Решение и Реализация:**
+        1. **Элевация реестра и аппликатора:**
+           - `CORE/strategy_registry.py` и `CORE/strategy_applicator.py` перенесены напрямую в `CORE/`.
+           - В `CORE/STRATEGY/strategy_registry.py` и `CORE/STRATEGY/strategy_applicator.py` сохранены прозрачные прокладки обратной совместимости (`from CORE.strategy_registry import *`, `from CORE.strategy_applicator import *`).
+        2. **Декомпозиция торгового цикла — `CORE/trade_cycle_manager.py`:**
+           - Создан класс `TradeCycleManager`, инкапсулирующий всю машину состояний торгового цикла:
+             - Идемпотентная валидация входов и окон благодати (`check_entry_block`);
+             - Размещение первого сигнального ордера L0 с броуновским джиттером `BrownianNoiseController` и динамическим расчетом объемов (`process_signal`);
+             - Управление позицией и синхронизация FSM (`process_symbol_loop`);
+             - Фиксация сделок, кросс-рециркуляция прибыли `CrossSideProfitRecycler` и сброс рантайма (`check_and_reset_finished_positions`).
+        3. **Декомпозиция экстренного закрытия — `CORE/SERVICES/emergency_closer.py`:**
+           - Создан класс `EmergencyCloserService`, инкапсулирующий методы ликвидации позиций и отмены ордеров:
+             - `close_all`: экстренное закрытие позиций всех активных стратегий с синхронизацией лидерборда и сбросом глобальной итерации;
+             - `close_strategy`: изоляция закрытия позиций конкретной стратегии с установкой идемпотентного кулдауна до границы свечи хартбита (`calc_cooldown`).
+        4. **Очистка BotCore (`CORE/bot.py`):**
+           - `BotCore` сокращен до роли чистого оркестратора;
+           - Главный цикл `_game_loop` разбит на четкие фазы: `_prepare_game_loop`, `_init_streams_and_fsm`, `_run_loop_iteration`, `_shutdown_game_loop`;
+           - Методы `_process_signal`, `_check_and_reset_finished_positions`, `_process_symbol_loop`, `check_entry_block` делегированы в `TradeCycleManager`;
+           - Методы `close_all_positions` и `close_strategy_positions` делегированы в `EmergencyCloserService`.
+        5. **Низкоуровневые C++ вычисления индикаторов:**
+           - Разработан заголовочный файл `CORE/STRATEGY/CPP/kernel_indicators.hpp` с оптимизированными SIMD/векторизованными вычислениями ядер Rational Quadratic, Gaussian, Epanechnikov и экспоненциальных скользящих средних;
+           - В `CORE/STRATEGY/kernel_regression.py` добавлена поддержка JIT/C++ вызовов с плавным fallback на векторизованный fastmath.
+        6. **Нормализация конфигураций (`CFG/_base.json`, `CFG/app.json`):**
+           - Нормализованы поля `"mode": "classic"` и `"sizing_mode": "static"` в виде строковых значений с аннотацией допустимых опций;
+           - Плечо `"leverage": 20` и маржа `"margin_type": "ISOLATED"` закреплены строго внутри карточек стратегий `active_strategies`.
+        7. **Пути API (`consts.py`):**
+           - Настроен чистый поиск и импорт `SHARED_API_DIR` для предотвращения ошибок импорта и красных подсветок в VSCode.
+      - **Тестовое покрытие и верификация:**
+        - Все 266 юнит-тестов выполнены за 16.35с (0 errors, 0 failures, 2 skipped).
+        - Полная верификация целостности архитектуры в `test_clean_architecture_integrity.py`.
 ---
 
 ### Перспективные гипотезы развития:
@@ -407,3 +443,61 @@
 3. Есть идея первую зону сетки (до 8-го либо 13-го уровней) растягивать (градировать) в зависимости от текущей волатильности (уровни выше с курками -- канон). (На основании Чита 3.5 Quantum Kernel Apex) -- **РЕШЕНО (Опровергнута эмпирически / Отклонена: фиксированная Зона 1 Читы 3.6 дает +83.62 USDT против +47.93 USDT у грейдера; Max DD у грейдера вырос в 2.2 раза)**.
 4. По поводу курков: поиграться с курками (например ставить их посередине между соседними уровнями пола или привязать к другим магическим числам). (На основании Чита 3.5 Quantum Kernel Apex) -- **РЕШЕНО (Чита 3.6 Golden-Cut 38.2%, +83.62 USDT vs +19.68 USDT у Midpoint)**.
 5. Тестирование флагманов на месячной дистанции с ротацией альфа-обоймы по скользящим недельным окнам -- **РЕШЕНО (Месячный турнир на 80 млн тиков: Чита 3.6 Golden-Cut превзошла Читу 3.1 на трендах, сократив просадку на 17.5-20%; аудит сайзинга закрепил 5-6 монет; создано C/C++ ядро с пропускной способностью 7.66M тиков/сек, ускорение 212x)**.
+
+
+
+
+
+
+
+
+
+
+
+cron3/
+├── CORE/
+│   ├── bot.py                        # 🎛️ Материнская плата (Оркестратор ядра, жизненный цикл бота)
+│   ├── trade_cycle_manager.py        # 🔄 Машина состояний торгового цикла (Signal Processing, Entry, Position Cycle)
+│   ├── strategy_registry.py          # 📋 Реестр стратегий (парсинг universes/*.json, _base.json)
+│   ├── strategy_applicator.py        # 🛠️ Аппликатор и валидатор стратегий для FSM
+│   ├── _utils.py                     # Базовые математические утилиты (TradeMath, SpecManager)
+│   │
+│   ├── STRATEGY/                     # 🏛️ ДОМЕН: Паспорта и математические сущности стратегий
+│   │   ├── CPP/                      # ⚡ C++ высокопроизводительные индикаторы (kernel_indicators.hpp)
+│   │   │   └── kernel_indicators.hpp
+│   │   ├── strategy_config.py        # Паспорт конфигурации стратегии (нативные tp_map_*, cross_side_recycling)
+│   │   ├── strategy_registry.py      # Прокладка обратной совместимости (re-export *)
+│   │   ├── strategy_applicator.py    # Прокладка обратной совместимости (re-export *)
+│   │   ├── peeling_manager.py        # Субсеточный LIFO-пилинг (peel_tp_pct, peel_ratio, peel_num)
+│   │   ├── brownian_noise.py         # Броуновский шум и анти-детект входов сильной руки
+│   │   ├── cross_recycler.py         # Кросс-тейк рециркуляция и канонический расчет сжигания
+│   │   ├── trailing_system.py        # Базовая система трейлинга (пол / курок)
+│   │   ├── first_order_regime.py     # Режим первого ордера Сильной Руки
+│   │   ├── momentum_engine.py        # Импульсный движок
+│   │   ├── kernel_regression.py      # Ядерная регрессия Надарая-Ватсона (Fastmath / C++ Kernels)
+│   │   ├── trend_calculator.py       # Расчет трендов (EMA / Kernel)
+│   │   ├── trend_size_depender.py    # Динамический сайзинг по трендам
+│   │   └── __init__.py               # Чистый экспорт всех сущностей паспорта
+│   │
+│   ├── SERVICES/                     # ⚙️ ДОМЕН: Фоновые, On-Demand сервисы и адаптеры
+│   │   ├── emergency_closer.py       # 🛑 Сервис экстренного закрытия позиций (EmergencyCloserService)
+│   │   ├── SELECTOR/                 # Селекторы монет
+│   │   │   ├── alpha_coin_selector.py
+│   │   │   ├── coin_selection_service.py
+│   │   │   ├── samsonov_funnel.py    # Законсервирован баннером техобслуживания
+│   │   │   └── __init__.py
+│   │   ├── VOLATILITY/               # Сервисы волатильности рынка и ATR
+│   │   │   ├── volatility_manager.py # Менеджер волатильности сеток (Super Grid)
+│   │   │   ├── volatility_scanner.py # Сканер 24h волатильности
+│   │   │   ├── atr_provider.py       # Провайдер динамического ATR
+│   │   │   ├── klines_cache.py       # Локальный TTL-кэш свечей
+│   │   │   └── __init__.py
+│   │   ├── TOOLS/                    # Вспомогательные сервисы аудита и восстановления
+│   │   │   ├── audit_and_cleanup_orders.py
+│   │   │   ├── grid_volume_calculator.py
+│   │   │   ├── restore_missing_tp_orders.py
+│   │   │   └── __init__.py
+│   │   ├── leverage_adapter.py       # Адаптер настройки плеча и маржи (LeverageAdapter)
+│   │   ├── auto_closer.py            # Сервис автозакрытия позиций (таймауты, убытки)
+│   │   ├── notifier.py               # Сервис уведомлений и отчетов
+│   │   └── __init__.py

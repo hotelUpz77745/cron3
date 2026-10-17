@@ -4,6 +4,7 @@ import time
 from unittest.mock import MagicMock, AsyncMock
 
 from CORE.bot import BotCore
+from CORE.trade_cycle_manager import TradeCycleManager
 from CORE.STRATEGY.strategy_registry import StrategyRegistry
 
 
@@ -30,7 +31,18 @@ class TestCloseIdempotent5mCooldown(unittest.TestCase):
         self.bot.client = MagicMock()
         self.bot.client.cancel_all_orders = AsyncMock()
         self.bot.client.fetch_positions = AsyncMock(return_value=[])
+        self.bot.client.make_order = AsyncMock(return_value=MagicMock(success=True))
+        self.bot.get_client_for_symbol = MagicMock(return_value=self.bot.client)
+        self.bot.get_client_for_strategy = MagicMock(return_value=self.bot.client)
+        self.bot._get_symbol_lock = MagicMock(side_effect=lambda s: asyncio.Lock())
+        self.bot.runtime_manager = MagicMock()
+        self.bot.runtime_manager.save_cache = AsyncMock()
+        self.bot.avg_manager = MagicMock()
+        self.bot.current_sim_time = None
         self.bot.get_strategy_heartbeat_seconds = lambda strategy_id=None, symbol=None: BotCore.get_strategy_heartbeat_seconds(self.bot, strategy_id, symbol)
+        self.bot.calc_heartbeat_window_cooldown = BotCore.calc_heartbeat_window_cooldown
+        self.bot.trade_cycle = TradeCycleManager(self.bot)
+        self.bot.is_paused = False
 
     def test_close_strategy_activates_5m_cooldown(self):
         """Проверяет, что закрытие стратегии рассчитывает ровную границу свечи хартбита и блокирует входы."""

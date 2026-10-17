@@ -73,18 +73,23 @@ if str(BASE_DIR) not in sys.path:
 if str(PARENT_DIR) not in sys.path:
     sys.path.insert(0, str(PARENT_DIR))
 
-# Динамически подключаем внешнюю папку API (с поддержкой относительных путей и автопоиска)
-_paths_cfg = _CFG["paths"]
-_shared_api_cfg = _paths_cfg["shared_api_dir"]
+# Каноническое подключение API для боевого робота и экосистемы
+_paths_cfg = _CFG.get("paths", {})
+_shared_api_cfg = _paths_cfg.get("shared_api_dir")
 if _shared_api_cfg:
     _p = Path(_shared_api_cfg)
     if not _p.is_absolute():
         _p = (BASE_DIR / _p).resolve()
-    SHARED_API_DIR = _p if _p.exists() else (PARENT_DIR / "API").resolve()
+    API_DIR = _p if _p.exists() else (BASE_DIR / "API").resolve()
 else:
-    SHARED_API_DIR = (PARENT_DIR / "API").resolve()
+    API_DIR = (BASE_DIR / "API").resolve()
 
-_api_parent = str(SHARED_API_DIR.parent)
+SHARED_API_DIR: Path = API_DIR
+
+# Добавляем пути к API в sys.path для исключения ошибок импорта как from API... так и прямых
+if str(API_DIR) not in sys.path:
+    sys.path.insert(0, str(API_DIR))
+_api_parent = str(API_DIR.parent)
 if _api_parent not in sys.path:
     sys.path.insert(0, _api_parent)
 

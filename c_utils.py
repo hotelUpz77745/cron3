@@ -57,7 +57,12 @@ class Utils:
         try:
             return round(float(value), ndigits)
         except (TypeError, ValueError):
-            return default    
+            return default
+
+    @staticmethod
+    def get_current_time(sim_time: Optional[float] = None) -> float:
+        """Возвращает текущее время: виртуальное время симуляции/бэктеста или системное time.time()."""
+        return float(sim_time) if sim_time is not None else time.time()
 
     @staticmethod
     def milliseconds_to_datetime(milliseconds):

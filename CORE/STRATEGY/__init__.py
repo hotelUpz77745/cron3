@@ -7,8 +7,8 @@ ROLE: Чистый экспорт сущностей паспорта страт
 ==============================================================================
 """
 
-from CORE.STRATEGY.strategy_registry import StrategyConfig, StrategyRegistry
-from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+from CORE.strategy_registry import StrategyConfig, StrategyRegistry
+from CORE.strategy_applicator import StrategyApplicator
 from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 from CORE.STRATEGY.peeling_manager import PeelingManager
 from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler, CrossRecycler

@@ -47,6 +47,8 @@
             ],
             "mode": "classic",
             "sizing_mode": "static",
+            "leverage": 20,
+            "margin_type": "ISOLATED",
             "analytics": {
                 "start_balance_usdt": 449.0
             }

@@ -16,15 +16,20 @@
     "_volume_distribution_doc": "Сумма базовых весов L0..L5 = 12 + 8 + 9 + 11 + 15 + 25 = 80%. Буфер 20% остается свободным для динамического управления риском и резервного бункера L6.",
     "_snake_bridge_doc": "Мостик Змея L3 (отступ -13.5%) — точка фазового перехода. Активирует сплит позиции Half-Peel 50%.",
     "_panic_damper_doc": "Панический демпфер L4 (отступ -24.0%) и Артиллерия L5 (отступ -55.0%) защищены триггерами Cross-Side Recycling.",
-    "modes": [
+    "mode": "classic",
+    "_modes_allowed": [
         "classic",
         "toxic",
         "fixed",
         "off"
     ],
-    "sizing_modes": [
-        "static"
+    "_mode_desc": "Режим автоклозера: 'classic' (Fibo trailing), 'toxic' (динамический выход), 'fixed' (тейк в USDT), 'off' (выключен).",
+    "sizing_mode": "static",
+    "_sizing_modes_allowed": [
+        "static",
+        "dynamic"
     ],
+    "_sizing_mode_desc": "Режим сайзинга: 'static' (фиксированный размер) или 'dynamic'.",
     "start_balance_usdt": 1000.0,
     "heartbeat_tfr": "1m",
     "signal_heartbeat_tfr": "15m",
