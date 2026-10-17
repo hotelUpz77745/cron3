@@ -435,6 +435,40 @@
       - **Тестовое покрытие и верификация:**
         - Все 266 юнит-тестов выполнены за 16.35с (0 errors, 0 failures, 2 skipped).
         - Полная верификация целостности архитектуры в `test_clean_architecture_integrity.py`.
+    - **ADR-24 (2026-10-17): Полная декомпозиция жизненного цикла ядра (SymbolLifecycleManager, BotBootstrapService), исправление багов калькулятора сеток и расширение тестового покрытия до 345 институциональных тестов:**
+      - **Контекст и Архитектурная Проблема:**
+        1. Монолитность `CORE/bot.py`: после первичной декомпозиции в ADR-23 файл оставался объемом ~1000 строк, что превышало жесткий лимит 600 строк (п. 1.10 Протокола).
+        2. Избыточная связанность: класс `BotCore` нес на себе ответственность за динамическое подключение/удаление монет (`add_symbol`, `delete_symbol`), низкоуровневые манипуляции с архивами и сбросом итераций (`reset_strategy_iteration`), а также фазы начального прогрева, подключения вебсокетов и завершения стримов.
+        3. Критический дефект в `CORE/SERVICES/TOOLS/grid_volume_calculator.py`: при единичном множителе геометрии (`multiplier == 1.0`) переменная `v0` оставалась неинициализированной (`UnboundLocalError: v0`), что ломало расчет геометрических объемов.
+        4. Пробелы в тестовом покрытии: ряд критических узлов торговой системы (жизненный цикл символов, сторожевой таймер `LoopWatchdog`, калькулятор ликвидаций `QuantCalculator`, менеджер ListenKey и User Data Stream `PositionStream`, динамический ATR Take-Profit, Fallback TP, синхронизация времени `TimeControl`) не имели прямых изолированных тестов.
+      - **Решение и Реализация:**
+        1. **Выделение `SymbolLifecycleManager` (`CORE/SERVICES/symbol_lifecycle_manager.py`):**
+           - Инкапсулирует динамическое добавление и удаление монет из активной обоймы, переконфигурацию FSM-состояний, валидацию через реестр стратегий и атомарный перезапуск стрима цен `CrossProcessHotPriceStream`.
+        2. **Выделение `BotBootstrapService` (`CORE/SERVICES/bot_bootstrap.py`):**
+           - Инкапсулирует оркестрацию старта и остановки: `prepare_game_loop` (прогрев кэшей, волатильности и валидация пула), `init_streams_and_fsm` (запуск стримов котировок, позиций, REST-синхронизация, аудит TP ордеров) и `shutdown_game_loop` (graceful shutdown клиентов биржи и задач).
+        3. **Завершение декомпозиции `CORE/bot.py`:**
+           - Размер `CORE/bot.py` сокращен с 997 до **521 строки** (в рамках лимита `<= 600 строк`, оптимальный модульный стандарт).
+           - Метод `reset_strategy_iteration` полностью перенесен в `EmergencyCloserService`.
+        4. **Исправление бага в `grid_volume_calculator.py`:**
+           - Базовый объем `v0 = (invest_size * 100.0) / total_weight` инициализируется безусловно для любых коэффициентов множителя.
+        5. **Масштабное расширение и стабилизация тестового сьюта:**
+           - Разработано 12 новых тестовых модулей:
+             - `tests/test_symbol_lifecycle_manager.py` (5 тестов)
+             - `tests/test_emergency_closer.py` (6 тестов)
+             - `tests/test_trade_cycle_manager.py` (9 тестов)
+             - `tests/test_binance_validator.py` (11 тестов)
+             - `tests/test_trade_velocity.py` (5 тестов)
+             - `tests/test_grid_volume_calculator.py` (6 тестов)
+             - `tests/test_watchdog.py` (5 тестов)
+             - `tests/test_quant_calculator.py` (7 тестов)
+             - `tests/test_pos_stream_listen_key.py` (7 тестов)
+             - `tests/test_tp_managers_extended.py` (10 тестов)
+             - `tests/test_signal_time_control.py` (4 теста)
+             - `tests/test_bot_bootstrap.py` (4 теста)
+           - Ликвидированы предупреждения deprecation `asyncio.iscoroutinefunction` в Python 3.14 (переход на `inspect.iscoroutinefunction`).
+      - **Итоги верификации:**
+        - Тестовый сьют расширен с 266 до **345 юнит-тестов**.
+        - Все 345 тестов успешно пройдены за 18.24с (**100% OK, 0 errors, 0 failures, 2 skipped**).
 ---
 
 ### Перспективные гипотезы развития:
@@ -481,6 +515,8 @@ cron3/
 │   │
 │   ├── SERVICES/                     # ⚙️ ДОМЕН: Фоновые, On-Demand сервисы и адаптеры
 │   │   ├── emergency_closer.py       # 🛑 Сервис экстренного закрытия позиций (EmergencyCloserService)
+│   │   ├── symbol_lifecycle_manager.py # 🔄 Управление динамическим добавлением/удалением символов
+│   │   ├── bot_bootstrap.py          # 🚀 Сервис инициализации, прогрева стримов и shutdown ядра
 │   │   ├── SELECTOR/                 # Селекторы монет
 │   │   │   ├── alpha_coin_selector.py
 │   │   │   ├── coin_selection_service.py

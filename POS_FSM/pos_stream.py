@@ -7,6 +7,7 @@
 # ==============================================================================
 
 import asyncio
+import inspect
 import aiohttp
 import json
 from typing import Optional, Callable, Set
@@ -215,7 +216,7 @@ class PositionStream:
                 logger.debug(f"[MASTER WS] EVENT {etype}", throttle_sec=60, throttle_key=f"ws_event_{etype}")
 
             for cb in self.callbacks:
-                if asyncio.iscoroutinefunction(cb):
+                if inspect.iscoroutinefunction(cb):
                     asyncio.create_task(cb(data))
                 else:
                     cb(data)

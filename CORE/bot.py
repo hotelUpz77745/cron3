@@ -50,6 +50,8 @@ from CORE.SERVICES.notifier import NotifierManager
 from CORE.SERVICES.leverage_adapter import LeverageAdapter, LeverageManager
 from CORE.SERVICES.VOLATILITY.volatility_manager import VolatilityManager
 from CORE.SERVICES.emergency_closer import EmergencyCloserService
+from CORE.SERVICES.symbol_lifecycle_manager import SymbolLifecycleManager
+from CORE.SERVICES.bot_bootstrap import BotBootstrapService
 from CORE.ENTRY.signal import TimeControl
 from CORE.GRID.avg_manager import AverageManager
 from CORE.TP.tp_manager import TakeProfitManager
@@ -265,201 +267,25 @@ class BotCore:
             return await self.tp_restorer.verify_and_restore_all(force=force)
         return {"checked": 0, "confirmed": 0, "restored": 0, "mismatch": 0}
 
-    async def add_symbol(self, symbol: str, strategy_id: Optional[str] = None):
-        symbol = symbol.upper()
-        if symbol in self.symbols:
-            logger.warning(f"[{symbol}] Symbol is already active in BotCore.")
-            return
-            
-        # 1. Update app.json
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path)
-        active_strategies = app_data.get("active_strategies", {})
-        
-        target_strat = strategy_id
-        if not target_strat:
-            for sid, sdata in active_strategies.items():
-                if sdata.get("enabled", False):
-                    target_strat = sid
-                    break
+    async def add_symbol(self, symbol: str, strategy_id: Optional[str] = None) -> bool:
+        """
+        Динамическое добавление торгового символа в обойму бота.
+        Делегирует исполнение в SymbolLifecycleManager.
+        """
+        sm = getattr(self, "symbol_manager", None)
+        if not isinstance(sm, SymbolLifecycleManager):
+            sm = SymbolLifecycleManager(self)
+        return await sm.add_symbol(symbol, strategy_id=strategy_id)
 
-        if target_strat:
-            if target_strat in active_strategies:
-                active_strategies[target_strat].setdefault("symbols", []).append(symbol)
-                active_strategies[target_strat]["enabled"] = True
-            else:
-                if self.strategy_registry:
-                    u_meta = self.strategy_registry.universes_db.get(target_strat, {})
-                else:
-                    univ_path = DATA_DIR / "universes" / f"{target_strat}.json"
-                    u_meta = Utils.read_json_file(univ_path) if univ_path.exists() else {}
-                active_strategies[target_strat] = {
-                    "enabled": True,
-                    "symbols": [symbol],
-                    "super_grid": {
-                        "enabled": bool((u_meta.get("overrides", {}).get("super_grid") or u_meta.get("super_grid") or {}).get("enabled", False)),
-                        "timeframe": "1w",
-                        "window": 12,
-                        "multiplier": 2.0,
-                        "min_volatility_pct": 15.0,
-                        "max_volatility_pct": None,
-                        "update_interval_hours": 24
-                    },
-                    "analytics": {
-                        "start_balance_usdt": u_meta.get("start_balance_usdt", 449.0)
-                    },
-                    "notifications": {
-                        "enabled": True,
-                        "negative_threshold": -20.0,
-                        "positive_threshold": 20.0
-                    },
-                    "auto_closing": {
-                        "negative": {"threshold": None, "threshold_increment": None},
-                        "positive": {"threshold": 100, "threshold_increment": 100}
-                    }
-                }
-            Utils.write_json_file(app_json_path, app_data)
-            logger.info(f"[{symbol}] Added to active_strategy '{target_strat}' in app.json.")
-
-        # 1b. Reload StrategyRegistry
-        if self.strategy_registry:
-            try:
-                self.strategy_registry.reload(active_strategies)
-                self._init_clients()
-            except Exception as e:
-                logger.error(f"Error reloading StrategyRegistry: {e}")
-
-        # 1c. Build isolated runtime config using StrategyApplicator if needed
-        try:
-            if self.strategy_registry and self.strategy_registry.is_symbol_active(symbol):
-                strat_cfg = self.strategy_registry.get_strategy_for_symbol(symbol)
-                StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
-        except Exception as e:
-            logger.warning(f"[{symbol}] StrategyApplicator build notice: {e}")
-            
-        # 2. Update bot lists and FSM states
-        self.symbols.append(symbol)
-        
-        if symbol not in self.fsm_states:
-            self.fsm_states[symbol] = {
-                "LONG": PositionState(symbol=symbol, side="LONG"),
-                "SHORT": PositionState(symbol=symbol, side="SHORT")
-            }
-            
-        # 3. Add to monitors and streams
-        if self.pos_stream and self.pos_stream.target_symbols is not None:
-            self.pos_stream.target_symbols.add(symbol)
-        if self.ws_interpreter and self.ws_interpreter.target_symbols is not None:
-            self.ws_interpreter.target_symbols.add(symbol)
-        if self.pos_monitor and self.pos_monitor.target_symbols is not None:
-            if symbol not in self.pos_monitor.target_symbols:
-                self.pos_monitor.target_symbols.append(symbol)
-
-        # 4. Immediate REST price prefetch
-        try:
-            p = await BinancePublic.get_price(symbol)
-            if p and p > 0:
-                self.prices[symbol] = (p, time.time())
-                logger.info(f"[{symbol}] Initial REST price fetched: {p}")
-        except Exception as e:
-            logger.warning(f"[{symbol}] Failed initial REST price fetch: {e}")
-            
-        # 5. Reload caches
-        self.runtime_manager.load_initial_caches(self.symbols)
-        self.runtime_configs = self.runtime_manager.caches
-        self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
-        
-        # 5.5 Pre-warm leverage for the new symbol (sets leverage & margin once)
-        try:
-            cfg = self.runtime_configs.get(symbol, {})
-            side_cfg = cfg.get("LONG") or cfg.get("SHORT")
-            if side_cfg:
-                await self.leverage_manager.set_leverage_and_margin(self.client, symbol, side_cfg)
-        except Exception as e:
-            logger.warning(f"[{symbol}] Leverage pre-warm warning on add_symbol: {e}")
-        
-        # 6. Restart price stream
-        logger.info(f"Restarting price stream to include new symbol: {symbol}")
-        await self._restart_price_stream()
-        
-        # 7. Trigger VolatilityManager to compute super_indent for the new symbol
-        if hasattr(self, 'volatility_manager') and self.volatility_manager.is_running:
-            asyncio.create_task(self.volatility_manager.process_all())
-        
-        logger.info(f"[{symbol}] Dynamically added to BotCore.")
-
-    async def delete_symbol(self, symbol: str):
-        symbol = symbol.upper()
-        if symbol not in self.symbols:
-            return
-            
-        logger.info(f"[{symbol}] Dynamically deleting symbol from BotCore...")
-        
-        # 1. Remove from app.json
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path)
-        active_strategies = app_data.get("active_strategies", {})
-        changed = False
-        if active_strategies:
-            for sdata in active_strategies.values():
-                if "symbols" in sdata and symbol in sdata["symbols"]:
-                    sdata["symbols"].remove(symbol)
-                    changed = True
-        if symbol in app_data.get("symbols", []):
-            app_data["symbols"].remove(symbol)
-            changed = True
-        if changed:
-            Utils.write_json_file(app_json_path, app_data)
-            logger.info(f"[{symbol}] Removed from app.json.")
-            
-        # 1b. Reload StrategyRegistry
-        if self.strategy_registry:
-            try:
-                self.strategy_registry.reload(active_strategies)
-                self._init_clients()
-            except Exception as e:
-                logger.error(f"Error reloading StrategyRegistry on delete: {e}")
-            
-        # 2. Update bot lists and FSM states
-        self.symbols.remove(symbol)
-        
-        if symbol in self.fsm_states:
-            del self.fsm_states[symbol]
-            
-        if symbol in self.runtime_configs:
-            del self.runtime_configs[symbol]
-            
-        if symbol in self.prices:
-            del self.prices[symbol]
-            
-        # 3. Remove from monitors and streams
-        if self.pos_stream and self.pos_stream.target_symbols and symbol in self.pos_stream.target_symbols:
-            self.pos_stream.target_symbols.remove(symbol)
-        if self.ws_interpreter and self.ws_interpreter.target_symbols is not None:
-            self.ws_interpreter.target_symbols.discard(symbol)
-        if self.pos_monitor and self.pos_monitor.target_symbols is not None:
-            self.pos_monitor.target_symbols = [s for s in self.pos_monitor.target_symbols if s != symbol]
-            
-        # 4. Delete the runtime JSON cache
-        runtime_path = self.runtime_manager.get_runtime_path(symbol)
-        if runtime_path.exists():
-            try:
-                runtime_path.unlink()
-                logger.info(f"[{symbol}] Deleted runtime cache file: {runtime_path}.")
-            except Exception as e:
-                logger.error(f"[{symbol}] Failed to delete runtime cache: {e}")
-        root_path = self.runtime_manager.runtime_dir / f"{symbol.lower()}.json"
-        if root_path.exists():
-            try:
-                root_path.unlink()
-            except Exception:
-                pass
-                
-        # 5. Restart price stream
-        logger.info(f"Restarting price stream to exclude deleted symbol: {symbol}")
-        await self._restart_price_stream()
-            
-        logger.info(f"[{symbol}] Successfully deleted from BotCore.")
+    async def delete_symbol(self, symbol: str) -> bool:
+        """
+        Динамическое удаление торгового символа из обоймы бота.
+        Делегирует исполнение в SymbolLifecycleManager.
+        """
+        sm = getattr(self, "symbol_manager", None)
+        if not isinstance(sm, SymbolLifecycleManager):
+            sm = SymbolLifecycleManager(self)
+        return await sm.delete_symbol(symbol)
 
     async def _on_tick(self, tick: HotPriceTick):
         """Коллбэк для стрима горячих цен."""
@@ -545,153 +371,12 @@ class BotCore:
         return await tc.process_symbol_loop(symbol)
 
     async def _prepare_game_loop(self) -> bool:
-        """ШАГ 0 и 1: Валидация списка монет, прогрев кэшей и волатильности."""
-        while self.is_running and not self.symbols:
-            logger.warning("[BotCore] Symbol list is empty. Waiting for symbols to be configured in app.json...")
-            await asyncio.sleep(5.0)
-            self.strategy_registry = StrategyRegistry()
-            active_syms = self.strategy_registry.get_all_active_symbols()
-            if active_syms:
-                self.symbols = active_syms
-
-        if not self.is_running:
-            return False
-
-        # Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        created_new = build_runtime_caches(self.symbols, registry=self.strategy_registry)
-        if created_new and not TG_ENABLED:
-            prompt_runtime_check()
-
-        # Первый расчет волатильности
-        if self.volatility_manager:
-            try:
-                await self.volatility_manager.process_all()
-            except Exception as e:
-                logger.error(f"Error during initial VolatilityManager process_all: {e}")
-            self.volatility_manager.start()
-
-        if self.strategy_registry:
-            try:
-                StrategyApplicator().build_all_runtimes(self.strategy_registry)
-            except Exception as e:
-                logger.warning(f"[BotCore] Startup StrategyApplicator sync warning: {e}")
-
-        self.runtime_manager.load_initial_caches(self.symbols)
-        self.runtime_configs = self.runtime_manager.caches
-        return True
+        """ШАГ 0 и 1: Валидация списка монет, прогрев кэшей и волатильности (делегировано в BotBootstrapService)."""
+        return await BotBootstrapService.prepare_game_loop(self)
 
     async def _init_streams_and_fsm(self) -> None:
-        """ШАГ 2 и 3: Запуск спецификаций, стримов цен/позиций, REST-синхронизация и прогрев."""
-        self.spec_manager.start()
-        self._price_task = asyncio.create_task(self.price_stream.run(self._on_tick), name="price_stream")
-
-        self.pos_monitor = PositionMonitor(states_cache=self.fsm_states, target_symbols=self.symbols)
-        self.runtime_manager.populate_fsm_from_cache(self.fsm_states)
-
-        self.pos_stream = PositionStream(
-            api_key=API_KEY,
-            stop_flag=lambda: not self.is_running,
-            monitor=self.pos_monitor,
-            target_symbols=set(self.symbols),
-            client=self.client
-        )
-
-        self.ws_interpreter = BinanceWsInterpreter(
-            monitor=self.pos_monitor, 
-            target_symbols=set(self.symbols)
-        )
-        self.pos_stream.register_callback(self.ws_interpreter.process_message)
-        self._pos_task = asyncio.create_task(self.pos_stream.start(), name="pos_stream")
-
-        logger.info("Main _game_loop started. Specifications and price streams are running.")
-        logger.info("Waiting for price streams to connect and snapshot...")
-        try:
-            await asyncio.wait_for(self.price_stream.ready.wait(), timeout=10.0)
-            if hasattr(self.price_stream, "snapshot_received"):
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(self.price_stream.snapshot_received.wait(), timeout=5.0)
-            logger.info("Price streams connected and snapshot received.")
-        except asyncio.TimeoutError:
-            logger.warning("Timeout waiting for price streams! Waiting for prices...")
-
-        # Дожидаемся цен от стрима (до 30с) с фолбеком на bulk REST
-        logger.info(f"Waiting for price initialization for all {len(self.symbols)} symbols (up to 30s)...")
-        wait_start = time.time()
-        while time.time() - wait_start < 30.0 and self.is_running:
-            missing = [s for s in self.symbols if not self.prices.get(s) or (isinstance(self.prices.get(s), tuple) and self.prices[s][0] <= 0)]
-            if not missing:
-                logger.info(f"All {len(self.symbols)} symbol prices successfully initialized from stream in {time.time() - wait_start:.1f}s!")
-                break
-            await asyncio.sleep(0.5)
-        else:
-            missing = [s for s in self.symbols if not self.prices.get(s) or (isinstance(self.prices.get(s), tuple) and self.prices[s][0] <= 0)]
-            if missing:
-                logger.warning(
-                    f"[PRICE_INIT] Price init timeout (30s): {len(missing)}/{len(self.symbols)} symbols missing. "
-                    f"Executing abnormal bulk REST fallback for all symbols..."
-                )
-                try:
-                    bulk_prices = await BinancePublic.get_prices_bulk(self.symbols)
-                    now_ts = time.time()
-                    for sym, p in bulk_prices.items():
-                        self.prices[sym] = (p, now_ts)
-                    logger.info(f"[PRICE_INIT] Bulk REST fallback populated {len(bulk_prices)}/{len(self.symbols)} symbols.")
-                except Exception as e:
-                    logger.warning(f"[PRICE_INIT] Bulk REST fallback failed: {e}")
-
-        logger.info("Waiting for Position Stream to connect...")
-        wait_cycles = 0
-        while not self.pos_stream.ready and wait_cycles < 50:
-            await asyncio.sleep(0.1)
-            wait_cycles += 1
-
-        if not self.pos_stream.ready:
-            logger.warning("Position Stream failed to connect in time! Relying on REST failsafe.")
-        else:
-            logger.info("Position Stream connected successfully.")
-
-        # Начальный стейт позиций по REST
-        await self.pos_monitor.sync_from_rest(self.client, self.symbols)
-
-        # Синхронизируем уровни сетки с реальными биржевыми объемами
-        for sym in self.symbols:
-            strat = self.strategy_registry.get_strategy_for_symbol(sym) if self.strategy_registry else None
-            for s_side in ("LONG", "SHORT"):
-                st = self.fsm_states.get(sym, {}).get(s_side)
-                if st and st.in_position and abs(st.total_volume) > 1e-6:
-                    cur_p = self.prices.get(sym, (0.0, 0))[0] if sym in self.prices else None
-                    StrategyApplicator.resolve_position_state_grid(st, strategy=strat, current_price=cur_p)
-
-        logger.info("Streams and REST synced! Running initial RuntimeFSM Sync...")
-        await self.runtime_manager.sync_with_fsm(self.fsm_states)
-
-        logger.info("Waiting for exchange specifications to load...")
-        while not self.spec_data.get("symbols") and self.is_running:
-            await asyncio.sleep(0.5)
-        logger.info("Exchange specifications loaded.")
-
-        # Прогрев плеча и маржи
-        logger.info(f"[BotCore] Pre-warming leverage and margin settings for {len(self.symbols)} active symbols...")
-        for sym in self.symbols:
-            cfg = self.runtime_configs.get(sym, {})
-            side_cfg = cfg.get("LONG") or cfg.get("SHORT")
-            if side_cfg:
-                try:
-                    await self.leverage_manager.set_leverage_and_margin(self.client, sym, side_cfg)
-                except Exception as e:
-                    logger.warning(f"[{sym}] Leverage pre-warm warning: {e}")
-
-        # Первоначальный аудит и восстановление TP ордеров
-        await self._reconcile_open_orders(force=True)
-
-        # Notifier & Watchdog
-        await self.notifier.start()
-        self._watchdog_task = asyncio.create_task(self.watchdog.start(), name="watchdog")
-
-        # Аналитика
-        logger.info("[BotCore] All systems & prices fully warmed up. Running initial sync and starting analytics tracker...")
-        await self.analytics.deep_sync_analytics(self.client, self.prices)
-        self.analytics.start_realtime_tracker(self.client)
+        """ШАГ 2 и 3: Запуск спецификаций, стримов цен/позиций, REST-синхронизация и прогрев (делегировано в BotBootstrapService)."""
+        return await BotBootstrapService.init_streams_and_fsm(self)
 
     async def _run_loop_iteration(self) -> None:
         """Одна итерация главного цикла торгового ядра."""
@@ -750,30 +435,8 @@ class BotCore:
             await asyncio.sleep(TIME_SLACK_SEC)
 
     async def _shutdown_game_loop(self) -> None:
-        """Корректная остановка задач и стримов игрового цикла."""
-        self.is_running = False
-        await self.notifier.stop()
-        if self.watchdog:
-            self.watchdog.stop()
-        if self._watchdog_task:
-            self._watchdog_task.cancel()
-        self.spec_manager.stop()
-        if self.price_stream:
-            self.price_stream.stop()
-        if self._price_task:
-            self._price_task.cancel()
-        if self._pos_task:
-            self._pos_task.cancel()
-
-        for creds, cl in getattr(self, '_key_clients', {}).items():
-            with contextlib.suppress(Exception):
-                await cl.shutdown()
-
-        tasks = [t for t in (self._price_task, self._pos_task, self._watchdog_task) if t]
-        if hasattr(self, '_pos_tasks'):
-            tasks.extend([t for t in self._pos_tasks if t])
-        if tasks:
-            await asyncio.gather(*tasks, return_exceptions=True)
+        """Корректная остановка задач и стримов игрового цикла (делегировано в BotBootstrapService)."""
+        return await BotBootstrapService.shutdown_game_loop(self)
 
     async def _game_loop(self):
         """Главный цикл торгового ядра (дирижер)."""
@@ -813,147 +476,9 @@ class BotCore:
     async def reset_strategy_iteration(self, strategy_id: str) -> dict:
         """
         Принудительный сброс итерации стратегии и переход на новый цикл.
-        Делегирует расчет и запись аналитики в AnalyticsManager, сбрасывает recent_closes и ставит кулдаун.
+        Делегирует исполнение в EmergencyCloserService.
         """
-        from unittest.mock import MagicMock
-
-        # 1. Запись аналитики через сервисный метод (с поддержкой фолбека для тестов с моками)
-        res = None
-        if hasattr(self, "analytics") and hasattr(self.analytics, "reset_strategy_iteration") and not isinstance(self.analytics, MagicMock):
-            res = self.analytics.reset_strategy_iteration(strategy_id)
-        if not isinstance(res, dict):
-            now_ms = int(time.time() * 1000)
-            strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strategy_id}.json"
-            strat_analytics = {}
-            if strat_stats_path.exists():
-                strat_analytics = Utils.read_json_file(strat_stats_path) or {}
-            strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
-            cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
-            next_iter_idx = cur_iter_idx + 1
-            new_iter_start_net = round(strat_net, 4)
-            new_iter_start_real = round(float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))), 4)
-
-            strat_analytics["iteration_index"] = next_iter_idx
-            strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
-            strat_analytics["iteration_net_profit_usdt"] = 0.0
-            strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
-            strat_analytics["iteration_realized_pnl_usdt"] = 0.0
-            strat_analytics["iteration_start_ts"] = now_ms
-            strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
-            strat_analytics["iteration_peak_ts"] = now_ms
-            strat_analytics["iteration_peak_age_hours"] = 0.0
-            strat_analytics["iteration_net_velocity"] = 0.0
-
-            if strat_stats_path.exists():
-                Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
-
-            # Синхронизация CACHE/iteration_state.json
-            try:
-                c_file = CACHE_DIR / "iteration_state.json"
-                c_dict = {}
-                if c_file.exists():
-                    try:
-                        c_dict = json.loads(c_file.read_text(encoding="utf-8"))
-                    except Exception:
-                        c_dict = {}
-                prev_entry = c_dict.get(strategy_id, {})
-                c_dict[strategy_id] = {
-                    "iteration_index": next_iter_idx,
-                    "iteration_start_net_profit_usdt": new_iter_start_net,
-                    "iteration_start_realized_pnl_usdt": new_iter_start_real,
-                    "iteration_realized_pnl_usdt": 0.0,
-                    "iteration_start_ts": now_ms,
-                    "iteration_peak_net_profit_usdt": 0.0,
-                    "iteration_peak_ts": now_ms,
-                    "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", strat_net),
-                    "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
-                    "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
-                    "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                }
-                Utils.atomic_write_json(c_file, c_dict, indent=4)
-            except Exception as ce:
-                logger.error(f"[{strategy_id}] Error saving iteration cache on manual reset: {ce}")
-
-            res = {
-                "strategy_id": strategy_id,
-                "prev_iteration": cur_iter_idx,
-                "new_iteration": next_iter_idx,
-                "base_net": new_iter_start_net,
-                "base_realized": new_iter_start_real
-            }
-
-        cur_iter_idx = res.get("prev_iteration", 1)
-        next_iter_idx = res.get("new_iteration", 2)
-        new_iter_start_net = res.get("base_net", 0.0)
-
-        # 2. Сброс recent_closes у монет стратегии
-        strat_cfg = None
-        if hasattr(self, "strategy_registry") and self.strategy_registry:
-            if hasattr(self.strategy_registry, "active_strategies") and isinstance(self.strategy_registry.active_strategies, dict):
-                strat_cfg = self.strategy_registry.active_strategies.get(strategy_id)
-            if not strat_cfg and hasattr(self.strategy_registry, "get_strategy") and not isinstance(self.strategy_registry.get_strategy, MagicMock):
-                try:
-                    strat_cfg = self.strategy_registry.get_strategy(strategy_id)
-                except Exception:
-                    strat_cfg = None
-        if strat_cfg and getattr(strat_cfg, "symbols", None):
-            for sym in strat_cfg.symbols:
-                if hasattr(self, "fsm_states") and sym in self.fsm_states:
-                    for s_side in ("LONG", "SHORT"):
-                        if s_side in self.fsm_states[sym]:
-                            self.fsm_states[sym][s_side].recent_closes = []
-
-        # 3. Кулдаун авто-закрытия и блокировка входов до открытия новой свечи хартбита
-        now = time.time()
-        heartbeat_sec = 300
-        if hasattr(self, "get_strategy_heartbeat_seconds") and not isinstance(getattr(self, "get_strategy_heartbeat_seconds", None), MagicMock):
-            try:
-                heartbeat_sec = int(self.get_strategy_heartbeat_seconds(strategy_id=strategy_id))
-            except (TypeError, ValueError):
-                heartbeat_sec = 300
-        cooldown_until = BotCore.calc_heartbeat_window_cooldown(now, heartbeat_sec)
-        if not isinstance(cooldown_until, (int, float)):
-            cooldown_until = now + heartbeat_sec
-
-        if not isinstance(getattr(self, "strategy_blocked_until", None), dict):
-            self.strategy_blocked_until = {}
-        prev_st = self.strategy_blocked_until.get(strategy_id, 0.0)
-        prev_st = prev_st if isinstance(prev_st, (int, float)) else 0.0
-        self.strategy_blocked_until[strategy_id] = max(prev_st, cooldown_until)
-
-        if not isinstance(getattr(self, "symbol_blocked_until", None), dict):
-            self.symbol_blocked_until = {}
-        if strat_cfg and getattr(strat_cfg, "symbols", None):
-            for sym in strat_cfg.symbols:
-                prev_sym = self.symbol_blocked_until.get(sym.upper(), 0.0)
-                prev_sym = prev_sym if isinstance(prev_sym, (int, float)) else 0.0
-                self.symbol_blocked_until[sym.upper()] = max(prev_sym, cooldown_until)
-
-        all_active_syms = set()
-        if hasattr(self, "strategy_registry") and self.strategy_registry and hasattr(self.strategy_registry, "get_all_active_symbols") and not isinstance(self.strategy_registry.get_all_active_symbols, MagicMock):
-            try:
-                all_active_syms = {s.upper() for s in self.strategy_registry.get_all_active_symbols()}
-            except Exception:
-                all_active_syms = set()
-        strat_syms = {s.upper() for s in strat_cfg.symbols} if (strat_cfg and getattr(strat_cfg, "symbols", None)) else set()
-        if not all_active_syms or strat_syms >= all_active_syms:
-            prev_block = getattr(self, "block_until_timestamp", 0.0)
-            prev_block = prev_block if isinstance(prev_block, (int, float)) else 0.0
-            self.block_until_timestamp = max(prev_block, cooldown_until)
-            self.entry_blocked = True
-
-        if hasattr(self, "auto_closer") and self.auto_closer and hasattr(self.auto_closer, "_last_close_ts") and isinstance(self.auto_closer._last_close_ts, dict):
-            self.auto_closer._last_close_ts[strategy_id] = time.time()
-
-        rem_s = int(cooldown_until - now)
-        raw_tfr = getattr(strat_cfg, "signal_heartbeat_tfr", None)
-        tfr_label = str(raw_tfr) if isinstance(raw_tfr, str) and raw_tfr else f"{heartbeat_sec}s"
-        logger.info(
-            f"[{strategy_id}] Manual iteration reset: Cycle #{cur_iter_idx} -> #{next_iter_idx}. "
-            f"Base Net: {new_iter_start_net:+.2f} USDT. Idempotent cooldown locked until {cooldown_until} ({rem_s}s until next {tfr_label} window)."
-        )
-
-        return res
+        return await EmergencyCloserService.reset_strategy_iteration(self, strategy_id)
 
     async def close_all_positions(self, reset_iterations: bool = True) -> dict:
         """Экстренное закрытие всех позиций, отмена лимитных ордеров и сброс итераций СТРОГО для текущей обоймы монет."""

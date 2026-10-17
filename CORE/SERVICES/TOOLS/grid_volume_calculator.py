@@ -42,7 +42,8 @@ def calculate_grid_volumes(
         raise ValueError("Количество уровней должно быть > 0")
 
     if abs(multiplier - 1.0) < 1e-9:
-        raw_volumes = [total_pct / levels] * levels
+        v0 = total_pct / levels
+        raw_volumes = [v0] * levels
     else:
         v0 = total_pct * (multiplier - 1.0) / (math.pow(multiplier, levels) - 1.0)
         raw_volumes = [v0 * math.pow(multiplier, k) for k in range(levels)]
