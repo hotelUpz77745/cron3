@@ -142,7 +142,7 @@ class TradeCycleManager:
                 if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
                     low = float(min(bn_factor))
                     high = float(max(bn_factor))
-                    if high > 0 and high >= low:
+                    if high > 0 and high >= low and getattr(self.bot, "current_sim_time", None) is None:
                         import CORE.bot as _bot_mod
                         noise_sleep = round(_bot_mod.secrets.SystemRandom().uniform(low, high), 2)
                         logger.info(
@@ -188,16 +188,25 @@ class TradeCycleManager:
             state.eff_invest = base_invest
             invest_size = base_invest
 
+            smart_size_mult = 1.0
             if strat and getattr(strat, "smart_size_cfg", None):
                 trend_state = None
                 trend_determ = strat.smart_size_cfg.get("trend_determ") or strat.smart_size_cfg.get("dynamic_sizing_mode")
                 if trend_determ:
-                    ema_cfg = strat.smart_size_cfg.get("ema_trend")
-                    trend_state = await MomentumEngine.get_ema_trend_state(
-                        symbol=symbol,
-                        ema_cfg=ema_cfg,
-                        client=sym_client
-                    )
+                    if str(trend_determ).startswith("adx"):
+                        adx_cfg = strat.smart_size_cfg.get("adx_trend") or {"timeframe": "1d", "period": 14, "adx_threshold": 25.0}
+                        trend_state = await MomentumEngine.get_adx_trend_state(
+                            symbol=symbol,
+                            adx_cfg=adx_cfg,
+                            client=sym_client
+                        )
+                    else:
+                        ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                        trend_state = await MomentumEngine.get_ema_trend_state(
+                            symbol=symbol,
+                            ema_cfg=ema_cfg,
+                            client=sym_client
+                        )
 
                 size_mult = MomentumEngine.calculate_smart_size_multiplier(
                     closed_count=closed_count,
@@ -206,9 +215,14 @@ class TradeCycleManager:
                     trend_state=trend_state
                 )
                 if size_mult != 1.0:
-                    invest_size *= size_mult
+                    smart_size_mult = size_mult
                     trend_tag = f" [Trend: {trend_state}]" if trend_state else ""
-                    logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied: x{size_mult:.2f}{trend_tag} -> invest_size={invest_size:.2f} USDT (closes: {closed_count})")
+                    logger.info(f"[{symbol}][{strat.strategy_id}] {side} Smart Size applied to grid_0: x{size_mult:.2f}{trend_tag} (closes: {closed_count})")
+
+            # ВАЖНО: state.eff_invest и side_cfg["eff_invest"] остаются строго base_invest.
+            # Колена усреднения сетки (L1..L7) не перегружают депозит и рассчитываются по базовому капиталу.
+            state.eff_invest = base_invest
+            side_cfg["eff_invest"] = base_invest
 
             grid_0 = side_cfg.get("grid", {}).get("0", {})
             volume_pct = float(grid_0.get("volume") or 12.0)
@@ -230,8 +244,23 @@ class TradeCycleManager:
                     strategy_id=strat.strategy_id if strat else "",
                 )
 
+            # Динамический фильтр микро-ступени волатильности (Micro-Step Filter)
+            ms_filter = getattr(strat, "micro_step_filter_cfg", None)
+            if ms_filter and ms_filter.get("enabled"):
+                target_lvl = str(ms_filter["target_level"])
+                max_atr = float(ms_filter["max_atr_pct"])
+                if hasattr(self.bot, "get_atr_for_symbol"):
+                    cur_atr = self.bot.get_atr_for_symbol(symbol)
+                    if cur_atr is not None:
+                        is_active = bool(cur_atr <= max_atr)
+                        if target_lvl in getattr(state, "grid", {}):
+                            state.grid[target_lvl]["enabled"] = is_active
+                        if target_lvl in side_cfg.get("grid", {}):
+                            side_cfg["grid"][target_lvl]["enabled"] = is_active
+
+            grid_0_invest = base_invest * smart_size_mult
             from CORE._utils import TradeMath
-            volume = TradeMath.calculate_order_volume(invest_size, volume_pct, current_price, self.bot.spec_data, symbol)
+            volume = TradeMath.calculate_order_volume(grid_0_invest, volume_pct, current_price, self.bot.spec_data, symbol)
             
             order_side = "BUY" if side == "LONG" else "SELL"
 
@@ -257,7 +286,7 @@ class TradeCycleManager:
                     err = getattr(res, "error_msg", "Unknown error")
                     logger.error(f"[{symbol}] Failed to open {side} position: {err}")
                     state.in_position_papper = False
-                    state.last_failed_entry_ts = time.time()
+                    state.last_failed_entry_ts = Utils.get_current_time(getattr(self.bot, "current_sim_time", None))
                     return False
 
                 state.set_in_position(True)
@@ -271,7 +300,7 @@ class TradeCycleManager:
                 if not await _do_open():
                     return
 
-            current_time_ms = int(time.time() * 1000)
+            current_time_ms = int(Utils.get_current_time(getattr(self.bot, "current_sim_time", None)) * 1000)
             state.open_time = current_time_ms
             side_cfg["open_time"] = current_time_ms
             if "0" in state.grid:
@@ -367,7 +396,7 @@ class TradeCycleManager:
             self.bot.runtime_manager.reset_state_to_default(symbol, side, states[side])
             self.bot.avg_manager.reset(symbol, side)
 
-            if idx < len(sides_to_reset) - 1:
+            if idx < len(sides_to_reset) - 1 and getattr(self.bot, "current_sim_time", None) is None:
                 await asyncio.sleep(0.1)
 
         if hasattr(self.bot, "runtime_manager") and hasattr(self.bot.runtime_manager, "save_cache"):
@@ -387,7 +416,7 @@ class TradeCycleManager:
         if current_time - last_sync > REST_FAILSAFE_SEC or symbol not in self.bot._last_rest_syncs:
             self.bot._last_rest_syncs[symbol] = current_time
             any_open = any(s.in_position for s in states.values())
-            if any_open:
+            if any_open and hasattr(self.bot, "pos_monitor") and self.bot.pos_monitor:
                 try:
                     await self.bot.pos_monitor.sync_from_rest(self.bot.client, [symbol])
                 except Exception as e:
@@ -401,7 +430,8 @@ class TradeCycleManager:
         if price_data:
             if isinstance(price_data, tuple):
                 p, ts = price_data
-                if time.time() - ts < 15.0:
+                now_ts = Utils.get_current_time(getattr(self.bot, "current_sim_time", None))
+                if abs(now_ts - ts) < 15.0:
                     current_price = p
             else:
                 current_price = price_data
@@ -465,7 +495,7 @@ class TradeCycleManager:
                 is_blocked, reason, rem = self.check_entry_block(symbol, strat.strategy_id if strat else None)
                 if is_blocked:
                     last_log = self.bot._last_blocked_log.get(symbol, {}).get(side, 0.0)
-                    now_ts = time.time()
+                    now_ts = Utils.get_current_time(getattr(self.bot, "current_sim_time", None))
                     if now_ts - last_log >= 30.0:
                         self.bot._last_blocked_log.setdefault(symbol, {})[side] = now_ts
                         logger.info(f"[{symbol}] {side}: Signal is TRUE but entry is blocked: {reason}.")

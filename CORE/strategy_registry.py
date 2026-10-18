@@ -373,6 +373,22 @@ class StrategyConfig:
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
 
+        # 7. Фильтр динамической микро-ступени волатильности (Micro-Step Filter Dome)
+        raw_ms_filter = (
+            self.active_settings.get("micro_step_filter")
+            or raw_meta.get("micro_step_filter")
+            or self.overrides.get("micro_step_filter")
+        )
+        if raw_ms_filter and isinstance(raw_ms_filter, dict):
+            self.micro_step_filter_cfg: Dict[str, Any] = copy.deepcopy(raw_ms_filter)
+        else:
+            self.micro_step_filter_cfg = {"enabled": False}
+
+        if self.micro_step_filter_cfg.get("enabled"):
+            for req_k in ("timeframe", "period", "target_level", "max_atr_pct"):
+                if req_k not in self.micro_step_filter_cfg:
+                    raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required micro_step_filter field: '{req_k}'")
+
         # Персональный пульс/хартбит стратегии: прямое чтение 'signal_heartbeat_tfr'
         # с поддержкой легаси-алиасов ('heartbeat_tfr', 'timeframe') по Протоколу №2 (без скрытых дефолтов)
         tfr_val = None
@@ -607,10 +623,21 @@ class StrategyRegistry:
             artifacts_tribute_dir = self.universes_path.parent / "artifacts" / "classic_tribute"
             if artifacts_tribute_dir.exists() and artifacts_tribute_dir.is_dir():
                 for jf in sorted(artifacts_tribute_dir.glob("*.json")):
-                    if not jf.stem.startswith("_") and jf.stem not in data:
+                    if not jf.stem.startswith("_"):
                         tribute_content = Utils.read_json_file(jf)
-                        if isinstance(tribute_content, dict) and "name" in tribute_content:
-                            data[jf.stem] = tribute_content
+                        if isinstance(tribute_content, dict):
+                            # Если спецификация завернута внутрь ключа с именем файла (как в u0_base_classic_supergrid)
+                            if jf.stem in tribute_content and isinstance(tribute_content[jf.stem], dict):
+                                tribute_content = tribute_content[jf.stem]
+                            if "name" in tribute_content:
+                                if jf.stem not in data:
+                                    data[jf.stem] = tribute_content
+                                if jf.stem == "u16_chita":
+                                    data["u16_chita_v30"] = copy.deepcopy(tribute_content)
+                                    data["u16_chita_30"] = copy.deepcopy(tribute_content)
+                                    data["30"] = copy.deepcopy(tribute_content)
+                                elif jf.stem == "u0_base_classic_supergrid":
+                                    data["u0"] = copy.deepcopy(tribute_content)
 
         # Fallback к universes.json (для обратной совместимости внешних утилит)
         if not data and self.universes_path.exists():
@@ -718,6 +745,62 @@ class StrategyRegistry:
             "omni": "u96_omni_zenith_apex",
             "омен": "u96_omni_zenith_apex",
             "омен96": "u96_omni_zenith_apex",
+
+            # U0 Классик Супергрид (Base Classic SuperGrid)
+            "u0": "u0_base_classic_supergrid",
+            "u0_classic": "u0_base_classic_supergrid",
+            "u0_base": "u0_base_classic_supergrid",
+            "supergrid": "u0_base_classic_supergrid",
+            "u0_base_classic_supergrid": "u0_base_classic_supergrid",
+
+            # U16 Чита Origin
+            "u16_chita_origin": "u16_chita_origin",
+            "chita_origin": "u16_chita_origin",
+            "origin": "u16_chita_origin",
+
+            # U10 Spinning Early Rebound
+            "u10": "u10_spinning_early_rebound",
+            "u10_spinning": "u10_spinning_early_rebound",
+
+            # U12 Cross Side Recycler & Spinning
+            "u12": "u12_cross_side_recycler",
+            "u12_atr": "u12_cross_side_recycler",
+            "u12_recycler": "u12_cross_side_recycler",
+            "u12_v1": "u12_cross_side_recycler",
+            "u12_v2": "u12_spinning_cross_rebound_recycler",
+            "u12_spinning": "u12_spinning_cross_rebound_recycler",
+            "u12_rebound": "u12_spinning_cross_rebound_recycler",
+
+            # U16 Chita v3.6E3 / v3.6E4 / v3.6E5 (Auto-EMA Fist)
+            "v36e": "u16_chita_v36E3",
+            "u16_v36e": "u16_chita_v36E3",
+            "u16_chita_v36e": "u16_chita_v36E3",
+            "chita_v36e": "u16_chita_v36E3",
+            "v36e3": "u16_chita_v36E3",
+            "u16_v36e3": "u16_chita_v36E3",
+            "u16_chita_v36e3": "u16_chita_v36E3",
+            "chita_v36e3": "u16_chita_v36E3",
+            "v36e4": "u16_chita_v36E4",
+            "u16_v36e4": "u16_chita_v36E4",
+            "u16_chita_v36e4": "u16_chita_v36E4",
+            "chita_v36e4": "u16_chita_v36E4",
+            "v36e5": "u16_chita_v36E5",
+            "u16_v36e5": "u16_chita_v36E5",
+            "u16_chita_v36e5": "u16_chita_v36E5",
+            "chita_v36e5": "u16_chita_v36E5",
+
+            # U16 Chita v3.6n (Neutral Hand 9/9)
+            "v36n": "u16_chita_v36n",
+            "u16_v36n": "u16_chita_v36n",
+            "u16_chita_v36n": "u16_chita_v36n",
+            "chita_v36n": "u16_chita_v36n",
+
+            # U16 Chita v3.3FK (Hybrid Apex with Golden-Cut 38.2% Fibo-Kurki Triggers)
+            "v33fk": "u16_chita_v33FK",
+            "u16_v33fk": "u16_chita_v33FK",
+            "u16_chita_v33fk": "u16_chita_v33FK",
+            "chita_v33fk": "u16_chita_v33FK",
+            "u16_chita_v33FK": "u16_chita_v33FK",
         }
         if target_lower in ALIAS_MAP:
             cand = ALIAS_MAP[target_lower]
