@@ -404,11 +404,19 @@ class MomentumEngine:
         closed_count: int,
         smart_size_cfg: Optional[Dict[str, Any]],
         side: Optional[str] = None,
-        trend_state: Optional[str] = None
+        trend_state: Optional[str] = None,
+        opp_in_pos: bool = False,
+        opp_step: int = 0
     ) -> float:
         """
         Рассчитывает множитель объема сетки на основе профитабельности стороны.
         По умолчанию 1.00x.
+        
+        Если в smart_size_cfg задан 'stagnation_min_step':
+          - Множители profiting_size_weights применяются ТОЛЬКО если противоположная сторона
+            находится в позиции и набрала cur_step >= stagnation_min_step.
+          - Если противоположная сторона не в позиции или ее шаг < stagnation_min_step,
+            стартовый ордер заходит чистым базовым объемом (1.00x).
         
         Если включен dynamic_sizing_mode (например, 'dyn_ema_71'):
           - Применяем множитель из profiting_size_weights ТОЛЬКО если сторона ордера
@@ -424,6 +432,12 @@ class MomentumEngine:
         weights_card = smart_size_cfg.get("profiting_size_weights", {})
         if not weights_card:
             return 1.00
+
+        # Триггер стагнации (stagnation_min_step)
+        stag_step = smart_size_cfg.get("stagnation_min_step")
+        if stag_step is not None:
+            if not opp_in_pos or int(opp_step) < int(stag_step):
+                return 1.00
 
         # Проверка флага привязки к тренду (trend_determ: "ema_trend")
         trend_determ = smart_size_cfg.get("trend_determ") or smart_size_cfg.get("dynamic_sizing_mode")
@@ -452,14 +466,18 @@ class MomentumEngine:
         closed_count: int,
         smart_size_cfg: Optional[Dict[str, Any]],
         side: Optional[str] = None,
-        trend_state: Optional[str] = None
+        trend_state: Optional[str] = None,
+        opp_in_pos: bool = False,
+        opp_step: int = 0
     ) -> float:
         """Алиас для calculate_smart_size_weight для полной совместимости с bot.py."""
         return cls.calculate_smart_size_weight(
             closed_count=closed_count,
             smart_size_cfg=smart_size_cfg,
             side=side,
-            trend_state=trend_state
+            trend_state=trend_state,
+            opp_in_pos=opp_in_pos,
+            opp_step=opp_step
         )
 
     @classmethod

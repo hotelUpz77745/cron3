@@ -233,5 +233,62 @@ class TestStephensonMechanisms(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(levels[idx]["floor"], flr)
 
 
+    def test_08_stagnation_min_step_smart_size(self):
+        """8. Тестирование триггера стагнации stagnation_min_step: 2 для Stephenson-EM5S2."""
+        from CORE.STRATEGY.momentum_engine import MomentumEngine
+        
+        cfg_s2_path = Path("CFG/universes/u17_stephensonEM5S2.json")
+        self.assertTrue(cfg_s2_path.exists(), "u17_stephensonEM5S2.json должен существовать!")
+        with open(cfg_s2_path, "r", encoding="utf-8") as f:
+            cfg_s2 = json.load(f)
+        
+        ss_s2 = cfg_s2["smart_size"]
+        self.assertEqual(ss_s2["stagnation_min_step"], 2)
+
+        # Случай А: Противоположная сторона НЕ в позиции -> строго 1.00x
+        mult_no_pos = MomentumEngine.calculate_smart_size_multiplier(
+            closed_count=0,
+            smart_size_cfg=ss_s2,
+            side="LONG",
+            trend_state="UP",
+            opp_in_pos=False,
+            opp_step=0
+        )
+        self.assertEqual(mult_no_pos, 1.00, "Без противоположной позиции Smart Size должен быть 1.00x!")
+
+        # Случай Б: Противоположная сторона на шаге 1 (< 2) -> строго 1.00x
+        mult_step1 = MomentumEngine.calculate_smart_size_multiplier(
+            closed_count=0,
+            smart_size_cfg=ss_s2,
+            side="LONG",
+            trend_state="UP",
+            opp_in_pos=True,
+            opp_step=1
+        )
+        self.assertEqual(mult_step1, 1.00, "На шаге 1 (< 2) Smart Size должен быть 1.00x!")
+
+        # Случай В: Противоположная сторона на шаге 2 (>= 2) -> форсаж 1.14x (при ==0 closes)
+        mult_step2 = MomentumEngine.calculate_smart_size_multiplier(
+            closed_count=0,
+            smart_size_cfg=ss_s2,
+            side="LONG",
+            trend_state="UP",
+            opp_in_pos=True,
+            opp_step=2
+        )
+        self.assertEqual(mult_step2, 1.14, "На шаге 2 (стагнация) Smart Size должен форсироваться до 1.14x!")
+
+        # Случай Г: Шаг 3 и 2 закрытия -> пик колокола 1.42x
+        mult_step3_c2 = MomentumEngine.calculate_smart_size_multiplier(
+            closed_count=2,
+            smart_size_cfg=ss_s2,
+            side="LONG",
+            trend_state="UP",
+            opp_in_pos=True,
+            opp_step=3
+        )
+        self.assertEqual(mult_step3_c2, 1.42, "При 2 закрытиях и стагнации Smart Size должен быть 1.42x!")
+
+
 if __name__ == "__main__":
     unittest.main()

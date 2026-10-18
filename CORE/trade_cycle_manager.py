@@ -208,11 +208,20 @@ class TradeCycleManager:
                             client=sym_client
                         )
 
+                opp_side = "SHORT" if side == "LONG" else "LONG"
+                opp_state = None
+                if hasattr(self.bot, "fsm_states") and self.bot.fsm_states:
+                    opp_state = self.bot.fsm_states.get(symbol, {}).get(opp_side)
+                opp_in_pos = bool(opp_state and (getattr(opp_state, "in_position", False) or getattr(opp_state, "in_position_papper", False)))
+                opp_step = int(getattr(opp_state, "cur_step", 0)) if opp_state else 0
+
                 size_mult = MomentumEngine.calculate_smart_size_multiplier(
                     closed_count=closed_count,
                     smart_size_cfg=strat.smart_size_cfg,
                     side=side,
-                    trend_state=trend_state
+                    trend_state=trend_state,
+                    opp_in_pos=opp_in_pos,
+                    opp_step=opp_step
                 )
                 if size_mult != 1.0:
                     smart_size_mult = size_mult
