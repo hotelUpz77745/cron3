@@ -125,11 +125,20 @@ class TradeCycleManager:
                     if active and isinstance(active, dict):
                         strat = next(iter(active.values()), None)
 
-            # Скользящее окно закрытий
+            # Свечное окно закрытий (строго в пределах текущей свечи сердцебиения)
             now = Utils.get_current_time(getattr(self.bot, "current_sim_time", None))
-            smart_grace_cfg = getattr(strat, "smart_grace_cfg", None) or DEFAULT_SMART_GRACE
-            eval_w = float(smart_grace_cfg.get("eval_window_sec", 900))
-            state.recent_closes = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
+            interval = 300
+            if hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
+                try:
+                    interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
+                except Exception:
+                    interval = 300
+            elif hasattr(self.bot, "time_control") and getattr(self.bot.time_control, "interval_seconds", None):
+                interval = int(self.bot.time_control.interval_seconds)
+
+            candle_id = int(now // interval)
+            candle_start = candle_id * interval
+            state.recent_closes = [t for t in getattr(state, "recent_closes", []) if t >= candle_start]
             closed_count = len(state.recent_closes)
 
             # Броуновский шум применяется только между ордерами сильной руки (closed_count >= 1).
@@ -260,7 +269,7 @@ class TradeCycleManager:
                 max_atr = float(ms_filter["max_atr_pct"])
                 if hasattr(self.bot, "get_atr_for_symbol"):
                     cur_atr = self.bot.get_atr_for_symbol(symbol)
-                    if cur_atr is not None:
+                    if cur_atr is not None and isinstance(cur_atr, (int, float)):
                         is_active = bool(cur_atr <= max_atr)
                         if target_lvl in getattr(state, "grid", {}):
                             state.grid[target_lvl]["enabled"] = is_active
@@ -473,15 +482,26 @@ class TradeCycleManager:
                 strat = self.bot.strategy_registry.get_strategy_for_symbol(symbol) if self.bot.strategy_registry else None
                 smart_grace_cfg = strat.smart_grace_cfg if strat else DEFAULT_SMART_GRACE
                 smart_size_cfg = strat.smart_size_cfg if strat else None
-                eval_window = smart_grace_cfg["eval_window_sec"]
 
                 now = self.bot.get_current_time()
-                state.recent_closes = [t for t in state.recent_closes if now - t <= eval_window]
+                interval = 300
+                if hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
+                    try:
+                        interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
+                    except Exception:
+                        interval = 300
+                elif hasattr(self.bot, "time_control") and getattr(self.bot.time_control, "interval_seconds", None):
+                    interval = int(self.bot.time_control.interval_seconds)
+
+                candle_id = int(now // interval)
+                candle_start = candle_id * interval
+
+                state.recent_closes = [t for t in getattr(state, "recent_closes", []) if t >= candle_start]
                 closed_count = len(state.recent_closes)
 
                 opposite_side = "SHORT" if side == "LONG" else "LONG"
                 opposite_state = states[opposite_side]
-                opposite_state.recent_closes = [t for t in opposite_state.recent_closes if now - t <= eval_window]
+                opposite_state.recent_closes = [t for t in getattr(opposite_state, "recent_closes", []) if t >= candle_start]
                 opposite_closed_count = len(opposite_state.recent_closes)
 
                 if MomentumEngine.is_knife_blocked(opposite_closed_count, smart_size_cfg):

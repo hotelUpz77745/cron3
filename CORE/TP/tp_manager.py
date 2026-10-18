@@ -88,8 +88,17 @@ class TakeProfitManager:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 if strat and getattr(strat, "smart_tp_cfg", None):
                     now = time.time()
-                    eval_w = float(strat.smart_tp_cfg.get("eval_window_sec", 300))
-                    recent = [t for t in getattr(state, "recent_closes", []) if now - t <= eval_w]
+                    interval = 300
+                    if hasattr(self.runtime_manager, "get_heartbeat_interval_for_symbol"):
+                        try:
+                            interval = self.runtime_manager.get_heartbeat_interval_for_symbol(symbol)
+                        except Exception:
+                            interval = 300
+                    elif hasattr(strat, "heartbeat_seconds") and strat.heartbeat_seconds:
+                        interval = int(strat.heartbeat_seconds)
+                    candle_id = int(now // interval)
+                    candle_start = candle_id * interval
+                    recent = [t for t in getattr(state, "recent_closes", []) if t >= candle_start]
                     closed_cnt = len(recent)
                     if closed_cnt > 0:
                         trend_state = None

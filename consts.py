@@ -204,7 +204,6 @@ DEFAULT_TAKER_FEE_RATE: float = 0.0005  # 0.05% Taker fee on Binance Futures (VI
 DEFAULT_SMART_GRACE: Dict[str, Any] = _SIG_CFG.get("smart_grace") or {
     "start_period_sec": 57,
     "shift_interval_sec": 13,
-    "eval_window_sec": 300,
     "increments_card": {
         "<2": 0,
         ">=2": 120,
@@ -215,13 +214,11 @@ DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_se
 _raw_shift = DEFAULT_SMART_GRACE.get("shift_interval_sec", 13)
 DEFAULT_SHIFT_INTERVAL_SEC: int = int(_raw_shift[0] if isinstance(_raw_shift, (list, tuple)) else _raw_shift)
 DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
-    "eval_window_sec": 300,
     "knife_blocker_enabled": False,
     "knife_blocker_threshold": 2,
     "profiting_size_weights": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
 DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
-    "eval_window_sec": 300,
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
 _BASE_CFG: Dict[str, Any] = _read_json(DATA_DIR / "_base.json")
