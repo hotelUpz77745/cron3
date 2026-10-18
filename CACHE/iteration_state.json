@@ -3,13 +3,13 @@
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 15.5698,
-        "iteration_start_ts": 1792345025531,
+        "iteration_realized_pnl_usdt": 16.909,
+        "iteration_start_ts": 1792022974637,
         "iteration_peak_net_profit_usdt": 10.4474,
         "iteration_peak_ts": 1792353368092,
         "historical_peak_net_profit_usdt": 10.4474,
         "historical_peak_net_ts": 1792353368092,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-18 20:01:49 UTC"
+        "historical_max_drawdown_usdt": -11.8141,
+        "updated_at": "2026-10-18 20:22:05 UTC"
     }
 }
