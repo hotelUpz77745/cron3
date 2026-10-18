@@ -11,7 +11,7 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": false
+        "auto_start": true
     },
     "paths": {
         "shared_api_dir": "./API",
@@ -33,9 +33,9 @@
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
     "_avg_free_volume_behavior_doc": "Available avg_free_volume_behavior modes: 1) 'distribute_remaining' (равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки); 2) 'accumulate_current' (объем пропущенных уровней суммируется и переносится в текущее сработавшее колено, пропущенные помечаются исполненными); 3) 'mark_executed' (сжигание объема: пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится).",
     "active_strategies": {
-        "u17_stephensonEM5__classic": {
-            "_comment_alias": "⚡ U17: Stephenson-EM5 [Dual EMA 1d | Adaptive Micro-Step L1 -1.6% (4h ATR<=5%) | Half-Peel 50% | Cross-Side Recycling 50-75%] [CLASSIC]",
-            "template": "u17_stephensonEM5",
+        "u17_stephensonE__classic": {
+            "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [CLASSIC]",
+            "template": "u17_stephensonE",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
