@@ -6,7 +6,7 @@
 import csv
 import json
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 try:
@@ -104,7 +104,7 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0) if iter_start_ts else None
+    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0, tz=timezone.utc).replace(tzinfo=None) if iter_start_ts else None
 
     # Чтение сделок из леджера
     raw_trades = []
@@ -161,7 +161,7 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         except Exception:
             pass
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     times = []
     net_profits = []
 
@@ -269,31 +269,33 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         times.append(now)
         net_profits.append(round(net_profit_final, 4))
 
+        balances = [round(start_balance + np_val, 4) for np_val in net_profits]
+
     # Построение графика в темной теме
     plt.style.use("dark_background")
     fig, ax1 = plt.subplots(figsize=(11, 5.8), dpi=130)
     fig.patch.set_facecolor("#0F131A")
     ax1.set_facecolor("#161B24")
 
-    # Основная кривая Net Profit
-    ax1.plot(times, net_profits, color="#29B6F6", linewidth=2.4, label="Чистый Net Profit", zorder=4)
+    # Основная кривая Баланса / Эквити
+    ax1.plot(times, balances, color="#29B6F6", linewidth=2.4, label="Эквити портфеля", zorder=4)
 
-    # Пунктирная нулевая линия и заливка областей профита/просадки
-    ax1.axhline(0.0, color="#78909C", linestyle="--", linewidth=1.2, alpha=0.7, zorder=3)
-    np_arr = np.array(net_profits) if 'np' in globals() else None
-    if np_arr is not None:
-        ax1.fill_between(times, np_arr, 0.0, where=(np_arr >= 0), color="#00D26A", alpha=0.18, interpolate=True)
-        ax1.fill_between(times, np_arr, 0.0, where=(np_arr < 0), color="#FF5252", alpha=0.18, interpolate=True)
+    # Пунктирная базовая линия стартового баланса и заливка областей профита/просадки
+    ax1.axhline(start_balance, color="#78909C", linestyle="--", linewidth=1.2, alpha=0.7, zorder=3)
+    b_arr = np.array(balances) if 'np' in globals() else None
+    if b_arr is not None:
+        ax1.fill_between(times, b_arr, start_balance, where=(b_arr >= start_balance), color="#00D26A", alpha=0.18, interpolate=True)
+        ax1.fill_between(times, b_arr, start_balance, where=(b_arr < start_balance), color="#FF5252", alpha=0.18, interpolate=True)
 
     # Финальная точка с плашкой значения
     end_color = "#00D26A" if net_profit_final >= 0 else "#FF5252"
-    ax1.scatter([times[-1]], [net_profits[-1]], color=end_color, s=60, zorder=6, edgecolors="white", linewidths=1.5)
+    ax1.scatter([times[-1]], [balances[-1]], color=end_color, s=60, zorder=6, edgecolors="white", linewidths=1.5)
     sign = "+" if net_profit_final >= 0 else ""
-    callout_txt = f"{sign}{net_profit_final:.2f} USDT"
+    callout_txt = f"{balances[-1]:.2f} $ ({sign}{net_profit_final:.2f}$)"
     ax1.annotate(
         callout_txt,
-        xy=(times[-1], net_profits[-1]),
-        xytext=(-70, 15 if net_profit_final < 0 else -20),
+        xy=(times[-1], balances[-1]),
+        xytext=(-85, 15 if net_profit_final < 0 else -20),
         textcoords="offset points",
         color="white",
         fontweight="bold",
@@ -303,23 +305,23 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     )
 
     # Границы шкалы
-    min_np = min(net_profits)
-    max_np = max(net_profits)
-    span = max_np - min_np
+    min_b = min(balances)
+    max_b = max(balances)
+    span = max_b - min_b
     pad = max(2.0, span * 0.15)
-    ax1.set_ylim(min_np - pad, max_np + pad)
+    ax1.set_ylim(min_b - pad, max_b + pad)
 
-    # Вторичная правая шкала: Баланс / Эквити (Старт + Net Profit)
+    # Вторичная правая шкала: Чистый Net Profit
     ax2 = ax1.twinx()
-    ax2.set_ylim(min_np - pad + start_balance, max_np + pad + start_balance)
-    ax2.set_ylabel("Баланс / Эквити (USDT)", color="#90CAF9", fontsize=10, labelpad=8)
+    ax2.set_ylim(min_b - pad - start_balance, max_b + pad - start_balance)
+    ax2.set_ylabel("Чистый Net Profit (USDT)", color="#90CAF9", fontsize=10, labelpad=8)
     ax2.tick_params(axis="y", labelcolor="#90CAF9")
 
     # Заголовки и сетка
     title_u = f" [{universe_id}]" if universe_id else ""
-    ax1.set_title(f"Кривая чистого Net Profit & Эквити{title_u}", fontsize=14, fontweight="bold", pad=15, color="#ECEFF1")
-    ax1.set_xlabel("Дата / Время", fontsize=10, color="#B0BEC5")
-    ax1.set_ylabel("Чистый Net Profit (USDT)", fontsize=10, color="#ECEFF1")
+    ax1.set_title(f"Кривая баланса и эквити{title_u}", fontsize=14, fontweight="bold", pad=15, color="#ECEFF1")
+    ax1.set_xlabel("Дата / Время (UTC)", fontsize=10, color="#B0BEC5")
+    ax1.set_ylabel("Баланс / Эквити (USDT)", fontsize=10, color="#ECEFF1")
     ax1.grid(True, linestyle=":", alpha=0.25, color="#CFD8DC")
     ax1.tick_params(axis="x", rotation=30, labelsize=9, colors="#B0BEC5")
     ax1.tick_params(axis="y", labelsize=9, colors="#ECEFF1")
@@ -384,7 +386,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
         except Exception:
             pass
 
-    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0) if iter_start_ts else None
+    start_dt = datetime.fromtimestamp(iter_start_ts / 1000.0, tz=timezone.utc).replace(tzinfo=None) if iter_start_ts else None
 
     times = []
     raw_pnls = []
@@ -440,7 +442,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
         except Exception:
             pass
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     if not times:
         target_end_bal = round(start_balance + final_pnl, 2)
         times = [now - timedelta(hours=3), now]
