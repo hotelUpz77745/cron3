@@ -35,7 +35,11 @@ class TradeMath:
         coin_qty = usdt_volume / price
         
         # Округляем до нужного количества знаков после запятой (шаг лота)
-        return round(coin_qty, qty_precision)
+        rounded = round(coin_qty, qty_precision)
+        if rounded <= 0.0 and usdt_volume > 0:
+            min_step = 10 ** (-qty_precision) if qty_precision > 0 else 1.0
+            rounded = round(min_step, qty_precision)
+        return rounded
 
     @staticmethod
     def calculate_take_profit_price(

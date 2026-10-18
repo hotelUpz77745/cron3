@@ -40,10 +40,10 @@
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
             "symbols": [
-                "GTCUSDT",
+                "ICNTUSDT",
                 "AVAUSDT",
-                "BEAMXUSDT",
-                "CKBUSDT"
+                "GTCUSDT",
+                "GWEIUSDT"
             ],
             "mode": "classic",
             "sizing_mode": "static",

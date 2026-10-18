@@ -130,7 +130,21 @@ class UnifiedLogger:
         avg_len = estimate_average_line_length(log_path)
         max_bytes = calc_max_bytes(avg_len, max_lines)
 
-        desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
+        argv_str = " ".join(sys.argv).lower()
+        is_backtesting = (
+            "backtest" in argv_str or "study" in argv_str or "tournament" in argv_str or os.getenv("CRON3_BACKTEST") == "1"
+        )
+        is_testing = (
+            any(k in argv_str for k in ("unittest", "pytest", "discover", "tests\\", "tests/"))
+            or ("unittest" in sys.modules and any("test" in a.lower() for a in sys.argv))
+            or "pytest" in sys.modules
+        )
+
+        if is_backtesting:
+            desired_level = logging.ERROR
+        else:
+            desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
+
         logger = logging.getLogger(name)
         logger.setLevel(desired_level)
         logger.propagate = False  # 🔒 важно: не всплывать в root
@@ -142,21 +156,18 @@ class UnifiedLogger:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             
-            
             if LOG_TO_FILE:
-                # Единый лог-файл: боевой all.log или tests.log при прогоне тестов (без загрязнения боевого лога)
-                argv_str = " ".join(sys.argv).lower()
-                is_testing = (
-                    any(k in argv_str for k in ("unittest", "pytest", "discover", "tests\\", "tests/"))
-                    or ("unittest" in sys.modules and any("test" in a.lower() for a in sys.argv))
-                    or "pytest" in sys.modules
-                )
-                log_filename = "tests.log" if is_testing else "all.log"
+                if is_backtesting:
+                    log_filename = "backtest_errors.log"
+                elif is_testing:
+                    log_filename = "tests.log"
+                else:
+                    log_filename = "all.log"
 
                 all_log_path = os.path.join(log_dir, log_filename)
                 all_handler = UnlockedRotatingFileHandler(
                     all_log_path,
-                    maxBytes=max_bytes * 5,
+                    maxBytes=max_bytes,
                     backupCount=1,
                     encoding="utf-8",
                 )

@@ -1,0 +1,585 @@
+{
+    "name": "🚂 U17: Stephenson-A31 [Wilder ADX 1d Macro-Trend | Bearish Fist 6/13 | Chita Flagship Successor]",
+    "description": "Поколение U17 Stephenson-A31: Дневной авто-тренд на базе классического Wilder ADX/DMI (1d, period=14, th=25.0), «Кулак Сильной руки» auto_adx (Bullish 12/7, Neutral 9/9, Bearish 6/13), разряженная Фибо-сетка с Мостиком Змея L3 Half-Peel 50% и трендовый смарт-сайз adx_trend.",
+    "signal_heartbeat_tfr": "5m",
+    "tp_purpose": "self",
+    "avg_free_volume_behavior": "mark_executed",
+    "_avg_free_volume_behavior_modes": {
+        "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
+        "accumulate_current": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
+        "mark_executed": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
+    },
+    "_avg_free_volume_runtime_note": "В рантайме пропущенные уровни наглядно помечаются метаполями: _skipped: true, _skip_policy: 'mark_executed', _skip_status: 'burnt', _skip_desc: '...', _skipped_by_level: '...', чтобы оператор сразу видел сгоревшие ступени.",
+    "_volume_distribution_doc": {
+        "concept": "Пропорциональное математическое масштабирование бюджета объема Читы 3.0 в Читу 3.1",
+        "rationale": "В Чите 3.0 бюджет объема до просадки -21.0% составлял 43.0% (L0: 12% + L1: 8% + L2: 10% + L3: 13%). При этом между L2 (-8.0%) и L3 (-21.0%) существовала 13%-я 'мертвая зона', где капитал не генерировал кэшфлоу. В Чите 3.1 этот объем пропорционально и плавно распределен до уровня -13.5%: L0 (12%) + L1 (8%) + L2 (9%) + L3 (11%) = 40.0%. Оставшиеся 60.0% распределены в глубокую броню: L4 -24% (15%), L5 -55% (25%) и резервный бункер L6 (20% enabled: false).",
+        "backtest_proof_14d_10coins": {
+            "net_profit_growth": "+51.0% (surged from +22.03 USDT to +33.27 USDT)",
+            "floating_risk_reduction": "-23.3% (unrealized loss contracted from -163.98$ to -125.81$)",
+            "max_drawdown": "-85.32$ (held strictly safe on both 500$ and 171$ accounts)",
+            "dataset": "10 coins x 14 days (20,160 bars each): DOGE, ENA, MET, NEAR, PUMP, RLC, SOL, STRK, UNI, WLD"
+        }
+    },
+    "_snake_bridge_doc": {
+        "level": "L3 (-13.5% Long / +21.0% Short)",
+        "role": "Мостик Змея с половинчатым пилингом Half-Peel 50% (peel_ratio: 0.5, peel_num: 1, peel_tp_pct: 1.2%)",
+        "effect": "Превращает просадки средней глубины (-10%..-18%) в мощный генератор реализованной прибыли, сбрасывая 50% объема при первом микро-отскоке."
+    },
+    "_panic_damper_doc": {
+        "tp_staircase": "L0: 1.2% -> L1: 1.8% -> L2: 1.4% -> L3: 1.2% -> L4: 1.1% -> L5: 1.0% -> L6: 1.0%",
+        "min_tp_floor": "min_tp_indent: 1.0% (гарантированный пол Правила 11)",
+        "benefit": "При углублении просадки цель тейк-профита сужается к 1.0%, обеспечивая молниеносный выход из токсичной позиции при малейшем развороте рынка."
+    },
+    "super_grid": {
+        "enabled": false
+    },
+    "smart_grace": {
+        "start_period_sec": 150,
+        "shift_interval_sec": [
+            5,
+            16
+        ],
+        "_shift_interval_sec_desc": "Рандомизированный сдвиг интервала сердцебиения в секундах от 5 до 16 включительно (равномерный криптографический рандом secrets.SystemRandom с дробными квантами до 0.01s). Размывает границу открытия окна grace period перед закрытием свечи, лишая HFT-алгоритмы возможности вычислять фиксированный тайминг первого сигнального входа.",
+        "brownian_noise_factor": [
+            3,
+            13
+        ],
+        "_brownian_noise_factor_desc": "Рандомизированная задержка броуновского шума в секундах между 3 и 13 включительно МЕЖДУ ордерами сильной руки: применяется только когда в пределах окна уже закрылся хотя бы 1 ордер (closed_count >= 1), чтобы не забивать стопку ордеров подряд и дать цене покачаться. Первый сигнальный вход (closed_count == 0) идет строго по рандомизированному таймингу shift_interval_sec: [5, 16] без броуновской паузы.",
+        "eval_window_sec": 300,
+        "increments_card": {
+            "==1": 25,
+            "==2": 40,
+            "==3": 25,
+            ">=4": 0
+        }
+    },
+    "smart_size": {
+        "eval_window_sec": 300,
+        "trend_determ": "adx_trend",
+        "_trend_determ_modes": {
+            "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 4h Dual EMA тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
+            "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
+        },
+        "ema_trend": {
+            "timeframe": "4h",
+            "sma_fast": 10,
+            "sma_slow": 30,
+            "confirmation_candles": 5,
+            "require_rising": true,
+            "trend_positive": true
+        },
+        "profiting_size_weights": {
+            "==0": 1.14,
+            "==1": 1.28,
+            "==2": 1.42,
+            "==3": 1.28,
+            ">=4": 1.14
+        },
+        "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
+        "knife_blocker_enabled": true,
+        "knife_blocker_threshold": 1,
+        "adx_trend": {
+            "timeframe": "1d",
+            "period": 14,
+            "adx_threshold": 25.0
+        }
+    },
+    "smart_tp": {
+        "enabled": true,
+        "eval_window_sec": 300,
+        "trend_determ": "ema_trend",
+        "_trend_determ_desc": "Множители increments_tp (колокол Тюринга) применяются только при совпадении с 4h Dual EMA трендом (LONG при UP, SHORT при DOWN). В контртренде/флэте множитель строго 1.00x.",
+        "increments_tp": {
+            "==1": 1.14,
+            "==2": 1.28,
+            "==3": 1.42,
+            ">=4": 1.14
+        }
+    },
+    "min_tp_indent": 1.0,
+    "_min_tp_indent_desc": "Минимальный гарантированный пол тейк-профита для стратегии (Правило 11 + персональный пол): никакой тейк на всей глубине сетки не опускается ниже 1.0%.",
+    "first_order_weight_regime": {
+        "mode": "auto_adx",
+        "_concept": "«Правило кулака Сильной руки» (Strong Hand Fist Rule)",
+        "_desc_mode": "«Правило кулака Сильной руки» (grid_0): регулирует силу стартового входа первого ордера. Варианты: 'bullish' (12% Long / 7% Short — кулак бьет вверх), 'neutral' (9% Long / 9% Short — равновесие во флэте), 'bearish' (7% Long / 12% Short — кулак бьет вниз), 'auto_ema' (динамический выбор по дневной 1d EMA), или 'off' / null (отключение фичи — используются фиксированные базовые объемы из сетки стратегии). Допустимы также числовые эквиваленты: 1 (bullish), 0 (neutral), -1 (bearish).",
+        "presets": {
+            "bullish": {
+                "LONG": 12.0,
+                "SHORT": 7.0
+            },
+            "neutral": {
+                "LONG": 9.0,
+                "SHORT": 9.0
+            },
+            "bearish": {
+                "LONG": 6.0,
+                "SHORT": 13.0
+            }
+        },
+        "_desc_presets": "Веса капитала стартового удара (grid_0 в % от invest_size). ВНИМАНИЕ: «Правило кулака» управляет ИСКЛЮЧИТЕЛЬНО первым ордером (grid_0). Все последующие усредняющие уровни сетки (L1..L6) и их шаги остаются строго неизменными по утвержденной сетке стратегии.",
+        "auto_ema": {
+            "timeframe": "1d",
+            "sma_fast": 10,
+            "sma_slow": 30,
+            "confirmation_candles": 3,
+            "require_rising": true,
+            "trend_positive": true,
+            "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
+        },
+        "auto_adx": {
+            "timeframe": "1d",
+            "period": 14,
+            "adx_threshold": 25.0,
+            "_desc": "Wilder ADX/DMI (1d): +DI > -DI и ADX >= 25 -> Bullish (12/7), -DI > +DI и ADX >= 25 -> Bearish (6/13), ADX < 25 -> Neutral (9/9)"
+        }
+    },
+    "trend_size_depender": "static",
+    "auto_closing": {
+        "mode": "iter_net_classic",
+        "positive": {
+            "enabled": true,
+            "mode": "iter_net_classic",
+            "quant_base_usdt": 10.0,
+            "quant_reference_size": 400.0,
+            "trailing_ratchet": {
+                "enabled": true,
+                "levels": [
+                    {
+                        "activation": 13.0,
+                        "floor": 8.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"
+                    },
+                    {
+                        "activation": 21.0,
+                        "floor": 13.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"
+                    },
+                    {
+                        "activation": 34.0,
+                        "floor": 21.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"
+                    },
+                    {
+                        "activation": 55.0,
+                        "floor": 34.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"
+                    },
+                    {
+                        "activation": 89.0,
+                        "floor": 55.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"
+                    },
+                    {
+                        "activation": 144.0,
+                        "floor": 144.0,
+                        "min_age_hours": 0.0,
+                        "enabled": true,
+                        "_desc": "L5: F12 ($144 instant Mega rally)"
+                    }
+                ]
+            }
+        },
+        "negative": {
+            "threshold": null,
+            "threshold_increment": null
+        }
+    },
+    "LONG": {
+        "invest_size": 400.0,
+        "grid": {
+            "0": {
+                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, базовый объем 12.0% — может определяться динамически правилом first_order_weight_regime)",
+                "enabled": true,
+                "indent": 0.0,
+                "activation": null,
+                "volume": 12.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "1": {
+                "role": "L1: Скальп (Зона 1: отступ -3.5%, объем 8.0%)",
+                "enabled": true,
+                "indent": -3.5,
+                "activation": null,
+                "volume": 8.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "2": {
+                "role": "L2: Скальп (Зона 1: отступ -7.5%, объем 9.0%)",
+                "enabled": true,
+                "indent": -7.5,
+                "activation": null,
+                "volume": 9.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "3": {
+                "role": "L3: Мостик Змея (Зона 2: разворот, отступ -13.5% / курок -15.0%, объем 11.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -13.5,
+                "activation": -15.0,
+                "volume": 11.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.2,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 2
+            },
+            "4": {
+                "role": "L4: Буфер разворота (Зона 2: разворот, Фибо -24.0% / курок -27.0%, объем 15.0%, Half-Peel 50%, триггер Cross-Side Recycling, peel_num=1)",
+                "enabled": true,
+                "indent": -24.0,
+                "activation": -27.0,
+                "volume": 15.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.4,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 2
+            },
+            "5": {
+                "role": "L5: Тяжелая Артиллерия (Зона 3: глубинная броня, Фибо -55.0% / курок -60.0%, объем 25.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -55.0,
+                "activation": -60.0,
+                "volume": 25.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.5,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 3
+            },
+            "6": {
+                "role": "L6: Резервный бункер (Зона 3: глубинная броня, Фибо -65.0% / курок -72.0%, объем 20.0%, Disabled Placeholder)",
+                "enabled": false,
+                "indent": null,
+                "activation": null,
+                "volume": 20.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 3
+            }
+        },
+        "tp_map": {
+            "0": {
+                "indent": 1.2,
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "1": {
+                "indent": 1.8,
+                "fallback_indent": 2.4,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "2": {
+                "indent": 1.4,
+                "fallback_indent": 1.8,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "3": {
+                "indent": 1.2,
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "4": {
+                "indent": 1.1,
+                "fallback_indent": 1.3,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "5": {
+                "indent": 1.0,
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "6": {
+                "indent": 1.0,
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            }
+        }
+    },
+    "SHORT": {
+        "enabled": true,
+        "_inheritance_base_side": false,
+        "grid": {
+            "0": {
+                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, базовый объем 7.0% — может определяться динамически правилом first_order_weight_regime)",
+                "enabled": true,
+                "indent": 0.0,
+                "activation": null,
+                "volume": 7.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "1": {
+                "role": "L1: Скальп (Зона 1: памп +3.0%, объем 6.0%)",
+                "enabled": true,
+                "indent": -3.0,
+                "activation": null,
+                "volume": 6.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "2": {
+                "role": "L2: Скальп (Зона 1: памп +8.0%, объем 8.0%)",
+                "enabled": true,
+                "indent": -8.0,
+                "activation": null,
+                "volume": 8.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 1
+            },
+            "3": {
+                "role": "L3: Буфер (Зона 2: разворот, памп +21.0% / курок +26.0%, объем 10.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -21.0,
+                "activation": -26.0,
+                "volume": 10.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.2,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 2
+            },
+            "4": {
+                "role": "L4: Буфер (Зона 2: разворот, памп +55.0% / курок +65.0%, объем 14.0%, Half-Peel 50%, триггер Cross-Side Recycling, peel_num=1)",
+                "enabled": true,
+                "indent": -55.0,
+                "activation": -65.0,
+                "volume": 14.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.4,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 2
+            },
+            "5": {
+                "role": "L5: Тяжелая артиллерия (Зона 3: противоракетная броня, памп +144.0% / курок +155.0%, объем 19.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -144.0,
+                "activation": -155.0,
+                "volume": 19.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.5,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 3
+            },
+            "6": {
+                "role": "L6: Мега-Ралли (Зона 3: глубинная броня, памп +360.0% / курок +380.0%, объем 21.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -360.0,
+                "activation": -380.0,
+                "volume": 21.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.6,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 3
+            },
+            "7": {
+                "role": "L7: Финальный щит (Зона 3: объем 15.0%, Disabled Placeholder)",
+                "enabled": false,
+                "indent": null,
+                "activation": null,
+                "volume": 15.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": null,
+                "peel_ratio": null,
+                "peel_num": null,
+                "zone": 3
+            }
+        },
+        "tp_map": {
+            "0": {
+                "indent": 1.2,
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "1": {
+                "indent": 1.8,
+                "fallback_indent": 2.4,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "2": {
+                "indent": 1.4,
+                "fallback_indent": 1.8,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "3": {
+                "indent": 1.2,
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "4": {
+                "indent": 1.1,
+                "fallback_indent": 1.3,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "5": {
+                "indent": 1.0,
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "6": {
+                "indent": 1.0,
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            },
+            "7": {
+                "indent": 1.0,
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
+            }
+        },
+        "invest_size": 400.0
+    },
+    "cross_side_recycling": {
+        "enabled": true,
+        "recycle_ratio_tiers": {
+            "2-4": 0.5,
+            ">=5": 0.75
+        },
+        "_desc_recycle_ratio_tiers": "Дискретная карта сжигания токсина: со 2 по 4 уровни усреднения расходуем 50% прибыли прибыльной стороны, начиная с 5 уровня (тяжелая артиллерия) — 75%.",
+        "min_drawdown_pct": 3.0,
+        "max_slice_pct": 35.0
+    },
+    "base_order_type": "LIMIT",
+    "fallback_order_type": "MARKET"
+}

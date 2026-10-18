@@ -95,14 +95,22 @@ class TakeProfitManager:
                         trend_state = None
                         trend_determ = strat.smart_tp_cfg.get("trend_determ") or strat.smart_tp_cfg.get("dynamic_sizing_mode")
                         if trend_determ:
-                            ema_cfg = strat.smart_tp_cfg.get("ema_trend")
-                            if not ema_cfg and getattr(strat, "smart_size_cfg", None):
-                                ema_cfg = strat.smart_size_cfg.get("ema_trend")
-                            trend_state = await MomentumEngine.get_ema_trend_state(
-                                symbol=symbol,
-                                ema_cfg=ema_cfg,
-                                client=client
-                            )
+                            if str(trend_determ).startswith("adx"):
+                                adx_cfg = strat.smart_tp_cfg.get("adx_trend") or (getattr(strat, "smart_size_cfg", None) and strat.smart_size_cfg.get("adx_trend")) or {"timeframe": "1d", "period": 14, "adx_threshold": 25.0}
+                                trend_state = await MomentumEngine.get_adx_trend_state(
+                                    symbol=symbol,
+                                    adx_cfg=adx_cfg,
+                                    client=client
+                                )
+                            else:
+                                ema_cfg = strat.smart_tp_cfg.get("ema_trend")
+                                if not ema_cfg and getattr(strat, "smart_size_cfg", None):
+                                    ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                                trend_state = await MomentumEngine.get_ema_trend_state(
+                                    symbol=symbol,
+                                    ema_cfg=ema_cfg,
+                                    client=client
+                                )
 
                         tp_mult = MomentumEngine.calculate_smart_tp_multiplier(
                             closed_count=closed_cnt,

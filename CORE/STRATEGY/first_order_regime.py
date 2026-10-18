@@ -36,7 +36,7 @@ class FirstOrderRegimeManager:
     - Никаких магических чисел и неявных алиасов.
     """
 
-    SUPPORTED_DYNAMIC_MODES = ("auto_ema", "kernel_forecast")
+    SUPPORTED_DYNAMIC_MODES = ("auto_ema", "kernel_forecast", "auto_adx")
     SUPPORTED_STATIC_MODES = ("bullish", "neutral", "bearish")
     OFF_MODES = ("off", "none", "null", "disabled", False, None)
 
@@ -135,7 +135,18 @@ class FirstOrderRegimeManager:
             )
             regime_name = f"AUTO-EMA ({tf_label})"
 
-        # 3. Статические режимы
+        # 3. Динамический режим: Auto-ADX
+        elif mode_str == "auto_adx":
+            adx_cfg = regime_cfg["auto_adx"]
+            tf_label = adx_cfg["timeframe"]
+            trend_st = await MomentumEngine.get_adx_trend_state(
+                symbol=symbol,
+                adx_cfg=adx_cfg,
+                client=client,
+            )
+            regime_name = f"AUTO-ADX ({tf_label})"
+
+        # 4. Статические режимы
         elif mode_str in cls.SUPPORTED_STATIC_MODES:
             return cls.resolve_static_volume(regime_cfg, side, default_vol)
 

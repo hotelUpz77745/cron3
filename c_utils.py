@@ -406,6 +406,9 @@ class Utils:
         Ожидает обновления средней цены входа от вебсокета (FSM sync).
         Возвращает True если цена обновилась (sync success), False если произошел таймаут.
         """
+        if getattr(state, "_is_simulated", False) or getattr(state, "is_simulated", False):
+            return True
+
         max_cycles = int(timeout_sec / poll_interval)
         wait_cycles = 0
         while state.avg_entry_price == state.pre_avg_price and wait_cycles < max_cycles:

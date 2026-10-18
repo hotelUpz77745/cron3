@@ -155,8 +155,6 @@
         "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
         "knife_blocker_enabled": true,
         "knife_blocker_threshold": 1,
-        "omni_size_all_zones": false,
-        "_omni_size_all_zones_desc": "false = множители применяются строго к ордеру grid_0; true = распространялись бы на всю сетку усреднения (выключено для защиты депозита).",
         "stagnation_min_step": 2
     },
     "smart_tp": {

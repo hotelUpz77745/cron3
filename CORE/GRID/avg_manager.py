@@ -150,6 +150,9 @@ class AverageManager:
             return
 
         level_data = grid[candidate_level]
+        # Защитный кулдаун: если прошлый ордер отклонен (например, Margin Insufficient), не долбим биржу каждую миллисекунду
+        if level_data.get("failed_cooldown_until", 0) > time.time():
+            return
 
         # 4. Обработка пропущенных уровней (avg_free_volume_behavior)
         if skipped_levels:
@@ -315,8 +318,10 @@ class AverageManager:
             level_data["timestamp"] = None
             state.pending_avg = False
             state.next_avg_price = None
+            level_data["failed_cooldown_until"] = time.time() + 30.0
             return
 
+        level_data.pop("failed_cooldown_until", None)
         logger.info(f"[{symbol}] {side} Averaging order SUCCESS for level {level_str}. Waiting for FSM sync...")
         level_data["fill_price"] = current_price
         level_data["fill_qty"] = volume
