@@ -32,5 +32,8 @@
     "ETHUSDT": true,
     "SOLUSDT": true,
     "LTCUSDT": true,
-    "BTCUSDT": true
+    "BTCUSDT": true,
+    "ICNTUSDT": true,
+    "AVAUSDT": true,
+    "GWEIUSDT": true
 }
