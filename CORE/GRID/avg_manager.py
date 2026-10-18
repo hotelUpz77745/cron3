@@ -217,7 +217,7 @@ class AverageManager:
                         f"[{symbol}] {side} 📦 [VOLUME CEILING REACHED] "
                         f"Skipped {skipped_levels} at grid ceiling, remaining volume ignored."
                     )
-            # Режим 3: mark_executed — забиваем хер (объем сгорает, пропущенные уровни просто помечаются исполненными)
+            # Режим 3: mark_executed — аннулирование объема (пропущенные уровни помечаются исполненными без редистрибуции)
             elif behavior == "mark_executed":
                 logger.info(
                     f"[{symbol}] {side} 📦 [VOLUME BURNT: mark_executed] "
