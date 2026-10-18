@@ -153,7 +153,7 @@ class TestTradeVelocityEngine(unittest.TestCase):
 
             metrics_high = engine_high.calculate_velocity({"symbols": ["BTCUSDT"]})
             self.assertEqual(metrics_high["status"], "HIGH_VOLATILITY")
-            self.assertEqual(metrics_high["status_desc"], "ВОЛАТИЛЬНОСТЬ ЗАШИБИСЬ")
+            self.assertEqual(metrics_high["status_desc"], "ВЫСОКАЯ ВОЛАТИЛЬНОСТЬ")
 
 
 if __name__ == "__main__":

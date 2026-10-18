@@ -264,7 +264,7 @@ class TradeVelocityEngine:
             if c_ratio <= self.low_ratio_threshold:
                 c_status = "НЕДОГРЕВ"
             elif c_ratio >= self.high_ratio_threshold:
-                c_status = "ВОЛАТИЛЬНОСТЬ ЗАШИБИСЬ"
+                c_status = "ВЫСОКАЯ ВОЛАТИЛЬНОСТЬ"
             else:
                 c_status = "НОРМА"
             per_coin_metrics[sym] = {
@@ -313,7 +313,7 @@ class TradeVelocityEngine:
             status_desc = "НЕДОГРЕВ"
         elif speed_ratio >= self.high_ratio_threshold:
             status = "HIGH_VOLATILITY"
-            status_desc = "ВОЛАТИЛЬНОСТЬ ЗАШИБИСЬ"
+            status_desc = "ВЫСОКАЯ ВОЛАТИЛЬНОСТЬ"
         else:
             status = "NORMAL"
             status_desc = "НОРМА"
