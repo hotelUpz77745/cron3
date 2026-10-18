@@ -33,9 +33,9 @@
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
     "_avg_free_volume_behavior_doc": "Available avg_free_volume_behavior modes: 1) 'distribute_remaining' (равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки); 2) 'accumulate_current' (объем пропущенных уровней суммируется и переносится в текущее сработавшее колено, пропущенные помечаются исполненными); 3) 'mark_executed' (сжигание объема: пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится).",
     "active_strategies": {
-        "u16_chita__classic": {
-            "_comment_alias": "🐆 U16: Chita v3.3 [Hybrid Apex | Golden Mean TP 1.0-1.2% | Balanced Stepping | Defense Cross-Recycling 97% + Half-Peel 50%] [CLASSIC]",
-            "template": "u16_chita_v33",
+        "u17_stephensonEM5__classic": {
+            "_comment_alias": "⚡ U17: Stephenson-EM5 [Dual EMA 1d | Adaptive Micro-Step L1 -1.6% (4h ATR<=5%) | Half-Peel 50% | Cross-Side Recycling 50-75%] [CLASSIC]",
+            "template": "u17_stephensonEM5",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -48,9 +48,9 @@
             "mode": "classic",
             "sizing_mode": "static",
             "leverage": 20,
-            "margin_type": "ISOLATED",
+            "margin_type": "CROSSED",
             "analytics": {
-                "start_balance_usdt": 449.0
+                "start_balance_usdt": 450.0
             }
         }
     },
