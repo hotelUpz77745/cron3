@@ -1,5 +1,5 @@
 {
-    "updated_at_utc": "2026-10-19 19:39:57 UTC",
+    "updated_at_utc": "2026-10-19 20:00:58 UTC",
     "total_universes_active": 1,
     "evaluated_coins_count": 6,
     "aggregate_start_balance_usdt": 459.0,
@@ -82,7 +82,7 @@
             "iteration_net_profit_usdt": 0.0,
             "iteration_realized_pnl_usdt": 0.0,
             "peak_net_profit_usdt": 0.0,
-            "peak_age_hours": 1.2,
+            "peak_age_hours": 1.5,
             "net_velocity": 0.0,
             "realized_pnl_usdt": 0.0,
             "realized_pnl_gross_usdt": 0.0,
