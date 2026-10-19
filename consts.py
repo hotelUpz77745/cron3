@@ -67,11 +67,9 @@ _CFG: Dict[str, Any] = _read_json(CFG_PATH)
 import sys
 PARENT_DIR = BASE_DIR.parent
 
-# Гарантируем наличие BASE_DIR и PARENT_DIR в sys.path (запуск изнутри и извне)
+# Гарантируем наличие BASE_DIR в sys.path (запуск изнутри и извне)
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
-if str(PARENT_DIR) not in sys.path:
-    sys.path.insert(0, str(PARENT_DIR))
 
 # Каноническое подключение API для боевого робота и экосистемы
 _paths_cfg = _CFG.get("paths", {})
@@ -85,13 +83,6 @@ else:
     API_DIR = (BASE_DIR / "API").resolve()
 
 SHARED_API_DIR: Path = API_DIR
-
-# Добавляем пути к API в sys.path для исключения ошибок импорта как from API... так и прямых
-if str(API_DIR) not in sys.path:
-    sys.path.insert(0, str(API_DIR))
-_api_parent = str(API_DIR.parent)
-if _api_parent not in sys.path:
-    sys.path.insert(0, _api_parent)
 
 ANALYTICS_DIR = _STATE_ROOT / "ANALYTICS"
 ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"

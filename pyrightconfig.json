@@ -1,0 +1,14 @@
+{
+    "include": [
+        "."
+    ],
+    "exclude": [
+        "tests",
+        "scratch",
+        ".venv",
+        "venv"
+    ],
+    "extraPaths": [
+        "."
+    ]
+}

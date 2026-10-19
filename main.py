@@ -13,11 +13,8 @@ import sys
 from pathlib import Path
 
 _CUR_DIR = Path(__file__).resolve().parent
-_PARENT_DIR = _CUR_DIR.parent
 if str(_CUR_DIR) not in sys.path:
     sys.path.insert(0, str(_CUR_DIR))
-if str(_PARENT_DIR) not in sys.path:
-    sys.path.insert(0, str(_PARENT_DIR))
 
 from consts import TG_ENABLED
 from TG.tg_receiver import TelegramReceiver
@@ -30,7 +27,7 @@ from CORE.bot import BotCore
 os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"
 
 import asyncio
-from typing import *
+from typing import Optional, List, Dict, Any
 
 
 async def run_app(bot, logger):
@@ -72,9 +69,8 @@ def send_telegram_fatal(msg: str):
             pass
 
 def main():
-    
     logger = UnifiedLogger("App")
-    
+    bot: Optional[BotCore] = None
     try:
         bot = BotCore()
         logger.info("Starting BotCore...")
@@ -88,24 +84,27 @@ def main():
         
     except KeyboardInterrupt:
         logger.info("Ctrl+C detected. Shutting down...")
-        try:
-            asyncio.run(bot.shutdown())
-        except Exception:
-            pass
+        if bot:
+            try:
+                asyncio.run(bot.shutdown())
+            except Exception:
+                pass
     except ValueError as e:
         logger.error(f"FATAL CONFIG ERROR: {e}")
         send_telegram_fatal(str(e))
-        try:
-            asyncio.run(bot.shutdown())
-        except Exception:
-            pass
+        if bot:
+            try:
+                asyncio.run(bot.shutdown())
+            except Exception:
+                pass
     except Exception as e:
         logger.exception("Fatal error: %s", e)
         send_telegram_fatal(str(e))
-        try:
-            asyncio.run(bot.shutdown())
-        except Exception:
-            pass
+        if bot:
+            try:
+                asyncio.run(bot.shutdown())
+            except Exception:
+                pass
 
 
 if __name__ == "__main__":

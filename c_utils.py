@@ -6,8 +6,8 @@
 # Role: Утилитарные и вспомогательные функции
 # ==============================================================================
 
-from typing import *
-from datetime import datetime
+from typing import Dict, Any, List, Optional, Tuple, Union, Set
+from datetime import datetime, timezone
 import asyncio
 import re
 import time
