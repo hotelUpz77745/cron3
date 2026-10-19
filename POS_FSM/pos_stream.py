@@ -138,14 +138,9 @@ class PositionStream:
                 self.websocket = await self.session.ws_connect(
                     self.ws_url,
                     autoping=True,
+                    heartbeat=15.0,
+                    receive_timeout=30.0,
                     max_msg_size=0,
-                    timeout=aiohttp.ClientWSTimeout(ws_close=20.0),
-                    headers={
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-                        "Origin": "https://fapi.binance.com",
-                        "Host": "fstream.binance.com",
-                        "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits"
-                    }
                 )
                 self.is_connected = True
                 return True
@@ -195,7 +190,7 @@ class PositionStream:
                 continue
 
             if msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.ERROR):
-                logger.warning(f"[MASTER WS] socket closed: {msg.type}")
+                logger.warning(f"[MASTER WS] socket closed: {msg.type} ({msg.data})")
                 raise RuntimeError("ws_closed")
 
             if msg.type != aiohttp.WSMsgType.TEXT:
