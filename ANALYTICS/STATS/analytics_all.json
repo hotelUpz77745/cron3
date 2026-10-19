@@ -1,0 +1,183 @@
+{
+    "updated_at_utc": "2026-10-19 19:39:57 UTC",
+    "total_universes_active": 1,
+    "evaluated_coins_count": 6,
+    "aggregate_start_balance_usdt": 459.0,
+    "aggregate_cur_balance_usdt": 459.0,
+    "aggregate_peak_balance_usdt": 459.0,
+    "aggregate_min_balance_usdt": 459.0,
+    "aggregate_net_profit_usdt": 0.0,
+    "aggregate_realized_pnl_usdt": 0.0,
+    "aggregate_unrealized_pnl_usdt": 0.0,
+    "aggregate_total_trades": 0,
+    "trade_velocity": {
+        "universe_id": "default",
+        "timeframe_hours": 6.0,
+        "min_accumulation_hours": 1.0,
+        "accumulation_hours": 0.0,
+        "is_ready_for_alerts": false,
+        "is_interpolated": false,
+        "interpolation_factor": 1.0,
+        "benchmark_speed": 10.0,
+        "slice_description": "Все монеты (6 шт.)",
+        "slice_coins_count": 6,
+        "slice_trades_count": 0,
+        "avg_actual_speed": null,
+        "avg_effective_speed": null,
+        "speed_ratio": null,
+        "deviation_pct": null,
+        "status": "ACCUMULATING",
+        "status_desc": "Накопление (0.0ч / 1.0ч)",
+        "per_coin": {
+            "ICNTUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "AVAUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "GTCUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "GWEIUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "SOLVUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "SANDUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            }
+        }
+    },
+    "leaderboard": [
+        {
+            "universe_id": "u17_stephensonE__trailing_ratchet",
+            "name": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6% Long / 13% Short | Flagship]",
+            "description": "Флагманское поколение U17 Stephenson-E: 1) Разряженная асимметричная Фибо-сетка L3 (-13.5%); 2) Panic Damper TP (min_tp_indent: 1.0%); 3) Half-Peel 50% пилинг; 4) distribute_skip сжигание объема; 5) Дискретный кросс-ресайклинг (50%/75%); 6) «Правило кулака Сильной руки» auto_ema по 1d свечам (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 7) Трендовый smart_size (1.14x-1.42x) с knife_blocker; 8) Smart Grace 150s с броуновским шумом; 9) trailing_ratchet с Фибо-лестницей трейлинг-храповика.",
+            "status": "RUNNING",
+            "start_balance_usdt": 459.0,
+            "cur_balance_usdt": 459.0,
+            "peak_balance_usdt": 459.0,
+            "min_balance_usdt": 459.0,
+            "net_profit_usdt": 0.0,
+            "iteration_index": 1,
+            "iteration_net_profit_usdt": 0.0,
+            "iteration_realized_pnl_usdt": 0.0,
+            "peak_net_profit_usdt": 0.0,
+            "peak_age_hours": 1.2,
+            "net_velocity": 0.0,
+            "realized_pnl_usdt": 0.0,
+            "realized_pnl_gross_usdt": 0.0,
+            "unrealized_pnl_usdt": 0.0,
+            "max_drawdown_usdt": 0.0,
+            "max_drawdown_pct": 0.0,
+            "recovery_factor": 0.0,
+            "total_trades": 0,
+            "winning_trades": 0,
+            "winrate_pct": 0.0,
+            "roi_pct": 0.0,
+            "mode": "classic",
+            "mode_badge": "[CLASSIC]",
+            "sizing_mode": "static",
+            "sizing_badge": "[STATIC]",
+            "trade_velocity": {
+                "universe_id": "u17_stephensonE__trailing_ratchet",
+                "timeframe_hours": 6.0,
+                "min_accumulation_hours": 1.0,
+                "accumulation_hours": 0.0,
+                "is_ready_for_alerts": false,
+                "is_interpolated": false,
+                "interpolation_factor": 1.0,
+                "benchmark_speed": 10.0,
+                "slice_description": "Все монеты (6 шт.)",
+                "slice_coins_count": 6,
+                "slice_trades_count": 0,
+                "avg_actual_speed": null,
+                "avg_effective_speed": null,
+                "speed_ratio": null,
+                "deviation_pct": null,
+                "status": "ACCUMULATING",
+                "status_desc": "Накопление (0.0ч / 1.0ч)",
+                "per_coin": {
+                    "ICNTUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    },
+                    "AVAUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    },
+                    "GTCUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    },
+                    "GWEIUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    },
+                    "SOLVUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    },
+                    "SANDUSDT": {
+                        "trades": 0,
+                        "effective_speed": 0.0,
+                        "speed_ratio": 0.0,
+                        "status_desc": "НЕДОГРЕВ"
+                    }
+                }
+            },
+            "toxic_defense": {
+                "subgrid_peeling": {
+                    "events_count": 0,
+                    "total_peeled_usdt": 0.0,
+                    "loss_absorbed_usdt": 0.0,
+                    "locked_micro_pnl_usdt": 0.0
+                },
+                "cross_recycling": {
+                    "events_count": 0,
+                    "burned_volume_usdt": 0.0,
+                    "profit_spent_usdt": 0.0,
+                    "loss_absorbed_usdt": 0.0,
+                    "locked_micro_pnl_usdt": 0.0
+                }
+            },
+            "peel_events": 0,
+            "peel_vol_usdt": 0.0,
+            "peel_pnl_usdt": 0.0,
+            "rec_events": 0,
+            "rec_burn_usdt": 0.0,
+            "rec_loss_usdt": 0.0,
+            "rec_spent_usdt": 0.0,
+            "defense_badge": "0P/0R"
+        }
+    ]
+}

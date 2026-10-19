@@ -1,0 +1,1 @@
+Id;Timestamp (UTC);Strategy;Symbol;Side;Level;Fill Price;Peel Price;Rebound %;Peel Qty;Peel Vol (USDT);Micro PnL (USDT);Remaining Pos Qty

@@ -1,0 +1,1 @@
+Id;Symbol;Side;Open Time;Close Time;PnL (USDT);Balance
