@@ -74,16 +74,14 @@
     },
     "min_tp_indent": 1.0,
     "_min_tp_indent_desc": "Минимальный гарантированный пол тейк-профита для стратегии (Правило 11 + персональный пол): никакой тейк на всей глубине сетки не опускается ниже 1.0%.",
-    "trend_size_depender": {
-        "mode": "static"
-    },
+    "trend_size_depender": "static",
     "auto_closing": {
         "mode": "iter_net_classic",
         "positive": {
             "enabled": true,
             "mode": "iter_net_classic",
-            "quant_base_usdt": 10.0,
-            "quant_reference_size": 600.0,
+            "scale_money": 1.0,
+            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "trailing_ratchet": {
                 "enabled": true,
                 "levels": [

@@ -3,36 +3,13 @@
     "description": "Stephenson-EM5 с динамическим фильтром волатильности: микро-ступень L1 (-1.6%, 3% объема) включается только при низкой волатильности (4h ATR <= 5.0%). При высокой волатильности ступень отключается.",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
-    "avg_free_volume_behavior": "mark_executed",
+    "avg_free_volume_behavior": "distribute_skip",
     "_avg_free_volume_behavior_modes": {
         "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
-        "accumulate_current": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
-        "mark_executed": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
+        "distribute_nearest": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
+        "distribute_skip": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
     },
-    "_avg_free_volume_runtime_note": "В рантайме пропущенные уровни наглядно помечаются метаполями: _skipped: true, _skip_policy: 'mark_executed', _skip_status: 'burnt', _skip_desc: '...', _skipped_by_level: '...', чтобы оператор сразу видел сгоревшие ступени.",
-    "_volume_distribution_doc": {
-        "concept": "Пропорциональное математическое масштабирование бюджета объема Читы 3.0 в Читу 3.1",
-        "rationale": "В Чите 3.0 бюджет объема до просадки -21.0% составлял 43.0% (L0: 12% + L1: 8% + L2: 10% + L3: 13%). При этом между L2 (-8.0%) и L3 (-21.0%) существовала 13%-я 'мертвая зона', где капитал не генерировал кэшфлоу. В Чите 3.1 этот объем пропорционально и плавно распределен до уровня -13.5%: L0 (12%) + L1 (8%) + L2 (9%) + L3 (11%) = 40.0%. Оставшиеся 60.0% распределены в глубокую броню: L4 -24% (15%), L5 -55% (25%) и резервный бункер L6 (20% enabled: false).",
-        "backtest_proof_14d_10coins": {
-            "net_profit_growth": "+51.0% (surged from +22.03 USDT to +33.27 USDT)",
-            "floating_risk_reduction": "-23.3% (unrealized loss contracted from -163.98$ to -125.81$)",
-            "max_drawdown": "-85.32$ (held strictly safe on both 500$ and 171$ accounts)",
-            "dataset": "10 coins x 14 days (20,160 bars each): DOGE, ENA, MET, NEAR, PUMP, RLC, SOL, STRK, UNI, WLD"
-        }
-    },
-    "_snake_bridge_doc": {
-        "level": "L3 (-13.5% Long / +21.0% Short)",
-        "role": "Мостик Змея с половинчатым пилингом Half-Peel 50% (peel_ratio: 0.5, peel_num: 1, peel_tp_pct: 1.2%)",
-        "effect": "Превращает просадки средней глубины (-10%..-18%) в мощный генератор реализованной прибыли, сбрасывая 50% объема при первом микро-отскоке."
-    },
-    "_panic_damper_doc": {
-        "tp_staircase": "L0: 1.2% -> L1: 1.8% -> L2: 1.4% -> L3: 1.2% -> L4: 1.1% -> L5: 1.0% -> L6: 1.0%",
-        "min_tp_floor": "min_tp_indent: 1.0% (гарантированный пол Правила 11)",
-        "benefit": "При углублении просадки цель тейк-профита сужается к 1.0%, обеспечивая молниеносный выход из токсичной позиции при малейшем развороте рынка."
-    },
-    "super_grid": {
-        "enabled": false
-    },
+    "super_grid": false,
     "smart_grace": {
         "start_period_sec": 150,
         "shift_interval_sec": [
@@ -72,8 +49,8 @@
             ">=4": 1.0
         },
         "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
-        "knife_blocker_enabled": true,
-        "knife_blocker_threshold": 1
+        "knife_blocker_threshold": 1,
+        "stagnation_min_step": null
     },
     "smart_tp": {
         "enabled": true,
@@ -84,7 +61,8 @@
             "==2": 1.28,
             "==3": 1.42,
             ">=4": 1.14
-        }
+        },
+        "stagnation_min_step": null
     },
     "min_tp_indent": 1.0,
     "_min_tp_indent_desc": "Минимальный гарантированный пол тейк-профита для стратегии (Правило 11 + персональный пол): никакой тейк на всей глубине сетки не опускается ниже 1.0%.",
@@ -117,14 +95,13 @@
             "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
         }
     },
-    "trend_size_depender": "static",
     "auto_closing": {
         "mode": "iter_net_classic",
         "positive": {
             "enabled": true,
             "mode": "iter_net_classic",
-            "quant_base_usdt": 10.0,
-            "quant_reference_size": 400.0,
+            "scale_money": 1.0,
+            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "trailing_ratchet": {
                 "enabled": true,
                 "levels": [
@@ -179,14 +156,13 @@
         }
     },
     "LONG": {
-        "invest_size": 400.0,
         "grid": {
             "0": {
-                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, базовый объем 12.0% — динамически от авто_тренда)",
+                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, объем определяется динамически правилом first_order_weight_regime)",
                 "enabled": true,
                 "indent": 0.0,
                 "activation": null,
-                "volume": 12.0,
+                "volume": null,
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
@@ -297,31 +273,73 @@
         "tp_map": {
             "0": {
                 "indent": 1.8,
-                "fallback_indent": 2.6
+                "fallback_indent": 2.6,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "1": {
                 "indent": 1.2,
-                "fallback_indent": 1.8
+                "fallback_indent": 1.8,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "2": {
                 "indent": 1.15,
-                "fallback_indent": 1.5
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "3": {
                 "indent": 1.05,
-                "fallback_indent": 1.3
+                "fallback_indent": 1.3,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "4": {
                 "indent": 1.05,
-                "fallback_indent": 1.2
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "5": {
                 "indent": 1.05,
-                "fallback_indent": 1.05
+                "fallback_indent": 1.05,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "6": {
                 "indent": 1.05,
-                "fallback_indent": 1.05
+                "fallback_indent": 1.05,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             }
         }
     },
@@ -330,11 +348,11 @@
         "_inheritance_base_side": false,
         "grid": {
             "0": {
-                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, базовый объем 12.0% — динамически от авто_тренда)",
+                "role": "L0: Скальп-ядро / Кулак (Зона 1: отступ 0.0%, объем определяется динамически правилом first_order_weight_regime)",
                 "enabled": true,
                 "indent": 0.0,
                 "activation": null,
-                "volume": 12.0,
+                "volume": null,
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
@@ -445,34 +463,75 @@
         "tp_map": {
             "0": {
                 "indent": 1.8,
-                "fallback_indent": 2.6
+                "fallback_indent": 2.6,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "1": {
                 "indent": 1.2,
-                "fallback_indent": 1.8
+                "fallback_indent": 1.8,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "2": {
                 "indent": 1.15,
-                "fallback_indent": 1.5
+                "fallback_indent": 1.5,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "3": {
                 "indent": 1.05,
-                "fallback_indent": 1.3
+                "fallback_indent": 1.3,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "4": {
                 "indent": 1.05,
-                "fallback_indent": 1.2
+                "fallback_indent": 1.2,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "5": {
                 "indent": 1.05,
-                "fallback_indent": 1.05
+                "fallback_indent": 1.05,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             },
             "6": {
                 "indent": 1.05,
-                "fallback_indent": 1.05
+                "fallback_indent": 1.05,
+                "activation": null,
+                "is_atr": null,
+                "atr_mult": null,
+                "min_floor": null,
+                "max_ceil": null,
+                "fallback_atr_pct": null
             }
-        },
-        "invest_size": 400.0
+        }
     },
     "cross_side_recycling": {
         "enabled": true,

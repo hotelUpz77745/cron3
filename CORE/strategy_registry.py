@@ -42,56 +42,39 @@ class StrategyConfig:
         self,
         strategy_id: str,
         raw_meta: Dict[str, Any],
-        symbols: List[str],
+        symbols: Optional[List[str]] = None,
         active_settings: Optional[Dict[str, Any]] = None
     ):
         self.strategy_id: str = strategy_id
         self.name: str = raw_meta["name"]
         self.description: str = raw_meta.get("description", "")
         self.raw_meta: Dict[str, Any] = copy.deepcopy(raw_meta)
+        self.active_settings: Dict[str, Any] = copy.deepcopy(active_settings or {})
+
+        # Автоматическое извлечение symbols из ключей per-symbol invest_size, если явно не задан
+        if not symbols:
+            found_syms = []
+            for src in [
+                self.active_settings.get("symbols"),
+                (self.active_settings.get("LONG") or {}).get("invest_size"),
+                (self.active_settings.get("SHORT") or {}).get("invest_size"),
+                self.active_settings.get("invest_size")
+            ]:
+                if isinstance(src, dict):
+                    for k in src.keys():
+                        k_clean = str(k).upper().strip()
+                        if k_clean and k_clean not in found_syms and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                            found_syms.append(k_clean)
+                elif isinstance(src, list):
+                    for s in src:
+                        s_clean = str(s).upper().strip() if s else ""
+                        if s_clean and s_clean not in found_syms:
+                            found_syms.append(s_clean)
+            symbols = found_syms
+
+        self.symbols: List[str] = [s.upper().strip() for s in (symbols or [])]
 
         meta_overrides = raw_meta.get("overrides") or {}
-        raw_long_cfg = raw_meta.get("LONG") or meta_overrides.get("LONG") or {}
-        raw_short_cfg = raw_meta.get("SHORT") or meta_overrides.get("SHORT") or {}
-        long_inv = raw_long_cfg.get("invest_size")
-        short_inv = raw_short_cfg.get("invest_size")
-
-        if long_inv is not None and short_inv is not None:
-            self.invest_size_long: float = float(long_inv)
-            self.invest_size_short: float = float(short_inv)
-            if float(long_inv) == float(short_inv):
-                self.invest_size = float(long_inv)
-            else:
-                self.invest_size = {"LONG": float(long_inv), "SHORT": float(short_inv)}
-        elif "invest_size" in raw_meta:
-            raw_inv = raw_meta["invest_size"]
-            if isinstance(raw_inv, dict):
-                self.invest_size_long = float(raw_inv["LONG"])
-                self.invest_size_short = float(raw_inv["SHORT"])
-                self.invest_size = {k.upper(): float(v) for k, v in raw_inv.items()}
-            else:
-                self.invest_size_long = float(raw_inv)
-                self.invest_size_short = float(raw_inv)
-                self.invest_size = float(raw_inv)
-        elif long_inv is not None:
-            self.invest_size_long = float(long_inv)
-            self.invest_size_short = float(long_inv)
-            self.invest_size = float(long_inv)
-        elif short_inv is not None:
-            self.invest_size_long = float(short_inv)
-            self.invest_size_short = float(short_inv)
-            self.invest_size = float(short_inv)
-        else:
-            self.invest_size_long = 400.0
-            self.invest_size_short = 400.0
-            self.invest_size = 400.0
-
-        raw_lev = raw_meta.get("leverage", 20)
-        if isinstance(raw_lev, dict):
-            self.leverage = {k.upper(): int(v) for k, v in raw_lev.items()}
-        else:
-            self.leverage = int(raw_lev)
-
         # Сохраняем self.overrides для обратной совместимости, но наполняем его напрямую из raw_meta
         self.overrides: Dict[str, Any] = copy.deepcopy(meta_overrides)
         for k, v in raw_meta.items():
@@ -106,34 +89,99 @@ class StrategyConfig:
             if tp_cand:
                 self.overrides["tp_map"] = copy.deepcopy(tp_cand)
 
-        self.symbols: List[str] = [s.upper().strip() for s in symbols]
-        self.active_settings: Dict[str, Any] = copy.deepcopy(active_settings or {})
+        # Разрешение invest_size: строго на уровне клиента (active_settings), с безопасным fallback
+        # 1. Приоритет клиента (active_settings)
+        act_long_inv = (self.active_settings.get("LONG") or {}).get("invest_size")
+        if act_long_inv is None:
+            act_long_inv = self.active_settings.get("invest_size_long")
+        act_short_inv = (self.active_settings.get("SHORT") or {}).get("invest_size")
+        if act_short_inv is None:
+            act_short_inv = self.active_settings.get("invest_size_short")
+        act_inv = self.active_settings.get("invest_size")
 
-        if self.active_settings:
-            if "invest_size" in self.active_settings:
-                act_inv = self.active_settings["invest_size"]
-                if isinstance(act_inv, dict):
-                    self.invest_size = {k.upper(): float(v) for k, v in act_inv.items()}
-                else:
-                    self.invest_size = float(act_inv)
-            if "leverage" in self.active_settings:
-                act_lev = self.active_settings["leverage"]
-                if isinstance(act_lev, dict):
-                    self.leverage = {k.upper(): int(v) for k, v in act_lev.items()}
-                else:
-                    self.leverage = int(act_lev)
-            for side_k in ("LONG", "SHORT"):
-                if side_k in self.active_settings and isinstance(self.active_settings[side_k], dict):
-                    if side_k not in self.overrides:
-                        self.overrides[side_k] = {}
-                    self.overrides[side_k].update(self.active_settings[side_k])
+        # 2. Fallback на raw_meta (обратная совместимость со старыми тестами/шаблонами)
+        raw_long_cfg = raw_meta.get("LONG") or meta_overrides.get("LONG") or {}
+        raw_short_cfg = raw_meta.get("SHORT") or meta_overrides.get("SHORT") or {}
+        raw_long_inv = raw_long_cfg.get("invest_size")
+        raw_short_inv = raw_short_cfg.get("invest_size")
+        raw_inv = raw_meta.get("invest_size")
 
-        # 1. Купол Аналитики (Analytics Dome): канонически из app.json -> active_strategies[strategy_id]["analytics"]
+        # Явный default_invest_size из конфига (active_settings -> raw_meta -> 400.0)
+        act_def = self.active_settings.get("default_invest_size")
+        act_long_def = (self.active_settings.get("LONG") or {}).get("default_invest_size", act_def)
+        act_short_def = (self.active_settings.get("SHORT") or {}).get("default_invest_size", act_def)
+
+        raw_def = raw_meta.get("default_invest_size")
+        raw_long_def = (raw_long_cfg).get("default_invest_size", raw_def)
+        raw_short_def = (raw_short_cfg).get("default_invest_size", raw_def)
+
+        def_long = act_long_def if act_long_def is not None else (raw_long_def if raw_long_def is not None else 400.0)
+        def_short = act_short_def if act_short_def is not None else (raw_short_def if raw_short_def is not None else 400.0)
+        self.default_invest_size_long: float = float(def_long)
+        self.default_invest_size_short: float = float(def_short)
+        self.default_invest_size: float = self.default_invest_size_long if self.default_invest_size_long == self.default_invest_size_short else float(act_def if act_def is not None else def_long)
+
+        def _parse_side_inv(act_side_inv, act_all_inv, raw_side_inv, raw_all_inv, side_name, fallback_val):
+            if isinstance(act_side_inv, dict):
+                return {k.upper(): float(v) for k, v in act_side_inv.items()}
+            elif act_side_inv is not None:
+                return float(act_side_inv)
+            elif act_all_inv is not None:
+                if isinstance(act_all_inv, dict):
+                    if side_name in act_all_inv:
+                        sub = act_all_inv[side_name]
+                        return {k.upper(): float(x) for k, x in sub.items()} if isinstance(sub, dict) else float(sub)
+                    return {k.upper(): float(v) for k, v in act_all_inv.items()}
+                return float(act_all_inv)
+            elif isinstance(raw_side_inv, dict):
+                return {k.upper(): float(v) for k, v in raw_side_inv.items()}
+            elif raw_side_inv is not None:
+                return float(raw_side_inv)
+            elif raw_all_inv is not None:
+                if isinstance(raw_all_inv, dict):
+                    if side_name in raw_all_inv:
+                        sub = raw_all_inv[side_name]
+                        return {k.upper(): float(x) for k, x in sub.items()} if isinstance(sub, dict) else float(sub)
+                    return {k.upper(): float(v) for k, v in raw_all_inv.items()}
+                return float(raw_all_inv)
+            return float(fallback_val)
+
+        final_long = _parse_side_inv(act_long_inv, act_inv, raw_long_inv, raw_inv, "LONG", self.default_invest_size_long)
+        final_short = _parse_side_inv(act_short_inv, act_inv, raw_short_inv, raw_inv, "SHORT", self.default_invest_size_short)
+
+        self.invest_size_long: Union[float, Dict[str, float]] = final_long
+        self.invest_size_short: Union[float, Dict[str, float]] = final_short
+        if final_long == final_short:
+            self.invest_size = final_long
+        else:
+            self.invest_size = {"LONG": final_long, "SHORT": final_short}
+
+        if "LONG" not in self.overrides:
+            self.overrides["LONG"] = {}
+        self.overrides["LONG"]["invest_size"] = final_long
+        if "SHORT" not in self.overrides:
+            self.overrides["SHORT"] = {}
+        self.overrides["SHORT"]["invest_size"] = final_short
+
+        # Leverage resolution (active_settings -> raw_meta -> 20)
+        act_lev = self.active_settings.get("leverage")
+        raw_lev = raw_meta.get("leverage", 20)
+        final_lev = act_lev if act_lev is not None else raw_lev
+        if isinstance(final_lev, dict):
+            self.leverage = {k.upper(): int(v) for k, v in final_lev.items()}
+        else:
+            self.leverage = int(final_lev)
+
+        for side_k in ("LONG", "SHORT"):
+            if side_k in self.active_settings and isinstance(self.active_settings[side_k], dict):
+                self.overrides[side_k].update(self.active_settings[side_k])
+
+        # 1. Купол Аналитики (Analytics Dome): канонически из app.json -> active_strategies[strategy_id]["start_balance_usdt"]
         strat_analytics = self.active_settings.get("analytics")
-        if isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
-            self.start_balance_usdt: float = float(strat_analytics["start_balance_usdt"])
-        elif "start_balance_usdt" in self.active_settings:
+        if "start_balance_usdt" in self.active_settings:
             self.start_balance_usdt: float = float(self.active_settings["start_balance_usdt"])
+        elif isinstance(strat_analytics, dict) and "start_balance_usdt" in strat_analytics:
+            self.start_balance_usdt: float = float(strat_analytics["start_balance_usdt"])
         elif "analytics" in raw_meta and isinstance(raw_meta["analytics"], dict) and "start_balance_usdt" in raw_meta["analytics"]:
             self.start_balance_usdt: float = float(raw_meta["analytics"]["start_balance_usdt"])
         elif "start_balance_usdt" in raw_meta:
@@ -148,7 +196,31 @@ class StrategyConfig:
             or raw_meta.get("super_grid")
             or self.overrides.get("super_grid")
         )
-        if sg_override is not None and isinstance(sg_override, dict):
+        if isinstance(sg_override, bool):
+            self.super_grid_enabled: bool = sg_override
+            self.super_grid_cfg = {
+                "enabled": self.super_grid_enabled,
+                "timeframe": "1w",
+                "window": 12,
+                "multiplier": 2.0,
+                "min_volatility_pct": 15.0,
+                "max_volatility_pct": None,
+                "update_interval_hours": 24
+            }
+        elif isinstance(sg_override, str):
+            sg_str = sg_override.strip().lower()
+            self.super_grid_enabled: bool = sg_str in ("true", "1", "yes", "on")
+            self.super_grid_cfg = {
+                "enabled": self.super_grid_enabled,
+                "mode": sg_override,
+                "timeframe": "1w",
+                "window": 12,
+                "multiplier": 2.0,
+                "min_volatility_pct": 15.0,
+                "max_volatility_pct": None,
+                "update_interval_hours": 24
+            }
+        elif sg_override is not None and isinstance(sg_override, dict):
             self.super_grid_cfg: Dict[str, Any] = copy.deepcopy(sg_override)
             self.super_grid_enabled: bool = bool(sg_override.get("enabled", True))
         elif "super_grid_enabled" in raw_meta:
@@ -202,11 +274,13 @@ class StrategyConfig:
             base_ac = deep_merge_dict(base_ac, override_ac)
         self.auto_closing_cfg: Dict[str, Any] = base_ac
 
-        # 5. Купол Режима Автозакрытия (Mode Dome): строго строковый тип
+        # 5. Купол Режима Автозакрытия (Auto-Closing Mode Dome): "auto_closing_mode"
         mode_val = (
-            self.active_settings.get("mode")
+            self.active_settings.get("auto_closing_mode")
+            or self.active_settings.get("mode")
             or raw_meta.get("auto_closing_mode")
             or raw_meta.get("mode")
+            or self.overrides.get("auto_closing_mode")
             or self.overrides.get("mode")
         )
         if not mode_val and self.active_settings.get("modes"):
@@ -219,20 +293,21 @@ class StrategyConfig:
             self.mode = "off"
         self.auto_closing_mode: str = self.mode
 
-        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго строковый тип ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
+        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго "trend_size_depender": "static" (строковый тип: "static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
         raw_tsd = raw_meta.get("trend_size_depender")
-        tsd_mode = raw_tsd if isinstance(raw_tsd, str) else (raw_tsd.get("mode") if isinstance(raw_tsd, dict) else None)
         active_tsd = self.active_settings.get("trend_size_depender")
-        active_tsd_mode = active_tsd if isinstance(active_tsd, str) else (active_tsd.get("mode") if isinstance(active_tsd, dict) else None)
 
         sizing_mode_val = (
-            self.active_settings.get("sizing_mode")
-            or active_tsd_mode
-            or tsd_mode
+            active_tsd
+            or self.active_settings.get("sizing_mode")
+            or raw_tsd
             or raw_meta.get("sizing_mode")
+            or self.overrides.get("trend_size_depender")
             or self.overrides.get("sizing_mode")
         )
-        if not sizing_mode_val and self.active_settings.get("sizing_modes"):
+        if isinstance(sizing_mode_val, dict):
+            sizing_mode_val = sizing_mode_val.get("mode") or sizing_mode_val.get("trend_mode")
+        elif not sizing_mode_val and self.active_settings.get("sizing_modes"):
             legacy_sm = self.active_settings.get("sizing_modes")
             sizing_mode_val = legacy_sm[0] if isinstance(legacy_sm, list) and legacy_sm else str(legacy_sm)
         elif not sizing_mode_val and raw_meta.get("sizing_modes"):
@@ -248,6 +323,7 @@ class StrategyConfig:
             self.sizing_mode: str = sm
         else:
             self.sizing_mode = "static"
+        self.trend_size_depender: str = self.sizing_mode
 
         VALID_SIZING_MODES = ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
         if self.sizing_mode not in VALID_SIZING_MODES:
@@ -316,13 +392,15 @@ class StrategyConfig:
         user_tsd_override = (
             self.active_settings.get("override", {}).get("trend_size_depender")
             or self.active_settings.get("overrides", {}).get("trend_size_depender")
-            or self.overrides.get("trend_size_depender")
         )
         if isinstance(user_tsd_override, str):
             self.trend_size_cfg["mode"] = user_tsd_override
             self.trend_size_cfg["enabled"] = (user_tsd_override != "static")
         elif user_tsd_override and isinstance(user_tsd_override, dict):
             self.trend_size_cfg.update(user_tsd_override)
+
+        self.overrides["trend_size_depender"] = self.sizing_mode
+        self.overrides["sizing_mode"] = self.sizing_mode
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
@@ -338,6 +416,8 @@ class StrategyConfig:
         ss_cfg = raw_meta.get("smart_size") or self.overrides.get("smart_size")
         if ss_cfg and isinstance(ss_cfg, dict):
             base_smart_size.update(ss_cfg)
+            if "knife_blocker_threshold" in ss_cfg and "knife_blocker_enabled" not in ss_cfg:
+                base_smart_size["knife_blocker_enabled"] = ss_cfg["knife_blocker_threshold"] is not None
         self.smart_size_cfg: Dict[str, Any] = base_smart_size
 
         base_smart_tp = copy.deepcopy(DEFAULT_SMART_TP)
@@ -498,6 +578,69 @@ class StrategyConfig:
         """Обратная совместимость: возвращает список с текущим строковым режимом сайзинга."""
         return [self.sizing_mode]
 
+    def get_invest_size(self, side: str, symbol: Optional[str] = None) -> float:
+        """
+        Возвращает размер инвестиции для стороны (LONG / SHORT) и конкретной монеты (symbol).
+        Иерархия разрешения:
+        1. active_settings['symbols'][symbol][side]['invest_size'] (если задано для монеты)
+        2. active_settings[side]['invest_size'][symbol] (если в стороне задан per-symbol dict)
+        3. self.invest_size_long / self.invest_size_short (если dict -> по монете, если float -> напрямую)
+        4. self.invest_size (если dict -> по стороне или монете, если float -> напрямую)
+        5. Fallback: 400.0
+        """
+        sym = symbol.upper().strip() if symbol else None
+        side_upper = side.upper().strip()
+
+        # 1. active_settings['symbols'][symbol]
+        act_symbols = self.active_settings.get("symbols")
+        if isinstance(act_symbols, dict) and sym and sym in act_symbols:
+            sym_cfg = act_symbols[sym]
+            if isinstance(sym_cfg, dict):
+                if side_upper in sym_cfg and isinstance(sym_cfg[side_upper], dict) and "invest_size" in sym_cfg[side_upper]:
+                    return float(sym_cfg[side_upper]["invest_size"])
+                if "invest_size" in sym_cfg:
+                    val = sym_cfg["invest_size"]
+                    if isinstance(val, dict) and side_upper in val:
+                        return float(val[side_upper])
+                    elif isinstance(val, (int, float)):
+                        return float(val)
+
+        # 2. Выборка из self.invest_size_long / self.invest_size_short
+        side_val = self.invest_size_long if side_upper == "LONG" else self.invest_size_short
+        side_def = self.default_invest_size_long if side_upper == "LONG" else self.default_invest_size_short
+        if isinstance(side_val, dict):
+            if sym and sym in side_val:
+                return float(side_val[sym])
+            if "DEFAULT" in side_val:
+                return float(side_val["DEFAULT"])
+            if side_def is not None:
+                return float(side_def)
+            if side_val:
+                return float(next(iter(side_val.values())))
+        elif isinstance(side_val, (int, float)):
+            return float(side_val)
+
+        # 3. Fallback на явный default_invest_size стороны/стратегии
+        if side_def is not None:
+            return float(side_def)
+        if getattr(self, "default_invest_size", None) is not None:
+            return float(self.default_invest_size)
+
+        # 4. Fallback на self.invest_size
+        if isinstance(self.invest_size, dict):
+            if side_upper in self.invest_size:
+                v = self.invest_size[side_upper]
+                if isinstance(v, dict) and sym and sym in v:
+                    return float(v[sym])
+                elif isinstance(v, (int, float)):
+                    return float(v)
+            if sym and sym in self.invest_size:
+                return float(self.invest_size[sym])
+        elif isinstance(self.invest_size, (int, float)):
+            return float(self.invest_size)
+
+        return float(getattr(self, "default_invest_size", 400.0))
+
     def __repr__(self) -> str:
         return f"<StrategyConfig id='{self.strategy_id}' name='{self.name}' symbols={self.symbols}>"
 
@@ -542,8 +685,11 @@ class StrategyRegistry:
 
         neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
         pos_base = copy.deepcopy(base_ac.get("positive") or {})
-        quant_base = pos_base.get("quant_base_usdt", 10.0)
-        quant_ref = pos_base.get("quant_reference_size", 600.0)
+        scale_money = float(pos_base.get("scale_money", 1.0))
+        desc_scale_money = pos_base.get(
+            "_desc_scale_money",
+            "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону."
+        )
 
         if mode == "off":
             return {
@@ -558,8 +704,8 @@ class StrategyRegistry:
             pos_cfg = {
                 "enabled": True,
                 "mode": "fixed_net",
-                "quant_base_usdt": quant_base,
-                "quant_reference_size": quant_ref,
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
                 "fixed_net": copy.deepcopy(pos_base["fixed_net"])
             }
             return {
@@ -574,8 +720,8 @@ class StrategyRegistry:
             pos_cfg = {
                 "enabled": True,
                 "mode": "toxicity_adaptive",
-                "quant_base_usdt": quant_base,
-                "quant_reference_size": quant_ref,
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
                 "toxicity_adaptive": copy.deepcopy(pos_base["toxicity_adaptive"])
             }
             return {
@@ -590,8 +736,8 @@ class StrategyRegistry:
             pos_cfg = {
                 "enabled": True,
                 "mode": "iter_net_classic",
-                "quant_base_usdt": quant_base,
-                "quant_reference_size": quant_ref,
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
                 "trailing_ratchet": copy.deepcopy(pos_base["trailing_ratchet"])
             }
             return {
@@ -938,9 +1084,29 @@ class StrategyRegistry:
                 raw_meta["overrides"] = {}
             raw_meta["overrides"]["auto_closing"] = ac_block
 
-            # Прямое чтение списка монет купола (Правило 2)
-            raw_symbols: List[str] = strat_settings.get("symbols", [])
-            strat_symbols = [s.upper().strip() for s in raw_symbols if s and s.strip()]
+            # Прямое чтение списка монет купола (Правило 2):
+            # Если symbols не задан явно, единым источником истины являются ключи per-symbol invest_size
+            raw_symbols = strat_settings.get("symbols")
+            if not raw_symbols:
+                found_syms = []
+                for inv_source in [
+                    (strat_settings.get("LONG") or {}).get("invest_size"),
+                    (strat_settings.get("SHORT") or {}).get("invest_size"),
+                    strat_settings.get("invest_size")
+                ]:
+                    if isinstance(inv_source, dict):
+                        for k in inv_source.keys():
+                            k_clean = str(k).upper().strip()
+                            if k_clean and k_clean not in found_syms and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                                found_syms.append(k_clean)
+                raw_symbols = found_syms
+
+            if isinstance(raw_symbols, dict):
+                strat_symbols = [s.upper().strip() for s in raw_symbols.keys() if s and s.strip()]
+            else:
+                strat_symbols = [s.upper().strip() for s in raw_symbols if s and s.strip()]
+
+            strat_settings["symbols"] = list(strat_symbols)
 
             strat_config = StrategyConfig(
                 strategy_id=strat_id,
@@ -950,8 +1116,14 @@ class StrategyRegistry:
             )
             strat_config.mode = target_mode
             strat_config.auto_closing_mode = target_mode
-            strat_config.auto_closing_cfg = ac_block
             self.active_strategies[strat_id] = strat_config
+            scale_money = float(ac_block.get("positive", {}).get("scale_money", 1.0))
+            logger.info(
+                f"[StrategyRegistry] 🚀 Стратегия [{strat_id}] активирована: "
+                f"mode={target_mode}, start_balance={strat_config.start_balance_usdt:.2f} USDT, "
+                f"scale_money={scale_money:.2f}x (масштаб капитала автоклозера), "
+                f"монеты={strat_symbols}"
+            )
 
             acc_id = strat_config.get_account_id()
             if acc_id not in account_symbols:

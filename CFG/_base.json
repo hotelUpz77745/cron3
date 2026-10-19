@@ -1,85 +1,36 @@
 {
     "name": "_base",
     "description": "Универсальный базовый шаблон со всеми institutional фичами Chita 3.6",
-    "leverage": 20,
-    "invest_size": 400.0,
     "min_tp_indent": 0.5,
     "_min_tp_indent_desc": "Общесистемный пол тейк-профита 0.50% per Protocol Rule #11. Конкретные стратегии могут переопределять выше (например 1.05% в Chita 36).",
     "tp_purpose": "self",
-    "avg_free_volume_behavior": "mark_executed",
+    "_tp_purposes_allowed": [
+        "self",
+        "opposite",
+        "both",
+        "neutral"
+    ],
+    "_tp_purpose_desc": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp); 'neutral' = автономная лестница TP, полностью отвязанная от ступеней сетки усреднения.",
+    "avg_free_volume_behavior": "distribute_skip",
     "_avg_free_volume_behavior_modes": {
         "distribute_remaining": "Классика: оставшийся свободный объем пропорционально размазывается по оставшимся ордерам сетки.",
-        "accumulate_current": "Аккумуляция: весь свободный объем наваливается строго на следующий шаг сетки.",
-        "mark_executed": "Chita 3.6 Standard: свободный объем списывается (помечается как исполненный), сетка сохраняет идеальную геометрию без раздувания рисков."
+        "distribute_nearest": "Аккумуляция: весь свободный объем наваливается строго на следующий шаг сетки.",
+        "distribute_skip": "Chita 3.6 Standard: свободный объем списывается (помечается как исполненный), сетка сохраняет идеальную геометрию без раздувания рисков."
     },
-    "_avg_free_volume_runtime_note": "Параметр определяет логику перераспределения капитала при отмене части объема.",
-    "_volume_distribution_doc": "Сумма базовых весов L0..L5 = 12 + 8 + 9 + 11 + 15 + 25 = 80%. Буфер 20% остается свободным для динамического управления риском и резервного бункера L6.",
-    "_snake_bridge_doc": "Мостик Змея L3 (отступ -13.5%) — точка фазового перехода. Активирует сплит позиции Half-Peel 50%.",
-    "_panic_damper_doc": "Панический демпфер L4 (отступ -24.0%) и Артиллерия L5 (отступ -55.0%) защищены триггерами Cross-Side Recycling.",
-    "mode": "classic",
-    "_modes_allowed": [
+    "auto_closing_mode": "classic",
+    "_auto_closing_modes_allowed": [
         "classic",
         "toxic",
         "fixed",
         "off"
     ],
-    "_mode_desc": "Режим автоклозера: 'classic' (Fibo trailing), 'toxic' (динамический выход), 'fixed' (тейк в USDT), 'off' (выключен).",
-    "sizing_mode": "static",
-    "_sizing_modes_allowed": [
-        "static",
-        "dynamic"
-    ],
-    "_sizing_mode_desc": "Режим сайзинга: 'static' (фиксированный размер) или 'dynamic'.",
-    "start_balance_usdt": 1000.0,
+    "_auto_closing_mode_desc": "Режим автоклозера: 'classic' (Fibo trailing ratchet), 'toxic' (динамический токсичный выход), 'fixed' (тейк в USDT), 'off' (выключен).",
     "heartbeat_tfr": "1m",
     "signal_heartbeat_tfr": "15m",
-    "super_grid": {
-        "enabled": false
-    },
+    "super_grid": false,
+    "_super_grid_desc": "Флаг адаптивной динамической сетки волатильности: true (включено), false (выключено).",
     "base_order_type": "LIMIT",
     "fallback_order_type": "MARKET",
-    "trend_size_depender": {
-        "mode": "static",
-        "_trend_size_depender_modes": {
-            "static": "(Статический) Сайзинг строго 50/50, макро-оценка тренда 4h выключена.",
-            "dyn_inv_16": "(Bollinger Inverted 16) Контр-трендовый 4h Боллинджер, шкала 16 (коридор 33.3% / 66.7%), 4h-заморозка 50/50 при пробое.",
-            "dyn_ema_16": "(EMA Trend 16) Трендовый фильтр Dual EMA 10/30 (4h), шкала 16 (коридор 33.3% / 66.7%).",
-            "dyn_ema_10": "(EMA Trend 10) Трендовый фильтр Dual EMA 10/30 (4h), мягкая шкала 10 (коридор 40.0% / 60.0%)."
-        },
-        "bb_inverted": {
-            "timeframe": "4h",
-            "window": 20,
-            "multiplier": 2.0,
-            "lockout_duration_sec": 14400.0,
-            "confirmation_candles": 5
-        },
-        "ema_trend": {
-            "timeframe": "4h",
-            "sma_fast": 10,
-            "sma_slow": 30,
-            "confirmation_candles": 5,
-            "require_rising": true,
-            "trend_positive": true
-        },
-        "scale_16": {
-            "scale": 16,
-            "min_side_pct": 33.3333,
-            "max_side_pct": 66.6667
-        },
-        "scale_10": {
-            "scale": 10,
-            "min_side_pct": 40.0,
-            "max_side_pct": 60.0
-        },
-        "timeframe": "4h",
-        "eval_window": 20,
-        "eval_window_bars": 3360,
-        "multiplier": 2.0
-    },
-    "swan_amputator": {
-        "enabled": false,
-        "threshold_pct": 15.0
-    },
     "first_order_weight_regime": {
         "mode": "kernel_forecast",
         "_concept": "«Ядерный кулак Сильной руки» (Nadaraya-Watson Non-Parametric Kernel Forecast)",
@@ -146,12 +97,11 @@
             "==1": 1.14,
             "==2": 1.28,
             "==3": 1.43,
-            ">=4": 1.14
+            ">=4": 1.0
         },
         "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
-        "knife_blocker_enabled": true,
         "knife_blocker_threshold": 1,
-        "stagnation_min_step": 2
+        "stagnation_min_step": null
     },
     "smart_tp": {
         "enabled": true,
@@ -163,7 +113,7 @@
             "==3": 1.18,
             ">=4": 1.05
         },
-        "stagnation_min_step": 2
+        "stagnation_min_step": null
     },
     "cross_side_recycling": {
         "enabled": true,
@@ -180,14 +130,12 @@
         "positive": {
             "enabled": true,
             "mode": "iter_net_classic",
-            "quant_base_usdt": 10.0,
-            "quant_reference_size": 400.0,
+            "scale_money": 1.0,
+            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "fixed_net": {
                 "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
                 "target_net_usdt": 60.0,
                 "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT.",
-                "scale_by_invest_size": false,
-                "_desc_scale_by_invest_size": "If true, target scales as (invest_size / quant_reference_size) * target_net_usdt.",
                 "enabled": true
             },
             "toxicity_adaptive": {
@@ -264,8 +212,6 @@
     },
     "LONG": {
         "enable": true,
-        "invest_size": 400.0,
-        "leverage": 20,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "grid": {
@@ -354,7 +300,7 @@
                 "zone": null
             }
         },
-        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = от колена противоположной стороны (level_opp); 'both' = максимальное колено max(level_self, level_opp); 'neutral' = автономная лестница TP, полностью отвязана от ступеней сетки усреднения.",
         "tp_purpose": "both",
         "tp_map": {
             "0": {
@@ -421,8 +367,6 @@
     },
     "SHORT": {
         "enable": true,
-        "invest_size": 400.0,
-        "leverage": 20,
         "margin_type": "CROSSED",
         "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "grid": {
@@ -511,7 +455,7 @@
                 "zone": null
             }
         },
-        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = уровень TP берется от колена противоположной стороны (level_opp); 'both' = берется максимальное колено max(level_self, level_opp).",
+        "_comment_tp_purpose": "Режимы привязки уровня TP к коленам сетки: 'self' = уровень TP берется строго от своего колена (level_self, изолированный TP); 'opposite' = от колена противоположной стороны (level_opp); 'both' = максимальное колено max(level_self, level_opp); 'neutral' = автономная лестница TP, полностью отвязана от ступеней сетки усреднения.",
         "tp_purpose": "both",
         "tp_map": {
             "0": {

@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\SERVICES\SELECTOR\samsonov_funnel.py
-# Role: samsonov_funnel.py module
-
 # ==============================================================================
 # Path: CORE/SERVICES/SELECTOR/samsonov_funnel.py
 # Role: Квантовые селекторы монет (Agent Market Scanner & Samsonov 3-Step Funnel)
@@ -146,21 +143,10 @@ class SamsonovFunnelSelector:
 
     def __init__(self, radar_stats_dir: Optional[Path] = None):
         logger.warning(SAMSONOV_FUNNEL_MAINTENANCE_BANNER)
-        if radar_stats_dir:
-            self.radar_stats_dir = Path(radar_stats_dir)
-        else:
-            paths_cfg = _CFG.get("paths", {})
-            radar_cfg = paths_cfg.get("radar_dir")
-            if radar_cfg:
-                p = Path(radar_cfg)
-                if not p.is_absolute():
-                    p = (BASE_DIR / p).resolve()
-                self.radar_stats_dir = p / "ANALYTICS" / "STATS"
-            else:
-                self.radar_stats_dir = PARENT_DIR / "cron3PapperUniverses" / "ANALYTICS" / "STATS"
+        self.radar_stats_dir: Optional[Path] = Path(radar_stats_dir) if radar_stats_dir else None
 
     def is_radar_available(self) -> bool:
-        return self.radar_stats_dir.exists() and self.radar_stats_dir.is_dir()
+        return self.radar_stats_dir is not None and self.radar_stats_dir.exists() and self.radar_stats_dir.is_dir()
 
     def load_universe_data(self, universe_id: str) -> Optional[Dict[str, Any]]:
         if not self.is_radar_available():

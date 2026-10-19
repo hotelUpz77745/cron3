@@ -1609,7 +1609,7 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
 - **Статус:** Конфигурация создана, верифицирована тестами и активирована (`is_active: true`).
 
 #### 3. Удаление дубликата `u16_dual_zone_titan`:
-- Вселенная `u16_dual_zone_titan` признана избыточным дубликатом `u16_apex_predator` (полностью идентичные сетки, тейки, трейлинги и ресайклинг). Полностью выведена из эксплуатации, отправлена в архив (`CFG/archive/`), статистика и записи в лидерборде очищены. -->
+- Вселенная `u16_dual_zone_titan` признана избыточным дубликатом `u16_apex_predator` (полностью идентичные сетки, тейки, трейлинги и ресайклинг). Полностью выведена из эксплуатации, отправлена в архив (`CFG/artifacts/classic_tribute/`), статистика и записи в лидерборде очищены. -->
 
 
 <!-- {
@@ -1673,8 +1673,8 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
     "positive": {
       "enabled": true,
       "mode": "iter_net_classic",
-      "quant_base_usdt": 10.0,
-      "quant_reference_size": 600.0,
+      "scale_money": 1.0,
+      "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
       "trailing_ratchet": {
         "enabled": true,
         "levels": [
@@ -1928,8 +1928,8 @@ Ranked strictly by Cumulative Net Profit USDT (Winrate excluded - DCA quantitati
     "positive": {
       "enabled": true,
       "mode": "iter_net_classic",
-      "quant_base_usdt": 10.0,
-      "quant_reference_size": 600.0,
+      "scale_money": 1.0,
+      "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
       "trailing_ratchet": {
         "enabled": true,
         "levels": [

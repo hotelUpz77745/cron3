@@ -11,11 +11,10 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
-        "auto_start": true
+        "auto_start": false
     },
     "paths": {
-        "shared_api_dir": "./API",
-        "radar_dir": "../cron3PapperUniverses"
+        "shared_api_dir": "./API"
     },
     "streamer": {
         "port": 48123,
@@ -31,7 +30,6 @@
         "log_to_file": true
     },
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
-    "_avg_free_volume_behavior_doc": "Available avg_free_volume_behavior modes: 1) 'distribute_remaining' (равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки); 2) 'accumulate_current' (объем пропущенных уровней суммируется и переносится в текущее сработавшее колено, пропущенные помечаются исполненными); 3) 'mark_executed' (сжигание объема: пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится).",
     "active_strategies": {
         "u17_stephensonE__classic": {
             "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [CLASSIC]",
@@ -39,19 +37,28 @@
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
-            "symbols": [
-                "ICNTUSDT",
-                "AVAUSDT",
-                "GTCUSDT",
-                "GWEIUSDT"
-            ],
-            "mode": "classic",
-            "sizing_mode": "static",
+            "auto_closing_mode": "classic",
             "leverage": 20,
             "margin_type": "CROSSED",
-            "analytics": {
-                "start_balance_usdt": 450.0
-            }
+            "LONG": {
+                "default_invest_size": 400.0,
+                "invest_size": {
+                    "ICNTUSDT": 400.0,
+                    "AVAUSDT": 400.0,
+                    "GTCUSDT": 400.0,
+                    "GWEIUSDT": 400.0
+                }
+            },
+            "SHORT": {
+                "default_invest_size": 400.0,
+                "invest_size": {
+                    "ICNTUSDT": 400.0,
+                    "AVAUSDT": 400.0,
+                    "GTCUSDT": 400.0,
+                    "GWEIUSDT": 400.0
+                }
+            },
+            "start_balance_usdt": 459.0
         }
     },
     "telegram": {
@@ -137,19 +144,6 @@
         "_desc_max_parabolic_pump_pct": "Anti-pump ceiling: reject parabolic surges above this %.",
         "max_death_spiral_dump_pct": -45.0,
         "_desc_max_death_spiral_dump_pct": "Anti-dump floor: reject death spiral collapses below this %."
-    },
-    "samsonov_funnel": {
-        "enabled": true,
-        "_desc_enabled": "Samsonov 3-step funnel selector toggle.",
-        "target_count": 4,
-        "_desc_target_count": "Default top coins count to select.",
-        "default_universe_id": "u0_fat_swing123",
-        "_desc_default_universe_id": "Fallback universe if bot active strategies are not specified.",
-        "w_resilience": 1.0,
-        "w_realized": 1.0,
-        "w_velocity": 1.0,
-        "empty_notice": "Пусто, выросла капуста",
-        "_desc_empty_notice": "Safe notice when paper bot is disabled or raw radar data is empty."
     },
     "watchdog": {
         "timeout_sec": 60,

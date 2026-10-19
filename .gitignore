@@ -6,7 +6,7 @@ ssh_key.txt
 .ssh-autostart.sh
 TESTS/
 test/
-!tests/
+tests/
 logs/
 scratch/
 API/IPC/streamer.lock
@@ -18,7 +18,8 @@ ANALYTICS/STATS/*.json
 ANALYTICS/LEDGERS/*.txt
 !ANALYTICS/LEDGERS/.gitkeep
 CFG/runtime/
-CFG/volatile_symbols*
+CFG/volatile_symbols*
+
 combat_replay_klines.json
 *.tmp*
 *.tmp_*

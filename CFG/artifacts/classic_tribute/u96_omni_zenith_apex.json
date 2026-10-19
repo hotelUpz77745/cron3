@@ -49,11 +49,8 @@
       ">4": 1.6
     }
   },
-  "trend_size_depender": {
-    "mode": "static"
-  },
+  "trend_size_depender": "static",
   "LONG": {
-    "invest_size": 151.0,
     "grid": {
       "0": {
         "indent": 0.0,

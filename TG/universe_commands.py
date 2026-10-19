@@ -138,11 +138,36 @@ def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: i
     active_strats = app_data.get("active_strategies", {})
     s_cfg = active_strats.get(uid, {})
 
-    cur_sizing = str(s_cfg.get("sizing_mode", "static")).lower().strip()
+    cur_sizing = str(s_cfg.get("trend_size_depender") or s_cfg.get("sizing_mode", "static")).lower().strip()
     cur_closer = str(s_cfg.get("mode", "classic")).lower().strip()
-    symbols = s_cfg.get("symbols", [])
+    raw_inv = (
+        (s_cfg.get("LONG") or {}).get("invest_size")
+        or (s_cfg.get("SHORT") or {}).get("invest_size")
+        or s_cfg.get("invest_size")
+    )
+    def_inv = (
+        (s_cfg.get("LONG") or {}).get("default_invest_size")
+        or (s_cfg.get("SHORT") or {}).get("default_invest_size")
+        or s_cfg.get("default_invest_size")
+    )
+    symbols = s_cfg.get("symbols")
+    if not symbols:
+        if isinstance(raw_inv, dict):
+            symbols = list(raw_inv.keys())
+        else:
+            symbols = []
     sym_str = ", ".join(symbols) if symbols else "нет"
-    inv_size = float(s_cfg.get("invest_size", 151.0))
+
+    if isinstance(raw_inv, dict):
+        inv_display = ", ".join(f"{k}: {float(v):.0f}$" for k, v in raw_inv.items())
+        if def_inv is not None:
+            inv_display += f" (дефолт: {float(def_inv):.0f}$)"
+    elif raw_inv is not None:
+        inv_display = f"{float(raw_inv):.1f} USDT"
+    elif def_inv is not None:
+        inv_display = f"{float(def_inv):.1f} USDT (дефолт)"
+    else:
+        inv_display = "400.0 USDT (дефолт)"
 
     sz_badge, sz_desc = SIZING_MODE_BADGES.get(cur_sizing, (cur_sizing, ""))
     cl_badge, cl_desc = CLOSER_MODE_BADGES.get(cur_closer, (cur_closer, ""))
@@ -150,7 +175,7 @@ def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: i
     text = (
         f"🐆 <b>УПРАВЛЕНИЕ КУПОЛОМ:</b> <code>{uid}</code>\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"💰 <b>Инвест-сайз:</b> <code>{inv_size:.1f} USDT</code>\n"
+        f"💰 <b>Инвест-сайз:</b> <code>{inv_display}</code>\n"
         f"🎯 <b>Пул монет ({len(symbols)}):</b> <code>{sym_str}</code>\n\n"
         f"⚖️ <b>Сайзинг (trend_size_depender):</b>\n"
         f"• Текущий режим: <b>{sz_badge}</b>\n"
@@ -264,6 +289,7 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) or {}
         if "active_strategies" in app_data and uid in app_data["active_strategies"]:
+            app_data["active_strategies"][uid]["trend_size_depender"] = new_mode
             app_data["active_strategies"][uid]["sizing_mode"] = new_mode
             Utils.atomic_write_json(app_json_path, app_data)
 

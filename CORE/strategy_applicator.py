@@ -59,11 +59,11 @@ class StrategyApplicator:
             return copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
         return data
 
-    def build_side_configs(self, strategy: StrategyConfig) -> Dict[str, Dict[str, Any]]:
+    def build_side_configs(self, strategy: StrategyConfig, symbol: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
         Создает стороны LONG и SHORT для символа путем наложения переопределений стратегии
         на базовый шаблон _base.json с жестким соблюдением правила TP >= 0.50%
-        и поддержкой асимметричных настроек per-side (LONG / SHORT).
+        и поддержкой асимметричных настроек per-side (LONG / SHORT) и per-symbol invest_size.
         """
         side_cfgs = {}
         for side in ("LONG", "SHORT"):
@@ -83,13 +83,24 @@ class StrategyApplicator:
                     merged.update(side_dict)
                     side_dict = merged
 
-            # 1. Invest Size (приоритет: side_dict -> strategy.invest_size[side] -> strategy.invest_size)
-            if "invest_size" in side_dict:
-                side_data["invest_size"] = float(side_dict["invest_size"])
-            elif isinstance(strategy.invest_size, dict) and side in strategy.invest_size:
-                side_data["invest_size"] = float(strategy.invest_size[side])
-            elif isinstance(strategy.invest_size, (int, float)):
+            # 1. Invest Size (приоритет: per-symbol / активная стратегия/клиентский уровень -> side_dict -> дефолт 400.0)
+            if hasattr(strategy, "get_invest_size"):
+                side_data["invest_size"] = strategy.get_invest_size(side, symbol=symbol)
+            elif side == "LONG" and getattr(strategy, "invest_size_long", None) is not None:
+                val = strategy.invest_size_long
+                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+            elif side == "SHORT" and getattr(strategy, "invest_size_short", None) is not None:
+                val = strategy.invest_size_short
+                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+            elif isinstance(getattr(strategy, "invest_size", None), dict) and side in strategy.invest_size:
+                val = strategy.invest_size[side]
+                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+            elif isinstance(getattr(strategy, "invest_size", None), (int, float)):
                 side_data["invest_size"] = float(strategy.invest_size)
+            elif "invest_size" in side_dict:
+                side_data["invest_size"] = float(side_dict["invest_size"])
+            else:
+                side_data["invest_size"] = 400.0
 
             # 2. Leverage (приоритет: side_dict -> strategy.leverage[side] -> strategy.leverage)
             if "leverage" in side_dict:
@@ -193,8 +204,9 @@ class StrategyApplicator:
                 side_data["avg_free_volume_behavior"] = strategy.overrides["avg_free_volume_behavior"]
 
             # auto_closing и trend_size_depender вынесены на уровень стратегии и не дублируются в рантайм позиций
-            if hasattr(strategy, "sizing_mode") and strategy.sizing_mode:
-                side_data["sizing_mode"] = strategy.sizing_mode
+            tsd_val = getattr(strategy, "trend_size_depender", None) or getattr(strategy, "sizing_mode", None)
+            if tsd_val:
+                side_data["sizing_mode"] = tsd_val
 
             side_cfgs[side] = side_data
 
@@ -424,7 +436,7 @@ class StrategyApplicator:
         target_file = runtime_dir / f"{symbol.lower()}.json"
         target_pkl = runtime_dir / f"{symbol.lower()}.pkl"
 
-        side_configs = self.build_side_configs(strategy)
+        side_configs = self.build_side_configs(strategy, symbol=symbol)
 
         existing = {}
         if target_file.exists():

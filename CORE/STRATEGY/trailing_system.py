@@ -55,9 +55,9 @@ class BaseTrailingSystem:
         if not levels:
             return False, None, "", False
 
-        scale_factor = float(ratchet_cfg.get("scale_factor", 1.0))
-        if scale_factor <= 0:
-            scale_factor = 1.0
+        scale_money = float(ratchet_cfg.get("scale_money", ratchet_cfg.get("scale_factor", 1.0)))
+        if scale_money <= 0:
+            scale_money = 1.0
 
         state["highest_net"] = max(state.get("highest_net", 0.0), iter_net)
 
@@ -67,8 +67,8 @@ class BaseTrailingSystem:
             min_age = float(lvl.get("min_age_hours") or 0.0)
             if iter_age_hours < min_age:
                 continue
-            act_val = float(lvl["activation"]) * scale_factor
-            floor_val = float(lvl["floor"]) * scale_factor
+            act_val = float(lvl["activation"]) * scale_money
+            floor_val = float(lvl["floor"]) * scale_money
             if iter_net >= act_val:
                 cur_floor = state.get("armed_floor")
                 if cur_floor is None or floor_val > cur_floor:
@@ -78,7 +78,7 @@ class BaseTrailingSystem:
 
         armed_floor = state.get("armed_floor")
         if armed_floor is None:
-            first_act = float(levels[0].get("activation", 5.0)) * scale_factor
+            first_act = float(levels[0].get("activation", 5.0)) * scale_money
             return False, None, f"[RATCHET IDLE: Net {iter_net:+.2f} < Act {first_act:.2f}]", False
 
         idx = int(state.get("active_level_idx", 0))
@@ -86,7 +86,7 @@ class BaseTrailingSystem:
         lvl_min_age = float(levels[idx].get("min_age_hours") or 0.0) if idx < len(levels) else 0.0
         is_stag = (lvl_min_age > 0.0 or idx == 0)
 
-        act_threshold = float(levels[idx]["activation"]) * scale_factor
+        act_threshold = float(levels[idx]["activation"]) * scale_money
         # Полиморфный прямой триггер: если курок равен полу (или ниже), мгновенная фиксация при касании/перелёте
         if act_threshold <= armed_floor and iter_net >= act_threshold:
             high_net = float(state.get("highest_net", 0.0))
@@ -404,6 +404,7 @@ class ToxicityEngine:
         toxicity_score: float,
         delta_recovery: float,
         scale_factor: float = 1.0,
+        scale_money: float = 1.0,
     ) -> Tuple[bool, Optional[float], str, bool]:
         """
         Способ 2: Адаптивный Фикс по СКОРУ и СПАДУ токсичности инвентаря.
@@ -411,26 +412,31 @@ class ToxicityEngine:
         - ЖЕЛЕЗНЫЙ ИНВАРИАНТ: iter_net ОБЯЗАН быть строго положительным (iter_net >= floor > 0). В минус не закрываем никогда!
         1. Высокая токсичность (S >= panic_th, дефолт 0.70):
            - При рассасывании ямы (delta_recovery >= min_panic_recovery, дефолт 0.40)
-             и iter_net >= emergency_floor (дефолт +3.0 USDT * scale) -> экстренный сброс в кэш!
+             и iter_net >= emergency_floor (дефолт +3.0 USDT * scale_money) -> экстренный сброс в кэш!
         2. Умеренная токсичность (relaxed_th <= S < panic_th, дефолт 0.35..0.70):
            - При рассасывании ямы (delta_recovery >= min_moderate_recovery, дефолт 0.20)
-             и iter_net >= moderate_floor (дефолт +8.0 USDT * scale) -> рабочий сброс в кэш!
+             и iter_net >= moderate_floor (дефолт +8.0 USDT * scale_money) -> рабочий сброс в кэш!
         3. Низкая токсичность / Легкий рынок (S < relaxed_th, дефолт < 0.35):
            - Инвентарь не давит, маржа свободна.
-             При iter_net >= relaxed_floor (дефолт +15.0 USDT * scale) -> целевой сброс в кэш!
+             При iter_net >= relaxed_floor (дефолт +15.0 USDT * scale_money) -> целевой сброс в кэш!
         """
         # Железная защита от минуса: в положительной ветке автоклозера минус запрещен абсолютно
         if iter_net <= 0.0:
             return False, None, "", False
 
+        eff_scale = scale_factor if scale_factor != 1.0 else scale_money
+        eff_scale = float(ratchet_cfg.get("scale_money", ratchet_cfg.get("scale_factor", eff_scale)))
+        if eff_scale <= 0:
+            eff_scale = 1.0
+
         t_cfg = ratchet_cfg.get("toxicity_adaptive", {})
         panic_th = float(t_cfg.get("panic_toxicity_threshold", 0.70))
         relaxed_th = float(t_cfg.get("relaxed_toxicity_threshold", 0.35))
 
-        # Минимальные целевые пороги чистого профита (с учетом масштаба портфеля)
-        emergency_floor = max(1.0, round(float(t_cfg.get("emergency_exit_floor_usdt", 3.0)) * scale_factor, 2))
-        moderate_floor = max(2.0, round(float(t_cfg.get("moderate_exit_floor_usdt", 8.0)) * scale_factor, 2))
-        relaxed_floor = max(3.0, round(float(t_cfg.get("relaxed_exit_floor_usdt", 15.0)) * scale_factor, 2))
+        # Минимальные целевые пороги чистого профита (с учетом множителя scale_money)
+        emergency_floor = round(float(t_cfg.get("emergency_exit_floor_usdt", 3.0)) * eff_scale, 2)
+        moderate_floor = round(float(t_cfg.get("moderate_exit_floor_usdt", 8.0)) * eff_scale, 2)
+        relaxed_floor = round(float(t_cfg.get("relaxed_exit_floor_usdt", 15.0)) * eff_scale, 2)
 
         # 1. ВЫСОКАЯ ТОКСИЧНОСТЬ (ПАНИКА / НАВЕС МАРЖИ)
         if toxicity_score >= panic_th:
@@ -471,6 +477,7 @@ class ToxicityEngine:
         iter_net: float,
         fixed_cfg: dict,
         scale_factor: float = 1.0,
+        scale_money: float = 1.0,
     ) -> Tuple[bool, Optional[float], str]:
         """
         Режим 4: Фиксация по фиксированному значению чистого Net профита текущей итерации.
@@ -482,11 +489,13 @@ class ToxicityEngine:
 
         if "target_net_usdt" not in fixed_cfg:
             raise KeyError("[TrailingSystem] В конфигурации fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
+        eff_scale = scale_factor if scale_factor != 1.0 else scale_money
+        eff_scale = float(fixed_cfg.get("scale_money", fixed_cfg.get("scale_factor", eff_scale)))
+        if eff_scale <= 0:
+            eff_scale = 1.0
+
         raw_target = float(fixed_cfg["target_net_usdt"])
-        if fixed_cfg.get("scale_by_invest_size", False):
-            target_fixed = round(raw_target * scale_factor, 2)
-        else:
-            target_fixed = raw_target
+        target_fixed = round(raw_target * eff_scale, 2)
 
         if iter_net >= target_fixed:
             info = f"[FIXED NET PROFIT TARGET: Net {iter_net:+.2f} >= Target {target_fixed:.2f} USDT]"

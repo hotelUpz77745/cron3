@@ -173,15 +173,43 @@ class TelegramReceiver:
 
         return current_uid, univ_name, analytics_path, csv_path
 
+    @staticmethod
+    def _extract_strategy_symbols(sdata) -> List[str]:
+        """Универсально извлекает монеты стратегии: из .symbols, ключа 'symbols' или ключей per-symbol invest_size."""
+        if hasattr(sdata, "symbols"):
+            return [str(s).upper().strip() for s in sdata.symbols]
+        if not isinstance(sdata, dict):
+            return []
+        if "symbols" in sdata and isinstance(sdata["symbols"], list) and sdata["symbols"]:
+            return [str(s).upper().strip() for s in sdata["symbols"]]
+        res = []
+        for side in ("LONG", "SHORT"):
+            side_inv = (sdata.get(side) or {}).get("invest_size")
+            if isinstance(side_inv, dict):
+                for k in side_inv.keys():
+                    k_clean = str(k).upper().strip()
+                    if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                        res.append(k_clean)
+        if not res and isinstance(sdata.get("invest_size"), dict):
+            for k in sdata["invest_size"].keys():
+                k_clean = str(k).upper().strip()
+                if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                    res.append(k_clean)
+        return res
+
     def _get_strategy_meta(self, strat_id: str) -> dict:
         if hasattr(self, "bot_core") and getattr(self.bot_core, "strategy_registry", None):
             strat = self.bot_core.strategy_registry.get_strategy(strat_id)
             if strat and isinstance(getattr(strat, "name", None), str):
+                def_inv = float(getattr(strat, "default_invest_size", 400.0))
+                inv_size = def_inv if isinstance(strat.invest_size, dict) else float(strat.invest_size)
                 return {
                     "strategy_id": strat_id,
                     "name": strat.name,
                     "description": strat.description or "Пользовательская стратегия",
-                    "invest_size": strat.invest_size,
+                    "invest_size": inv_size,
+                    "default_invest_size": def_inv,
+                    "invest_size_map": strat.invest_size if isinstance(strat.invest_size, dict) else None,
                     "leverage": strat.leverage,
                     "super_grid": getattr(strat, "super_grid_enabled", False),
                     "super_grid_cfg": getattr(strat, "super_grid_cfg", {}),
@@ -218,11 +246,22 @@ class TelegramReceiver:
         
         name = u_meta.get("name", strat_id)
         description = u_meta.get("description", "Пользовательская стратегия")
-        invest_size = (
-            (u_meta.get("LONG") or {}).get("invest_size")
+        def_inv = (
+            (strat_app.get("LONG") or {}).get("default_invest_size")
+            or (strat_app.get("SHORT") or {}).get("default_invest_size")
+            or strat_app.get("default_invest_size")
+            or u_meta.get("default_invest_size")
+        )
+        raw_inv = (
+            (strat_app.get("LONG") or {}).get("invest_size")
+            or (strat_app.get("SHORT") or {}).get("invest_size")
+            or strat_app.get("invest_size")
+            or (u_meta.get("LONG") or {}).get("invest_size")
             or (u_meta.get("SHORT") or {}).get("invest_size")
             or u_meta.get("invest_size", 400.0)
         )
+        final_def = float(def_inv if def_inv is not None else (400.0 if isinstance(raw_inv, dict) else raw_inv))
+        invest_size = final_def if isinstance(raw_inv, dict) else float(raw_inv)
         leverage = u_meta.get("leverage", 20)
         start_bal = float((strat_app.get("analytics") or {}).get("start_balance_usdt", u_meta.get("start_balance_usdt", 57.0)))
         
@@ -249,6 +288,8 @@ class TelegramReceiver:
             "name": name,
             "description": description,
             "invest_size": invest_size,
+            "default_invest_size": final_def,
+            "invest_size_map": raw_inv if isinstance(raw_inv, dict) else None,
             "leverage": leverage,
             "super_grid": sg_enabled,
             "super_grid_cfg": sg_cfg,
@@ -1766,7 +1807,7 @@ class TelegramReceiver:
                 meta = self._get_strategy_meta(sid)
                 sname = meta.get("name", sid)
                 clean_name = sname.encode("ascii", "ignore").decode("ascii").strip() or sid
-                sym_cnt = len(sdata.get("symbols", []))
+                sym_cnt = len(self._extract_strategy_symbols(sdata))
                 btn_txt = f"{status_icon} {clean_name[:28]} ({sym_cnt}м)"
                 buttons.append([InlineKeyboardButton(text=btn_txt, callback_data=f"strat_analytics:{sid}")])
 
@@ -1787,7 +1828,7 @@ class TelegramReceiver:
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
             sdata = app_data.get("active_strategies", {}).get(strat_id, {})
             is_enabled = sdata.get("enabled", False)
-            coins_list = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+            coins_list = self._extract_strategy_symbols(sdata)
             coins_str = ", ".join(coins_list) if coins_list else "—"
 
             meta = self._get_strategy_meta(strat_id)
@@ -1905,7 +1946,7 @@ class TelegramReceiver:
 
             # 1. ЗАЩИТА ПРИ ОТКЛЮЧЕНИИ: проверяем открытые позиции
             if cur_en:
-                strat_symbols = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+                strat_symbols = self._extract_strategy_symbols(sdata)
                 open_positions = []
                 if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "caches"):
                     for sym in strat_symbols:
@@ -1932,7 +1973,7 @@ class TelegramReceiver:
             # 2. ЗАЩИТА ПРИ ВКЛЮЧЕНИИ: проверяем конфликты дублирования монет на одном аккаунте
             else:
                 my_acc = str(sdata.get("api_key_name") or "API_KEY").strip()
-                my_symbols = [str(s).upper().strip() for s in sdata.get("symbols", [])]
+                my_symbols = self._extract_strategy_symbols(sdata)
                 conflicts = []
                 for other_id, other_data in active_strats.items():
                     if other_id == strat_id or not isinstance(other_data, dict):
@@ -1941,7 +1982,7 @@ class TelegramReceiver:
                         continue
                     other_acc = str(other_data.get("api_key_name") or "API_KEY").strip()
                     if other_acc == my_acc:
-                        other_symbols = [str(s).upper().strip() for s in other_data.get("symbols", [])]
+                        other_symbols = self._extract_strategy_symbols(other_data)
                         intersect = set(my_symbols) & set(other_symbols)
                         if intersect:
                             conflicts.append((other_id, list(intersect)))
@@ -2491,9 +2532,9 @@ class TelegramReceiver:
                 active_strats = self.bot_core.strategy_registry.get_active_strategies()
                 if sid in active_strats:
                     symbols = list(active_strats[sid].symbols)
-            else:
+            if not symbols:
                 app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
-                symbols = list(app_data.get("active_strategies", {}).get(sid, {}).get("symbols", []))
+                symbols = self._extract_strategy_symbols(app_data.get("active_strategies", {}).get(sid, {}))
 
             symbols_str = ", ".join(sorted(symbols)) if symbols else "Нет монет"
             try:
@@ -2576,6 +2617,9 @@ class TelegramReceiver:
                     active_strats = self.bot_core.strategy_registry.get_active_strategies()
                     if selected_dome in active_strats:
                         symbols = list(active_strats[selected_dome].symbols)
+                if not symbols:
+                    app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+                    symbols = self._extract_strategy_symbols(app_data.get("active_strategies", {}).get(selected_dome, {}))
                 symbols_str = ", ".join(sorted(symbols)) if symbols else symbol
 
                 await message.answer(
@@ -2637,12 +2681,13 @@ class TelegramReceiver:
             meta = self._get_strategy_meta(strat_id)
             sg_str = "✅ Включен" if meta.get("super_grid") else "❌ Выключен"
 
+            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
             text = (
                 f"⚙️ <b>Параметры запуска {symbol}:</b>\n"
                 f"📌 Стратегия: <b>{meta.get('name', strat_id)}</b>\n"
                 f"ID: <code>{strat_id}</code>\n"
                 f"📝 <i>{meta.get('description', '')[:120]}...</i>\n\n"
-                f"• <b>Размер ордера (Invest):</b> <b>{meta.get('invest_size', 400.0)} USDT</b>\n"
+                f"• <b>Размер ордера (Invest):</b> <b>{def_inv} USDT</b> (дефолтный из конфига)\n"
                 f"• <b>Кредитное плечо (Leverage):</b> <b>{meta.get('leverage', 20)}x</b>\n"
                 f"• <b>Режим Take Profit:</b> <b>{meta.get('tp_summary')}</b>\n"
                 f"• <b>Super Grid (волатильность):</b> <b>{sg_str}</b>\n\n"
@@ -2666,11 +2711,12 @@ class TelegramReceiver:
 
             await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
             meta = self._get_strategy_meta(strat_id)
+            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
 
             await callback.message.edit_text(
                 f"✅ <b>Монета {symbol} успешно добавлена и запущена!</b>\n\n"
                 f"🎯 Стратегия: <b>{meta.get('name', strat_id)}</b> (<code>{strat_id}</code>)\n"
-                f"💰 Депозит: <b>{meta.get('invest_size', 400.0)} USDT</b> (Плечо: {meta.get('leverage', 20)}x)\n"
+                f"💰 Депозит: <b>{def_inv} USDT</b> (дефолтный из конфига, Плечо: {meta.get('leverage', 20)}x)\n"
                 f"🎯 Тейк-профит: <b>{meta.get('tp_summary')}</b>\n"
                 f"📁 Конфиг: <code>CFG/runtime/{strat_id}/{symbol.lower()}.json</code>",
                 parse_mode="HTML"
@@ -2701,11 +2747,12 @@ class TelegramReceiver:
             strat_id = "_".join(parts[3:])
             await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
             meta = self._get_strategy_meta(strat_id)
+            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
             
             await callback.message.answer(
                 f"⚙️ <b>Кастомная настройка {symbol} под {strat_id}</b>\n\n"
-                f"Текущий базовый Invest Size: <b>{meta.get('invest_size', 400.0)} USDT</b>.\n"
-                f"Введите желаемый размер инвестиции (USDT) для каждого направления (или отправьте 0 чтобы оставить {meta.get('invest_size', 400.0)}):",
+                f"Текущий дефолтный Invest Size (из конфига): <b>{def_inv} USDT</b>.\n"
+                f"Введите желаемый размер инвестиции (USDT) для каждого направления (или отправьте 0 чтобы оставить {def_inv}):",
                 reply_markup=self._get_back_keyboard(),
                 parse_mode="HTML"
             )
@@ -2722,7 +2769,8 @@ class TelegramReceiver:
                 symbol = data.get("pending_symbol")
                 strat_id = data.get("pending_strat")
                 meta = self._get_strategy_meta(strat_id)
-                invest = val if val > 0 else meta.get("invest_size", 400.0)
+                def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+                invest = val if val > 0 else def_inv
                 await state.update_data(custom_invest=invest)
 
                 await message.answer(
@@ -2748,9 +2796,29 @@ class TelegramReceiver:
                 strat_id = data.get("pending_strat")
                 meta = self._get_strategy_meta(strat_id)
                 lev = val if 1 <= val <= 50 else meta.get("leverage", 20)
-                invest = data.get("custom_invest", meta.get("invest_size", 400.0))
+                def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+                invest = data.get("custom_invest", def_inv)
 
                 await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
+
+                # Персистим кастомный invest_size в app.json
+                app_json_path = DATA_DIR / "app.json"
+                app_data = Utils.read_json_file(app_json_path) or {}
+                strat_entry = app_data.get("active_strategies", {}).get(strat_id, {})
+                for side in ("LONG", "SHORT"):
+                    if isinstance(strat_entry.get(side), dict):
+                        if not isinstance(strat_entry[side].get("invest_size"), dict):
+                            strat_entry[side]["invest_size"] = {}
+                        strat_entry[side]["invest_size"][symbol] = float(invest)
+                Utils.write_json_file(app_json_path, app_data)
+
+                # Перезагружаем StrategyRegistry для синхронизации
+                if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    self.bot_core.strategy_registry.reload(app_data.get("active_strategies", {}))
+                    strat_cfg = self.bot_core.strategy_registry.get_strategy(strat_id)
+                    if strat_cfg:
+                        from CORE.strategy_applicator import StrategyApplicator
+                        StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
 
                 rt_path = self.template_manager.get_runtime_path(symbol, strat_id)
                 if rt_path.exists():
@@ -2825,9 +2893,9 @@ class TelegramReceiver:
                 active_strats = self.bot_core.strategy_registry.get_active_strategies()
                 if selected_dome in active_strats:
                     symbols = list(active_strats[selected_dome].symbols)
-            else:
+            if not symbols:
                 app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
-                symbols = list(app_data.get("active_strategies", {}).get(selected_dome, {}).get("symbols", []))
+                symbols = self._extract_strategy_symbols(app_data.get("active_strategies", {}).get(selected_dome, {}))
 
             if not symbols:
                 await message.answer(
@@ -2862,11 +2930,17 @@ class TelegramReceiver:
             dome_id = parts[1]
             sym = parts[2]
             try:
-                await self.bot_core.delete_symbol(sym)
-                await callback.message.edit_text(
-                    f"✅ Монета <b>{sym}</b> успешно удалена из купола <code>{dome_id}</code>.",
-                    parse_mode="HTML"
-                )
+                res = await self.bot_core.delete_symbol(sym)
+                if res:
+                    await callback.message.edit_text(
+                        f"✅ Монета <b>{sym}</b> успешно удалена из купола <code>{dome_id}</code>.",
+                        parse_mode="HTML"
+                    )
+                else:
+                    await callback.message.edit_text(
+                        f"⚠️ Монета <b>{sym}</b> уже отсутствует в куполе <code>{dome_id}</code>.",
+                        parse_mode="HTML"
+                    )
             except Exception as e:
                 logger.error(f"Error deleting symbol {sym}: {e}")
                 await callback.message.edit_text(f"❌ Ошибка удаления монеты {sym}: {e}")

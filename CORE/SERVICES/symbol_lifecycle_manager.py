@@ -58,29 +58,61 @@ class SymbolLifecycleManager:
 
         if target_strat:
             if target_strat in active_strategies:
-                active_strategies[target_strat].setdefault("symbols", []).append(symbol)
-                active_strategies[target_strat]["enabled"] = True
+                strat_dict = active_strategies[target_strat]
+                if "symbols" in strat_dict and isinstance(strat_dict["symbols"], list):
+                    if symbol not in strat_dict["symbols"]:
+                        strat_dict["symbols"].append(symbol)
+                strat_def_size = (
+                    (strat_dict.get("LONG") or {}).get("default_invest_size")
+                    or (strat_dict.get("SHORT") or {}).get("default_invest_size")
+                    or strat_dict.get("default_invest_size")
+                    or strat_dict.get("invest_size")
+                    or 400.0
+                )
+                if isinstance(strat_def_size, dict):
+                    strat_def_size = 400.0
+                strat_def_size = float(strat_def_size)
+
+                for s_side in ("LONG", "SHORT"):
+                    if isinstance(strat_dict.get(s_side), dict):
+                        side_def = strat_dict[s_side].get("default_invest_size", strat_def_size)
+                        if side_def is None or isinstance(side_def, dict):
+                            side_def = strat_def_size
+                        side_def = float(side_def)
+                        if isinstance(strat_dict[s_side].get("invest_size"), dict):
+                            strat_dict[s_side]["invest_size"].setdefault(symbol, side_def)
+                        else:
+                            strat_dict[s_side]["invest_size"] = {symbol: side_def}
+                    else:
+                        strat_dict[s_side] = {
+                            "default_invest_size": strat_def_size,
+                            "invest_size": {symbol: strat_def_size}
+                        }
+                strat_dict["enabled"] = True
             else:
                 if getattr(self.bot, "strategy_registry", None):
                     u_meta = self.bot.strategy_registry.universes_db.get(target_strat, {})
                 else:
                     univ_path = DATA_DIR / "universes" / f"{target_strat}.json"
                     u_meta = Utils.read_json_file(univ_path) if univ_path.exists() else {}
+                def_inv = float(
+                    (u_meta.get("LONG") or {}).get("default_invest_size")
+                    or (u_meta.get("SHORT") or {}).get("default_invest_size")
+                    or u_meta.get("default_invest_size")
+                    or 400.0
+                )
                 active_strategies[target_strat] = {
                     "enabled": True,
-                    "symbols": [symbol],
-                    "super_grid": {
-                        "enabled": bool((u_meta.get("overrides", {}).get("super_grid") or u_meta.get("super_grid") or {}).get("enabled", False)),
-                        "timeframe": "1w",
-                        "window": 12,
-                        "multiplier": 2.0,
-                        "min_volatility_pct": 15.0,
-                        "max_volatility_pct": None,
-                        "update_interval_hours": 24,
+                    "LONG": {
+                        "default_invest_size": def_inv,
+                        "invest_size": {symbol: def_inv}
                     },
-                    "analytics": {
-                        "start_balance_usdt": u_meta.get("start_balance_usdt", 449.0)
+                    "SHORT": {
+                        "default_invest_size": def_inv,
+                        "invest_size": {symbol: def_inv}
                     },
+                    "super_grid": False,
+                    "start_balance_usdt": float(u_meta.get("start_balance_usdt", 450.0)),
                     "notifications": {
                         "enabled": True,
                         "negative_threshold": -20.0,
@@ -172,21 +204,40 @@ class SymbolLifecycleManager:
         Возвращает True, если символ успешно удален, False если символа не было в обойме.
         """
         symbol = symbol.upper()
-        if symbol not in self.bot.symbols:
-            return False
-
-        logger.info(f"[{symbol}] Dynamically deleting symbol from BotCore...")
-
-        # 1. Remove from app.json
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) if app_json_path.exists() else {}
         active_strategies = app_data.get("active_strategies", {})
+
+        in_bot = symbol in self.bot.symbols
+        in_app = False
+        if active_strategies:
+            for sdata in active_strategies.values():
+                if isinstance(sdata, dict):
+                    if symbol in sdata.get("symbols", []):
+                        in_app = True
+                        break
+                    for s_side in ("LONG", "SHORT"):
+                        if isinstance(sdata.get(s_side), dict) and symbol in (sdata[s_side].get("invest_size") or {}):
+                            in_app = True
+                            break
+        if not in_bot and not in_app and symbol not in app_data.get("symbols", []):
+            logger.warning(f"[{symbol}] Symbol not found in BotCore or app.json for deletion.")
+            return False
+
+        logger.info(f"[{symbol}] Dynamically deleting symbol from BotCore and app.json...")
+
+        # 1. Remove from app.json
         changed = False
         if active_strategies:
             for sdata in active_strategies.values():
-                if "symbols" in sdata and symbol in sdata["symbols"]:
+                if "symbols" in sdata and isinstance(sdata["symbols"], list) and symbol in sdata["symbols"]:
                     sdata["symbols"].remove(symbol)
                     changed = True
+                for s_side in ("LONG", "SHORT"):
+                    if isinstance(sdata.get(s_side), dict) and isinstance(sdata[s_side].get("invest_size"), dict):
+                        if symbol in sdata[s_side]["invest_size"]:
+                            del sdata[s_side]["invest_size"][symbol]
+                            changed = True
         if symbol in app_data.get("symbols", []):
             app_data["symbols"].remove(symbol)
             changed = True
@@ -204,7 +255,8 @@ class SymbolLifecycleManager:
                 logger.error(f"Error reloading StrategyRegistry on delete: {e}")
 
         # 2. Update bot lists and FSM states
-        self.bot.symbols.remove(symbol)
+        if symbol in self.bot.symbols:
+            self.bot.symbols.remove(symbol)
 
         if symbol in self.bot.fsm_states:
             del self.bot.fsm_states[symbol]
@@ -223,22 +275,18 @@ class SymbolLifecycleManager:
         if getattr(self.bot, "pos_monitor", None) and self.bot.pos_monitor.target_symbols is not None:
             self.bot.pos_monitor.target_symbols = [s for s in self.bot.pos_monitor.target_symbols if s != symbol]
 
-        # 4. Delete the runtime JSON cache
-        if getattr(self.bot, "runtime_manager", None):
-            runtime_path = self.bot.runtime_manager.get_runtime_path(symbol)
-            if runtime_path.exists():
-                try:
-                    runtime_path.unlink()
-                    logger.info(f"[{symbol}] Deleted runtime cache file: {runtime_path}.")
-                except Exception as e:
-                    logger.error(f"[{symbol}] Failed to delete runtime cache: {e}")
-
-            root_path = self.bot.runtime_manager.runtime_dir / f"{symbol.lower()}.json"
-            if root_path.exists():
-                try:
-                    root_path.unlink()
-                except Exception:
-                    pass
+        # 4. Delete runtime JSON/PKL cache files across all strategy folders
+        sym_lower = symbol.lower()
+        if getattr(self.bot, "runtime_manager", None) and hasattr(self.bot.runtime_manager, "runtime_dir"):
+            r_dir = self.bot.runtime_manager.runtime_dir
+            if r_dir.exists():
+                for f in r_dir.glob(f"**/{sym_lower}.*"):
+                    if f.is_file():
+                        try:
+                            f.unlink()
+                            logger.info(f"[{symbol}] Deleted runtime cache file: {f}.")
+                        except Exception as e:
+                            logger.error(f"[{symbol}] Failed to delete runtime file {f}: {e}")
 
         # 5. Restart price stream
         if hasattr(self.bot, "_restart_price_stream"):

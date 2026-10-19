@@ -33,15 +33,7 @@ class CoinSelectionService:
 
     def __init__(self, bot_core: Optional[Any] = None, radar_stats_dir: Optional[Path] = None):
         self.bot_core = bot_core
-        if radar_stats_dir is not None:
-            self.radar_stats_dir = radar_stats_dir
-        else:
-            # Прямое чтение пути к радару из app.json
-            radar_rel = _CFG["paths"]["radar_dir"]
-            p = Path(radar_rel)
-            if not p.is_absolute():
-                p = (BASE_DIR / p).resolve()
-            self.radar_stats_dir = p / "ANALYTICS" / "STATS"
+        self.radar_stats_dir: Optional[Path] = radar_stats_dir
 
     @staticmethod
     def _load_app_cfg() -> Dict[str, Any]:

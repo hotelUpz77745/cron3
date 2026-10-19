@@ -431,15 +431,9 @@ class AutoCloser:
             # Исполнение выбранного режима автозакрытия
             if mode != "off":
                 r_cfg = pos_cfg.get("trailing_ratchet") or {}
-                if hasattr(strat_cfg, "invest_size_long") and hasattr(strat_cfg, "invest_size_short"):
-                    eff_invest_ref = (float(strat_cfg.invest_size_long) + float(strat_cfg.invest_size_short)) / 2.0
-                elif isinstance(getattr(strat_cfg, "invest_size", None), dict):
-                    raw_inv = strat_cfg.invest_size
-                    eff_invest_ref = (float(raw_inv["LONG"]) + float(raw_inv["SHORT"])) / 2.0
-                else:
-                    eff_invest_ref = float(getattr(strat_cfg, "invest_size", 600.0))
-                quant_ref = float(pos_cfg.get("quant_reference_size", 600.0))
-                scale_factor = max(0.1, eff_invest_ref / quant_ref) if quant_ref > 0 else 1.0
+                scale_money = float(pos_cfg.get("scale_money", getattr(strat_cfg, "auto_closing_cfg", {}).get("scale_money", 1.0) if hasattr(strat_cfg, "auto_closing_cfg") else 1.0))
+                if scale_money <= 0:
+                    scale_money = 1.0
 
                 r_state = self._trailing_ratchet_state.setdefault(strat_id, {})
                 if r_state.get("iteration_index") != iter_idx:
@@ -464,7 +458,7 @@ class AutoCloser:
                         state=r_state,
                         toxicity_score=t_score,
                         delta_recovery=d_rec,
-                        scale_factor=scale_factor,
+                        scale_money=scale_money,
                     )
                     if should_close and trig_floor is not None:
                         strat_triggered = True
@@ -485,7 +479,8 @@ class AutoCloser:
                 elif mode in ("classic", "iter_net_classic", "trailing_ratchet"):
                     import copy
                     r_cfg_scaled = copy.deepcopy(r_cfg)
-                    r_cfg_scaled["scale_factor"] = scale_factor
+                    r_cfg_scaled["scale_money"] = scale_money
+                    r_cfg_scaled["scale_factor"] = scale_money
                     should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
                         iter_net=iter_net, iter_age_hours=iter_age_h, ratchet_cfg=r_cfg_scaled, state=r_state
                     )
@@ -506,7 +501,7 @@ class AutoCloser:
                 elif mode in ("fixed", "fixed_net"):
                     fixed_cfg = pos_cfg.get("fixed_net", {})
                     is_fixed, trig_target, f_info = ToxicityEngine.evaluate_fixed_net(
-                        iter_net=iter_net, fixed_cfg=fixed_cfg, scale_factor=scale_factor
+                        iter_net=iter_net, fixed_cfg=fixed_cfg, scale_money=scale_money
                     )
                     if is_fixed and trig_target is not None:
                         strat_triggered = True
@@ -525,6 +520,8 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 else:
                     th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(strat_analytics, pos_cfg)
+                    if th_pos is not None:
+                        th_pos = round(th_pos * scale_money, 2)
                     if th_pos is not None and iter_net >= th_pos:
                         strat_triggered = True
                         logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} Net ({iter_net:+.2f}) >= {th_pos} (Global: {strat_net:+.2f}). Auto-closing dome!")
@@ -542,6 +539,8 @@ class AutoCloser:
             th_neg = neg_cfg.get("threshold") if neg_enabled else None
             if th_neg == 0 or th_neg == 0.0:
                 th_neg = None
+            if th_neg is not None:
+                th_neg = round(float(th_neg) * scale_money, 2)
 
             if not strat_triggered and th_neg is not None and iter_net <= th_neg:
                 strat_triggered = True
@@ -552,7 +551,7 @@ class AutoCloser:
                     symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
                     iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
                     new_iter_start_net=0.0, close_type="NEGATIVE STOP",
-                    detail_info=f"Просадка цикла: <b>{iter_net:.2f} USDT</b> (Порог стопа: <b>{th_neg} USDT</b>)."
+                    detail_info=f"Просадка цикла: <b>{iter_net:.2f} USDT</b> (Порог стопа: <b>{th_neg:.2f} USDT</b>)."
                 )
 
             if strat_triggered:
@@ -668,6 +667,10 @@ class AutoCloser:
             float_ratio_g = abs(cur_floating_g) / (abs(cur_floating_g) + max(0.0, realized_g) + 1.0)
             delta_rec_g = ToxicityEngine.calculate_delta_recovery(cur_floating_g, max_dd_g)
 
+            scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+            if scale_money_g <= 0:
+                scale_money_g = 1.0
+
             t_cfg_g = pos_cfg.get("toxicity_adaptive", {})
             weights_g = t_cfg_g.get("score_weights") or pos_cfg.get("toxicity_weights")
             t_score_g = ToxicityEngine.calculate_toxicity_score(margin_load_g, depth_ratio_g, float_ratio_g, delta_rec_g, weights_g)
@@ -679,7 +682,7 @@ class AutoCloser:
                 state=r_state_g,
                 toxicity_score=t_score_g,
                 delta_recovery=delta_rec_g,
-                scale_factor=1.0,
+                scale_money=scale_money_g,
             )
             if should_close and trig_floor is not None:
                 self._is_closing = True
@@ -693,8 +696,15 @@ class AutoCloser:
                 )
 
         elif mode_g in ("iter_net_classic", "trailing_ratchet"):
+            scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+            if scale_money_g <= 0:
+                scale_money_g = 1.0
+            import copy
+            r_cfg_g_scaled = copy.deepcopy(r_cfg_g or {})
+            r_cfg_g_scaled["scale_money"] = scale_money_g
+            r_cfg_g_scaled["scale_factor"] = scale_money_g
             should_close, trig_floor, r_info, is_stagnation = self.evaluate_trailing_ratchet(
-                iter_net=iter_net_g, iter_age_hours=iter_age_h_g, ratchet_cfg=r_cfg_g or {}, state=r_state_g
+                iter_net=iter_net_g, iter_age_hours=iter_age_h_g, ratchet_cfg=r_cfg_g_scaled, state=r_state_g
             )
             if should_close and trig_floor is not None:
                 self._is_closing = True
@@ -708,9 +718,12 @@ class AutoCloser:
                 )
 
         elif mode_g == "fixed_net":
+            scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+            if scale_money_g <= 0:
+                scale_money_g = 1.0
             fixed_cfg_g = pos_cfg.get("fixed_net", {})
             is_fixed, trig_target, f_info = ToxicityEngine.evaluate_fixed_net(
-                iter_net=iter_net_g, fixed_cfg=fixed_cfg_g, scale_factor=1.0
+                iter_net=iter_net_g, fixed_cfg=fixed_cfg_g, scale_money=scale_money_g
             )
             if is_fixed and trig_target is not None:
                 self._is_closing = True
@@ -724,7 +737,12 @@ class AutoCloser:
                 )
 
         else:
+            scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+            if scale_money_g <= 0:
+                scale_money_g = 1.0
             th_pos, is_stagnation, stag_info, ref_top = self.evaluate_stagnation_target(analytics_data, pos_cfg)
+            if th_pos is not None:
+                th_pos = round(th_pos * scale_money_g, 2)
             if th_pos is not None and iter_net_g >= th_pos:
                 self._is_closing = True
                 triggered = True
@@ -738,9 +756,14 @@ class AutoCloser:
                 )
 
         # Check Negative Portfolio
+        scale_money_neg = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+        if scale_money_neg <= 0:
+            scale_money_neg = 1.0
         th_neg = neg_cfg.get("threshold")
         if th_neg == 0 or th_neg == 0.0:
             th_neg = None
+        if th_neg is not None:
+            th_neg = round(float(th_neg) * scale_money_neg, 2)
 
         if not triggered and th_neg is not None and iter_net_g <= th_neg:
             self._is_closing = True
@@ -751,7 +774,7 @@ class AutoCloser:
                 name="ПОРТФЕЛЯ", symbols_str="", iter_idx=iter_idx_g, next_iter_idx=next_iter_idx_g,
                 iter_net=iter_net_g, strat_net=net_usdt, new_iter_start_net=new_iter_start_net_g,
                 close_type="NEGATIVE STOP",
-                detail_info=f"Просадка цикла: <b>{iter_net_g:.2f} USDT</b> (Порог стопа: <b>{th_neg} USDT</b>)."
+                detail_info=f"Просадка цикла: <b>{iter_net_g:.2f} USDT</b> (Порог стопа: <b>{th_neg:.2f} USDT</b>)."
             )
 
         if triggered:
