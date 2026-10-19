@@ -26,7 +26,7 @@ class WatchdogTGAdapter:
         self.token = token or os.getenv("TG_TOKEN") or ""
         self._chat_ids = chat_ids
         self._heartbeat_msg_id = None
-        self._heartbeat_msg_time = 0
+        self._heartbeat_msg_time: float = 0.0
         self._session: Optional[aiohttp.ClientSession] = None
         self._session_lock: Optional[asyncio.Lock] = None
 
@@ -183,7 +183,7 @@ class LoopWatchdog:
         # Для трекинга
         self._last_report_time = time.time()
         self._last_report_ticks = 0
-        self._last_heartbeat_time = 0
+        self._last_heartbeat_time: float = 0.0
 
     @property
     def logger(self):

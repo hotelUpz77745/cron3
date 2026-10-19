@@ -316,7 +316,7 @@ class Utils:
             return {}
 
     @staticmethod
-    def write_json_file(file_path: str, data: dict):
+    def write_json_file(file_path: Union[str, Path], data: dict):
         try:
             p = Path(file_path)
             p.parent.mkdir(parents=True, exist_ok=True)

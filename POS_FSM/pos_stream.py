@@ -133,11 +133,13 @@ class PositionStream:
         max_attempts = 3
         for attempt in range(1, max_attempts + 1):
             try:
+                if not self.session or not self.ws_url:
+                    return False
                 self.websocket = await self.session.ws_connect(
                     self.ws_url,
                     autoping=True,
                     max_msg_size=0,
-                    timeout=20.0,
+                    timeout=aiohttp.ClientWSTimeout(ws_close=20.0),
                     headers={
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                         "Origin": "https://fapi.binance.com",
@@ -181,6 +183,8 @@ class PositionStream:
 
     async def _handle_messages(self):
         while not self._external_stop and not self.stop_flag():
+            if not self.websocket or self.websocket.closed:
+                break
             try:
                 msg = await asyncio.wait_for(
                     self.websocket.receive(),

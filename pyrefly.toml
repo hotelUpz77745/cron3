@@ -1,0 +1,9 @@
+project-includes = ["."]
+project-excludes = [
+    "tests",
+    "scratch",
+    ".venv",
+    "venv",
+]
+search-path = ["."]
+infer-with-first-use = false
