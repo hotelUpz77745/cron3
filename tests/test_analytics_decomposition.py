@@ -15,6 +15,7 @@ import csv
 import json
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -52,14 +53,13 @@ class TestAnalyticsDecomposition(unittest.TestCase):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_circuit_breaker(self):
-        # Initial state should not be banned
         with patch("ANALYTICS.circuit_breaker._ban_until_ms", 0):
             self.assertFalse(is_banned())
-            update_ban_from_error("APIError(code=-1003): Way too many requests; IP banned until 1792433999000.")
+            future_ts = int(time.time() * 1000) + 60_000
+            update_ban_from_error(f"APIError(code=-1003): Way too many requests; IP banned until {future_ts}.")
             self.assertTrue(is_banned())
 
     def test_ledger_recorder_dynamic_paths(self):
-        # Verify dynamic property resolution from manager
         recorder = self.mgr.ledger_recorder
         self.assertEqual(recorder.ledgers_dir, self.ledgers_dir)
         self.assertEqual(recorder.txt_file, self.ledgers_dir / "trades_ledger.txt")
@@ -123,16 +123,48 @@ class TestAnalyticsDecomposition(unittest.TestCase):
         self.assertEqual(data["cur_balance_usdt"], 500.0)
 
     def test_facade_delegation(self):
-        # Check that facade methods exist and point to sub-engines
         self.assertIsInstance(self.mgr.ledger_recorder, LedgerRecorder)
         self.assertIsInstance(self.mgr.drawdown_tracker, DrawdownTracker)
         self.assertIsInstance(self.mgr.strategy_stats, StrategyStatsEngine)
         self.assertIsInstance(self.mgr.reconstruction, ReconstructionService)
 
-        # Check iteration cache methods
         self.mgr._save_iteration_cache("s1", {"iteration_index": 3})
         cache = self.mgr._get_iteration_cache("s1")
         self.assertEqual(cache.get("iteration_index"), 3)
+
+    def test_update_strategies_stats(self):
+        mock_registry = MagicMock()
+        mock_strat = MagicMock()
+        mock_strat.name = "Test Universe"
+        mock_strat.symbols = ["BTCUSDT"]
+        mock_strat.analytics_cfg = {"start_balance_usdt": 200.0}
+        mock_strat.start_balance_usdt = 200.0
+        mock_registry.active_strategies = {"test_strat": mock_strat}
+        mock_registry.get_active_strategies.return_value = {"test_strat": mock_strat}
+        mock_registry.get_all_active_symbols.return_value = ["BTCUSDT"]
+
+        self.mgr.strategy_registry = mock_registry
+        data = {
+            "start_balance_usdt": 500.0,
+            "per_coin": {
+                "BTCUSDT": {
+                    "current_drawdown": -1.5,
+                    "realized_pnl_usdt": 10.0,
+                    "realized_pnl_net_usdt": 9.5,
+                    "commission_usdt": -0.5,
+                    "funding_usdt": 0.0,
+                    "total_trades": 2,
+                    "winning_trades": 2,
+                }
+            }
+        }
+        self.mgr._update_strategies_stats(data)
+
+        strat_file = self.stats_dir / "analytics_test_strat.json"
+        self.assertTrue(strat_file.exists())
+        strat_json = json.loads(strat_file.read_text(encoding="utf-8"))
+        self.assertEqual(strat_json["universe_id"], "test_strat")
+        self.assertEqual(strat_json["unrealized_pnl_usdt"], -1.5)
 
 
 class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
@@ -196,6 +228,91 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
         success = await self.mgr._update_drawdowns(mock_client, data)
         self.assertTrue(success)
         self.assertEqual(data.get("unrealized_pnl_usdt"), -5.0)
+
+    async def test_get_bnb_usdt_rate(self):
+        # Cached
+        rate = await self.mgr._get_bnb_usdt_rate(None, cached_prices={"BNBUSDT": (600.5, 600.6)})
+        self.assertEqual(rate, 600.5)
+
+        # Fallback to 0.0 when no network/cache
+        mock_client = MagicMock()
+        rate_none = await self.mgr._get_bnb_usdt_rate(mock_client, cached_prices=None)
+        self.assertIsInstance(rate_none, float)
+
+    async def test_sync_lightweight_unrealized_pnl(self):
+        mock_client = MagicMock()
+        mock_client.fetch_account_info = AsyncMock(return_value=MagicMock(
+            success=True,
+            data={
+                "totalMarginBalance": "500.0",
+                "positions": []
+            }
+        ))
+        res = await self.mgr.sync_lightweight_unrealized_pnl(mock_client)
+        self.assertTrue(res)
+
+    async def test_realtime_tracker_lifecycle(self):
+        mock_client = MagicMock()
+        self.mgr.start_realtime_tracker(mock_client)
+        self.assertTrue(self.mgr.drawdown_tracker._is_tracker_running)
+        self.assertIsNotNone(self.mgr.drawdown_tracker._tracker_task)
+
+        self.mgr.stop_realtime_tracker()
+        self.assertFalse(self.mgr.drawdown_tracker._is_tracker_running)
+        self.assertIsNone(self.mgr.drawdown_tracker._tracker_task)
+
+    async def test_deep_sync_analytics(self):
+        now_ts = int(time.time() * 1000)
+        mock_client = MagicMock()
+        mock_client._request = AsyncMock(side_effect=[
+            MagicMock(
+                success=True,
+                data=[
+                    {
+                        "symbol": "BTCUSDT",
+                        "incomeType": "REALIZED_PNL",
+                        "income": "25.0",
+                        "asset": "USDT",
+                        "time": now_ts - 500,
+                        "info": "trade_1",
+                    },
+                    {
+                        "symbol": "BTCUSDT",
+                        "incomeType": "COMMISSION",
+                        "income": "-0.5",
+                        "asset": "USDT",
+                        "time": now_ts - 500,
+                        "info": "trade_1",
+                    }
+                ]
+            ),
+            MagicMock(success=True, data=[])
+        ])
+        mock_client.fetch_account_info = AsyncMock(return_value=MagicMock(
+            success=True,
+            data={
+                "totalMarginBalance": "524.5",
+                "positions": []
+            }
+        ))
+
+        # Seed initial first_trade_ts close to now
+        data = self.mgr._read_data()
+        data["first_trade_ts"] = now_ts - 1000
+        self.mgr._write_data(data)
+
+        # Write a dummy entry to txt_file so BTCUSDT is tracked
+        with open(self.mgr.txt_file, "a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f, delimiter=';')
+            w.writerow(["BTCUSDT", "LONG", "2026-10-19 21:00:00", "2026-10-19 21:00:01", "25.0", "525.0"])
+
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await self.mgr.deep_sync_analytics(mock_client, cached_prices={"BNBUSDT": 600.0})
+
+        # Check results
+        synced_data = self.mgr._read_data()
+        self.assertEqual(synced_data.get("realized_pnl_usdt"), 25.0)
+        self.assertEqual(synced_data.get("total_commission_usdt"), -0.5)
 
     async def test_reset_analytics_state(self):
         await self.mgr.reset_analytics_state()
