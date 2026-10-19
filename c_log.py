@@ -34,8 +34,8 @@ class UnlockedRotatingFileHandler(RotatingFileHandler):
         super().__init__(filename, mode, maxBytes, backupCount, encoding, delay=True)
         self.stream = None  # Принудительно отключаем постоянный стрим
 
-    def _open(self):
-        return None
+    def _open(self):  # type: ignore[override]
+        return None  # type: ignore[return-value]
 
     def emit(self, record):
         try:
@@ -262,7 +262,7 @@ class UnifiedLogger:
             if inspect.iscoroutinefunction(func)
             else sync_wrapper
         )
-        wrapper._is_wrapped = True
+        setattr(wrapper, "_is_wrapped", True)
         return wrapper
 
     def _log_exception(self, func, ex, args, kwargs, context: Optional[Any] = None):

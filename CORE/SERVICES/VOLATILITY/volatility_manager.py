@@ -172,6 +172,7 @@ class VolatilityManager:
                         rt_data = json.load(f)
                     
                 modified = False
+                ratio: float = 1.0
                 for side in ["LONG", "SHORT"]:
                     if side in rt_data and "grid" in rt_data[side]:
                         grid = rt_data[side]["grid"]

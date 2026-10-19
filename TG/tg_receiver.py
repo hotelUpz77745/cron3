@@ -77,7 +77,6 @@ class TelegramReceiver:
         self._lock = asyncio.Lock()
         
         # Регистрация простого middleware для проверки прав доступа
-        @self.dp.message.outer_middleware()
         async def check_user_message(handler, event: Message, data: dict):
             if TG_ALLOWED_USERS and event.from_user.id not in TG_ALLOWED_USERS:
                 logger.warning(f"Unauthorized access attempt by {event.from_user.id}")
@@ -88,13 +87,14 @@ class TelegramReceiver:
                 return
                 
             return await handler(event, data)
+        self.dp.message.outer_middleware.register(check_user_message)
 
-        @self.dp.callback_query.outer_middleware()
         async def check_user_callback(handler, event: CallbackQuery, data: dict):
             if TG_ALLOWED_USERS and event.from_user.id not in TG_ALLOWED_USERS:
                 logger.warning(f"Unauthorized access attempt by {event.from_user.id}")
                 return
             return await handler(event, data)
+        self.dp.callback_query.outer_middleware.register(check_user_callback)
 
         setup_universe_handlers(self.dp, self.bot_core)
         self._register_handlers()

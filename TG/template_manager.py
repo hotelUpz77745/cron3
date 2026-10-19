@@ -142,6 +142,7 @@ class TemplateManager:
                                 final_data[side][key] = {}
                             for subkey in user_data[side][key]:
                                 if subkey in final_data[side][key] and isinstance(final_data[side][key][subkey], dict):
+                                    old_super_indent = None
                                     if key == "grid":
                                         old_indent = final_data[side][key][subkey].get("indent")
                                         new_indent = user_data[side][key][subkey].get("indent")

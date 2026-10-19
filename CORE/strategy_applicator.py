@@ -120,8 +120,8 @@ class StrategyApplicator:
                     side_data["invest_size"] = None
                 else:
                     raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
-            elif isinstance(getattr(strategy, "invest_size", None), dict) and side in strategy.invest_size:
-                val = strategy.invest_size[side]
+            elif isinstance(getattr(strategy, "invest_size", None), dict) and side in getattr(strategy, "invest_size"):
+                val = getattr(strategy, "invest_size")[side]
                 if isinstance(val, dict):
                     if symbol:
                         if symbol.upper() not in val:

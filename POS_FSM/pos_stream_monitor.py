@@ -6,12 +6,11 @@
 # Role: Базовый учетный модуль: только фиксирует total_volume и avg_entry_price, и на их основе переключает флаги in_position и is_finished. На этом его роль заканчивается.
 # ==============================================================================
 
-from typing import Dict, Tuple
+from typing import Dict, Any, Tuple, Optional, List
 from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
 import time
 import asyncio
-from typing import Dict, Any, Tuple
 from c_utils import Utils
 
 logger = UnifiedLogger("FSM_Monitor")
@@ -82,7 +81,7 @@ class BinanceWsInterpreter:
 IS_SHOW_SIGNAL = False
 
 class PositionMonitor:
-    def __init__(self, states_cache: Dict[str, Dict[str, PositionState]], target_symbols: list = None):
+    def __init__(self, states_cache: Dict[str, Dict[str, PositionState]], target_symbols: Optional[list] = None):
         """
         states_cache - ссылка на кеш состояний из торгового ядра (например, BotCore.fsm_states).
         Формат: {symbol: {"LONG": PositionState, "SHORT": PositionState}}

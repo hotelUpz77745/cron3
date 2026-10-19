@@ -59,6 +59,9 @@ class AgentMarketSelector:
             logger.error(f"Не удалось получить 24h тикеры от Binance: {e}")
             return []
 
+        if not tickers:
+            return []
+
         candidates = []
         for t in tickers:
             symbol = t.get("symbol", "")

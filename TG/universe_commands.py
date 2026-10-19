@@ -107,7 +107,7 @@ def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[s
         text_lines.append(
             f"{mark}<code>{uid}</code>: <b>Net: {net_str}</b> | Sizing: <code>{sz_mode}</code> | Mode: <code>{cl_mode}</code>"
         )
-        btn_label = f"⚙️ {uid[:18]} {badge}"
+        btn_label = f"⚙️ {str(uid)[:18]} {badge}"
         row_buttons.append(InlineKeyboardButton(text=btn_label, callback_data=f"use_univ:{uid}:{page}"))
         if len(row_buttons) == 2:
             buttons.append(row_buttons)

@@ -683,7 +683,7 @@ class AnalyticsManager:
         except Exception as e:
             logger.error(f"[record_cross_recycling] Error recording cross recycling: {e}")
 
-    async def deep_sync_analytics(self, client, cached_prices: dict = None):
+    async def deep_sync_analytics(self, client, cached_prices: Optional[dict] = None):
         """
         Level 2 (Absolute) Analytics Reconstruction.
         Fetches true income from Binance since first_trade_ts and perfectly reconstructs 
@@ -1502,7 +1502,7 @@ class AnalyticsManager:
                 }
 
             strat_symbols = list(strat_cfg.symbols)
-            existing_per_coin = strat_data.get("per_coin", {})
+            existing_per_coin: dict = strat_data.get("per_coin") if isinstance(strat_data.get("per_coin"), dict) else {}
             # Собираем список всех символов стратегии: текущие активные + исторические с историей торговли
             all_strat_symbols = set(strat_symbols)
             for sym, c_info in existing_per_coin.items():
@@ -1512,7 +1512,7 @@ class AnalyticsManager:
                     all_strat_symbols.add(sym)
 
             # Сохраняем персистентный список historical_symbols стратегии
-            saved_hist = strat_data.get("historical_symbols", [])
+            saved_hist: list = strat_data.get("historical_symbols") if isinstance(strat_data.get("historical_symbols"), list) else []
             for sym in saved_hist:
                 if sym in per_coin_global or sym in existing_per_coin:
                     all_strat_symbols.add(sym)
@@ -1831,7 +1831,7 @@ class AnalyticsManager:
         except Exception as e:
             logger.error(f"[ANALYTICS] Error saving leaderboard portfolio: {e}")
 
-    async def _get_bnb_usdt_rate(self, client, cached_prices: dict = None) -> float:
+    async def _get_bnb_usdt_rate(self, client, cached_prices: Optional[dict] = None) -> float:
         if cached_prices:
             val = cached_prices.get("BNBUSDT") or cached_prices.get("bnbusdt")
             if val is not None:

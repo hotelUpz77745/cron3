@@ -4,13 +4,13 @@
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792419692967,
+        "iteration_start_ts": 1792431949110,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792419692967,
+        "iteration_peak_ts": 1792431949110,
         "historical_peak_net_profit_usdt": 0.0,
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-19 14:21:32 UTC"
+        "updated_at": "2026-10-19 17:45:49 UTC"
     },
     "u17_stephensonE__classic": {
         "iteration_index": 1,
@@ -24,5 +24,18 @@
         "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
         "updated_at": "2026-10-19 14:33:01 UTC"
+    },
+    "u17_stephensonE__trailing_ratchet": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1792421167827,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1792421167827,
+        "historical_peak_net_profit_usdt": 0.0,
+        "historical_peak_net_ts": null,
+        "historical_max_drawdown_usdt": 0.0,
+        "updated_at": "2026-10-19 17:46:00 UTC"
     }
 }

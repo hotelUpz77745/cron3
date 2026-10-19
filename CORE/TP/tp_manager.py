@@ -11,19 +11,17 @@ from CORE._utils import TradeMath
 
 from CORE._utils import RiskCalculatingUtils
 from c_utils import Utils
+from typing import Optional
 import asyncio
 import time
-try:
-    from CORE.STRATEGY.momentum_engine import MomentumEngine
-except ImportError:
-    from CORE.UNIVERSE.momentum_engine import MomentumEngine
+from CORE.STRATEGY.momentum_engine import MomentumEngine
 logger = UnifiedLogger("TakeProfitManager")
 
 class TakeProfitManager:
     def __init__(self, runtime_manager):
         self.runtime_manager = runtime_manager
 
-    async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, opposite_state=None, volume: float = None):
+    async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, opposite_state=None, volume: Optional[float] = None):
         """Расчет и постановка лимитного TP ордера с ретраями и предварительной отменой."""
         
         # Предварительно отменяем все лимитки для этой стороны

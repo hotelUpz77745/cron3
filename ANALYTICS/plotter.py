@@ -269,7 +269,7 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         times.append(now)
         net_profits.append(round(net_profit_final, 4))
 
-        balances = [round(start_balance + np_val, 4) for np_val in net_profits]
+    balances = [round(start_balance + np_val, 4) for np_val in net_profits]
 
     # Построение графика в темной теме
     plt.style.use("dark_background")

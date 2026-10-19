@@ -21,7 +21,6 @@ from TG.tg_receiver import TelegramReceiver
 import urllib.request
 import json
 from consts import TG_TOKEN, TG_ALLOWED_USERS
-import logging
 from c_log import UnifiedLogger
 from CORE.bot import BotCore
 os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"

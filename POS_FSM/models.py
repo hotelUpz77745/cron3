@@ -7,6 +7,7 @@
 # ==============================================================================
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 @dataclass
 class PositionState:
@@ -18,9 +19,9 @@ class PositionState:
     pre_avg_price: float = 0.0           # Цена входа ДО усреднения (для синхронизации)
     initial_entry_price: float = 0.0     # начальная точка входа позиции
     open_time: int = 0                   # время открытия первой сделки (unix ms)
-    next_avg_price: float = None         # кешированная цена ближайшего усреднения
-    tp_price: float = None               # целевая цена основного тейк-профита
-    fallback_price: float = None    # кешированная цена страховочного маркета
+    next_avg_price: Optional[float] = None         # кешированная цена ближайшего усреднения
+    tp_price: Optional[float] = None               # целевая цена основного тейк-профита
+    fallback_price: Optional[float] = None    # кешированная цена страховочного маркета
     eff_invest: float = 0.0              # эффективный invest_size стороны с учетом макро-тренда 4h
     
     in_position: bool = False
@@ -41,6 +42,7 @@ class PositionState:
     last_grace_period: float = 0.0
     last_closed_volume: float = 0.0
     last_closed_avg_price: float = 0.0
+    last_closed_timestamp: float = 0.0
     cur_step: int = 0
     fees: float = 0.0
     peel_filled: bool = False

@@ -225,12 +225,16 @@ class AutoCloser:
             mode = "time" if ("<" in first_key and any(c.isdigit() and int(c) >= 3 for c in first_key) and "%" not in first_key) else "velocity"
 
         eval_val = velocity if mode == "velocity" else peak_age_h
-        active_targets = [cls.parse_card_target(rt)[0] for rt in card.values() if cls.parse_card_target(rt)[1] and cls.parse_card_target(rt)[0] is not None]
+        active_targets: list[float] = [
+            float(t) for rt in card.values()
+            for t, is_en in [cls.parse_card_target(rt)]
+            if is_en and t is not None
+        ]
         if not active_targets:
-            return base_th, False, "", (base_th or 0.0)
+            return base_th, False, "", float(base_th or 0.0)
 
         top_target = max(active_targets)
-        reference_top = base_th if base_th is not None else top_target
+        reference_top = float(base_th if base_th is not None else top_target)
 
         for rule, raw_target in card.items():
             target_float, is_en = cls.parse_card_target(raw_target)
@@ -240,7 +244,7 @@ class AutoCloser:
             is_matched, calc_threshold = cls.match_rule_adaptive(rule, eval_val, ref_target)
             if is_matched:
                 cls._last_matched_rule = rule
-                effective_target = max(target_float, min_floor)
+                effective_target = float(max(target_float, min_floor))
                 unit = "$/h" if mode == "velocity" else "h"
                 safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
                 info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' ({calc_threshold:.2f}{unit}) -> target {effective_target} USDT]" if "%" in rule else f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' -> target {effective_target} USDT]"

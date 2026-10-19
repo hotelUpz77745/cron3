@@ -272,7 +272,7 @@ class TradeCycleManager:
                 if hasattr(self.bot, "get_atr_for_symbol"):
                     cur_atr = self.bot.get_atr_for_symbol(symbol)
                     if cur_atr is not None and isinstance(cur_atr, (int, float)):
-                        is_active = bool(cur_atr <= max_atr)
+                        is_active = cur_atr <= max_atr
                         if target_lvl in getattr(state, "grid", {}):
                             state.grid[target_lvl]["enabled"] = is_active
                         if target_lvl in side_cfg.get("grid", {}):
