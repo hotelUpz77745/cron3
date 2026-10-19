@@ -15,7 +15,10 @@ import pytz
 import aiohttp
 
 from consts import TG_ALLOWED_USERS
-import logging
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("Watchdog")
+
 class WatchdogTGAdapter:
     """
     Адаптер для отправки алертов и heartbeat в Telegram.
@@ -189,7 +192,7 @@ class LoopWatchdog:
     def logger(self):
         if hasattr(self.bot, "logger") and self.bot.logger:
             return self.bot.logger
-        return logging.getLogger("Watchdog")
+        return logger
 
     @property
     def server_name(self) -> str:

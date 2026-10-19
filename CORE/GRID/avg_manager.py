@@ -234,16 +234,17 @@ class AverageManager:
         side_c = {}
         if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
             side_c = runtime_manager.caches[symbol].get(side, {})
-        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
         eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
-        if cfg_invest > 0:
-            invest_size = cfg_invest
-            if state and getattr(state, "eff_invest", 0.0) != cfg_invest:
-                state.eff_invest = cfg_invest
-        elif eff_invest > 0:
+        cfg_eff = float(side_c.get("eff_invest", 0.0) or 0.0)
+        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
+        if eff_invest > 0:
             invest_size = eff_invest
+        elif cfg_eff > 0:
+            invest_size = cfg_eff
+        elif cfg_invest > 0:
+            invest_size = cfg_invest
         else:
-            invest_size = float(side_c.get("eff_invest", 0.0) or 100.0)
+            invest_size = 100.0
 
         if invest_size > 0:
             cand_idx = int(candidate_level) if candidate_level.isdigit() else 999
@@ -294,16 +295,17 @@ class AverageManager:
         side_c = {}
         if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
             side_c = runtime_manager.caches[symbol].get(side, {})
-        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
         eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
-        if cfg_invest > 0:
-            invest_size = cfg_invest
-            if state and getattr(state, "eff_invest", 0.0) != cfg_invest:
-                state.eff_invest = cfg_invest
-        elif eff_invest > 0:
+        cfg_eff = float(side_c.get("eff_invest", 0.0) or 0.0)
+        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
+        if eff_invest > 0:
             invest_size = eff_invest
+        elif cfg_eff > 0:
+            invest_size = cfg_eff
+        elif cfg_invest > 0:
+            invest_size = cfg_invest
         else:
-            invest_size = float(side_c.get("eff_invest", 0.0) or 100.0)
+            invest_size = 100.0
         volume_pct = float(level_data.get("volume") or 0.0)
         
         # 1. ОТМЕНА СТАРЫХ ЛИМИТНЫХ ОРДЕРОВ (ВКЛЮЧАЯ ТЕЙК ПРОФИТ) ДО УСРЕДНЕНИЯ

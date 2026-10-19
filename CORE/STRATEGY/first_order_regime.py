@@ -6,12 +6,12 @@
 # Role: Доменная сущность паспорта стратегии: «Правило кулака Сильной руки» (First Order Weight Regime)
 # ==============================================================================
 
-import logging
 from typing import Any, Dict, Optional, Tuple
 
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from c_log import UnifiedLogger
 
-logger = logging.getLogger("FirstOrderRegime")
+logger = UnifiedLogger("FirstOrderRegime")
 
 
 class FirstOrderRegimeManager:

@@ -8,11 +8,12 @@ ROLE: Инкапсуляция броуновского шума (Brownian Noise
 """
 
 import asyncio
-import logging
 import secrets
 from typing import Any, Dict, Optional, Tuple
 
-logger = logging.getLogger("BrownianNoise")
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("BrownianNoise")
 
 
 class BrownianNoiseController:

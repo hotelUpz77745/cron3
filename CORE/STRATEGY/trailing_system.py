@@ -3,11 +3,12 @@
 # ROLE: Generic and Reusable Base Trailing System (TP, Grid & Ratchet)
 # ============================================================
 
-import logging
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger("BaseTrailingSystem")
+from c_log import UnifiedLogger
+
+logger = UnifiedLogger("BaseTrailingSystem")
 
 
 class BaseTrailingSystem:

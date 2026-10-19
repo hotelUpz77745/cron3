@@ -16,12 +16,8 @@ from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 from API.BINANCE.price_stream import BinanceHotPriceStream, HotPriceTick
 from API.BINANCE.public import BinancePublic
 
-try:
-    from c_log import UnifiedLogger
-    logger = UnifiedLogger("StreamerIPC")
-except Exception:
-    import logging
-    logger = logging.getLogger("StreamerIPC")
+from c_log import UnifiedLogger
+logger = UnifiedLogger("StreamerIPC")
 
 IPC_DIR = Path(__file__).resolve().parent
 LOCK_FILE = IPC_DIR / "streamer.lock"
@@ -38,7 +34,7 @@ def _is_pid_alive(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except (OSError, ProcessLookupError):
+    except OSError:
         return False
 
 
@@ -50,7 +46,7 @@ def _is_port_in_use(host: str, port: int) -> bool:
         try:
             s.connect((host, port))
             return True
-        except (OSError, ConnectionRefusedError):
+        except OSError:
             return False
 
 

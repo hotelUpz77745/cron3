@@ -15,13 +15,10 @@ from CORE.strategy_registry import StrategyConfig, StrategyRegistry
 
 logger = UnifiedLogger("StrategyApplicator")
 
-MIN_TAKE_PROFIT_PCT = 0.50  # Лабораторное правило 11: TP строго не менее 0.50%
-
 
 class StrategyApplicator:
     """
-    Применяет параметры и переопределения стратегии к базовой конфигурации _base.json,
-    соблюдает инвариант минимального тейк-профита >= 0.50%
+    Применяет параметры и переопределения стратегии к базовой конфигурации _base.json
     и генерирует изолированные JSON рантайм-конфигурации в CFG/runtime/<strategy_id>/<symbol>.json.
     """
 
@@ -215,14 +212,14 @@ class StrategyApplicator:
             if tp_map_override:
                 side_data["tp_map"] = copy.deepcopy(tp_map_override)
 
-            # Принудительное ограничение TP снизу: строго не менее 0.50% (или min_tp_indent стратегии)
-            min_tp_floor = MIN_TAKE_PROFIT_PCT
+            # Применение ограничения TP снизу: только если min_tp_indent явно задан в стратегии
+            min_tp_floor = None
             if getattr(strategy, "min_tp_indent", None) is not None:
-                min_tp_floor = max(MIN_TAKE_PROFIT_PCT, float(strategy.min_tp_indent))
-            elif hasattr(strategy, "raw_meta") and strategy.raw_meta.get("min_tp_indent") is not None:
-                min_tp_floor = max(MIN_TAKE_PROFIT_PCT, float(strategy.raw_meta["min_tp_indent"]))
+                min_tp_floor = float(strategy.min_tp_indent)
+            elif hasattr(strategy, "raw_meta") and strategy.raw_meta and strategy.raw_meta.get("min_tp_indent") is not None:
+                min_tp_floor = float(strategy.raw_meta["min_tp_indent"])
 
-            if "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
+            if min_tp_floor is not None and "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
                 for tp_step in side_data["tp_map"].values():
                     if "indent" in tp_step and tp_step["indent"] is not None:
                         tp_step["indent"] = max(min_tp_floor, float(tp_step["indent"]))

@@ -16,21 +16,7 @@ except ImportError:
     TIME_SLACK_SEC = 1.0
     API_RATE_LIMIT_SEC = 0.05
     API_CONCURRENT_RATE_LIMIT_SEC = 0.02
-try:
-    from c_log import UnifiedLogger
-except ImportError:
-    import logging
-    class UnifiedLogger:
-        def __init__(self, name):
-            self._logger = logging.getLogger(name)
-        def info(self, msg, *args, **kwargs):
-            self._logger.info(msg, *args, **kwargs)
-        def error(self, msg, *args, **kwargs):
-            self._logger.error(msg, *args, **kwargs)
-        def warning(self, msg, *args, **kwargs):
-            self._logger.warning(msg, *args, **kwargs)
-        def debug(self, msg, *args, **kwargs):
-            self._logger.debug(msg, *args, **kwargs)
+from c_log import UnifiedLogger
 from API.BINANCE.validator import OrderValidator, APIResponse
 
 logger = UnifiedLogger("BINANCE_API_PAPER")
