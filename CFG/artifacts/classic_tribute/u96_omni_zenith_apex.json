@@ -2,7 +2,7 @@
   "name": "🥉 U96: Omni Zenith Apex + Knife Blocker 1",
   "description": "Симбиоз Омен-9 (Omni Zenith Apex) с порогом ножа от Медного Змея (Knife Blocker >= 1): жесткая мгновенная блокировка входа на первом же импульсе противоположной стороны, защита от ножей.",
   "leverage": 20,
-  "timeframe": "5m",
+  "signal_heartbeat_tfr": "5m",
   "tp_purpose": "self",
   "super_grid": {
     "enabled": false,

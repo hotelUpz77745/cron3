@@ -40,6 +40,11 @@
             "auto_closing_mode": "trailing_ratchet",
             "leverage": 20,
             "margin_type": "CROSSED",
+            "notifications": {
+                "enabled": true,
+                "negative_threshold": -50.0,
+                "positive_threshold": 100.0
+            },
             "LONG": {
                 "enabled": true,
                 "default_invest_size": 400.0,

@@ -27,6 +27,12 @@
     "signal_heartbeat_tfr": "5m",
     "super_grid": false,
     "_super_grid_desc": "Флаг адаптивной динамической сетки волатильности: true (включено), false (выключено).",
+    "notifications": {
+        "enabled": true,
+        "negative_threshold": -50.0,
+        "positive_threshold": 100.0
+    },
+    "_notifications_desc": "Купол уведомлений: пороги отрицательного (negative_threshold) и положительного (positive_threshold) PnL в USDT для отправки алертов в Telegram.",
     "base_order_type": "LIMIT",
     "fallback_order_type": "MARKET",
     "first_order_weight_regime": {

@@ -257,14 +257,15 @@ class StrategyConfig:
             self.active_settings.get("notifications")
             or raw_meta.get("notifications")
             or self.overrides.get("notifications")
+            or _CFG.get("notifications")
         )
         if notif_cfg and isinstance(notif_cfg, dict):
             self.notifications_cfg: Dict[str, Any] = copy.deepcopy(notif_cfg)
         else:
             self.notifications_cfg: Dict[str, Any] = {
                 "enabled": True,
-                "negative_threshold": -20.0,
-                "positive_threshold": 20.0
+                "negative_threshold": -50.0,
+                "positive_threshold": 100.0
             }
 
         # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из raw_meta / _base.json с переопределениями стратегии
