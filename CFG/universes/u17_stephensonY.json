@@ -327,7 +327,6 @@
         }
     },
     "SHORT": {
-        "enabled": true,
         "_inheritance_base_side": false,
         "grid": {
             "0": {

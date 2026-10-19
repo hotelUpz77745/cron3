@@ -191,12 +191,23 @@ class StrategyApplicator:
             elif "tp_purpose" in strategy.overrides:
                 side_data["tp_purpose"] = strategy.overrides["tp_purpose"]
 
-            if "margin_type" in side_dict:
-                side_data["margin_type"] = side_dict["margin_type"]
+            # 7. Применение tp_purpose и margin_type (margin_type строго с уровня клиента-оператора)
+            act_mt = (
+                getattr(strategy, "active_settings", {}).get("margin_type")
+                or getattr(strategy, "active_settings", {}).get(side, {}).get("margin_type")
+            )
+            if act_mt:
+                side_data["margin_type"] = str(act_mt).upper()
+            elif hasattr(strategy, "margin_type") and strategy.margin_type:
+                side_data["margin_type"] = str(strategy.margin_type).upper()
+            elif "margin_type" in side_dict:
+                side_data["margin_type"] = str(side_dict["margin_type"]).upper()
             elif hasattr(strategy, "raw_meta") and "margin_type" in strategy.raw_meta:
-                side_data["margin_type"] = strategy.raw_meta["margin_type"]
-            elif "margin_type" in strategy.overrides:
-                side_data["margin_type"] = strategy.overrides["margin_type"]
+                side_data["margin_type"] = str(strategy.raw_meta["margin_type"]).upper()
+            elif "margin_type" in getattr(strategy, "overrides", {}):
+                side_data["margin_type"] = str(strategy.overrides["margin_type"]).upper()
+            else:
+                side_data["margin_type"] = "CROSSED"
 
             # 8. Применение avg_free_volume_behavior и auto_closing
             if "avg_free_volume_behavior" in side_dict:

@@ -24,8 +24,7 @@
         "off"
     ],
     "_auto_closing_mode_desc": "Режимы автоклозера (задаются исключительно в active_strategies на уровне клиента): 'trailing_ratchet' (Fibo trailing ratchet), 'toxic' (динамический токсичный выход), 'fixed' (тейк в USDT), 'off' (выключен).",
-    "heartbeat_tfr": "1m",
-    "signal_heartbeat_tfr": "15m",
+    "signal_heartbeat_tfr": "5m",
     "super_grid": false,
     "_super_grid_desc": "Флаг адаптивной динамической сетки волатильности: true (включено), false (выключено).",
     "base_order_type": "LIMIT",
@@ -58,6 +57,14 @@
             "envelope_multiplier": 1.5,
             "slope_threshold_pct": 0.05,
             "_desc": "Ядерная регрессия Надарая-Ватсона по свечам (1h) с ядром Rational Quadratic (h=8.0, W=30). Оценивает мгновенный наклон Y_hat(t) и положение цены относительно волатильного MAE-конверта: наклон > +0.05% -> Bullish (12/7), наклон < -0.05% -> Bearish (7/12), плоский наклон/конверт -> Neutral (9/9)."
+        },
+        "ema_trend": {
+            "timeframe": "4h",
+            "sma_fast": 10,
+            "sma_slow": 30,
+            "confirmation_candles": 5,
+            "require_rising": true,
+            "trend_positive": true
         }
     },
     "smart_grace": {
@@ -204,8 +211,6 @@
         }
     },
     "LONG": {
-        "margin_type": "CROSSED",
-        "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "grid": {
             "0": {
                 "role": "L0: Grid Step 0",
@@ -358,8 +363,6 @@
         }
     },
     "SHORT": {
-        "margin_type": "CROSSED",
-        "_comment_margin_type": "Valid values: CROSSED | ISOLATED",
         "grid": {
             "0": {
                 "role": "L0: Grid Step 0",

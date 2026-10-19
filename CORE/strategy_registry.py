@@ -172,6 +172,12 @@ class StrategyConfig:
         else:
             self.leverage = int(final_lev)
 
+        # Margin type resolution (active_settings -> raw_meta -> "CROSSED")
+        act_mt = self.active_settings.get("margin_type")
+        raw_mt = raw_meta.get("margin_type", "CROSSED")
+        self.margin_type: str = str(act_mt if act_mt is not None else raw_mt).upper()
+        self.overrides["margin_type"] = self.margin_type
+
         for side_k in ("LONG", "SHORT"):
             if side_k in self.active_settings and isinstance(self.active_settings[side_k], dict):
                 self.overrides[side_k].update(self.active_settings[side_k])
