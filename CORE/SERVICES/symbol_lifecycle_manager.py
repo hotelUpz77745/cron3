@@ -129,7 +129,7 @@ class SymbolLifecycleManager:
                         "negative_threshold": -20.0,
                         "positive_threshold": 20.0,
                     },
-                    "auto_closing": {
+                    "trailing_ratchet": {
                         "negative": {"threshold": None, "threshold_increment": None},
                         "positive": {"threshold": 100, "threshold_increment": 100},
                     },
@@ -223,17 +223,20 @@ class SymbolLifecycleManager:
         in_app = False
         if active_strategies:
             for sdata in active_strategies.values():
-                if isinstance(sdata, dict):
-                    if symbol in sdata.get("symbols", []):
-                        in_app = True
-                        break
-                    for s_side in ("LONG", "SHORT"):
-                        if isinstance(sdata.get(s_side), dict) and symbol in (sdata[s_side].get("invest_size") or {}):
-                            in_app = True
-                            break
+                if isinstance(sdata, dict) and symbol in Utils.extract_strategy_symbols(sdata):
+                    in_app = True
+                    break
         if not in_bot and not in_app and symbol not in app_data.get("symbols", []):
             logger.warning(f"[{symbol}] Symbol not found in BotCore or app.json for deletion.")
             return False
+
+        # Safeguard: Do not allow deletion if an active position is open in BotCore
+        if hasattr(self.bot, "fsm_states") and symbol in self.bot.fsm_states:
+            fsm_dict = self.bot.fsm_states[symbol]
+            if isinstance(fsm_dict, dict):
+                for side, fsm in fsm_dict.items():
+                    if getattr(fsm, "in_position", False) or abs(float(getattr(fsm, "total_volume", 0.0))) > 1e-6:
+                        raise RuntimeError(f"Cannot delete '{symbol}': active {side} position is currently open. Close position first.")
 
         logger.info(f"[{symbol}] Dynamically deleting symbol from BotCore and app.json...")
 

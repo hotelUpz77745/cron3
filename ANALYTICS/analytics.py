@@ -720,7 +720,7 @@ class AnalyticsManager:
                             active_symbols = []
                             for sdata in active_strategies.values():
                                 if sdata.get("enabled", False):
-                                    active_symbols.extend(sdata.get("symbols", []))
+                                    active_symbols.extend(Utils.extract_strategy_symbols(sdata))
                         else:
                             syms = app_cfg.get("symbols", [])
                             active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
@@ -1086,7 +1086,7 @@ class AnalyticsManager:
                             config_symbols = []
                             for _sdata in _active_strats.values():
                                 if _sdata.get("enabled", False):
-                                    config_symbols.extend(_sdata.get("symbols", []))
+                                    config_symbols.extend(Utils.extract_strategy_symbols(_sdata))
                         else:
                             _syms = _app.get("symbols", {})
                             config_symbols = list(_syms.keys()) if isinstance(_syms, dict) else list(_syms)

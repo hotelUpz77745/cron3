@@ -417,4 +417,35 @@ class Utils:
         
         return state.avg_entry_price != state.pre_avg_price
 
+    @staticmethod
+    def extract_strategy_symbols(sdata: Any) -> List[str]:
+        """
+        Универсально и надежно извлекает список торговых символов стратегии:
+        1. Если у объекта есть атрибут .symbols -> возвращает его.
+        2. Если в словаре есть ключ 'symbols' (список) -> возвращает его.
+        3. Если монеты заданы как ключи словарей LONG.invest_size / SHORT.invest_size / invest_size -> извлекает их.
+        """
+        if hasattr(sdata, "symbols"):
+            syms = getattr(sdata, "symbols")
+            if isinstance(syms, (list, tuple, set)):
+                return [str(s).upper().strip() for s in syms if s and str(s).strip()]
+        if not isinstance(sdata, dict):
+            return []
+        if "symbols" in sdata and isinstance(sdata["symbols"], list) and sdata["symbols"]:
+            return [str(s).upper().strip() for s in sdata["symbols"] if s and str(s).strip()]
+        res: List[str] = []
+        for side in ("LONG", "SHORT"):
+            side_inv = (sdata.get(side) or {}).get("invest_size")
+            if isinstance(side_inv, dict):
+                for k in side_inv.keys():
+                    k_clean = str(k).upper().strip()
+                    if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                        res.append(k_clean)
+        if not res and isinstance(sdata.get("invest_size"), dict):
+            for k in sdata["invest_size"].keys():
+                k_clean = str(k).upper().strip()
+                if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                    res.append(k_clean)
+        return res
+
 # можно и нужно добавить метод расчета количества контракта для ордеров с соблюдением округлителей.

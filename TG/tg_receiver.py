@@ -176,26 +176,7 @@ class TelegramReceiver:
     @staticmethod
     def _extract_strategy_symbols(sdata) -> List[str]:
         """Универсально извлекает монеты стратегии: из .symbols, ключа 'symbols' или ключей per-symbol invest_size."""
-        if hasattr(sdata, "symbols"):
-            return [str(s).upper().strip() for s in sdata.symbols]
-        if not isinstance(sdata, dict):
-            return []
-        if "symbols" in sdata and isinstance(sdata["symbols"], list) and sdata["symbols"]:
-            return [str(s).upper().strip() for s in sdata["symbols"]]
-        res = []
-        for side in ("LONG", "SHORT"):
-            side_inv = (sdata.get(side) or {}).get("invest_size")
-            if isinstance(side_inv, dict):
-                for k in side_inv.keys():
-                    k_clean = str(k).upper().strip()
-                    if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
-                        res.append(k_clean)
-        if not res and isinstance(sdata.get("invest_size"), dict):
-            for k in sdata["invest_size"].keys():
-                k_clean = str(k).upper().strip()
-                if k_clean and k_clean not in res and k_clean not in ("DEFAULT", "LONG", "SHORT"):
-                    res.append(k_clean)
-        return res
+        return Utils.extract_strategy_symbols(sdata)
 
     def _get_strategy_meta(self, strat_id: str) -> dict:
         if hasattr(self, "bot_core") and getattr(self.bot_core, "strategy_registry", None):
@@ -2502,7 +2483,7 @@ class TelegramReceiver:
                 meta = self._get_strategy_meta(sid)
                 s_name = meta.get("name", sid)
                 clean_title = s_name.encode("ascii", "ignore").decode("ascii").strip() or sid
-                symbols = getattr(scfg, "symbols", []) if hasattr(scfg, "symbols") else (scfg.get("symbols", []) if isinstance(scfg, dict) else [])
+                symbols = self._extract_strategy_symbols(scfg)
                 cnt = len(symbols)
                 btn_text = f"🪐 {clean_title[:28]} ({cnt} мон.)"
                 buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_coins_dome:{sid}")])
@@ -2999,7 +2980,7 @@ class TelegramReceiver:
                 sid = strat_registry.get_strategy_id_for_symbol(coin) if strat_registry else None
                 if not sid:
                     for s_name, s_cfg in active_strategies.items():
-                        if coin in s_cfg.get("symbols", []):
+                        if coin in self._extract_strategy_symbols(s_cfg):
                             sid = s_name
                             break
                 sid = sid or "u0_base_classic"
@@ -3686,7 +3667,7 @@ class TelegramReceiver:
                 [InlineKeyboardButton(text="🔙 Назад к списку", callback_data="sg_back_list")]
             ])
 
-            syms = ", ".join(strat_cfg.get("symbols", [])) or "нет"
+            syms = ", ".join(self._extract_strategy_symbols(strat_cfg)) or "нет"
             text = (
                 f"🔧 <b>Super Grid для стратегии:</b>\n"
                 f"ID: <code>{sid}</code>\n\n"

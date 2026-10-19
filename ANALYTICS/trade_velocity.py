@@ -195,13 +195,13 @@ class TradeVelocityEngine:
                 if self.universe_id != "default" and self.universe_id in act_strats:
                     scfg = act_strats[self.universe_id]
                     if isinstance(scfg, dict) and scfg.get("enabled", True):
-                        configured_symbols = list(scfg.get("symbols", []))
+                        configured_symbols = list(Utils.extract_strategy_symbols(scfg))
                 else:
                     for sid, scfg in act_strats.items():
                         if sid.startswith("_") or not isinstance(scfg, dict):
                             continue
                         if scfg.get("enabled") is True:
-                            configured_symbols.extend(scfg.get("symbols", []))
+                            configured_symbols.extend(Utils.extract_strategy_symbols(scfg))
             except Exception:
                 pass
 

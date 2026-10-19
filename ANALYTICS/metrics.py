@@ -182,12 +182,20 @@ class AnalyticsMathEngine:
                 
             # Calculate actual historical Max Position Size from runtime config
             runtime_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+            if not runtime_path.exists():
+                rt_candidates = list((DATA_DIR / "runtime").glob(f"**/{sym.lower()}.json"))
+                if rt_candidates:
+                    runtime_path = rt_candidates[0]
             current_margin = 0.0
             if runtime_path.exists():
                 try:
                     rt_data = json.loads(runtime_path.read_text(encoding="utf-8"))
-                    long_size = float(rt_data.get("LONG", {}).get("invest_size", 0.0)) if rt_data.get("LONG", {}).get("enable") else 0.0
-                    short_size = float(rt_data.get("SHORT", {}).get("invest_size", 0.0)) if rt_data.get("SHORT", {}).get("enable") else 0.0
+                    long_cfg = rt_data.get("LONG", {})
+                    short_cfg = rt_data.get("SHORT", {})
+                    long_en = long_cfg.get("enabled", True) is not False and long_cfg.get("enable", True) is not False
+                    short_en = short_cfg.get("enabled", True) is not False and short_cfg.get("enable", True) is not False
+                    long_size = float(long_cfg.get("invest_size", 0.0)) if long_en else 0.0
+                    short_size = float(short_cfg.get("invest_size", 0.0)) if short_en else 0.0
                     current_margin = (long_size + short_size) / 2.0
                 except Exception:
                     pass
