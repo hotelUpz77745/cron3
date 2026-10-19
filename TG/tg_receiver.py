@@ -960,6 +960,7 @@ class TelegramReceiver:
             if target == "all":
                 msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=self._get_main_keyboard())
                 try:
+                    reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
                     active_tfrs = []
                     if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
                         for s in self.bot_core.strategy_registry.active_strategies.values():
@@ -1590,7 +1591,7 @@ class TelegramReceiver:
             parts = callback.data.split(":")
             criterion = parts[1] if len(parts) > 1 else "net"
 
-            _, agg_per_coin, _ = self._get_portfolio_all_analytics_data()
+            agg_summary, agg_per_coin, _ = self._get_portfolio_all_analytics_data()
             if not agg_per_coin:
                 await callback.message.answer("❌ Нет данных о монетах для портфельного рейтинга.")
                 return
@@ -3342,7 +3343,7 @@ class TelegramReceiver:
             is_act = fsm_state.grid.get(str(lvl), {}).get("is_active", False) if fsm_state else False
             warn = "\n\n⚠️ <i>Внимание: Этот уровень уже отработал! Сброс цены не произойдет. Новые настройки применятся только для следующих циклов позиции.</i>" if is_act else ""
             
-            grid_cfg = runtime_cfg.get("grid", {}).get(str(lvl), {})
+            grid_cfg = fsm_state.grid.get(str(lvl), {}) if fsm_state else {}
             cur_vol = grid_cfg.get("volume")
             cur_ind = grid_cfg.get("indent")
             

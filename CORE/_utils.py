@@ -5,7 +5,7 @@
 # Role: Математика для трейдинга (расчет объема, тейк-профитов и прочего)
 # ==============================================================================
 
-from typing import Dict, Any
+from typing import Dict, Any, Union, Optional, List, Tuple
 from c_utils import Utils
 
 import asyncio

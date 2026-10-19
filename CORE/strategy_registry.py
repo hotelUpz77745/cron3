@@ -6,7 +6,7 @@
 import copy
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union, Set, Tuple
 
 from consts import (
     DATA_DIR,
@@ -362,7 +362,7 @@ class StrategyConfig:
         VALID_SIZING_MODES = ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
         if self.sizing_mode not in VALID_SIZING_MODES:
             raise ValueError(
-                f"[StrategyConfig][{universe_id}] Неизвестный sizing_mode '{self.sizing_mode}'! "
+                f"[StrategyConfig][{self.strategy_id}] Неизвестный sizing_mode '{self.sizing_mode}'! "
                 f"Допустимые режимы: {VALID_SIZING_MODES}"
             )
 
