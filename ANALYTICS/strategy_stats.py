@@ -29,10 +29,14 @@ class StrategyStatsEngine:
     def __init__(self, manager):
         self.manager = manager
 
+    @property
+    def cache_dir(self):
+        return getattr(self.manager, "cache_dir", CACHE_DIR)
+
     def get_iteration_cache(self, strat_id: str) -> dict:
         """Retrieves iteration telemetry cache for a specific strategy."""
         try:
-            cache_file = CACHE_DIR / "iteration_state.json"
+            cache_file = self.cache_dir / "iteration_state.json"
             if cache_file.exists():
                 data = json.loads(cache_file.read_text(encoding="utf-8"))
                 return data.get(strat_id, {})
@@ -43,7 +47,7 @@ class StrategyStatsEngine:
     def save_iteration_cache(self, strat_id: str, state: dict) -> None:
         """Saves iteration telemetry state to persistent cache."""
         try:
-            cache_file = CACHE_DIR / "iteration_state.json"
+            cache_file = self.cache_dir / "iteration_state.json"
             data = {}
             if cache_file.exists():
                 try:
@@ -306,9 +310,9 @@ class StrategyStatsEngine:
                     strat_data["peak_net_ts"] = hist_peak_ts
 
             # Telemetry: Peak Age & Net Velocity
-            peak_ts_s = strat_data.get("peak_net_ts", now_ms)
+            peak_ts_s = strat_data.get("peak_net_ts") or now_ms
             strat_data["peak_age_hours"] = round(max(0.0, (now_ms - peak_ts_s) / 3600000.0), 2)
-            first_ts_s = strat_data.get("first_trade_ts", now_ms)
+            first_ts_s = strat_data.get("first_trade_ts") or now_ms
             active_h_s = max(0.1, (now_ms - first_ts_s) / 3600000.0)
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
@@ -532,7 +536,7 @@ class StrategyStatsEngine:
 
         # Синхронизация CACHE/iteration_state.json
         try:
-            c_file = CACHE_DIR / "iteration_state.json"
+            c_file = self.cache_dir / "iteration_state.json"
             c_dict = {}
             if c_file.exists():
                 try:
@@ -585,7 +589,7 @@ class StrategyStatsEngine:
             g_data["iteration_net_velocity"] = 0.0
             Utils.atomic_write_json(g_path, g_data, indent=4)
 
-            c_file = CACHE_DIR / "iteration_state.json"
+            c_file = self.cache_dir / "iteration_state.json"
             c_dict = {}
             if c_file.exists():
                 try:

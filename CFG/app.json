@@ -47,22 +47,26 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 600.0,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "ICNTUSDT": 600.0,
-                    "AVAUSDT": 600.0,
-                    "GTCUSDT": 600.0,
-                    "GWEIUSDT": 600.0
+                    "ICNTUSDT": 400.0,
+                    "AVAUSDT": 400.0,
+                    "GTCUSDT": 400.0,
+                    "GWEIUSDT": 400.0,
+                    "SOLVUSDT": 400,
+                    "SANDUSDT": 400
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 600.0,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "ICNTUSDT": 600.0,
-                    "AVAUSDT": 600.0,
-                    "GTCUSDT": 600.0,
-                    "GWEIUSDT": 600.0
+                    "ICNTUSDT": 400.0,
+                    "AVAUSDT": 400.0,
+                    "GTCUSDT": 400.0,
+                    "GWEIUSDT": 400.0,
+                    "SOLVUSDT": 400,
+                    "SANDUSDT": 400
                 }
             },
             "start_balance_usdt": 459.0

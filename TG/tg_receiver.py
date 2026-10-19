@@ -623,7 +623,7 @@ class TelegramReceiver:
 
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data=f"analytics_ranking:net:{current_uid}:new"),
+                InlineKeyboardButton(text="🏆 Рейтинг монет", callback_data=f"arank:net:{current_uid}:new"),
             ],
             [
                 InlineKeyboardButton(text="🪙 Аналитика по монетам", callback_data=f"analytics_coin_menu:{current_uid}"),
@@ -2050,14 +2050,14 @@ class TelegramReceiver:
             )
             await callback.message.answer(help_str, parse_mode="HTML")
 
-        @self.dp.callback_query(F.data.startswith("analytics_ranking"))
+        @self.dp.callback_query(F.data.startswith("analytics_ranking") | F.data.startswith("arank:"))
         async def process_analytics_ranking(callback: CallbackQuery, state: FSMContext):
             await callback.answer()
-            # analytics_ranking[:criterion[:target_uid]]
+            # arank[:criterion[:target_uid[:switch]]]
             parts = callback.data.split(":")
             criterion = parts[1] if len(parts) > 1 and parts[1] else "net"
             target_uid = parts[2] if len(parts) > 2 and parts[2] else None
-            is_switch = len(parts) > 3 and parts[3] == "switch"
+            is_switch = len(parts) > 3 and parts[3] in ("switch", "s")
             current_uid, univ_name, analytics_path, _ = self._get_universe_analytics(callback.from_user.id, target_uid=target_uid)
             set_user_universe_id(callback.from_user.id, current_uid)
             import html
@@ -2145,9 +2145,9 @@ class TelegramReceiver:
                 # Add inline keyboard to switch criterion
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="Net Profit", callback_data=f"analytics_ranking:net:{current_uid}:switch"),
-                        InlineKeyboardButton(text="Recovery (Тек)", callback_data=f"analytics_ranking:rec:{current_uid}:switch"),
-                        InlineKeyboardButton(text="Abs Recovery", callback_data=f"analytics_ranking:abs_rec:{current_uid}:switch")
+                        InlineKeyboardButton(text="Net Profit", callback_data=f"arank:net:{current_uid}:s"),
+                        InlineKeyboardButton(text="Recovery (Тек)", callback_data=f"arank:rec:{current_uid}:s"),
+                        InlineKeyboardButton(text="Abs Recovery", callback_data=f"arank:abs_rec:{current_uid}:s")
                     ],
                     [
                         InlineKeyboardButton(text="❌ Закрыть рейтинг", callback_data="delete_ranking_msg")
@@ -3826,10 +3826,7 @@ class TelegramReceiver:
                     InlineKeyboardButton(text="⚡ 1. Alpha Selector (Wiggle & NATR)", callback_data="cb_selector_run:alpha_coin_selector")
                 ],
                 [
-                    InlineKeyboardButton(text="📡 2. Скринер Самсонова (Радар)", callback_data="cb_selector_run:samsonov_funnel")
-                ],
-                [
-                    InlineKeyboardButton(text="🔍 3. Volatility Scanner (Сонник)", callback_data="cb_selector_run:volatility_scanner")
+                    InlineKeyboardButton(text="🔍 2. Volatility Scanner (Сонник)", callback_data="cb_selector_run:volatility_scanner")
                 ],
                 [
                     InlineKeyboardButton(text="⚙️ Настройки скринеров", callback_data="cb_screener_settings_menu")
@@ -3847,8 +3844,7 @@ class TelegramReceiver:
                 "🎯 <b>Единый сервис рыночных скринеров</b>\n\n"
                 "Выберите инструмент для сканирования и анализа рынка:\n"
                 "1️⃣ ⚡ <b>Alpha Selector</b> — Institutional Wiggle & NATR ранжирование (поверх пула волатильности).\n"
-                "2️⃣ 📡 <b>Скринер Самсонова</b> — 3-ступенчатая квантовая воронка Полигона Радара.\n"
-                "3️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
+                "2️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
             )
             await message.answer(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
 
@@ -3860,8 +3856,7 @@ class TelegramReceiver:
                 "🎯 <b>Единый сервис рыночных скринеров</b>\n\n"
                 "Выберите инструмент для сканирования и анализа рынка:\n"
                 "1️⃣ ⚡ <b>Alpha Selector</b> — Institutional Wiggle & NATR ранжирование (поверх пула волатильности).\n"
-                "2️⃣ 📡 <b>Скринер Самсонова</b> — 3-ступенчатая квантовая воронка Полигона Радара.\n"
-                "3️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
+                "2️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
             )
             try:
                 await callback.message.edit_text(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
@@ -3874,7 +3869,6 @@ class TelegramReceiver:
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="🔍 Настройки Volatility Scanner", callback_data="cb_edit_screener_cfg:volatility_scanner")],
                 [InlineKeyboardButton(text="⚡ Настройки Alpha Selector", callback_data="cb_edit_screener_cfg:alpha_coin_selector")],
-                [InlineKeyboardButton(text="📡 Настройки Скринера Самсонова", callback_data="cb_edit_screener_cfg:samsonov_funnel")],
                 [InlineKeyboardButton(text="🔙 Назад в меню скринеров", callback_data="cb_screener_main_menu")]
             ])
             text = (
@@ -3901,8 +3895,7 @@ class TelegramReceiver:
 
             names_map = {
                 "volatility_scanner": "Volatility Scanner (Сонник)",
-                "alpha_coin_selector": "Alpha Selector (Wiggle & NATR)",
-                "samsonov_funnel": "Скринер Самсонова (Радар Полигона)"
+                "alpha_coin_selector": "Alpha Selector (Wiggle & NATR)"
             }
             comp_name = names_map.get(target_key, target_key)
 

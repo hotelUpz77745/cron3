@@ -35,5 +35,7 @@
     "BTCUSDT": true,
     "ICNTUSDT": true,
     "AVAUSDT": true,
-    "GWEIUSDT": true
+    "GWEIUSDT": true,
+    "SOLVUSDT": true,
+    "SANDUSDT": true
 }

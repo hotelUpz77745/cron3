@@ -1,65 +1,28 @@
 {
-    "u16_chita__classic": {
-        "iteration_index": 1,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792434728142,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792434728142,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-19 18:32:08 UTC"
-    },
     "u17_stephensonE__trailing_ratchet": {
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
         "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792421167827,
+        "iteration_start_ts": 1792436098073,
         "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792421167827,
-        "historical_peak_net_profit_usdt": 24.5,
-        "historical_peak_net_ts": 1792434565710,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-19 18:35:40 UTC"
-    },
-    "s1": {
-        "iteration_index": 3
-    },
-    "__global__": {
-        "iteration_index": 2,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_ts": 1792434724025,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792434724025,
-        "updated_at": "2026-10-19 18:32:04 UTC"
-    },
-    "strat_test": {
-        "iteration_index": 2,
-        "iteration_start_net_profit_usdt": 0.0,
-        "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792434724494,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792434724494,
+        "iteration_peak_ts": 1792436098073,
         "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": 1792433825213,
+        "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-19 18:32:04 UTC"
+        "updated_at": "2026-10-19 19:25:03 UTC"
     },
-    "test_strat": {
+    "u16_chita__classic": {
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 9.5,
-        "iteration_start_ts": 1792434724584,
-        "iteration_peak_net_profit_usdt": 8.0,
-        "iteration_peak_ts": 1792434724584,
-        "historical_peak_net_profit_usdt": 8.0,
-        "historical_peak_net_ts": 1792434225818,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1792437338810,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1792437338810,
+        "historical_peak_net_profit_usdt": 0.0,
+        "historical_peak_net_ts": null,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-19 18:32:04 UTC"
+        "updated_at": "2026-10-19 19:15:38 UTC"
     }
 }

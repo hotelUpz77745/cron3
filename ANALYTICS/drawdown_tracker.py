@@ -70,6 +70,9 @@ class DrawdownTracker:
 
             if not res.success or not isinstance(res.data, dict):
                 err = getattr(res, "error_msg", "Unknown Error") or ""
+                if "Connector is closed" in err or not getattr(self, "_is_tracker_running", True):
+                    logger.debug(f"[ANALYTICS] fetch_account_info skipped during shutdown: {err}")
+                    return False
                 update_ban_from_error(err)
                 logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}")
                 return False

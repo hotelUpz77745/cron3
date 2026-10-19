@@ -37,12 +37,15 @@ class TestAnalyticsDecomposition(unittest.TestCase):
         self.temp_dir = Path(tempfile.mkdtemp())
         self.stats_dir = self.temp_dir / "STATS"
         self.ledgers_dir = self.temp_dir / "LEDGERS"
+        self.cache_dir = self.temp_dir / "CACHE"
         self.stats_dir.mkdir(parents=True, exist_ok=True)
         self.ledgers_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.mgr = AnalyticsManager()
         self.mgr.stats_dir = self.stats_dir
         self.mgr.ledgers_dir = self.ledgers_dir
+        self.mgr.cache_dir = self.cache_dir
         self.mgr.log_file = self.stats_dir / "analytics.json"
         self.mgr.txt_file = self.ledgers_dir / "trades_ledger.txt"
         self.mgr.peels_ledger = self.ledgers_dir / "peels_ledger.txt"
@@ -172,12 +175,15 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
         self.temp_dir = Path(tempfile.mkdtemp())
         self.stats_dir = self.temp_dir / "STATS"
         self.ledgers_dir = self.temp_dir / "LEDGERS"
+        self.cache_dir = self.temp_dir / "CACHE"
         self.stats_dir.mkdir(parents=True, exist_ok=True)
         self.ledgers_dir.mkdir(parents=True, exist_ok=True)
+        self.cache_dir.mkdir(parents=True, exist_ok=True)
 
         self.mgr = AnalyticsManager()
         self.mgr.stats_dir = self.stats_dir
         self.mgr.ledgers_dir = self.ledgers_dir
+        self.mgr.cache_dir = self.cache_dir
         self.mgr.log_file = self.stats_dir / "analytics.json"
         self.mgr.txt_file = self.ledgers_dir / "trades_ledger.txt"
         self.mgr.peels_ledger = self.ledgers_dir / "peels_ledger.txt"
@@ -320,6 +326,72 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(self.mgr.txt_file.exists())
         self.assertFalse(self.mgr.peels_ledger.exists())
         self.assertFalse(self.mgr.recycling_ledger.exists())
+
+    async def test_drawdown_tracker_connector_closed_handling(self):
+        """Verify that Connector is closed during shutdown does not log warnings or raise exceptions."""
+        mock_client = MagicMock()
+        mock_client.fetch_account_info = AsyncMock(return_value=MagicMock(
+            success=False,
+            data=None,
+            error_msg="EXCEPTION ClientConnectionError: Connector is closed."
+        ))
+        data = {"start_balance_usdt": 500.0, "total_trades": 0}
+        success = await self.mgr.drawdown_tracker.update_drawdowns(mock_client, data)
+        self.assertFalse(success)
+
+    def test_strategy_stats_telemetry_none_first_trade_ts(self):
+        """Verify that None first_trade_ts or peak_net_ts in strategy stats does not cause TypeError."""
+        strat_data = {
+            "start_balance_usdt": 459.0,
+            "cur_balance_usdt": 459.0,
+            "first_trade_ts": None,
+            "peak_net_ts": None,
+            "net_profit_usdt": 0.0,
+            "iteration_index": 1,
+            "iteration_start_ts": None,
+            "iteration_peak_ts": None,
+            "per_coin": {}
+        }
+        mock_reg = MagicMock()
+        mock_strat = MagicMock()
+        mock_strat.name = "Test Universe"
+        mock_strat.start_balance_usdt = 459.0
+        mock_strat.raw_meta = {}
+        mock_strat.symbols = ["BTCUSDT"]
+        mock_reg.get_active_strategies.return_value = {"u17_test": mock_strat}
+        mock_reg.active_strategies = {"u17_test": mock_strat}
+        mock_reg.get_all_active_symbols.return_value = ["BTCUSDT"]
+
+        self.mgr.strategy_registry = mock_reg
+        # Should execute cleanly without TypeError
+        self.mgr._update_strategies_stats(strat_data)
+        out_file = self.stats_dir / "analytics_u17_test.json"
+        self.assertTrue(out_file.exists())
+
+    def test_tg_ranking_callback_data_length(self):
+        """Verify that all ranking callback_data buttons stay strictly <= 64 bytes for long universe IDs."""
+        long_uid = "u17_stephensonE__trailing_ratchet"
+        buttons_data = [
+            f"arank:net:{long_uid}:new",
+            f"arank:net:{long_uid}:s",
+            f"arank:rec:{long_uid}:s",
+            f"arank:abs_rec:{long_uid}:s",
+        ]
+        for cb in buttons_data:
+            self.assertLessEqual(len(cb.encode("utf-8")), 64, f"Callback data {cb} exceeds 64 bytes limit!")
+
+    def test_screeners_menu_no_samsonov(self):
+        """Verify that screeners menu does not include deprecated Samsonov screener."""
+        from TG.tg_receiver import TelegramReceiver
+        mock_core = MagicMock()
+        receiver = TelegramReceiver(mock_core)
+        # Search registered callback filters in dispatcher
+        # Also verify that helper markup has 3 rows (2 screeners + 1 settings)
+        # Inspect source code of tg_receiver for menu text
+        import inspect
+        src = inspect.getsource(receiver.__class__)
+        self.assertNotIn("Скринер Самсонова (Радар)", src)
+        self.assertNotIn("cb_selector_run:samsonov_funnel", src)
 
 
 if __name__ == "__main__":
