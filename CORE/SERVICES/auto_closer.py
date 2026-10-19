@@ -382,24 +382,27 @@ class AutoCloser:
 
             if strat_id.endswith("__off") or "__off" in strat_id:
                 mode = "off"
+            elif strat_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in strat_id:
+                mode = "trailing_ratchet"
             elif strat_id.endswith("__classic") or "__classic" in strat_id:
-                mode = "classic"
+                mode = "trailing_ratchet"
             elif strat_id.endswith("__toxic") or "__toxic" in strat_id:
                 mode = "toxic"
             elif strat_id.endswith("__fixed") or "__fixed" in strat_id:
                 mode = "fixed"
             else:
                 raw_m = (
-                    strat_app_cfg.get("mode")
-                    or getattr(strat_cfg, "mode", None)
+                    strat_app_cfg.get("auto_closing_mode")
+                    or strat_app_cfg.get("mode")
                     or getattr(strat_cfg, "auto_closing_mode", None)
+                    or getattr(strat_cfg, "mode", None)
                     or (strat_app_cfg.get("modes")[0] if isinstance(strat_app_cfg.get("modes"), list) and strat_app_cfg.get("modes") else None)
                     or ((strat_auto_cfg or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
                     or (((strat_auto_cfg or {}).get("positive") or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
                 )
                 raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
-                if raw_m_str in ("classic", "iter_net_classic", "trailing_ratchet"):
-                    mode = "classic"
+                if raw_m_str in ("trailing_ratchet", "classic", "iter_net_classic"):
+                    mode = "trailing_ratchet"
                 elif raw_m_str in ("toxic", "toxicity_adaptive"):
                     mode = "toxic"
                 elif raw_m_str in ("fixed", "fixed_net"):
@@ -476,7 +479,7 @@ class AutoCloser:
                 # -------------------------------------------------------------
                 # РЕЖИМ 1: ITER NET CLASSIC / TRAILING RATCHET
                 # -------------------------------------------------------------
-                elif mode in ("classic", "iter_net_classic", "trailing_ratchet"):
+                elif mode in ("trailing_ratchet", "classic", "iter_net_classic"):
                     import copy
                     r_cfg_scaled = copy.deepcopy(r_cfg)
                     r_cfg_scaled["scale_money"] = scale_money
@@ -491,7 +494,7 @@ class AutoCloser:
                             name=f"КУПОЛА [{strat_cfg.name}]",
                             symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
                             iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
-                            new_iter_start_net=0.0, close_type="ITER NET CLASSIC",
+                            new_iter_start_net=0.0, close_type="TRAILING RATCHET",
                             detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
                         )
 
@@ -641,7 +644,9 @@ class AutoCloser:
         new_iter_start_net_g = round(net_usdt, 4)
         
         # Check Positive Portfolio
-        mode_g = pos_cfg.get("mode", "toxicity_adaptive")
+        mode_g = auto_cfg.get("auto_closing_mode") or auto_cfg.get("mode") or pos_cfg.get("mode", "trailing_ratchet")
+        if mode_g == "classic":
+            mode_g = "trailing_ratchet"
         r_cfg_g = pos_cfg.get("trailing_ratchet") or {}
         r_state_g = self._trailing_ratchet_state.setdefault("__global__", {})
         if r_state_g.get("iteration_index") != iter_idx_g:
@@ -695,7 +700,7 @@ class AutoCloser:
                     detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nИнвентарь: Score: <b>{t_score_g:.2f}</b>, Recovery: <b>{delta_rec_g:.0%}</b>.\nСобытие: {r_info}."
                 )
 
-        elif mode_g in ("iter_net_classic", "trailing_ratchet"):
+        elif mode_g in ("trailing_ratchet", "classic", "iter_net_classic"):
             scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
             if scale_money_g <= 0:
                 scale_money_g = 1.0

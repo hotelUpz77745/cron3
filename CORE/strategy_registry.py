@@ -288,7 +288,8 @@ class StrategyConfig:
             mode_val = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
 
         if mode_val and isinstance(mode_val, str):
-            self.mode: str = mode_val.lower().strip()
+            clean_m = mode_val.lower().strip()
+            self.mode: str = "trailing_ratchet" if clean_m == "classic" else clean_m
         else:
             self.mode = "off"
         self.auto_closing_mode: str = self.mode
@@ -693,24 +694,18 @@ class StrategyRegistry:
 
         if mode == "off":
             return {
-                "enabled": False,
-                "mode": "disabled",
-                "positive": {"enabled": False, "mode": "disabled"},
+                "positive": {},
                 "negative": neg_cfg
             }
         elif mode == "fixed":
             if "fixed_net" not in pos_base or "target_net_usdt" not in pos_base["fixed_net"]:
                 raise KeyError("[StrategyRegistry] В секции auto_closing.positive.fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
             pos_cfg = {
-                "enabled": True,
-                "mode": "fixed_net",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "fixed_net": copy.deepcopy(pos_base["fixed_net"])
             }
             return {
-                "enabled": True,
-                "mode": "fixed_net",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
@@ -718,36 +713,28 @@ class StrategyRegistry:
             if "toxicity_adaptive" not in pos_base:
                 raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'toxicity_adaptive'!")
             pos_cfg = {
-                "enabled": True,
-                "mode": "toxicity_adaptive",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "toxicity_adaptive": copy.deepcopy(pos_base["toxicity_adaptive"])
             }
             return {
-                "enabled": True,
-                "mode": "toxicity_adaptive",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
-        elif mode == "classic":
+        elif mode in ("trailing_ratchet", "classic", "iter_net_classic"):
             if "trailing_ratchet" not in pos_base:
                 raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'trailing_ratchet'!")
             pos_cfg = {
-                "enabled": True,
-                "mode": "iter_net_classic",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "trailing_ratchet": copy.deepcopy(pos_base["trailing_ratchet"])
             }
             return {
-                "enabled": True,
-                "mode": "iter_net_classic",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
         else:
-            raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'fixed', 'classic', 'toxic', 'off'.")
+            raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'trailing_ratchet', 'toxic', 'fixed', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
         """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _base.json с поддержкой наследования base_template."""
@@ -1028,7 +1015,7 @@ class StrategyRegistry:
                     )
             else:
                 clean_id = strat_id
-                for sfx in ("__off", "__classic", "__fixed", "__toxic"):
+                for sfx in ("__off", "__trailing_ratchet", "__classic", "__fixed", "__toxic"):
                     if clean_id.endswith(sfx):
                         clean_id = clean_id[:-len(sfx)]
                         break
@@ -1044,17 +1031,20 @@ class StrategyRegistry:
             template_id = resolved_template
 
             # Определяем целевой строковый режим автозакрытия
-            raw_mode = strat_settings.get("mode")
+            raw_mode = strat_settings.get("auto_closing_mode") or strat_settings.get("mode")
             if raw_mode is None and "modes" in strat_settings:
                 legacy_m = strat_settings["modes"]
                 raw_mode = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
 
             if raw_mode:
-                target_mode = str(raw_mode).lower().strip()
+                clean_m = str(raw_mode).lower().strip()
+                target_mode = "trailing_ratchet" if clean_m == "classic" else clean_m
+            elif "__trailing_ratchet" in strat_id:
+                target_mode = "trailing_ratchet"
             elif "__fixed" in strat_id:
                 target_mode = "fixed"
             elif "__classic" in strat_id:
-                target_mode = "classic"
+                target_mode = "trailing_ratchet"
             elif "__toxic" in strat_id:
                 target_mode = "toxic"
             elif "__off" in strat_id:

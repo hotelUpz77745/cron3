@@ -72,16 +72,14 @@ class StrategyApplicator:
 
             side_data = copy.deepcopy(self.base_cfg[side])
 
-            # Извлекаем конфигурацию для стороны (из raw_meta[side] или legacy overrides[side])
+            # Извлекаем конфигурацию для стороны (из raw_meta[side] с наложением overrides[side])
             side_dict = {}
             if hasattr(strategy, "raw_meta") and isinstance(strategy.raw_meta, dict):
                 if side in strategy.raw_meta and isinstance(strategy.raw_meta[side], dict):
                     side_dict = copy.deepcopy(strategy.raw_meta[side])
             if hasattr(strategy, "overrides") and isinstance(strategy.overrides, dict):
                 if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
-                    merged = copy.deepcopy(strategy.overrides[side])
-                    merged.update(side_dict)
-                    side_dict = merged
+                    side_dict.update(strategy.overrides[side])
 
             # 1. Invest Size (приоритет: per-symbol / активная стратегия/клиентский уровень -> side_dict -> дефолт 400.0)
             if hasattr(strategy, "get_invest_size"):
@@ -110,15 +108,20 @@ class StrategyApplicator:
             elif isinstance(strategy.leverage, (int, float)):
                 side_data["leverage"] = int(strategy.leverage)
 
-            # 3. Enable / Enabled флаг стороны (если явно False, сторона не торгуется)
-            if "enable" in side_dict:
-                val = bool(side_dict["enable"])
-                side_data["enable"] = val
-                side_data["enabled"] = val
+            # 3. Enable / Enabled флаг стороны (высший приоритет — active_strategies на уровне клиента-оператора)
+            act_side = getattr(strategy, "active_settings", {}).get(side)
+            if isinstance(act_side, dict) and "enabled" in act_side:
+                val = bool(act_side["enabled"])
+            elif isinstance(act_side, dict) and "enable" in act_side:
+                val = bool(act_side["enable"])
             elif "enabled" in side_dict:
                 val = bool(side_dict["enabled"])
-                side_data["enable"] = val
-                side_data["enabled"] = val
+            elif "enable" in side_dict:
+                val = bool(side_dict["enable"])
+            else:
+                val = True
+            side_data["enable"] = val
+            side_data["enabled"] = val
 
             side_data["strategy_id"] = strategy.strategy_id
             side_data["strategy_name"] = strategy.name

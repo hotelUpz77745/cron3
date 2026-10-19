@@ -1,6 +1,6 @@
 {
     "name": "🚂 U17: Stephenson-Y [Nadaraya-Watson 1d Nuclear Kernel | Bearish Fist 6% Long / 13% Short | Chita Flagship Successor]",
-    "description": "Ядерное поколение U17 Stephenson-Y (Quantum Kernel Chita Successor): 1) Гармонизированные курки Золотого Сечения (Golden-Cut 38.2% Trigger Lock); 2) Дневная (1d) непараметрическая ядерная регрессия Надарая-Ватсона (NWKR 1d) с ядром Rational Quadratic и демпфером MAE Envelope 1.5x; 3) «Ядерный кулак Сильной руки» kernel_forecast (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 4) Мостик Змея L3 (-13.5%), Half-Peel 50%, mark_executed сжигание объема, Дискретный кросс-ресайклинг (50%/75%), Фибо-храповик iter_net_classic и Golden Mean Scalp 1.05%.",
+    "description": "Ядерное поколение U17 Stephenson-Y (Quantum Kernel Chita Successor): 1) Гармонизированные курки Золотого Сечения (Golden-Cut 38.2% Trigger Lock); 2) Дневная (1d) непараметрическая ядерная регрессия Надарая-Ватсона (NWKR 1d) с ядром Rational Quadratic и демпфером MAE Envelope 1.5x; 3) «Ядерный кулак Сильной руки» kernel_forecast (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 4) Мостик Змея L3 (-13.5%), Half-Peel 50%, mark_executed сжигание объема, Дискретный кросс-ресайклинг (50%/75%), Фибо-храповик trailing_ratchet и Golden Mean Scalp 1.05%.",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
     "avg_free_volume_behavior": "distribute_skip",
@@ -97,14 +97,10 @@
         }
     },
     "auto_closing": {
-        "mode": "iter_net_classic",
         "positive": {
-            "enabled": true,
-            "mode": "iter_net_classic",
             "scale_money": 1.0,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "trailing_ratchet": {
-                "enabled": true,
                 "levels": [
                     {
                         "activation": 13.0,

@@ -29,18 +29,19 @@
         "log_to_console": true,
         "log_to_file": true
     },
-    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __classic (pure Fibo trailing), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
+    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __trailing_ratchet (pure Fibo trailing ratchet), __fixed (flat net take), __toxic (institutional dynamic exit). Base auto_closing templates are located in CFG/universes/_base.json.",
     "active_strategies": {
-        "u17_stephensonE__classic": {
-            "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [CLASSIC]",
+        "u17_stephensonE__trailing_ratchet": {
+            "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [TRAILING RATCHET]",
             "template": "u17_stephensonE",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
-            "auto_closing_mode": "classic",
+            "auto_closing_mode": "trailing_ratchet",
             "leverage": 20,
             "margin_type": "CROSSED",
             "LONG": {
+                "enabled": true,
                 "default_invest_size": 400.0,
                 "invest_size": {
                     "ICNTUSDT": 400.0,
@@ -50,6 +51,7 @@
                 }
             },
             "SHORT": {
+                "enabled": true,
                 "default_invest_size": 400.0,
                 "invest_size": {
                     "ICNTUSDT": 400.0,
