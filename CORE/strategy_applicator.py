@@ -95,11 +95,11 @@ class StrategyApplicator:
                     if symbol:
                         if symbol.upper() not in val:
                             raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
-                        side_data["invest_size"] = float(val[symbol.upper()])
+                        side_data["invest_size"] = Utils.safe_float(val[symbol.upper()], 0.0)
                     else:
                         side_data["invest_size"] = None
                 elif isinstance(val, (int, float)):
-                    side_data["invest_size"] = float(val)
+                    side_data["invest_size"] = Utils.safe_float(val, 0.0)
                 elif symbol is None:
                     side_data["invest_size"] = None
                 else:
@@ -110,11 +110,11 @@ class StrategyApplicator:
                     if symbol:
                         if symbol.upper() not in val:
                             raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
-                        side_data["invest_size"] = float(val[symbol.upper()])
+                        side_data["invest_size"] = Utils.safe_float(val[symbol.upper()], 0.0)
                     else:
                         side_data["invest_size"] = None
                 elif isinstance(val, (int, float)):
-                    side_data["invest_size"] = float(val)
+                    side_data["invest_size"] = Utils.safe_float(val, 0.0)
                 elif symbol is None:
                     side_data["invest_size"] = None
                 else:
@@ -125,19 +125,19 @@ class StrategyApplicator:
                     if symbol:
                         if symbol.upper() not in val:
                             raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
-                        side_data["invest_size"] = float(val[symbol.upper()])
+                        side_data["invest_size"] = Utils.safe_float(val[symbol.upper()], 0.0)
                     else:
                         side_data["invest_size"] = None
                 elif isinstance(val, (int, float)):
-                    side_data["invest_size"] = float(val)
+                    side_data["invest_size"] = Utils.safe_float(val, 0.0)
                 elif symbol is None:
                     side_data["invest_size"] = None
                 else:
                     raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
             elif isinstance(getattr(strategy, "invest_size", None), (int, float)):
-                side_data["invest_size"] = float(strategy.invest_size)
+                side_data["invest_size"] = Utils.safe_float(strategy.invest_size, 0.0)
             elif "invest_size" in side_dict and side_dict["invest_size"] is not None:
-                side_data["invest_size"] = float(side_dict["invest_size"])
+                side_data["invest_size"] = Utils.safe_float(side_dict["invest_size"], 0.0)
             elif symbol is None:
                 side_data["invest_size"] = None
             else:
@@ -188,6 +188,10 @@ class StrategyApplicator:
             )
             if regime_cfg and "grid" in side_data and "0" in side_data["grid"]:
                 mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
+                base_raw_vol = side_data["grid"]["0"].get("volume")
+                fallback_vol = 12.0 if side.upper() == "LONG" else 7.0
+                curr_default = Utils.safe_float(base_raw_vol, fallback_vol) if base_raw_vol is not None else fallback_vol
+
                 if mode_val not in (
                     "auto", "auto_ema", "ema_trend",
                     "kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson",
@@ -196,9 +200,17 @@ class StrategyApplicator:
                     resolved_vol = StrategyApplicator.resolve_first_order_volume(
                         regime_cfg=regime_cfg,
                         side=side,
-                        default_vol=float(side_data["grid"]["0"].get("volume", 0.0))
+                        default_vol=curr_default
                     )
                     side_data["grid"]["0"]["volume"] = resolved_vol
+                elif side_data["grid"]["0"].get("volume") is None:
+                    # Для динамических режимов при генерации рантайма задаем канонический базовый объем (из пресетов или дефолта)
+                    from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+                    side_data["grid"]["0"]["volume"] = FirstOrderRegimeManager.resolve_static_volume(
+                        regime_cfg=regime_cfg,
+                        side=side,
+                        default_vol=curr_default
+                    )
 
             # 5. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
             if not strategy.super_grid_enabled and "grid" in side_data:
@@ -344,20 +356,21 @@ class StrategyApplicator:
         Полный отказ от хардкодов имен символов и номеров уровней.
         Все правила читаются из 'fsm_level_resolution' (app.json / strategy).
         """
-        if not (exist_side.get("in_position", False) or abs(float(exist_side.get("total_volume", 0.0))) > 1e-6):
+        exist_vol = Utils.safe_float(exist_side.get("total_volume"), 0.0)
+        if not (exist_side.get("in_position", False) or abs(exist_vol) > 1e-6):
             return
 
         resolution_cfg = StrategyApplicator._get_fsm_resolution_cfg(strategy)
         if not resolution_cfg.get("enabled", True):
             return
 
-        tolerance_pct = float(resolution_cfg.get("volume_tolerance_pct", 10.0))
+        tolerance_pct = Utils.safe_float(resolution_cfg.get("volume_tolerance_pct"), 10.0)
         tolerance_factor = 1.0 - (tolerance_pct / 100.0)
 
-        current_vol = abs(float(exist_side.get("total_volume", 0.0)))
-        entry_price = float(exist_side.get("avg_entry_price", 0.0))
+        current_vol = abs(exist_vol)
+        entry_price = Utils.safe_float(exist_side.get("avg_entry_price"), 0.0)
         current_notional = current_vol * entry_price
-        invest_size = float(new_side.get("invest_size", 0.0))
+        invest_size = Utils.safe_float(new_side.get("invest_size"), 0.0)
         if invest_size <= 0:
             return
 
@@ -372,7 +385,24 @@ class StrategyApplicator:
         cumulative_planned_usdt = 0.0
         for lvl_key in sorted_level_keys:
             lvl_cfg = grid[lvl_key]
-            vol_pct = float(lvl_cfg.get("volume", 0.0))
+            if not isinstance(lvl_cfg, dict):
+                continue
+            raw_vol = lvl_cfg.get("volume")
+            if raw_vol is None and lvl_key == "0":
+                regime_cfg = (
+                    getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
+                    or (getattr(strategy, "overrides", {}) or {}).get("first_order_weight_regime")
+                    or (getattr(strategy, "raw_meta", {}) or {}).get("first_order_weight_regime")
+                )
+                from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+                vol_pct = FirstOrderRegimeManager.resolve_static_volume(
+                    regime_cfg=regime_cfg,
+                    side=side,
+                    default_vol=12.0 if side.upper() == "LONG" else 7.0
+                )
+            else:
+                vol_pct = Utils.safe_float(raw_vol, 0.0)
+
             planned_lvl_usdt = invest_size * (vol_pct / 100.0)
             cumulative_planned_usdt += planned_lvl_usdt
 
@@ -458,7 +488,20 @@ class StrategyApplicator:
             lvl_cfg = grid[lvl_key]
             if not isinstance(lvl_cfg, dict):
                 continue
-            vol_pct = float(lvl_cfg.get("volume", 0.0) or 0.0)
+            raw_vol = lvl_cfg.get("volume")
+            if raw_vol is None and lvl_key == "0":
+                regime_cfg = (
+                    getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
+                    or getattr(strategy, "raw_meta", {}).get("first_order_weight_regime")
+                ) if strategy else None
+                from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+                vol_pct = FirstOrderRegimeManager.resolve_static_volume(
+                    regime_cfg=regime_cfg,
+                    side=getattr(state, "side", "LONG"),
+                    default_vol=12.0 if getattr(state, "side", "").upper() == "LONG" else 7.0
+                )
+            else:
+                vol_pct = Utils.safe_float(raw_vol, 0.0)
             planned_lvl_usdt = eff_invest * (vol_pct / 100.0)
             cumulative_planned_usdt += planned_lvl_usdt
 
@@ -532,7 +575,7 @@ class StrategyApplicator:
                                 pass
                         if c_data and isinstance(c_data, dict):
                             has_pos = any(
-                                isinstance(s_val, dict) and (s_val.get("in_position") or abs(float(s_val.get("total_volume", 0.0))) > 1e-6)
+                                isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6)
                                 for s_val in c_data.values()
                             )
                             if has_pos:
@@ -553,7 +596,7 @@ class StrategyApplicator:
                             if isinstance(d_syms, dict) and symbol.lower() in d_syms:
                                 cand_b = d_syms[symbol.lower()]
                                 if isinstance(cand_b, dict) and any(
-                                    isinstance(s_val, dict) and (s_val.get("in_position") or abs(float(s_val.get("total_volume", 0.0))) > 1e-6)
+                                    isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6)
                                     for s_val in cand_b.values()
                                 ):
                                     active_cand = cand_b
@@ -584,7 +627,7 @@ class StrategyApplicator:
             new_side = copy.deepcopy(side_cfg)
             exist_side = existing.get(side, {})
             # Если позиция открыта, сохраняем состояние FSM
-            if exist_side.get("in_position", False) or abs(float(exist_side.get("total_volume", 0.0))) > 1e-6:
+            if exist_side.get("in_position", False) or abs(Utils.safe_float(exist_side.get("total_volume"), 0.0)) > 1e-6:
                 for state_key in [
                     "total_volume", "avg_entry_price", "pre_avg_price",
                     "initial_entry_price", "open_time", "next_avg_price",
@@ -596,9 +639,9 @@ class StrategyApplicator:
                         new_side[state_key] = copy.deepcopy(exist_side[state_key])
 
                 # Актуализация invest_size и eff_invest из свежего конфига стратегии (на лету при перезапуске)
-                new_inv = float(new_side.get("invest_size", 0.0))
-                old_inv = float(exist_side.get("invest_size", 0.0))
-                old_eff = float(exist_side.get("eff_invest", 0.0))
+                new_inv = Utils.safe_float(new_side.get("invest_size"), 0.0)
+                old_inv = Utils.safe_float(exist_side.get("invest_size"), 0.0)
+                old_eff = Utils.safe_float(exist_side.get("eff_invest"), 0.0)
 
                 tsd = getattr(strategy, "trend_size_cfg", {}) or {}
                 if not tsd.get("enabled", False) or tsd.get("mode") == "static":
