@@ -4,3 +4,4 @@ pytz
 aiogram
 matplotlib
 numpy
+numba
