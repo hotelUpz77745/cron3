@@ -178,7 +178,9 @@ class TradeCycleManager:
             await self.bot.leverage_manager.set_leverage_and_margin(sym_client, symbol, side_cfg)
 
             # 1.5. Расчет базы инвестиций
-            base_invest = float(side_cfg.get("invest_size", 400.0))
+            if "invest_size" not in side_cfg or side_cfg["invest_size"] is None:
+                raise ValueError(f"Missing required 'invest_size' in side_cfg for {symbol} ({side})")
+            base_invest = float(side_cfg["invest_size"])
             if not strat and hasattr(self.bot, "strategy_registry") and self.bot.strategy_registry:
                 try:
                     strat = self.bot.strategy_registry.get_strategy_for_symbol(symbol)

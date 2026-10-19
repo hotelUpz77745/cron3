@@ -201,7 +201,7 @@ class TelegramReceiver:
         if hasattr(self, "bot_core") and getattr(self.bot_core, "strategy_registry", None):
             strat = self.bot_core.strategy_registry.get_strategy(strat_id)
             if strat and isinstance(getattr(strat, "name", None), str):
-                def_inv = float(getattr(strat, "default_invest_size", 400.0))
+                def_inv = float(getattr(strat, "default_invest_size", 0.0) or 0.0)
                 inv_size = def_inv if isinstance(strat.invest_size, dict) else float(strat.invest_size)
                 return {
                     "strategy_id": strat_id,
@@ -258,10 +258,17 @@ class TelegramReceiver:
             or strat_app.get("invest_size")
             or (u_meta.get("LONG") or {}).get("invest_size")
             or (u_meta.get("SHORT") or {}).get("invest_size")
-            or u_meta.get("invest_size", 400.0)
+            or u_meta.get("invest_size")
         )
-        final_def = float(def_inv if def_inv is not None else (400.0 if isinstance(raw_inv, dict) else raw_inv))
-        invest_size = final_def if isinstance(raw_inv, dict) else float(raw_inv)
+        if def_inv is not None:
+            final_def = float(def_inv)
+        elif isinstance(raw_inv, dict) and raw_inv:
+            final_def = float(next(iter(raw_inv.values())))
+        elif isinstance(raw_inv, (int, float)):
+            final_def = float(raw_inv)
+        else:
+            final_def = 0.0
+        invest_size = final_def if isinstance(raw_inv, dict) else float(raw_inv or final_def)
         leverage = u_meta.get("leverage", 20)
         start_bal = float((strat_app.get("analytics") or {}).get("start_balance_usdt", u_meta.get("start_balance_usdt", 57.0)))
         
@@ -2681,7 +2688,7 @@ class TelegramReceiver:
             meta = self._get_strategy_meta(strat_id)
             sg_str = "✅ Включен" if meta.get("super_grid") else "❌ Выключен"
 
-            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+            def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
             text = (
                 f"⚙️ <b>Параметры запуска {symbol}:</b>\n"
                 f"📌 Стратегия: <b>{meta.get('name', strat_id)}</b>\n"
@@ -2711,7 +2718,7 @@ class TelegramReceiver:
 
             await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
             meta = self._get_strategy_meta(strat_id)
-            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+            def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
 
             await callback.message.edit_text(
                 f"✅ <b>Монета {symbol} успешно добавлена и запущена!</b>\n\n"
@@ -2747,7 +2754,7 @@ class TelegramReceiver:
             strat_id = "_".join(parts[3:])
             await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
             meta = self._get_strategy_meta(strat_id)
-            def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+            def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
             
             await callback.message.answer(
                 f"⚙️ <b>Кастомная настройка {symbol} под {strat_id}</b>\n\n"
@@ -2769,7 +2776,7 @@ class TelegramReceiver:
                 symbol = data.get("pending_symbol")
                 strat_id = data.get("pending_strat")
                 meta = self._get_strategy_meta(strat_id)
-                def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+                def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
                 invest = val if val > 0 else def_inv
                 await state.update_data(custom_invest=invest)
 
@@ -2796,7 +2803,7 @@ class TelegramReceiver:
                 strat_id = data.get("pending_strat")
                 meta = self._get_strategy_meta(strat_id)
                 lev = val if 1 <= val <= 50 else meta.get("leverage", 20)
-                def_inv = meta.get("default_invest_size", meta.get("invest_size", 400.0))
+                def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
                 invest = data.get("custom_invest", def_inv)
 
                 await self.bot_core.add_symbol(symbol, strategy_id=strat_id)

@@ -167,7 +167,7 @@ def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: i
     elif def_inv is not None:
         inv_display = f"{float(def_inv):.1f} USDT (дефолт)"
     else:
-        inv_display = "400.0 USDT (дефолт)"
+        inv_display = "Не задан (ошибка)"
 
     sz_badge, sz_desc = SIZING_MODE_BADGES.get(cur_sizing, (cur_sizing, ""))
     cl_badge, cl_desc = CLOSER_MODE_BADGES.get(cur_closer, (cur_closer, ""))

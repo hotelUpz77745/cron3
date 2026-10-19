@@ -66,11 +66,20 @@ class SymbolLifecycleManager:
                     (strat_dict.get("LONG") or {}).get("default_invest_size")
                     or (strat_dict.get("SHORT") or {}).get("default_invest_size")
                     or strat_dict.get("default_invest_size")
-                    or strat_dict.get("invest_size")
-                    or 400.0
                 )
-                if isinstance(strat_def_size, dict):
-                    strat_def_size = 400.0
+                if not strat_def_size or isinstance(strat_def_size, dict):
+                    long_inv = (strat_dict.get("LONG") or {}).get("invest_size")
+                    short_inv = (strat_dict.get("SHORT") or {}).get("invest_size")
+                    if isinstance(long_inv, dict) and long_inv:
+                        strat_def_size = next(iter(long_inv.values()))
+                    elif isinstance(short_inv, dict) and short_inv:
+                        strat_def_size = next(iter(short_inv.values()))
+                    elif isinstance(long_inv, (int, float)):
+                        strat_def_size = float(long_inv)
+                    elif isinstance(short_inv, (int, float)):
+                        strat_def_size = float(short_inv)
+                    else:
+                        raise ValueError(f"Cannot add symbol '{symbol}': strategy '{target_strat}' has no default_invest_size configured.")
                 strat_def_size = float(strat_def_size)
 
                 for s_side in ("LONG", "SHORT"):
@@ -95,12 +104,14 @@ class SymbolLifecycleManager:
                 else:
                     univ_path = DATA_DIR / "universes" / f"{target_strat}.json"
                     u_meta = Utils.read_json_file(univ_path) if univ_path.exists() else {}
-                def_inv = float(
+                def_inv = (
                     (u_meta.get("LONG") or {}).get("default_invest_size")
                     or (u_meta.get("SHORT") or {}).get("default_invest_size")
                     or u_meta.get("default_invest_size")
-                    or 400.0
                 )
+                if def_inv is None:
+                    raise ValueError(f"Cannot activate strategy '{target_strat}' for '{symbol}': default_invest_size is not configured.")
+                def_inv = float(def_inv)
                 active_strategies[target_strat] = {
                     "enabled": True,
                     "LONG": {

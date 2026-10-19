@@ -28,7 +28,7 @@ class StrategyApplicator:
     DEFAULT_FALLBACK_BASE: Dict[str, Any] = {
         "LONG": {
             "enable": True,
-            "invest_size": 400.0,
+            "invest_size": None,
             "leverage": 20,
             "tp_purpose": "self",
             "margin_type": "CROSSED",
@@ -37,7 +37,7 @@ class StrategyApplicator:
         },
         "SHORT": {
             "enable": True,
-            "invest_size": 400.0,
+            "invest_size": None,
             "leverage": 20,
             "tp_purpose": "self",
             "margin_type": "CROSSED",
@@ -81,24 +81,70 @@ class StrategyApplicator:
                 if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
                     side_dict.update(strategy.overrides[side])
 
-            # 1. Invest Size (приоритет: per-symbol / активная стратегия/клиентский уровень -> side_dict -> дефолт 400.0)
+            # 1. Invest Size (приоритет: get_invest_size -> per-side / per-symbol -> side_dict -> ValueError)
             if hasattr(strategy, "get_invest_size"):
-                side_data["invest_size"] = strategy.get_invest_size(side, symbol=symbol)
+                try:
+                    side_data["invest_size"] = strategy.get_invest_size(side, symbol=symbol)
+                except ValueError:
+                    if symbol is None:
+                        side_data["invest_size"] = None
+                    else:
+                        raise
             elif side == "LONG" and getattr(strategy, "invest_size_long", None) is not None:
                 val = strategy.invest_size_long
-                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+                if isinstance(val, dict):
+                    if symbol:
+                        if symbol.upper() not in val:
+                            raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
+                        side_data["invest_size"] = float(val[symbol.upper()])
+                    else:
+                        side_data["invest_size"] = None
+                elif isinstance(val, (int, float)):
+                    side_data["invest_size"] = float(val)
+                elif symbol is None:
+                    side_data["invest_size"] = None
+                else:
+                    raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
             elif side == "SHORT" and getattr(strategy, "invest_size_short", None) is not None:
                 val = strategy.invest_size_short
-                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+                if isinstance(val, dict):
+                    if symbol:
+                        if symbol.upper() not in val:
+                            raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
+                        side_data["invest_size"] = float(val[symbol.upper()])
+                    else:
+                        side_data["invest_size"] = None
+                elif isinstance(val, (int, float)):
+                    side_data["invest_size"] = float(val)
+                elif symbol is None:
+                    side_data["invest_size"] = None
+                else:
+                    raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
             elif isinstance(getattr(strategy, "invest_size", None), dict) and side in strategy.invest_size:
                 val = strategy.invest_size[side]
-                side_data["invest_size"] = float(val.get(symbol.upper(), 400.0)) if isinstance(val, dict) and symbol else float(val) if isinstance(val, (int, float)) else 400.0
+                if isinstance(val, dict):
+                    if symbol:
+                        if symbol.upper() not in val:
+                            raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
+                        side_data["invest_size"] = float(val[symbol.upper()])
+                    else:
+                        side_data["invest_size"] = None
+                elif isinstance(val, (int, float)):
+                    side_data["invest_size"] = float(val)
+                elif symbol is None:
+                    side_data["invest_size"] = None
+                else:
+                    raise ValueError(f"Missing required invest_size for symbol '{symbol}' under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'")
             elif isinstance(getattr(strategy, "invest_size", None), (int, float)):
                 side_data["invest_size"] = float(strategy.invest_size)
-            elif "invest_size" in side_dict:
+            elif "invest_size" in side_dict and side_dict["invest_size"] is not None:
                 side_data["invest_size"] = float(side_dict["invest_size"])
+            elif symbol is None:
+                side_data["invest_size"] = None
             else:
-                side_data["invest_size"] = 400.0
+                raise ValueError(
+                    f"Missing required invest_size for symbol '{symbol}' ({side}) under strategy '{getattr(strategy, 'strategy_id', 'unknown')}'"
+                )
 
             # 2. Leverage (приоритет: side_dict -> strategy.leverage[side] -> strategy.leverage)
             if "leverage" in side_dict:

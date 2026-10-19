@@ -106,7 +106,7 @@ class StrategyConfig:
         raw_short_inv = raw_short_cfg.get("invest_size")
         raw_inv = raw_meta.get("invest_size")
 
-        # Явный default_invest_size из конфига (active_settings -> raw_meta -> 400.0)
+        # Явный default_invest_size из конфига (active_settings -> raw_meta)
         act_def = self.active_settings.get("default_invest_size")
         act_long_def = (self.active_settings.get("LONG") or {}).get("default_invest_size", act_def)
         act_short_def = (self.active_settings.get("SHORT") or {}).get("default_invest_size", act_def)
@@ -115,11 +115,35 @@ class StrategyConfig:
         raw_long_def = (raw_long_cfg).get("default_invest_size", raw_def)
         raw_short_def = (raw_short_cfg).get("default_invest_size", raw_def)
 
-        def_long = act_long_def if act_long_def is not None else (raw_long_def if raw_long_def is not None else 400.0)
-        def_short = act_short_def if act_short_def is not None else (raw_short_def if raw_short_def is not None else 400.0)
-        self.default_invest_size_long: float = float(def_long)
-        self.default_invest_size_short: float = float(def_short)
-        self.default_invest_size: float = self.default_invest_size_long if self.default_invest_size_long == self.default_invest_size_short else float(act_def if act_def is not None else def_long)
+        def_long = act_long_def if act_long_def is not None else raw_long_def
+        def_short = act_short_def if act_short_def is not None else raw_short_def
+
+        # Если явный default_invest_size не задан, проверяем скалярный invest_size
+        if def_long is None and isinstance(act_long_inv, (int, float)):
+            def_long = float(act_long_inv)
+        elif def_long is None and isinstance(raw_long_inv, (int, float)):
+            def_long = float(raw_long_inv)
+        elif def_long is None and isinstance(act_inv, (int, float)):
+            def_long = float(act_inv)
+        elif def_long is None and isinstance(raw_inv, (int, float)):
+            def_long = float(raw_inv)
+
+        if def_short is None and isinstance(act_short_inv, (int, float)):
+            def_short = float(act_short_inv)
+        elif def_short is None and isinstance(raw_short_inv, (int, float)):
+            def_short = float(raw_short_inv)
+        elif def_short is None and isinstance(act_inv, (int, float)):
+            def_short = float(act_inv)
+        elif def_short is None and isinstance(raw_inv, (int, float)):
+            def_short = float(raw_inv)
+
+        self.default_invest_size_long: Optional[float] = float(def_long) if def_long is not None else None
+        self.default_invest_size_short: Optional[float] = float(def_short) if def_short is not None else None
+        self.default_invest_size: Optional[float] = (
+            self.default_invest_size_long
+            if self.default_invest_size_long == self.default_invest_size_short
+            else (float(act_def) if act_def is not None else self.default_invest_size_long)
+        )
 
         def _parse_side_inv(act_side_inv, act_all_inv, raw_side_inv, raw_all_inv, side_name, fallback_val):
             if isinstance(act_side_inv, dict):
@@ -144,7 +168,9 @@ class StrategyConfig:
                         return {k.upper(): float(x) for k, x in sub.items()} if isinstance(sub, dict) else float(sub)
                     return {k.upper(): float(v) for k, v in raw_all_inv.items()}
                 return float(raw_all_inv)
-            return float(fallback_val)
+            if fallback_val is not None:
+                return float(fallback_val)
+            return None
 
         final_long = _parse_side_inv(act_long_inv, act_inv, raw_long_inv, raw_inv, "LONG", self.default_invest_size_long)
         final_short = _parse_side_inv(act_short_inv, act_inv, raw_short_inv, raw_inv, "SHORT", self.default_invest_size_short)
@@ -647,7 +673,9 @@ class StrategyConfig:
         elif isinstance(self.invest_size, (int, float)):
             return float(self.invest_size)
 
-        return float(getattr(self, "default_invest_size", 400.0))
+        raise ValueError(
+            f"Missing required invest_size for symbol '{symbol}' ({side_upper}) under strategy '{self.strategy_id}'"
+        )
 
     def __repr__(self) -> str:
         return f"<StrategyConfig id='{self.strategy_id}' name='{self.name}' symbols={self.symbols}>"

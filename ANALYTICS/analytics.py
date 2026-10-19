@@ -1180,8 +1180,8 @@ class AnalyticsManager:
                 long_cfg = rt_data.get("LONG", base_data.get("LONG", {}))
                 short_cfg = rt_data.get("SHORT", base_data.get("SHORT", {}))
                 
-                long_size = float(long_cfg.get("invest_size", 400.0)) if long_cfg.get("enable", True) else 0.0
-                short_size = float(short_cfg.get("invest_size", 400.0)) if short_cfg.get("enable", True) else 0.0
+                long_size = float(long_cfg.get("invest_size", 0.0) or 0.0) if long_cfg.get("enable", True) else 0.0
+                short_size = float(short_cfg.get("invest_size", 0.0) or 0.0) if short_cfg.get("enable", True) else 0.0
                 long_lev = float(long_cfg.get("leverage", 20.0)) or 20.0
                 short_lev = float(short_cfg.get("leverage", 20.0)) or 20.0
                 

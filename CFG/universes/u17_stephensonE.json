@@ -98,7 +98,7 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": 1.0,
+            "scale_money": 1.5,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "trailing_ratchet": {
                 "levels": [
