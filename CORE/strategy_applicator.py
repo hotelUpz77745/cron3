@@ -591,13 +591,24 @@ class StrategyApplicator:
                     "initial_entry_price", "open_time", "next_avg_price",
                     "fallback_price", "in_position", "in_position_papper",
                     "is_finished", "pending_avg", "pending_rolling_tp", "recent_closes",
-                    "trailing_tp_state", "trailing_grid_state", "eff_invest"
+                    "trailing_tp_state", "trailing_grid_state"
                 ]:
                     if state_key in exist_side:
                         new_side[state_key] = copy.deepcopy(exist_side[state_key])
+
+                # Актуализация invest_size и eff_invest из свежего конфига стратегии (на лету при перезапуске)
+                new_inv = float(new_side.get("invest_size", 0.0))
+                old_inv = float(exist_side.get("invest_size", 0.0))
+                old_eff = float(exist_side.get("eff_invest", 0.0))
+
                 tsd = getattr(strategy, "trend_size_cfg", {}) or {}
                 if not tsd.get("enabled", False) or tsd.get("mode") == "static":
-                    new_side["eff_invest"] = float(new_side.get("invest_size", 0.0))
+                    new_side["eff_invest"] = new_inv
+                elif old_inv > 0 and old_eff > 0 and new_inv != old_inv:
+                    ratio = new_inv / old_inv
+                    new_side["eff_invest"] = round(old_eff * ratio, 4)
+                else:
+                    new_side["eff_invest"] = new_inv if new_inv > 0 else old_eff
                 if "grid" in exist_side and "grid" in new_side:
                     for g_idx, g_val in exist_side["grid"].items():
                         if g_idx in new_side["grid"] and isinstance(g_val, dict):

@@ -252,7 +252,7 @@ class CoinSelectionService:
                 if sid.startswith("_") or not isinstance(sdata, dict):
                     continue
                 if sdata.get("enabled", False):
-                    for sym in sdata.get("symbols", []):
+                    for sym in Utils.extract_strategy_symbols(sdata):
                         s_clean = sym.upper().strip()
                         active_symbols.add(s_clean)
                         symbol_to_strat[s_clean] = sid
@@ -299,7 +299,7 @@ class CoinSelectionService:
                 continue
             other_acc = str(other_data.get("api_key_name") or "API_KEY").strip()
             if other_acc == target_account:
-                other_symbols = [str(s).upper().strip() for s in other_data.get("symbols", [])]
+                other_symbols = Utils.extract_strategy_symbols(other_data)
                 conflicts = set(clean_symbols) & set(other_symbols)
                 if conflicts:
                     conflicts_str = ", ".join(sorted(conflicts))
@@ -311,8 +311,24 @@ class CoinSelectionService:
                     logger.error(f"[CoinSelectionService] {self.last_error}")
                     return False
 
-        active_strategies[strategy_id]["symbols"] = clean_symbols
-        active_strategies[strategy_id]["enabled"] = True
+        strat_entry = active_strategies[strategy_id]
+        strat_entry["symbols"] = clean_symbols
+        strat_entry["enabled"] = True
+        def_inv = (
+            (strat_entry.get("LONG") or {}).get("default_invest_size")
+            or (strat_entry.get("SHORT") or {}).get("default_invest_size")
+            or strat_entry.get("default_invest_size")
+        )
+        if def_inv is not None:
+            def_inv = float(def_inv)
+            for side_k in ("LONG", "SHORT"):
+                if isinstance(strat_entry.get(side_k), dict):
+                    if not isinstance(strat_entry[side_k].get("invest_size"), dict):
+                        strat_entry[side_k]["invest_size"] = {}
+                    strat_entry[side_k]["invest_size"] = {
+                        s: strat_entry[side_k]["invest_size"].get(s, def_inv)
+                        for s in clean_symbols
+                    }
 
         Utils.write_json_file(app_json_path, app_data)
         logger.info(

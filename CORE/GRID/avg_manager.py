@@ -231,13 +231,19 @@ class AverageManager:
         # 4.5. Институциональный предохранитель от повторного/ложного усреднения:
         # Если позиция на бирже УЖЕ содержит объем сработавшего уровня (например, после перезапуска бота
         # или ручных вмешательств оператора), ордер НЕ отправляется! Уровень маркируется отработанным.
-        invest_size = float(getattr(state, "eff_invest", 0.0) or 0.0)
-        if invest_size <= 0:
-            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
-                side_c = runtime_manager.caches[symbol].get(side, {})
-                invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
-            else:
-                invest_size = 100.0
+        side_c = {}
+        if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+            side_c = runtime_manager.caches[symbol].get(side, {})
+        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
+        eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
+        if cfg_invest > 0:
+            invest_size = cfg_invest
+            if state and getattr(state, "eff_invest", 0.0) != cfg_invest:
+                state.eff_invest = cfg_invest
+        elif eff_invest > 0:
+            invest_size = eff_invest
+        else:
+            invest_size = float(side_c.get("eff_invest", 0.0) or 100.0)
 
         if invest_size > 0:
             cand_idx = int(candidate_level) if candidate_level.isdigit() else 999
@@ -285,13 +291,19 @@ class AverageManager:
         )
 
     async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager):
-        invest_size = float(getattr(state, "eff_invest", 0.0) or 0.0)
-        if invest_size <= 0:
-            if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
-                side_c = runtime_manager.caches[symbol].get(side, {})
-                invest_size = float(side_c.get("eff_invest", 0.0) or side_c.get("invest_size", 100.0))
-            else:
-                invest_size = 100.0
+        side_c = {}
+        if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
+            side_c = runtime_manager.caches[symbol].get(side, {})
+        cfg_invest = float(side_c.get("invest_size", 0.0) or 0.0)
+        eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
+        if cfg_invest > 0:
+            invest_size = cfg_invest
+            if state and getattr(state, "eff_invest", 0.0) != cfg_invest:
+                state.eff_invest = cfg_invest
+        elif eff_invest > 0:
+            invest_size = eff_invest
+        else:
+            invest_size = float(side_c.get("eff_invest", 0.0) or 100.0)
         volume_pct = float(level_data.get("volume") or 0.0)
         
         # 1. ОТМЕНА СТАРЫХ ЛИМИТНЫХ ОРДЕРОВ (ВКЛЮЧАЯ ТЕЙК ПРОФИТ) ДО УСРЕДНЕНИЯ
