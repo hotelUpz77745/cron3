@@ -55,6 +55,10 @@ class TakeProfitBackoffManager:
                 strat = rm.strategy_registry.get_strategy_for_symbol(symbol)
             except Exception:
                 strat = None
+        if not strat:
+            bot = getattr(rm, "bot_core", None)
+            if bot and hasattr(bot, "strategy_config"):
+                strat = bot.strategy_config
 
         backoff_cfg = None
         if strat:

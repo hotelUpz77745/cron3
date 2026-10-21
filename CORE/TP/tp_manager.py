@@ -55,11 +55,11 @@ class TakeProfitManager:
         from CORE._utils import TakeProfitConfigResolver
         active_level_str = TakeProfitConfigResolver.get_nearest_level_key(active_level_str, state.tp_map)
         current_tp = state.tp_map.get(active_level_str)
-        if not current_tp:
+        if not current_tp and override_indent is None:
             logger.error(f"[{symbol}] {side} Missing TP config for level {active_level_str} (purpose: {state.tp_purpose})")
             return False
             
-        tp_indent = current_tp.get("indent") if override_indent is None else float(override_indent)
+        tp_indent = float(override_indent) if override_indent is not None else current_tp.get("indent")
         if tp_indent is None:
             logger.info(f"[{symbol}] {side} TP indent is null. Skipping LIMIT order placement to rely on Fallback TP.")
             if active_level_str not in state.tp_map:
