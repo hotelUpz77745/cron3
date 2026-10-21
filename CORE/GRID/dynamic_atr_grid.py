@@ -66,3 +66,47 @@ class DynamicAtrGridManager:
         except Exception as e:
             logger.warning(f"[DynamicAtrGrid] [{symbol}] Error computing ATR multiplier ({e}), using 1.0x")
             return 1.0
+
+    @classmethod
+    def calculate_effective_indent(
+        cls,
+        base_indent: float,
+        level_index: int,
+        atr_mult: float,
+        cfg: Optional[dict] = None
+    ) -> float:
+        """
+        Масштабирует отступ уровня с защитой от размытия сетки («резинового метода»):
+        - Масштабируются строго заданные по номеру ступени (по умолчанию только L1..L2 через max_scaled_level или scale_levels).
+        - Разворотные ступени (L3+) и глубинная броня остаются строго на фиксированных Фибо-позициях.
+        - Минимальный пол отступа min_indent_floor_pct (по умолчанию 1.5%).
+        """
+        if not cfg or not cfg.get("enabled", False) or atr_mult == 1.0:
+            return float(base_indent)
+
+        # 1. Проверка по конкретным номерам уровней:
+        scale_levels = cfg.get("scale_levels")
+        if scale_levels is not None:
+            if level_index not in scale_levels:
+                return float(base_indent)
+        else:
+            # По умолчанию масштабируются только скальп-ступени L1 и L2 (номер <= 2)
+            max_scaled_lvl = int(cfg.get("max_scaled_level", 2))
+            if level_index > max_scaled_lvl:
+                return float(base_indent)
+
+        min_floor = float(cfg.get("min_indent_floor_pct", 1.5))
+        max_cap = cfg.get("max_indent_cap_pct")
+
+        scaled = float(base_indent) * atr_mult
+        if base_indent < 0:
+            eff = min(-min_floor, scaled)
+            if max_cap is not None:
+                eff = max(-float(max_cap), eff)
+        else:
+            eff = max(min_floor, scaled)
+            if max_cap is not None:
+                eff = min(float(max_cap), eff)
+        return round(eff, 4)
+
+

@@ -99,8 +99,18 @@ class AverageManager:
                         if is_sg_enabled and level_data.get("super_indent") is not None:
                             indent_pct = level_data["super_indent"]
                             
-                        # Динамическое масштабирование шага сетки через ATR
-                        eff_indent = round(float(indent_pct) * atr_mult, 4)
+                        # Динамическое масштабирование шага сетки через ATR (с защитой от резинового метода)
+                        try:
+                            lvl_idx = int(level_str)
+                        except Exception:
+                            lvl_idx = 1
+                        from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
+                        eff_indent = DynamicAtrGridManager.calculate_effective_indent(
+                            base_indent=float(indent_pct),
+                            level_index=lvl_idx,
+                            atr_mult=atr_mult,
+                            cfg=atr_grid_cfg
+                        )
                         level_data["indent"] = eff_indent
                         level_data["effective_indent"] = eff_indent
                         level_data["atr_mult"] = atr_mult
@@ -113,7 +123,16 @@ class AverageManager:
                 if level_data.get("activation_price") is None:
                     base_act = level_data.get("_base_activation", level_data.get("activation"))
                     if base_act is not None:
-                        eff_act = round(float(base_act) * atr_mult, 4)
+                        try:
+                            lvl_idx = int(level_str)
+                        except Exception:
+                            lvl_idx = 1
+                        eff_act = DynamicAtrGridManager.calculate_effective_indent(
+                            base_indent=float(base_act),
+                            level_index=lvl_idx,
+                            atr_mult=atr_mult,
+                            cfg=atr_grid_cfg
+                        )
                         level_data["activation"] = eff_act
                         level_data["effective_activation"] = eff_act
                         act_price = TradeMath.calculate_grid_price(initial_price, eff_act, side, spec_data, symbol)

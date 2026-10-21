@@ -11,15 +11,18 @@
     },
     "super_grid": false,
     "dynamic_atr_grid": {
-        "enabled": true,
-        "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента",
+        "enabled": false,
+        "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента (только уровни L1..L3 до потолка 21%)",
         "timeframe": "1h",
         "period": 14,
         "cache_ttl_sec": 300,
         "fallback_atr_pct": 2.0,
         "ref_atr_pct": 2.0,
         "min_multiplier": 0.75,
-        "max_multiplier": 2.25
+        "max_scaled_level": 2,
+        "_desc_max_scaled_level": "Конкретный номер предельного уровня сетки (L1..LN) для ATR-масштабирования. Значение 2 означает, что динамически под волатильность адаптируются только скальп-ступени L1 и L2 (до ~8%). Разворотные ступени L3 (13.5% / 21%) и глубинная броня (L4+) остаются строго фиксированными на своих Фибо-рубежах, исключая «резиновый метод».",
+        "min_indent_floor_pct": 1.5,
+        "_desc_min_indent_floor_pct": "Минимальный пол шага ступени (1.5%), чтобы при падении волатильности ордера не слипались слишком близко к входу."
     },
     "smart_grace": {
         "start_period_sec": 150,
@@ -43,13 +46,13 @@
     "smart_size": {
         "trend_determ": "ema_trend",
         "_trend_determ_modes": {
-            "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 4h Dual EMA тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
+            "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 1d Dual EMA 7/25 тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
             "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
         },
         "ema_trend": {
             "timeframe": "1d",
-            "sma_fast": 10,
-            "sma_slow": 30,
+            "sma_fast": 7,
+            "sma_slow": 25,
             "confirmation_candles": 3,
             "require_rising": true,
             "trend_positive": true
@@ -109,28 +112,9 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": null,
-            "_desc_scale_money": "Масштаб порогов AutoCloser в USDT. При значении null или auto_scale_money=true пороги автоматически масштабируются от фактически задействованной маржи.",
-            "auto_scale_money": true,
-            "_desc_auto_scale_money": "Динамическая привязка масштаба порогов AutoCloser к фактически задействованной марже корзины.",
-            "mode_scale": "inverted_notional",
-            "_desc_mode_scale": "Выбор режима автомасштабирования: 'inverted_notional' (инвертированная деэскалация по совокупным сайзам — чем выше перегруз корзины, тем лояльнее порог тейка 0.5x..1.5x) или 'margin_relative' (прямой маржинальный масштаб).",
-            "inverted_notional": {
-                "enabled": true,
-                "_desc": "Инвертированное масштабирование по совокупному сайзу позиций к депозиту (в %). При штатной нагрузке (сайзы <= 1.67x депозита, ~1000$ при 600$ балансе) порог 1.5x. При перегрузке (полундра, сайзы >= 3.5x депозита, ~2100$) порог сжимается до 0.5x для быстрого сброса токсинов на отскоке.",
-                "low_load_ratio": 1.67,
-                "high_load_ratio": 3.50,
-                "max_scale": 1.5,
-                "min_scale": 0.5
-            },
-            "margin_relative": {
-                "enabled": false,
-                "_desc": "Динамическое масштабирование порогов автоклозера от фактически задействованной маржи корзины",
-                "ref_margin_usdt": 100.0,
-                "_desc_ref_margin_usdt": "Базовая маржа при invest_size=400 USDT (25% от invest_size). При сайзе 4000 USDT масштабировать пропорционально до 1000.0 USDT (invest_size * 0.25).",
-                "min_scale": 0.5,
-                "max_scale": 2.5
-            },
+            "scale_money": 1.5,
+            "_desc_scale_money": "Канонический статический масштаб 1.5x порогов AutoCloser в USDT (проверенный золотой эталон турниров).",
+            "auto_scale_money": false,
             "trailing_ratchet": {
                 "levels": [
                     {

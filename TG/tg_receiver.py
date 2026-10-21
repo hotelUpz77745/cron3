@@ -604,6 +604,19 @@ class TelegramReceiver:
         real_sign = "+" if realized > 0 else ""
         unreal_sign = "+" if unrealized > 0 else ""
 
+        peel_cnt, peel_vol, rec_cnt, rec_vol = 0, 0.0, 0, 0.0
+        try:
+            from ANALYTICS.leaderboard import LeaderboardEngine
+            lb_engine = LeaderboardEngine(analytics_dir=self.analytics_dir)
+            u_summary = lb_engine.calculate_universe_summary(current_uid, {"name": univ_name}, analytics_data=adata if 'adata' in locals() else None)
+            peel_cnt = int(u_summary.get("peel_events", 0))
+            peel_vol = float(u_summary.get("peel_vol_usdt", 0.0))
+            rec_cnt = int(u_summary.get("rec_events", 0))
+            rec_vol = float(u_summary.get("rec_burn_usdt", 0.0))
+        except Exception:
+            pass
+        def_line = f"├ <b>Дефенс:</b> 🍊 {peel_cnt} пилинг ({peel_vol:.1f}$) | ♻️ {rec_cnt} рециклер ({rec_vol:.1f}$)\n"
+
         text = (
             f"📊 <b>АНАЛИТИКА КУПОЛА СТРАТЕГИИ</b>\n"
             f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
@@ -615,6 +628,7 @@ class TelegramReceiver:
             f"📈 <b>Результаты купола:</b>\n"
             f"├ <b>Net Profit:</b> <b>{net_sign}{net_profit:,.2f}$</b> ({roi_sign}{roi_pct:.2f}%)\n"
             f"├ <b>Realized:</b> {real_sign}{realized:,.2f}$ | <b>Floating:</b> {unreal_sign}{unrealized:,.2f}$\n"
+            f"{def_line}"
             f"├ <b>Max Drawdown:</b> {max_dd:,.2f}$ | <b>Recovery:</b> {recovery:.2f}\n"
             f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
             f"{vel_block}"
@@ -1823,62 +1837,19 @@ class TelegramReceiver:
             meta = self._get_strategy_meta(strat_id)
             strat_name = meta.get("name", strat_id)
 
-            strat_file = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
-            analytics_data = {}
-            if strat_file.exists():
-                try:
-                    analytics_data = json.loads(strat_file.read_text(encoding="utf-8"))
-                except Exception as e:
-                    logger.warning(f"Failed to read analytics file for {strat_id}: {e}")
-
-            net = float(analytics_data.get("net_profit_usdt", 0.0))
-            real = float(analytics_data.get("realized_pnl_usdt", 0.0))
-            unreal = float(analytics_data.get("unrealized_pnl_usdt", 0.0))
-            dd = float(analytics_data.get("max_drawdown_usdt", 0.0))
-            rf = float(analytics_data.get("recovery_factor", 0.0))
-            trades = int(analytics_data.get("total_trades", 0))
-            wins = int(analytics_data.get("winning_trades", 0))
-            wr = float(analytics_data.get("winrate_pct", 0.0))
-            cur_bal = float(analytics_data.get("cur_balance_usdt", sdata.get("analytics", {}).get("start_balance_usdt", 57.0)))
-            start_bal = float(analytics_data.get("start_balance_usdt", sdata.get("analytics", {}).get("start_balance_usdt", 57.0)))
-
-            iter_idx = int(analytics_data.get("iteration_index", 1))
-            iter_net = float(analytics_data.get("iteration_net_profit_usdt", net))
-            iter_start_net = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
-            iter_real = float(analytics_data.get("iteration_realized_pnl_usdt", real))
-            iter_vel = float(analytics_data.get("iteration_net_velocity", 0.0))
-            peak_net = float(analytics_data.get("peak_net_profit_usdt", max(0.0, cur_bal - start_bal)))
-            peak_age = float(analytics_data.get("peak_age_hours", 0.0))
-
             status_str = "🟢 <b>ВКЛЮЧЕНА (В работе)</b>" if is_enabled else "🔴 <b>ВЫКЛЮЧЕНА (На паузе)</b>"
             toggle_btn_text = "🔘 Тумблер: 🟢 ВКЛ (Нажмите для ВЫКЛ)" if is_enabled else "🔘 Тумблер: 🔴 ВЫКЛ (Нажмите для ВКЛ)"
 
             text = (
-                f"🌌 <b>ВСЕЛЕННАЯ: {strat_name}</b>\n"
-                f"ID: <code>{strat_id}</code>\n"
-                f"Состояние: {status_str}\n"
-                f"🪙 Монеты ({len(coins_list)}): <b>{coins_str}</b>\n\n"
-                f"🔄 <b>Текущий Цикл: #{iter_idx}</b>\n"
-                f"├ Net цикла: <b>{iter_net:+.2f} USDT</b> (База: {iter_start_net:+.2f} $)\n"
-                f"├ Realized цикла: <b>{iter_real:+.2f} $</b>\n"
-                f"└ Скорость цикла: <b>{iter_vel:.2f} $/ч</b>\n\n"
-                f"💰 Баланс: <b>{cur_bal:+.2f} $</b> (Старт: {start_bal:.2f} $)\n"
-                f"📈 Кумулятивный Net: <b>{net:+.2f} USDT</b>\n"
-                f"├ Realized (сумм): <b>{real:+.2f} $</b>\n"
-                f"└ Floating: <b>{unreal:+.2f} $</b>\n\n"
-                f"🏔️ Peak Net: <b>+{peak_net:.2f} $</b> ({peak_age:.1f}h)\n"
-                f"📉 Max Drawdown: <b>{dd:.2f} $</b>\n"
-                f"🛡️ Recovery Factor: <b>{rf:.2f}</b>\n"
-                f"🎯 Сделок: <b>{trades}</b> (Побед: {wins} | Winrate: {wr:.1f}%)\n"
+                f"🌌 <b>УПРАВЛЕНИЕ ВСЕЛЕННОЙ</b>\n\n"
+                f"🏷 <b>Название:</b> {strat_name}\n"
+                f"🆔 <b>ID:</b> <code>{strat_id}</code>\n"
+                f"⚡ <b>Статус:</b> {status_str}\n"
+                f"🪙 <b>Пул монет ({len(coins_list)}):</b> <code>{coins_str}</code>\n\n"
+                f"<i>Используйте кнопку ниже для включения или отключения вселенной в торгах:</i>"
             )
-            strat_vel = analytics_data.get("trade_velocity")
-            if not strat_vel and hasattr(self.bot_core, "analytics") and hasattr(self.bot_core.analytics, "get_trade_velocity"):
-                strat_vel = self.bot_core.analytics.get_trade_velocity(strat_id)
-            vel_block = self._format_trade_velocity_block(strat_vel, title="⚡ Trade Velocity")
-            text += f"\n{vel_block}\n"
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text=toggle_btn_text, callback_data=f"toggle_strat:{strat_id}")],
-                [InlineKeyboardButton(text="📝 Леджер вселенной (TXT)", callback_data=f"strat_ledger:{strat_id}")],
                 [InlineKeyboardButton(text="🔙 К списку вселенных", callback_data="analytics_strats_menu")]
             ])
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
