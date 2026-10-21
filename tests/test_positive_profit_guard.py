@@ -41,7 +41,7 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
         }
 
     def test_evaluate_ratchet_blocks_negative_and_zero_net(self):
-        """Positive section must NEVER close when iter_net <= 0.0 regardless of armed floor."""
+        """Positive section must NEVER close when iter_net <= 0.0 and must DE-ARM (armed_floor = None)."""
         state = {
             "armed_floor": 8.0,
             "active_level_idx": 0,
@@ -49,7 +49,7 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
             "highest_net": 15.0,
         }
 
-        # Negative net (drawdown)
+        # Negative net (drawdown) -> must de-arm!
         should_close, trig_floor, info, is_stag = BaseTrailingSystem.evaluate_ratchet(
             iter_net=-0.23,
             iter_age_hours=10.0,
@@ -57,10 +57,11 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
             state=state,
         )
         self.assertFalse(should_close, "Ratchet must NOT trigger when iter_net < 0")
-        self.assertIn("TRAILING RATCHET BLOCKED", info)
-        self.assertIn("strictly forbidden", info)
+        self.assertIsNone(state.get("armed_floor"), "Ratchet must be de-armed when net <= 0")
+        self.assertIn("De-armed", info)
 
-        # Zero net
+        # Re-arm manually to test zero net
+        state["armed_floor"] = 8.0
         should_close_zero, _, info_zero, _ = BaseTrailingSystem.evaluate_ratchet(
             iter_net=0.0,
             iter_age_hours=10.0,
@@ -68,28 +69,29 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
             state=state,
         )
         self.assertFalse(should_close_zero, "Ratchet must NOT trigger when iter_net == 0.0")
-        self.assertIn("TRAILING RATCHET BLOCKED", info_zero)
+        self.assertIsNone(state.get("armed_floor"), "Ratchet must be de-armed when net == 0.0")
+        self.assertIn("De-armed", info_zero)
 
-    def test_evaluate_ratchet_min_profit_guarantee_default_half_step(self):
-        """When min_guaranteed_profit_usdt is not specified, default to half of step floor (> 0)."""
+    def test_evaluate_ratchet_min_profit_guarantee_default_five_dollars(self):
+        """When min_guaranteed_profit_usdt is not specified, default to at least 5.0 USDT (> 0)."""
         state = {
             "armed_floor": 8.0,
             "active_level_idx": 0,
             "armed_level_desc": "L0",
             "highest_net": 15.0,
         }
-        # L0 floor is 8.0 -> default min profit guarantee is 0.5 * 8.0 = 4.0 USDT
-        # If iter_net drops to 3.0 USDT (below 4.0 guarantee), it must be blocked!
+        # Default min profit guarantee is max(5.0, 0.5 * 8.0) = 5.0 USDT
+        # If iter_net drops to 3.0 USDT (below 5.0 guarantee), it must be blocked!
         should_close, trig_floor, info, _ = BaseTrailingSystem.evaluate_ratchet(
             iter_net=3.0,
             iter_age_hours=5.0,
             ratchet_cfg=self.ratchet_cfg,
             state=state,
         )
-        self.assertFalse(should_close, "Ratchet must NOT trigger below half-step minimum guarantee (4.0 USDT)")
-        self.assertIn("MinGuard 4.00", info)
+        self.assertFalse(should_close, "Ratchet must NOT trigger below minimum guarantee (5.0 USDT)")
+        self.assertIn("MinGuard 5.00", info)
 
-        # But if iter_net is 8.0 USDT (<= armed_floor 8.0, and >= 4.0), it should normally trigger
+        # But if iter_net is 8.0 USDT (<= armed_floor 8.0, and >= 5.0), it should normally trigger
         should_close_ok, trig_ok, info_ok, _ = BaseTrailingSystem.evaluate_ratchet(
             iter_net=8.0,
             iter_age_hours=5.0,
@@ -309,6 +311,87 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
         # On the second sync pass (when tracker._floating_synced is True and data is verified), peak can update
         await tracker.update_drawdowns(mock_client, data)
         self.assertEqual(data["peak_balance_usdt"], 450.0, "Peak balance updates on subsequent verified ticks")
+
+
+    def test_strategy_stats_hands_off_analytics_when_unsynced(self):
+        """When _floating_synced is False, update_strategies_stats must NOT recalculate or write to disk."""
+        mock_manager = MagicMock()
+        mock_manager._floating_synced = False
+        mock_manager.strategy_registry = MagicMock()
+        mock_manager.stats_dir = Path("/nonexistent/stats")
+
+        engine = StrategyStatsEngine(mock_manager)
+        global_data = {"_floating_synced": False, "per_coin": {}}
+
+        # Should return immediately and not call strategy_registry or disk
+        engine.update_strategies_stats(global_data)
+        mock_manager.strategy_registry.get_active_strategies.assert_not_called()
+
+    def test_strategy_applicator_does_not_use_base_json(self):
+        """StrategyApplicator must build configs directly from strategy metadata without _base.json."""
+        from CORE.strategy_applicator import StrategyApplicator
+
+        applicator = StrategyApplicator()
+        self.assertFalse(hasattr(applicator, "_load_base_cfg"), "Must not have _load_base_cfg")
+
+        class DummyStrategy:
+            strategy_id = "test_strat"
+            name = "Test Strategy"
+            leverage = 20
+            super_grid_enabled = False
+            raw_meta = {
+                "leverage": 20,
+                "LONG": {
+                    "enabled": True,
+                    "invest_size": 400.0,
+                    "grid": {"0": {"indent": 0.0, "volume": 7.0}},
+                    "tp_map": {"0": {"indent": 1.0}},
+                },
+                "SHORT": {
+                    "enabled": True,
+                    "invest_size": 400.0,
+                    "grid": {"0": {"indent": 0.0, "volume": 7.0}},
+                    "tp_map": {"0": {"indent": 1.0}},
+                },
+            }
+            overrides = {}
+
+        strat_mock = DummyStrategy()
+        side_cfgs = applicator.build_side_configs(strat_mock, "BTCUSDT")
+        long_cfg = side_cfgs["LONG"]
+        short_cfg = side_cfgs["SHORT"]
+        self.assertEqual(long_cfg["invest_size"], 400.0)
+        self.assertEqual(short_cfg["invest_size"], 400.0)
+        self.assertIn("0", long_cfg["grid"])
+
+    def test_analytics_restorer_initialization(self):
+        """AnalyticsManager must restore frozen state on startup and lock recalculations until verified API."""
+        from ANALYTICS.analytics import AnalyticsManager
+        from consts import ANALYTICS_START_BALANCE_USDT
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp_path = Path(tmp_dir)
+            with patch("ANALYTICS.analytics.ANALYTICS_STATS_DIR", tmp_path / "STATS"), \
+                 patch("ANALYTICS.analytics.ANALYTICS_LEDGERS_DIR", tmp_path / "LEDGERS"):
+                
+                # Pre-populate a frozen analytics file
+                stats_dir = tmp_path / "STATS"
+                stats_dir.mkdir(parents=True, exist_ok=True)
+                frozen_file = stats_dir / "analytics.json"
+                init_bal = float(ANALYTICS_START_BALANCE_USDT)
+                frozen_file.write_text(json.dumps({
+                    "start_balance_usdt": init_bal,
+                    "cur_balance_usdt": init_bal + 15.0,
+                    "net_profit_usdt": 15.0,
+                    "peak_balance_usdt": init_bal + 15.0,
+                }), encoding="utf-8")
+
+                mgr = AnalyticsManager(strategy_registry=None)
+                self.assertFalse(mgr._floating_synced, "Must be initialized as unsynced")
+                self.assertEqual(mgr._persisted_global_cache.get("net_profit_usdt"), 15.0)
+
+                data = mgr._read_data()
+                self.assertFalse(data.get("_floating_synced"), "_read_data must reflect unverified state")
+                self.assertEqual(data.get("cur_balance_usdt"), init_bal + 15.0)
 
 
 if __name__ == "__main__":

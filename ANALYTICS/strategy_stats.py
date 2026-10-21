@@ -61,6 +61,11 @@ class StrategyStatsEngine:
 
     def update_strategies_stats(self, global_data: dict) -> None:
         """Рассчитывает и сохраняет изолированную аналитику по стратегиям и лидерборд."""
+        is_synced = bool(getattr(self.manager, "_floating_synced", False) or global_data.get("_floating_synced", False))
+        if not is_synced:
+            logger.info("[STRATEGY_STATS] ❄️ Hands off analytics! REST API floating PnL not confirmed yet. Skipping recalculation to preserve disk state.")
+            return
+
         if not getattr(self.manager, "strategy_registry", None):
             try:
                 from CORE.STRATEGY.strategy_registry import StrategyRegistry
@@ -268,14 +273,12 @@ class StrategyStatsEngine:
             s_trough = float(strat_data.get("_current_trough_usdt", s_init))
             s_min = float(strat_data.get("min_balance_usdt", s_init))
 
-            is_synced = bool(getattr(self.manager, "_floating_synced", False) or global_data.get("_floating_synced", False))
-            strat_data["_floating_synced"] = is_synced
-
+            strat_data["_floating_synced"] = True
             has_active_positions = any(
                 abs(float(c.get("long_amt", 0.0))) > 1e-8 or abs(float(c.get("short_amt", 0.0))) > 1e-8
                 for c in strat_per_coin.values()
             )
-            can_update_strat_peak = is_synced
+            can_update_strat_peak = True
             if has_active_positions and abs(s_unreal) < 1e-5:
                 can_update_strat_peak = False
                 logger.warning(
@@ -504,10 +507,7 @@ class StrategyStatsEngine:
         cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
         next_iter_idx = cur_iter_idx + 1
         new_iter_start_net = round(strat_net, 4)
-        new_iter_start_real = round(
-            float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))),
-            4,
-        )
+        new_iter_start_real = round(float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))), 4)
 
         strat_analytics.update({
             "iteration_index": next_iter_idx, "iteration_start_net_profit_usdt": new_iter_start_net,

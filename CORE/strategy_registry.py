@@ -741,12 +741,12 @@ class StrategyRegistry:
         self._resolve_and_validate()
 
     def _build_mode_auto_closing(self, mode: str, base_ac: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или _base.json)."""
+        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или app.json)."""
         mode = mode.lower().strip()
         if base_ac is None:
-            base_ac = getattr(self, "common_defaults", {}).get("auto_closing") or _CFG.get("auto_closing", {})
+            base_ac = _CFG.get("auto_closing", {})
         if not base_ac or not isinstance(base_ac, dict):
-            raise KeyError("[StrategyRegistry] Отсутствует базовый шаблон auto_closing в _base.json или app.json!")
+            base_ac = {"positive": {}, "negative": {}}
 
         neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
         pos_base = copy.deepcopy(base_ac.get("positive") or {})
@@ -768,8 +768,9 @@ class StrategyRegistry:
                 "negative": neg_cfg
             }
         elif mode == "fixed":
-            if "fixed_net" not in pos_base or "target_net_usdt" not in pos_base["fixed_net"]:
-                raise KeyError("[StrategyRegistry] В секции auto_closing.positive.fixed_net отсутствует обязательный параметр 'target_net_usdt'!")
+            fixed_net = copy.deepcopy(pos_base.get("fixed_net") or {"target_net_usdt": 15.0})
+            if "target_net_usdt" not in fixed_net:
+                fixed_net["target_net_usdt"] = 15.0
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
@@ -777,15 +778,22 @@ class StrategyRegistry:
                 "mode_scale": mode_scale,
                 "inverted_notional": inverted_notional,
                 "margin_relative": margin_relative,
-                "fixed_net": copy.deepcopy(pos_base["fixed_net"])
+                "fixed_net": fixed_net
             }
             return {
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
         elif mode == "toxic":
-            if "toxicity_adaptive" not in pos_base:
-                raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'toxicity_adaptive'!")
+            toxicity_cfg = copy.deepcopy(pos_base.get("toxicity_adaptive") or {
+                "panic_toxicity_threshold": 0.70,
+                "relaxed_toxicity_threshold": 0.35,
+                "emergency_exit_floor_usdt": 3.0,
+                "moderate_exit_floor_usdt": 8.0,
+                "relaxed_exit_floor_usdt": 15.0,
+                "min_panic_recovery": 0.40,
+                "min_moderate_recovery": 0.20,
+            })
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
@@ -793,7 +801,7 @@ class StrategyRegistry:
                 "mode_scale": mode_scale,
                 "inverted_notional": inverted_notional,
                 "margin_relative": margin_relative,
-                "toxicity_adaptive": copy.deepcopy(pos_base["toxicity_adaptive"])
+                "toxicity_adaptive": toxicity_cfg
             }
             return {
                 "positive": pos_cfg,
@@ -819,16 +827,11 @@ class StrategyRegistry:
             raise ValueError(f"[StrategyRegistry] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'trailing_ratchet', 'toxic', 'fixed', 'off'.")
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:
-        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json и базовый шаблон _base.json с поддержкой наследования base_template."""
+        """Загружает базу спецификаций стратегий из папки CFG/universes/*.json."""
         data: Dict[str, Dict[str, Any]] = {}
         self.common_defaults: Dict[str, Any] = {}
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
-            base_file = self.universes_path.parent / "_base.json"
-            if not base_file.exists():
-                base_file = universes_dir / "_base.json"
-            if base_file.exists():
-                self.common_defaults = Utils.read_json_file(base_file) or {}
             for jf in sorted(universes_dir.glob("*.json")):
                 if jf.name == "_base.json" or jf.stem.startswith("_"):
                     continue
@@ -867,15 +870,13 @@ class StrategyRegistry:
                 f"[StrategyRegistry] Критическая ошибка: шаблоны стратегий не найдены в {universes_dir}!"
             )
 
-        # Поддержка наследования шаблонов: base_template / template в файле вселенной, либо базовый _base.json
+        # Поддержка наследования шаблонов в архивных трибьют-файлах
         for u_id, u_meta in list(data.items()):
             if isinstance(u_meta, dict):
                 base_ref = u_meta.get("base_template") or u_meta.get("template")
                 if base_ref and base_ref in data and base_ref != u_id:
                     parent_meta = copy.deepcopy(data[base_ref])
                     data[u_id] = deep_merge_dict(parent_meta, u_meta)
-                elif base_ref in ("_base", "base") and self.common_defaults:
-                    data[u_id] = deep_merge_dict(self.common_defaults, u_meta)
 
         return data
 

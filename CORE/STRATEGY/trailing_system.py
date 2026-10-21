@@ -60,6 +60,16 @@ class BaseTrailingSystem:
         if scale_money <= 0:
             scale_money = 1.0
 
+        # Вариант Б (Сброс взвода / De-arm):
+        # Если iter_net упал до нуля или ниже, взведённый курок сбрасывается (armed_floor = None).
+        # Требуется повторный рост выше порога активации (iter_net >= act_val > 0) для нового взвода.
+        if iter_net <= 0.0:
+            state.pop("armed_floor", None)
+            state.pop("active_level_idx", None)
+            state.pop("armed_level_desc", None)
+            state["highest_net"] = 0.0
+            return False, None, f"[RATCHET IDLE: Net {iter_net:+.2f} <= 0.0 (De-armed)]", False
+
         state["highest_net"] = max(state.get("highest_net", 0.0), iter_net)
 
         for idx, lvl in enumerate(levels):
@@ -100,8 +110,8 @@ class BaseTrailingSystem:
         # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ниже гарантийного пола!
         min_profit_floor = float(ratchet_cfg.get("min_guaranteed_profit_usdt") or 0.0)
         if min_profit_floor <= 0.0:
-            first_step_floor = float(levels[0].get("floor", 5.0)) * scale_money if levels else 1.0
-            effective_min_profit = max(0.5, 0.5 * first_step_floor)
+            first_step_floor = float(levels[0].get("floor", 5.0)) * scale_money if levels else 5.0
+            effective_min_profit = max(5.0, 0.5 * first_step_floor)
         else:
             effective_min_profit = min_profit_floor
 

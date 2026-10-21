@@ -87,7 +87,12 @@ class AnalyticsManager:
         self.strategy_stats = StrategyStatsEngine(self)
         self.reconstruction = ReconstructionService(self)
 
+        self._floating_synced = False
+        self._persisted_global_cache: dict = {}
+        self._persisted_strat_cache: dict = {}
+
         self._ensure_files()
+        self._restore_persisted_state()
 
         # Sync start balance from config upon restart
         data = self._read_data()
@@ -97,6 +102,40 @@ class AnalyticsManager:
             if config_start > 0 and abs(stored_start - config_start) > 0.0001:
                 logger.info(f"Syncing analytics start balance from config: {stored_start} -> {config_start}")
                 self.rebase_start_balance(config_start)
+
+    def _restore_persisted_state(self):
+        """
+        Ресторатор аналитики при рестарте системы:
+        Восстанавливает последнее замороженное состояние из JSON-файлов на диске.
+        Любой пересчет метрик блокируется (_floating_synced = False) до тех пор,
+        пока от Binance REST API не получен первый подтвержденный ответ по открытым позициям.
+        """
+        self._floating_synced = False
+        try:
+            if self.log_file.exists():
+                self._persisted_global_cache = json.loads(self.log_file.read_text(encoding="utf-8"))
+                self._persisted_global_cache["_floating_synced"] = False
+        except Exception as e:
+            logger.error(f"[ANALYTICS_RESTORER] Error reading global analytics: {e}")
+
+        try:
+            if self.stats_dir.exists():
+                for sf in self.stats_dir.glob("analytics_*.json"):
+                    try:
+                        strat_d = json.loads(sf.read_text(encoding="utf-8"))
+                        strat_d["_floating_synced"] = False
+                        self._persisted_strat_cache[sf.stem.replace("analytics_", "")] = strat_d
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.error(f"[ANALYTICS_RESTORER] Error reading strategy analytics: {e}")
+
+        cur_bal = self._persisted_global_cache.get("cur_balance_usdt", "N/A")
+        net_prof = self._persisted_global_cache.get("net_profit_usdt", "N/A")
+        logger.info(
+            f"[ANALYTICS_RESTORER] 🛡️ Restored frozen analytics: Balance ${cur_bal}, Net ${net_prof}. "
+            f"All metrics locked until first verified REST response."
+        )
 
     def _ensure_files(self):
         """Ensures directories and baseline JSON / ledger files exist."""
@@ -284,10 +323,13 @@ class AnalyticsManager:
             self._ensure_files()
 
         try:
-            return json.loads(self.log_file.read_text(encoding="utf-8"))
+            data = json.loads(self.log_file.read_text(encoding="utf-8"))
+            if not getattr(self, "_floating_synced", False):
+                data["_floating_synced"] = False
+            return data
         except Exception as e:
             logger.error(f"Error reading analytics file: {e}")
-            return {}
+            return dict(getattr(self, "_persisted_global_cache", {}))
 
     def _write_data(self, data: dict, mark_backup: bool = True):
         """Writes global analytics JSON file atomically and recalculates derived metrics."""

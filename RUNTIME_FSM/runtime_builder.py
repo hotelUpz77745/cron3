@@ -45,10 +45,6 @@ def build_runtime_caches(
 
     applicator = StrategyApplicator()
 
-    base_file = DATA_DIR / "_base.json"
-    base_data = Utils.read_json_file(base_file) or {}
-
-
     for symbol in symbols:
         sym_lower = symbol.lower()
         strat = registry.get_strategy_for_symbol(symbol) if registry else None
@@ -78,46 +74,8 @@ def build_runtime_caches(
                         pass
                     created_new = True
                 else:
-                    if not base_data:
-                        logger.error(f"[CRITICAL] Neither strategy nor base template found for symbol {symbol}!")
-                        continue
-                    # Create from base template and add is_active / price
-                    new_data = json.loads(json.dumps(base_data))  # deep copy
-                    
-                    for side in ("LONG", "SHORT"):
-                        if side in new_data:
-                            new_data[side].update({
-                                "total_volume": 0.0,
-                                "avg_entry_price": 0.0,
-                                "pre_avg_price": 0.0,
-                                "initial_entry_price": 0.0,
-                                "open_time": 0,
-                                "next_avg_price": None,
-                                "fallback_price": None,
-                                "in_position": False,
-                                "in_position_papper": False,
-                                "is_finished": False,
-                                "pending_avg": False,
-                                "pending_rolling_tp": False
-                            })
-                            if "grid" in new_data[side]:
-                                for grid_id, grid_cfg in new_data[side]["grid"].items():
-                                    grid_cfg["is_active"] = False
-                                    grid_cfg["price"] = None
-                                    grid_cfg["activated_at"] = None
-                                    grid_cfg["timestamp"] = None
-                            else:
-                                logger.error(f"[CRITICAL] Секция 'grid' ОТСУТСТВУЕТ для {side} в _base.json!")
-                            
-                            if "tp_map" in new_data[side]:
-                                for tp_id, tp_cfg in new_data[side]["tp_map"].items():
-                                    tp_cfg["is_active"] = False
-                            else:
-                                logger.error(f"[CRITICAL] Секция 'tp_map' ОТСУТСТВУЕТ для {side} в _base.json!")
-
-                    Utils.atomic_write_json(target_file, new_data, indent=4)
-                    logger.info(f"Created runtime cache for {symbol} at {target_file.name}")
-                    created_new = True
+                    logger.error(f"[RUNTIME_BUILDER] No strategy assigned for symbol {symbol}! Skipping runtime creation.")
+                    continue
 
     return created_new
 

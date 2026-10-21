@@ -49,7 +49,60 @@
       ">4": 1.6
     }
   },
-  "trend_size_depender": "static",
+  "auto_closing": {
+    "positive": {
+      "scale_money": 1.0,
+      "_desc_scale_money": "Масштаб порогов AutoCloser в USDT.",
+      "min_guaranteed_profit_usdt": 5.0,
+      "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
+      "trailing_ratchet": {
+        "levels": [
+          {
+            "activation": 13.0,
+            "floor": 8.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 21.0,
+            "floor": 13.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 34.0,
+            "floor": 21.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 55.0,
+            "floor": 34.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 89.0,
+            "floor": 55.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 144.0,
+            "floor": 144.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L5: F12 ($144 instant Mega rally)"
+          }
+        ]
+      }
+    }
+  },
   "LONG": {
     "grid": {
       "0": {
@@ -156,8 +209,6 @@
     }
   },
   "SHORT": {
-    "enabled": true,
     "_inheritance_base_side": true
-  },
-  "start_balance_usdt": 449.0
+  }
 }

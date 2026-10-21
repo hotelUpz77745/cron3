@@ -46,31 +46,17 @@ class StrategyApplicator:
     }
 
     def __init__(self, base_cfg_path: Optional[Path] = None):
-        self.base_cfg_path: Path = base_cfg_path or (DATA_DIR / "_base.json")
-        self.base_cfg: Dict[str, Any] = self._load_base_cfg()
-
-    def _load_base_cfg(self) -> Dict[str, Any]:
-        """Загружает базовый шаблон торговли или возвращает безопасный дефолт, если _base.json отсутствует."""
-        if not self.base_cfg_path.exists():
-            return copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
-        data = Utils.read_json_file(self.base_cfg_path)
-        if not data or not isinstance(data, dict):
-            return copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
-        return data
+        self.base_cfg_path: Optional[Path] = base_cfg_path
+        self.base_cfg: Dict[str, Any] = copy.deepcopy(self.DEFAULT_FALLBACK_BASE)
 
     def build_side_configs(self, strategy: StrategyConfig, symbol: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
-        Создает стороны LONG и SHORT для символа путем наложения переопределений стратегии
-        на базовый шаблон _base.json с жестким соблюдением правила TP >= min_tp_indent
+        Создает стороны LONG и SHORT для символа напрямую из спецификации стратегии
+        с жестким соблюдением правила TP >= min_tp_indent
         и поддержкой асимметричных настроек per-side (LONG / SHORT) и per-symbol invest_size.
         """
         side_cfgs = {}
         for side in ("LONG", "SHORT"):
-            if side not in self.base_cfg:
-                continue
-
-            side_data = copy.deepcopy(self.base_cfg[side])
-
             # Извлекаем конфигурацию для стороны (из raw_meta[side] с наложением overrides[side])
             side_dict = {}
             if hasattr(strategy, "raw_meta") and isinstance(strategy.raw_meta, dict):
@@ -79,6 +65,8 @@ class StrategyApplicator:
             if hasattr(strategy, "overrides") and isinstance(strategy.overrides, dict):
                 if side in strategy.overrides and isinstance(strategy.overrides[side], dict):
                     side_dict.update(strategy.overrides[side])
+
+            side_data = copy.deepcopy(side_dict) if side_dict else copy.deepcopy(self.DEFAULT_FALLBACK_BASE[side])
 
             # 1. Invest Size (приоритет: get_invest_size -> per-side / per-symbol -> side_dict -> ValueError)
             if hasattr(strategy, "get_invest_size"):
@@ -168,8 +156,8 @@ class StrategyApplicator:
             side_data["enable"] = val
             side_data["enabled"] = val
 
-            side_data["strategy_id"] = strategy.strategy_id
-            side_data["strategy_name"] = strategy.name
+            side_data["strategy_id"] = getattr(strategy, "strategy_id", "unknown")
+            side_data["strategy_name"] = getattr(strategy, "name", getattr(strategy, "strategy_id", "unknown"))
 
             # 4. Применение сетки (grid): строго из стороны side_dict["grid"], либо общей
             grid_override = (
@@ -213,7 +201,7 @@ class StrategyApplicator:
                     )
 
             # 5. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
-            if not strategy.super_grid_enabled and "grid" in side_data:
+            if not getattr(strategy, "super_grid_enabled", False) and "grid" in side_data:
                 for lvl_data in side_data["grid"].values():
                     lvl_data["super_indent"] = None
 

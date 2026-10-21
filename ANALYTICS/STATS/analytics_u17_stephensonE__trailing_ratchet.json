@@ -23,7 +23,7 @@
     "iteration_start_ts": 1792436098073,
     "iteration_peak_net_profit_usdt": 0.0,
     "iteration_peak_ts": 1792436098073,
-    "iteration_peak_age_hours": 1.1,
+    "iteration_peak_age_hours": 52.11,
     "iteration_net_velocity": 0.0,
     "per_coin": {
         "AVAUSDT": {
@@ -303,7 +303,7 @@
     "margin_load_pct": 0.0,
     "peak_net_ts": 1792434565710,
     "peak_net_profit_usdt": 0.0,
-    "peak_age_hours": 1.53,
+    "peak_age_hours": 52.53,
     "net_velocity": 0.0,
     "iteration_start_realized_pnl_usdt": 0.0,
     "iteration_realized_pnl_usdt": 0.0,
@@ -376,5 +376,6 @@
             "profit_spent_usdt": 0.0,
             "loss_absorbed_usdt": 0.0
         }
-    }
+    },
+    "_floating_synced": false
 }

@@ -215,9 +215,8 @@ class DrawdownTracker:
                     except Exception:
                         rt_data = {}
 
-                base_data = Utils.read_json_file(DATA_DIR / "_base.json") or {}
-                long_cfg = rt_data.get("LONG", base_data.get("LONG", {}))
-                short_cfg = rt_data.get("SHORT", base_data.get("SHORT", {}))
+                long_cfg = rt_data.get("LONG", {})
+                short_cfg = rt_data.get("SHORT", {})
 
                 long_size = float(long_cfg.get("invest_size", 0.0) or 0.0) if long_cfg.get("enable", True) else 0.0
                 short_size = float(short_cfg.get("invest_size", 0.0) or 0.0) if short_cfg.get("enable", True) else 0.0
@@ -355,6 +354,8 @@ class DrawdownTracker:
                 self._floating_synced = True
                 self.manager._floating_synced = True
                 data["_floating_synced"] = True
+                if hasattr(self.manager, "_persisted_global_cache"):
+                    self.manager._persisted_global_cache = data
 
             if len(coin_details) > 0 and abs(bot_unrealized) < 1e-5:
                 can_update_peak = False

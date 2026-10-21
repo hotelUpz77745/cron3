@@ -42,17 +42,25 @@ class QuantCalculator:
         if coins_count == 0:
             coins_count = 1
             
-        base_path = DATA_DIR / "_base.json"
-        if base_path.exists() and (leverage is None or grid_steps is None or volumes is None or invest_size is None):
-            base_data = Utils.read_json_file(base_path)
-            long_cfg = base_data["LONG"]
-            
-            if invest_size is None:
+        if (leverage is None or grid_steps is None or volumes is None or invest_size is None):
+            strat_meta = {}
+            try:
+                from CORE.strategy_registry import StrategyRegistry
+                sr = StrategyRegistry()
+                active = sr.get_active_strategies()
+                if active:
+                    strat_cfg = next(iter(active.values()))
+                    strat_meta = getattr(strat_cfg, "raw_meta", {})
+            except Exception:
+                strat_meta = {}
+
+            long_cfg = strat_meta.get("LONG", {})
+            if invest_size is None and "invest_size" in long_cfg:
                 invest_size = float(long_cfg["invest_size"])
-            if leverage is None:
-                leverage = int(long_cfg["leverage"])
-                
-            if grid_steps is None or volumes is None:
+            if leverage is None and "leverage" in strat_meta:
+                leverage = int(strat_meta["leverage"])
+
+            if (grid_steps is None or volumes is None) and "grid" in long_cfg:
                 grid = long_cfg["grid"]
                 loaded_steps = []
                 loaded_vols = []
@@ -68,7 +76,7 @@ class QuantCalculator:
                         continue
                     loaded_steps.append(float(raw_indent))
                     loaded_vols.append(float(raw_vol))
-                
+
                 if not grid_steps and loaded_steps:
                     grid_steps = loaded_steps
                 if not volumes and loaded_vols:

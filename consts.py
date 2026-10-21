@@ -212,10 +212,8 @@ DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
 DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
-_BASE_CFG: Dict[str, Any] = _read_json(DATA_DIR / "_base.json")
-if not _BASE_CFG:
-    _BASE_CFG = _read_json(DATA_DIR / "universes" / "_base.json")
-DEFAULT_AUTO_CLOSING: Dict[str, Any] = _BASE_CFG.get("auto_closing") or _CFG.get("auto_closing", {})
+_BASE_CFG: Dict[str, Any] = _read_json(DATA_DIR / "_base.json") if (DATA_DIR / "_base.json").exists() else {}
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or _BASE_CFG.get("auto_closing", {})
 if "auto_closing" not in _CFG and DEFAULT_AUTO_CLOSING:
     _CFG["auto_closing"] = DEFAULT_AUTO_CLOSING
 
