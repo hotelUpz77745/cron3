@@ -89,20 +89,27 @@ class DynamicAtrGridManager:
         if scale_levels is not None:
             if level_index not in scale_levels:
                 return float(base_indent)
-        else:
-            # По умолчанию масштабируются только скальп-ступени L1 и L2 (номер <= 2)
-            max_scaled_lvl = int(cfg.get("max_scaled_level", 2))
-            if level_index > max_scaled_lvl:
-                return float(base_indent)
+        # По умолчанию масштабируются рабочие ступени Зоны 1 и 2 (L1..L3, номер <= 3)
+        max_scaled_lvl = int(cfg.get("max_scaled_level", 3))
+        if level_index > max_scaled_lvl:
+            return float(base_indent)
 
         min_floor = float(cfg.get("min_indent_floor_pct", 1.5)) if cfg.get("min_indent_floor_pct") is not None else None
+        max_cap = float(cfg.get("max_indent_cap_pct", 21.0)) if cfg.get("max_indent_cap_pct") is not None else None
+
         scaled = float(base_indent) * atr_mult
-        if min_floor is not None:
-            if base_indent < 0:
-                eff = min(-min_floor, scaled)
-            else:
-                eff = max(min_floor, scaled)
-            return round(eff, 4)
-        return round(scaled, 4)
+        if base_indent < 0:
+            eff = scaled
+            if min_floor is not None:
+                eff = min(-min_floor, eff)
+            if max_cap is not None:
+                eff = max(-max_cap, eff)
+        else:
+            eff = scaled
+            if min_floor is not None:
+                eff = max(min_floor, eff)
+            if max_cap is not None:
+                eff = min(max_cap, eff)
+        return round(eff, 4)
 
 
