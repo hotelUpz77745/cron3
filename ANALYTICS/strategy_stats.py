@@ -102,17 +102,8 @@ class StrategyStatsEngine:
                 pass
 
         global_data["toxic_defense"] = {
-            "subgrid_peeling": {
-                "events_count": g_peel_cnt,
-                "total_peeled_usdt": round(g_peel_vol, 4),
-                "locked_micro_pnl_usdt": round(g_peel_pnl, 4),
-            },
-            "cross_recycling": {
-                "events_count": g_rec_cnt,
-                "burned_volume_usdt": round(g_rec_vol, 4),
-                "profit_spent_usdt": round(g_rec_spent, 4),
-                "loss_absorbed_usdt": round(g_rec_absorbed, 4),
-            },
+            "subgrid_peeling": {"events_count": g_peel_cnt, "total_peeled_usdt": round(g_peel_vol, 4), "locked_micro_pnl_usdt": round(g_peel_pnl, 4)},
+            "cross_recycling": {"events_count": g_rec_cnt, "burned_volume_usdt": round(g_rec_vol, 4), "profit_spent_usdt": round(g_rec_spent, 4), "loss_absorbed_usdt": round(g_rec_absorbed, 4)},
         }
 
         for strat_id, strat_cfg in self.manager.strategy_registry.active_strategies.items():
@@ -277,7 +268,22 @@ class StrategyStatsEngine:
             s_trough = float(strat_data.get("_current_trough_usdt", s_init))
             s_min = float(strat_data.get("min_balance_usdt", s_init))
 
-            if s_cur > s_peak:
+            is_synced = bool(getattr(self.manager, "_floating_synced", False) or global_data.get("_floating_synced", False))
+            strat_data["_floating_synced"] = is_synced
+
+            has_active_positions = any(
+                abs(float(c.get("long_amt", 0.0))) > 1e-8 or abs(float(c.get("short_amt", 0.0))) > 1e-8
+                for c in strat_per_coin.values()
+            )
+            can_update_strat_peak = is_synced
+            if has_active_positions and abs(s_unreal) < 1e-5:
+                can_update_strat_peak = False
+                logger.warning(
+                    f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: active position(s) exist, "
+                    f"but s_unreal is 0.0. Blocking peak balance update."
+                )
+
+            if s_cur > s_peak and can_update_strat_peak:
                 s_peak = s_cur
                 s_trough = s_cur
                 strat_data["peak_net_ts"] = now_ms
@@ -302,7 +308,7 @@ class StrategyStatsEngine:
             hist_max_dd = float(iter_cache.get("historical_max_drawdown_usdt", 0.0))
 
             cur_peak_net = float(strat_data.get("peak_net_profit_usdt", 0.0))
-            if hist_peak > cur_peak_net:
+            if hist_peak > cur_peak_net and can_update_strat_peak:
                 strat_data["peak_net_profit_usdt"] = hist_peak
                 s_peak = s_init + hist_peak
                 strat_data["peak_balance_usdt"] = round(s_peak, 4)
@@ -337,7 +343,7 @@ class StrategyStatsEngine:
                 else iter_cache.get("iteration_peak_net_profit_usdt", iter_net)
             )
             iter_peak_ts = strat_data.get("iteration_peak_ts") or iter_cache.get("iteration_peak_ts") or iter_start_ts
-            if iter_net > iter_peak_net:
+            if iter_net > iter_peak_net and can_update_strat_peak:
                 iter_peak_net = iter_net
                 iter_peak_ts = now_ms
 
@@ -463,17 +469,8 @@ class StrategyStatsEngine:
                 strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
 
             strat_data["toxic_defense"] = {
-                "subgrid_peeling": {
-                    "events_count": strat_peel_cnt,
-                    "total_peeled_usdt": round(strat_peel_vol, 4),
-                    "locked_micro_pnl_usdt": round(strat_peel_pnl, 4),
-                },
-                "cross_recycling": {
-                    "events_count": strat_rec_cnt,
-                    "burned_volume_usdt": round(strat_rec_vol, 4),
-                    "profit_spent_usdt": round(strat_rec_spent, 4),
-                    "loss_absorbed_usdt": round(strat_rec_absorbed, 4),
-                },
+                "subgrid_peeling": {"events_count": strat_peel_cnt, "total_peeled_usdt": round(strat_peel_vol, 4), "locked_micro_pnl_usdt": round(strat_peel_pnl, 4)},
+                "cross_recycling": {"events_count": strat_rec_cnt, "burned_volume_usdt": round(strat_rec_vol, 4), "profit_spent_usdt": round(strat_rec_spent, 4), "loss_absorbed_usdt": round(strat_rec_absorbed, 4)},
             }
 
             Utils.atomic_write_json(strat_file, strat_data, indent=4)
@@ -481,15 +478,7 @@ class StrategyStatsEngine:
         # Update Leaderboard & portfolio analytics_all.json
         try:
             universes_meta = {
-                sid: {
-                    **getattr(scfg, "raw_meta", {}),
-                    "name": scfg.name,
-                    "enabled": True,
-                    "sizing_mode": getattr(scfg, "sizing_mode", "static"),
-                    "auto_closing": getattr(
-                        scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {})
-                    ),
-                }
+                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True, "sizing_mode": getattr(scfg, "sizing_mode", "static"), "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))}
                 for sid, scfg in self.manager.strategy_registry.get_active_strategies().items()
             }
             entries = self.manager.leaderboard_engine.generate_leaderboard(universes_meta)
@@ -520,16 +509,13 @@ class StrategyStatsEngine:
             4,
         )
 
-        strat_analytics["iteration_index"] = next_iter_idx
-        strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
-        strat_analytics["iteration_net_profit_usdt"] = 0.0
-        strat_analytics["iteration_start_realized_pnl_usdt"] = new_iter_start_real
-        strat_analytics["iteration_realized_pnl_usdt"] = 0.0
-        strat_analytics["iteration_start_ts"] = now_ms
-        strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
-        strat_analytics["iteration_peak_ts"] = now_ms
-        strat_analytics["iteration_peak_age_hours"] = 0.0
-        strat_analytics["iteration_net_velocity"] = 0.0
+        strat_analytics.update({
+            "iteration_index": next_iter_idx, "iteration_start_net_profit_usdt": new_iter_start_net,
+            "iteration_net_profit_usdt": 0.0, "iteration_start_realized_pnl_usdt": new_iter_start_real,
+            "iteration_realized_pnl_usdt": 0.0, "iteration_start_ts": now_ms,
+            "iteration_peak_net_profit_usdt": 0.0, "iteration_peak_ts": now_ms,
+            "iteration_peak_age_hours": 0.0, "iteration_net_velocity": 0.0,
+        })
 
         if strat_stats_path.exists():
             Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)

@@ -33,6 +33,9 @@ class DrawdownTracker:
         self.manager = manager
         self._is_tracker_running = False
         self._tracker_task: Optional[asyncio.Task] = None
+        self._floating_synced = False
+        if hasattr(manager, "_floating_synced"):
+            manager._floating_synced = False
 
     async def get_bnb_usdt_rate(self, client, cached_prices: Optional[dict] = None) -> float:
         """Retrieves BNB price in USDT for commission calculation."""
@@ -74,12 +77,12 @@ class DrawdownTracker:
                     logger.debug(f"[ANALYTICS] fetch_account_info skipped during shutdown: {err}")
                     return False
                 update_ban_from_error(err)
-                logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}")
+                logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}. Skipping recalculation until valid API data.")
                 return False
 
             acc_data = res.data
-            if "positions" not in acc_data or "totalMarginBalance" not in acc_data:
-                logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data! Skipping update.")
+            if "positions" not in acc_data or "totalMarginBalance" not in acc_data or not isinstance(acc_data.get("positions"), list):
+                logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data! Skipping recalculation until valid API data.")
                 return False
 
             positions = acc_data.get("positions", [])
@@ -193,12 +196,8 @@ class DrawdownTracker:
                 details = coin_details.get(sym, {})
                 long_unreal = details.get("long_unrealized", 0.0)
                 short_unreal = details.get("short_unrealized", 0.0)
-
-                if (sym, "LONG") in self.manager._sync_locks and details.get("long_amt", 0.0) != 0:
-                    long_unreal = 0.0
-                if (sym, "SHORT") in self.manager._sync_locks and details.get("short_amt", 0.0) != 0:
-                    short_unreal = 0.0
-
+                # Источник правды для плавающего PnL открытой позиции — данные биржи (coin_details),
+                # искусственное обнуление просадки во время блокировок синхронизации запрещено!
                 drawdown = long_unreal + short_unreal
                 cdata["current_drawdown"] = round(drawdown, 4)
                 cdata["long_unrealized"] = long_unreal
@@ -350,6 +349,13 @@ class DrawdownTracker:
             min_bal = float(data.get("min_balance_usdt") if data.get("min_balance_usdt") is not None else initial)
 
             can_update_peak = True
+            if not getattr(self, "_floating_synced", False):
+                can_update_peak = False
+                logger.info("[ANALYTICS] First API sync verified. Marking floating stats as synced.")
+                self._floating_synced = True
+                self.manager._floating_synced = True
+                data["_floating_synced"] = True
+
             if len(coin_details) > 0 and abs(bot_unrealized) < 1e-5:
                 can_update_peak = False
                 logger.warning(
@@ -393,7 +399,7 @@ class DrawdownTracker:
 
             iter_peak_net_g = float(data.get("iteration_peak_net_profit_usdt", iter_net_g))
             iter_peak_ts_g = data.get("iteration_peak_ts", iter_start_ts_g)
-            if iter_net_g > iter_peak_net_g:
+            if iter_net_g > iter_peak_net_g and can_update_peak:
                 iter_peak_net_g = iter_net_g
                 iter_peak_ts_g = now_ms
 

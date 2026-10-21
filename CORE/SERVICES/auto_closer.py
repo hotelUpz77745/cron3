@@ -422,10 +422,18 @@ class AutoCloser:
             if not strat_analytics:
                 strat_analytics = analytics_data
 
+            if strat_analytics.get("_floating_synced") is False or strat_analytics.get("net_profit_usdt") is None:
+                logger.debug(f"[AUTO_CLOSER][{strat_id}] ⏳ Floating stats unverified by API. Skipping auto-close evaluation.")
+                continue
+
             strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
             iter_idx = int(strat_analytics.get("iteration_index", 1))
             iter_start_net = float(strat_analytics.get("iteration_start_net_profit_usdt", 0.0))
-            iter_net = float(strat_analytics.get("iteration_net_profit_usdt", round(strat_net - iter_start_net, 4)))
+            iter_net_val = strat_analytics.get("iteration_net_profit_usdt")
+            if iter_net_val is None:
+                iter_net = round(strat_net - iter_start_net, 4)
+            else:
+                iter_net = float(iter_net_val)
 
             pos_cfg = strat_auto_cfg.get("positive", {}) if isinstance(strat_auto_cfg, dict) else {}
             neg_cfg = strat_auto_cfg.get("negative", {}) if isinstance(strat_auto_cfg, dict) else {}
@@ -612,6 +620,15 @@ class AutoCloser:
                     detail_info=f"Просадка цикла: <b>{iter_net:.2f} USDT</b> (Порог стопа: <b>{th_neg:.2f} USDT</b>)."
                 )
 
+            # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ноль!
+            is_negative_stop = ("NEGATIVE STOP" in strat_msg)
+            if strat_triggered and not is_negative_stop and iter_net <= 0.0:
+                logger.critical(
+                    f"[AUTO_CLOSER][{strat_id}] 🛡️ [POSITIVE PROFIT GUARD] Blocked positive auto-close! "
+                    f"iter_net={iter_net:+.2f} <= 0.00 USDT. Section 'positive' is forbidden from closing in loss/zero!"
+                )
+                strat_triggered = False
+
             if strat_triggered:
                 try:
                     self._is_closing = True
@@ -684,10 +701,18 @@ class AutoCloser:
         if now_sec - self._last_close_ts.get("__global__", 0.0) < CLOSE_COOLDOWN_SEC:
             return
 
+        if analytics_data.get("_floating_synced") is False or analytics_data.get("net_profit_usdt") is None:
+            logger.debug("[AUTO_CLOSER] ⏳ Global floating stats unverified by API. Skipping global auto-close.")
+            return
+
         net_usdt = float(analytics_data.get("net_profit_usdt", 0.0))
         iter_idx_g = int(analytics_data.get("iteration_index", 1))
         iter_start_net_g = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
-        iter_net_g = float(analytics_data.get("iteration_net_profit_usdt", round(net_usdt - iter_start_net_g, 4)))
+        iter_net_g_val = analytics_data.get("iteration_net_profit_usdt")
+        if iter_net_g_val is None:
+            iter_net_g = round(net_usdt - iter_start_net_g, 4)
+        else:
+            iter_net_g = float(iter_net_g_val)
 
         pos_cfg = auto_cfg.get("positive", {})
         neg_cfg = auto_cfg.get("negative", {})
@@ -836,6 +861,16 @@ class AutoCloser:
                 close_type="NEGATIVE STOP",
                 detail_info=f"Просадка цикла: <b>{iter_net_g:.2f} USDT</b> (Порог стопа: <b>{th_neg:.2f} USDT</b>)."
             )
+
+        # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ноль!
+        is_negative_stop_g = ("NEGATIVE STOP" in action_msg)
+        if triggered and not is_negative_stop_g and iter_net_g <= 0.0:
+            logger.critical(
+                f"[AUTO_CLOSER] 🛡️ [POSITIVE PROFIT GUARD] Blocked global positive auto-close! "
+                f"iter_net_g={iter_net_g:+.2f} <= 0.00 USDT. Section 'positive' is forbidden from closing in loss/zero!"
+            )
+            triggered = False
+            self._is_closing = False
 
         if triggered:
             try:

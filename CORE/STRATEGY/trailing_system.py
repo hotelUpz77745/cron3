@@ -97,6 +97,22 @@ class BaseTrailingSystem:
             )
             return True, armed_floor, info, is_stag
 
+        # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ниже гарантийного пола!
+        min_profit_floor = float(ratchet_cfg.get("min_guaranteed_profit_usdt") or 0.0)
+        if min_profit_floor <= 0.0:
+            first_step_floor = float(levels[0].get("floor", 5.0)) * scale_money if levels else 1.0
+            effective_min_profit = max(0.5, 0.5 * first_step_floor)
+        else:
+            effective_min_profit = min_profit_floor
+
+        if iter_net <= 0.0 or iter_net < effective_min_profit:
+            high_net = float(state.get("highest_net", 0.0))
+            info = (
+                f"[TRAILING RATCHET BLOCKED: Net {iter_net:+.2f} < MinGuard {effective_min_profit:.2f} | Floor {armed_floor:.2f} | "
+                f"High {high_net:+.2f} | Positive section is strictly forbidden from closing below minimum guaranteed profit!]"
+            )
+            return False, armed_floor, info, is_stag
+
         if iter_net <= armed_floor:
             high_net = float(state.get("highest_net", 0.0))
             info = (

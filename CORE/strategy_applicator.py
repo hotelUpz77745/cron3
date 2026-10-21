@@ -15,6 +15,8 @@ from CORE.strategy_registry import StrategyConfig, StrategyRegistry
 
 logger = UnifiedLogger("StrategyApplicator")
 
+MIN_TAKE_PROFIT_PCT: float = 0.5
+
 
 class StrategyApplicator:
     """
