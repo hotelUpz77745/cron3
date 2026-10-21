@@ -5,10 +5,10 @@
     "smart_size": {
         "trend_determ": "ema_trend",
         "ema_trend": {
-            "timeframe": "4h",
+            "timeframe": "1h",
             "sma_fast": 7,
             "sma_slow": 25,
-            "confirmation_candles": 5,
+            "confirmation_candles": 3,
             "require_rising": true,
             "trend_positive": true
         }
