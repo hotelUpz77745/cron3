@@ -95,18 +95,14 @@ class DynamicAtrGridManager:
             if level_index > max_scaled_lvl:
                 return float(base_indent)
 
-        min_floor = float(cfg.get("min_indent_floor_pct", 1.5))
-        max_cap = cfg.get("max_indent_cap_pct")
-
+        min_floor = float(cfg.get("min_indent_floor_pct", 1.5)) if cfg.get("min_indent_floor_pct") is not None else None
         scaled = float(base_indent) * atr_mult
-        if base_indent < 0:
-            eff = min(-min_floor, scaled)
-            if max_cap is not None:
-                eff = max(-float(max_cap), eff)
-        else:
-            eff = max(min_floor, scaled)
-            if max_cap is not None:
-                eff = min(float(max_cap), eff)
-        return round(eff, 4)
+        if min_floor is not None:
+            if base_indent < 0:
+                eff = min(-min_floor, scaled)
+            else:
+                eff = max(min_floor, scaled)
+            return round(eff, 4)
+        return round(scaled, 4)
 
 
