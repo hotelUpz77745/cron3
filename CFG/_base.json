@@ -163,27 +163,7 @@
     "auto_closing": {
         "positive": {
             "scale_money": 1.5,
-            "_desc_scale_money": "Статический масштаб порогов AutoCloser в USDT (золотой эталон 1.5x для максимального профита и стабильности).",
-            "auto_scale_money": false,
-            "_desc_auto_scale_money": "Динамический автомасштабер отключен (статика 1.5x показала наивысшую стабильность и PnL).",
-            "mode_scale": null,
-            "_desc_mode_scale": "Автомасштабер депрекейтирован.",
-            "inverted_notional": {
-                "enabled": false,
-                "_desc": "Инвертированное масштабирование отключено.",
-                "low_load_ratio": 1.67,
-                "high_load_ratio": 3.50,
-                "max_scale": 1.5,
-                "min_scale": 0.5
-            },
-            "margin_relative": {
-                "enabled": false,
-                "_desc": "Динамическое масштабирование порогов автоклозера от фактически задействованной маржи корзины",
-                "ref_margin_usdt": 100.0,
-                "_desc_ref_margin_usdt": "Базовая маржа при invest_size=400 USDT (25% от invest_size). При сайзе 4000 USDT масштабировать пропорционально до 1000.0 USDT (invest_size * 0.25).",
-                "min_scale": 0.5,
-                "max_scale": 2.5
-            },
+            "_desc_scale_money": "Канонический статический масштаб 1.5x порогов AutoCloser в USDT (проверенный золотой эталон турниров).",
             "fixed_net": {
                 "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
                 "target_net_usdt": 60.0,

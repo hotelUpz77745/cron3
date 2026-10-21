@@ -11,7 +11,7 @@
     },
     "super_grid": false,
     "dynamic_atr_grid": {
-        "enabled": false,
+        "enabled": true,
         "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента (только скальп-ступени L1..L2)",
         "timeframe": "1h",
         "period": 14,
@@ -115,7 +115,6 @@
         "positive": {
             "scale_money": 1.5,
             "_desc_scale_money": "Канонический статический масштаб 1.5x порогов AutoCloser в USDT (проверенный золотой эталон турниров).",
-            "auto_scale_money": false,
             "trailing_ratchet": {
                 "levels": [
                     {
