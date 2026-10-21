@@ -1,10 +1,7 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\POS_FSM\models.py
-# Role: models.py module
-
-# ==============================================================================
-# Path: FSM/models.py
-# Role: Модели состояний FSM
-# ==============================================================================
+# ============================================================
+# FILE: POS_FSM/models.py
+# ROLE: Position state data models for FSM
+# ============================================================
 
 from dataclasses import dataclass, field
 from typing import Optional
@@ -22,6 +19,9 @@ class PositionState:
     next_avg_price: Optional[float] = None         # кешированная цена ближайшего усреднения
     tp_price: Optional[float] = None               # целевая цена основного тейк-профита
     fallback_price: Optional[float] = None    # кешированная цена страховочного маркета
+    tp_placed_at: Optional[float] = None      # Временная метка выставления последнего TP ордера (сек)
+    tp_current_indent: Optional[float] = None # Текущий процентный отступ установленного TP ордера
+    tp_backoff_applied: bool = False          # Флаг: был ли применен tp_backoff для текущего ордера
     eff_invest: float = 0.0              # эффективный invest_size стороны с учетом макро-тренда 4h
     
     in_position: bool = False
@@ -128,6 +128,9 @@ class PositionState:
         self.next_avg_price = None
         self.tp_price = None
         self.fallback_price = None
+        self.tp_placed_at = None
+        self.tp_current_indent = None
+        self.tp_backoff_applied = False
         self.trailing_tp_state = {}
         self.trailing_grid_state = {}
         

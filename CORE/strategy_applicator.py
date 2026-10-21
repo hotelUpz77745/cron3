@@ -15,8 +15,6 @@ from CORE.strategy_registry import StrategyConfig, StrategyRegistry
 
 logger = UnifiedLogger("StrategyApplicator")
 
-MIN_TAKE_PROFIT_PCT = 0.50
-
 
 class StrategyApplicator:
     """
@@ -61,7 +59,7 @@ class StrategyApplicator:
     def build_side_configs(self, strategy: StrategyConfig, symbol: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
         """
         Создает стороны LONG и SHORT для символа путем наложения переопределений стратегии
-        на базовый шаблон _base.json с жестким соблюдением правила TP >= 0.50%
+        на базовый шаблон _base.json с жестким соблюдением правила TP >= min_tp_indent
         и поддержкой асимметричных настроек per-side (LONG / SHORT) и per-symbol invest_size.
         """
         side_cfgs = {}
@@ -226,12 +224,14 @@ class StrategyApplicator:
             if tp_map_override:
                 side_data["tp_map"] = copy.deepcopy(tp_map_override)
 
-            # Применение ограничения TP снизу: только если min_tp_indent явно задан в стратегии
+            # Применение ограничения TP снизу: min_tp_indent из стратегии или base_cfg
             min_tp_floor = None
             if getattr(strategy, "min_tp_indent", None) is not None:
                 min_tp_floor = float(strategy.min_tp_indent)
             elif hasattr(strategy, "raw_meta") and strategy.raw_meta and strategy.raw_meta.get("min_tp_indent") is not None:
                 min_tp_floor = float(strategy.raw_meta["min_tp_indent"])
+            elif "min_tp_indent" in self.base_cfg and self.base_cfg["min_tp_indent"] is not None:
+                min_tp_floor = float(self.base_cfg["min_tp_indent"])
 
             if min_tp_floor is not None and "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
                 for tp_step in side_data["tp_map"].values():

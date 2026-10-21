@@ -1,15 +1,13 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\_utils.py
-# Role: _utils.py module
-
-# ==============================================================================
-# Role: Математика для трейдинга (расчет объема, тейк-профитов и прочего)
-# ==============================================================================
+# ============================================================
+# FILE: CORE/_utils.py
+# ROLE: Trading calculations, order volume, TP math, and config resolvers
+# ============================================================
 
 from typing import Dict, Any, Union, Optional, List, Tuple
 from c_utils import Utils
 
 import asyncio
-from consts import SPEC_TTL_SEC, CACHE_DIR
+from consts import SPEC_TTL_SEC, CACHE_DIR, _BASE_CFG
 from API.BINANCE.public import BinancePublic
 from c_log import UnifiedLogger
 class TradeMath:
@@ -198,15 +196,18 @@ class TakeProfitConfigResolver:
         lvl_cfg = tp_map.get(nearest_key, {})
         resolved = cls.resolve_level(lvl_cfg)
         
-        # Системное правило: минимальный тейк не менее 0.50% (или min_tp_indent стратегии)
-        floor = 0.50
+        # Разрешение минимального пола тейка: min_tp_indent (из стратегии или _base.json)
+        floor = None
         if min_tp_indent is not None:
-            floor = max(0.50, float(min_tp_indent))
+            floor = float(min_tp_indent)
+        elif "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
+            floor = float(_BASE_CFG["min_tp_indent"])
             
-        if resolved.get("indent") is not None:
-            resolved["indent"] = max(floor, float(resolved["indent"]))
-        if resolved.get("fallback_indent") is not None:
-            resolved["fallback_indent"] = max(floor, float(resolved["fallback_indent"]))
+        if floor is not None:
+            if resolved.get("indent") is not None:
+                resolved["indent"] = max(floor, float(resolved["indent"]))
+            if resolved.get("fallback_indent") is not None:
+                resolved["fallback_indent"] = max(floor, float(resolved["fallback_indent"]))
         resolved["level_key"] = nearest_key
         return resolved
 

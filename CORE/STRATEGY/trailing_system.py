@@ -5,7 +5,7 @@
 
 import time
 from typing import Any, Dict, List, Optional, Tuple
-
+from consts import _BASE_CFG
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("BaseTrailingSystem")
@@ -116,6 +116,7 @@ class BaseTrailingSystem:
         state_trailing: dict,
         tp_purpose: str = "neutral",
         active_grid_level: str = "0",
+        min_tp_indent: Optional[float] = None,
     ) -> Tuple[bool, Optional[float], str]:
         """
         Трейлинг Тейк-Профит:
@@ -149,11 +150,15 @@ class BaseTrailingSystem:
             if raw_floor is None:
                 raw_floor = resolved_lvl.get("indent")
 
+            resolved_min_tp = min_tp_indent
+            if resolved_min_tp is None and "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
+                resolved_min_tp = float(_BASE_CFG["min_tp_indent"])
+
             if raw_act is not None:
                 act_val = cls.normalize_abs(raw_act)
-                floor_val = cls.normalize_abs(raw_floor, default=0.5)
-                # Архитектурное правило: минимальный тейк не менее 0.5%
-                floor_val = max(0.5, floor_val)
+                floor_val = cls.normalize_abs(raw_floor, default=resolved_min_tp)
+                if resolved_min_tp is not None and floor_val is not None:
+                    floor_val = max(float(resolved_min_tp), floor_val)
 
                 if gain_pct >= act_val:
                     cur_floor = state_trailing.get("armed_floor")
@@ -169,8 +174,10 @@ class BaseTrailingSystem:
                         lvl_cfg["armed_timestamp"] = int(time.time() * 1000)
             elif raw_floor is not None and tp_purpose != "neutral":
                 # Шаг без трейлинга в классическом режиме: прямое срабатывание при достижении пола
-                floor_val = max(0.5, cls.normalize_abs(raw_floor))
-                if gain_pct >= floor_val:
+                floor_val = cls.normalize_abs(raw_floor)
+                if resolved_min_tp is not None and floor_val is not None:
+                    floor_val = max(float(resolved_min_tp), floor_val)
+                if floor_val is not None and gain_pct >= floor_val:
                     info = f"[TP MARKET DIRECT: Gain {gain_pct:.2f}% >= Target {floor_val:.2f}%]"
                     return True, floor_val, info
 

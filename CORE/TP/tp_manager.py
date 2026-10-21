@@ -1,27 +1,36 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\TP\tp_manager.py
-# Role: tp_manager.py module
+# ============================================================
+# FILE: CORE/TP/tp_manager.py
+# ROLE: Limit take-profit order calculation and placement manager
+# ============================================================
 
-# ==============================================================================
-# Path: CORE/tp_manager.py
-# Role: Менеджер постановки лимитных тейк-профит ордеров
-# ==============================================================================
-
-from c_log import UnifiedLogger
-from CORE._utils import TradeMath
-
-from CORE._utils import RiskCalculatingUtils
-from c_utils import Utils
-from typing import Optional
 import asyncio
 import time
+from typing import Optional
+
+from consts import _BASE_CFG
+from c_log import UnifiedLogger
+from c_utils import Utils
+from CORE._utils import TradeMath, RiskCalculatingUtils
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+
 logger = UnifiedLogger("TakeProfitManager")
 
 class TakeProfitManager:
     def __init__(self, runtime_manager):
         self.runtime_manager = runtime_manager
 
-    async def place_take_profit(self, client, symbol: str, side: str, current_price: float, spec_data: dict, state, opposite_state=None, volume: Optional[float] = None):
+    async def place_take_profit(
+        self,
+        client,
+        symbol: str,
+        side: str,
+        current_price: float,
+        spec_data: dict,
+        state,
+        opposite_state=None,
+        volume: Optional[float] = None,
+        override_indent: Optional[float] = None
+    ):
         """Расчет и постановка лимитного TP ордера с ретраями и предварительной отменой."""
         
         # Предварительно отменяем все лимитки для этой стороны
@@ -50,7 +59,7 @@ class TakeProfitManager:
             logger.error(f"[{symbol}] {side} Missing TP config for level {active_level_str} (purpose: {state.tp_purpose})")
             return False
             
-        tp_indent = current_tp.get("indent")
+        tp_indent = current_tp.get("indent") if override_indent is None else float(override_indent)
         if tp_indent is None:
             logger.info(f"[{symbol}] {side} TP indent is null. Skipping LIMIT order placement to rely on Fallback TP.")
             if active_level_str not in state.tp_map:
@@ -58,8 +67,8 @@ class TakeProfitManager:
             state.tp_map[active_level_str]["is_active"] = True
             return True
 
-        # Динамический ATR Take-Profit (если стратегия задает dynamic_atr_tp)
-        if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
+        # Динамический ATR Take-Profit (только если не задан override_indent и стратегия задает dynamic_atr_tp)
+        if override_indent is None and hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
             try:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 atr_cfg = getattr(strat, "dynamic_atr_tp_cfg", None)
@@ -80,8 +89,8 @@ class TakeProfitManager:
             except Exception as e:
                 logger.debug(f"[{symbol}] Dynamic ATR TP error: {e}")
 
-        # Динамический Smart TP множитель для импульсного рынка (если стратегия задает smart_tp)
-        if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
+        # Динамический Smart TP множитель для импульсного рынка (только если не задан override_indent)
+        if override_indent is None and hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
             try:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 if strat and getattr(strat, "smart_tp_cfg", None):
@@ -137,19 +146,27 @@ class TakeProfitManager:
             except Exception as e:
                 logger.debug(f"[{symbol}] Smart TP calculation error: {e}")
 
-        # Строгое соблюдение минимального тейка (Правило 11: не менее 0.50%, либо min_tp_indent стратегии)
-        min_tp = 0.50
+        # Строгое соблюдение минимального тейка: min_tp_indent (из стратегии или _base.json)
+        min_tp = None
         if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
             try:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 if strat:
                     if getattr(strat, "min_tp_indent", None) is not None:
-                        min_tp = max(0.50, float(strat.min_tp_indent))
+                        min_tp = float(strat.min_tp_indent)
                     elif hasattr(strat, "raw_meta") and strat.raw_meta.get("min_tp_indent") is not None:
-                        min_tp = max(0.50, float(strat.raw_meta["min_tp_indent"]))
+                        min_tp = float(strat.raw_meta["min_tp_indent"])
             except Exception:
                 pass
-        tp_indent = max(min_tp, float(tp_indent))
+        if min_tp is None:
+            base_cfg = getattr(self.runtime_manager, "base_cfg", None) or {}
+            if "min_tp_indent" in base_cfg and base_cfg["min_tp_indent"] is not None:
+                min_tp = float(base_cfg["min_tp_indent"])
+            elif "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
+                min_tp = float(_BASE_CFG["min_tp_indent"])
+
+        if min_tp is not None:
+            tp_indent = max(min_tp, float(tp_indent))
 
         # Расчет цены TP (строго от средней цены входа, а не от плавающего тикера)
         base_price = state.avg_entry_price if state.avg_entry_price > 0 else current_price
@@ -190,6 +207,14 @@ class TakeProfitManager:
                         state.tp_map[active_level_str] = {}
                         
                     state.tp_map[active_level_str]["is_active"] = True
+
+                    # Фиксация параметров выставленного TP ордера для tp_backoff и телеметрии
+                    bot = getattr(self.runtime_manager, "bot_core", None)
+                    now = bot.get_current_time() if (bot and hasattr(bot, "get_current_time")) else (getattr(client, "current_sim_time", None) or time.time())
+                    state.tp_placed_at = now
+                    state.tp_current_indent = tp_indent
+                    state.tp_price = tp_price
+                    state.tp_backoff_applied = (override_indent is not None)
                     
                     # Не вызываем save_cache здесь, sync_with_fsm сделает это
                     return True

@@ -55,6 +55,7 @@ from CORE.ENTRY.signal import TimeControl
 from CORE.GRID.avg_manager import AverageManager
 from CORE.TP.tp_manager import TakeProfitManager
 from CORE.TP.fallback_tp_manager import FallbackTpManager
+from CORE.TP.tp_backoff_manager import TakeProfitBackoffManager
 from CORE.TP.take_profit_restorer import TakeProfitRestorer
 from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 from CORE.STRATEGY.peeling_manager import PeelingManager
@@ -110,6 +111,7 @@ class BotCore:
         self.peeling_manager = PeelingManager()
         
         self.fallback_tp_manager = FallbackTpManager()
+        self.tp_backoff_manager = TakeProfitBackoffManager(self.runtime_manager)
         self.spec_manager = SpecManager(self)
         
         self.analytics = AnalyticsManager(strategy_registry=self.strategy_registry)
