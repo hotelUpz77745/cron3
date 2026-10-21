@@ -439,26 +439,57 @@ class AutoCloser:
             if mode != "off":
                 r_cfg = pos_cfg.get("trailing_ratchet") or {}
                 raw_scale = pos_cfg.get("scale_money", getattr(strat_cfg, "auto_closing_cfg", {}).get("scale_money") if hasattr(strat_cfg, "auto_closing_cfg") else None)
-                auto_scale = bool(pos_cfg.get("auto_scale_money", False) or raw_scale is None or (isinstance(pos_cfg.get("margin_relative"), dict) and pos_cfg["margin_relative"].get("enabled", False)))
-
-                margin_rel_cfg = pos_cfg.get("margin_relative") if isinstance(pos_cfg.get("margin_relative"), dict) else {}
-                ref_margin = float(margin_rel_cfg.get("ref_margin_usdt", 100.0))
-                min_scale = float(margin_rel_cfg.get("min_scale", 0.5))
-                max_scale = float(margin_rel_cfg.get("max_scale", 2.5))
+                auto_scale = bool(pos_cfg.get("auto_scale_money", False) or raw_scale is None or (isinstance(pos_cfg.get("inverted_notional"), dict) and pos_cfg["inverted_notional"].get("enabled", False)) or (isinstance(pos_cfg.get("margin_relative"), dict) and pos_cfg["margin_relative"].get("enabled", False)))
 
                 if auto_scale:
-                    total_margin = 0.0
-                    per_coin = strat_analytics.get("per_coin", {})
-                    if isinstance(per_coin, dict) and per_coin:
-                        for c_data in per_coin.values():
-                            if isinstance(c_data, dict):
-                                total_margin += float(c_data.get("current_margin_usdt", 0.0))
+                    mode_scale = pos_cfg.get("mode_scale", "inverted_notional")
+                    inv_cfg = pos_cfg.get("inverted_notional") if isinstance(pos_cfg.get("inverted_notional"), dict) else {}
+                    margin_rel_cfg = pos_cfg.get("margin_relative") if isinstance(pos_cfg.get("margin_relative"), dict) else {}
                     base_mult = float(raw_scale) if (raw_scale is not None and float(raw_scale) > 0) else 1.0
-                    if ref_margin > 0 and total_margin > 0:
-                        calc_scale = (total_margin / ref_margin) * base_mult
-                        scale_money = round(max(min_scale, min(max_scale, calc_scale)), 3)
+
+                    if mode_scale == "inverted_notional" or (inv_cfg.get("enabled", False) and not margin_rel_cfg.get("enabled", False)):
+                        # Инвертированное масштабирование по совокупному сайзу корзины (деэскалация при перегрузке)
+                        total_notional = 0.0
+                        per_coin = strat_analytics.get("per_coin", {})
+                        if isinstance(per_coin, dict) and per_coin:
+                            for c_data in per_coin.values():
+                                if isinstance(c_data, dict):
+                                    c_load = float(c_data.get("current_grid_load_usdt", 0.0))
+                                    if c_load <= 0.0:
+                                        c_load = float(c_data.get("current_margin_usdt", 0.0)) * 20.0
+                                    total_notional += c_load
+                        base_bal = float(getattr(strat_cfg, "start_balance_usdt", 0.0) or strat_analytics.get("start_balance_usdt", 600.0))
+                        base_bal = max(1.0, base_bal)
+                        load_ratio = total_notional / base_bal
+                        low_ratio = float(inv_cfg.get("low_load_ratio", 1.67))    # ~1000$ сайз при 600$ депозите
+                        high_ratio = float(inv_cfg.get("high_load_ratio", 3.50))  # ~2100$ сайз при 600$ депозите
+                        max_s = float(inv_cfg.get("max_scale", 1.5))
+                        min_s = float(inv_cfg.get("min_scale", 0.5))
+
+                        if load_ratio <= low_ratio:
+                            calc_scale = max_s * base_mult
+                        elif load_ratio >= high_ratio:
+                            calc_scale = min_s * base_mult
+                        else:
+                            frac = (load_ratio - low_ratio) / max(0.001, (high_ratio - low_ratio))
+                            calc_scale = (max_s - frac * (max_s - min_s)) * base_mult
+                        scale_money = round(max(min_s, min(max_s, calc_scale)), 3)
                     else:
-                        scale_money = min_scale
+                        # Прямое масштабирование от задействованной маржи (устаревший режим)
+                        ref_margin = float(margin_rel_cfg.get("ref_margin_usdt", 100.0))
+                        min_scale = float(margin_rel_cfg.get("min_scale", 0.5))
+                        max_scale = float(margin_rel_cfg.get("max_scale", 2.5))
+                        total_margin = 0.0
+                        per_coin = strat_analytics.get("per_coin", {})
+                        if isinstance(per_coin, dict) and per_coin:
+                            for c_data in per_coin.values():
+                                if isinstance(c_data, dict):
+                                    total_margin += float(c_data.get("current_margin_usdt", 0.0))
+                        if ref_margin > 0 and total_margin > 0:
+                            calc_scale = (total_margin / ref_margin) * base_mult
+                            scale_money = round(max(min_scale, min(max_scale, calc_scale)), 3)
+                        else:
+                            scale_money = min_scale
                 else:
                     scale_money = float(raw_scale) if (raw_scale is not None and float(raw_scale) > 0) else 1.0
 

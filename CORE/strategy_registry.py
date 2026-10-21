@@ -750,11 +750,17 @@ class StrategyRegistry:
 
         neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
         pos_base = copy.deepcopy(base_ac.get("positive") or {})
-        scale_money = float(pos_base.get("scale_money", 1.0))
+        raw_scale_val = pos_base.get("scale_money")
+        scale_money = float(raw_scale_val) if raw_scale_val is not None else None
         desc_scale_money = pos_base.get(
             "_desc_scale_money",
             "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону."
         )
+
+        auto_scale_money = pos_base.get("auto_scale_money", False)
+        margin_relative = copy.deepcopy(pos_base.get("margin_relative") or {})
+        mode_scale = pos_base.get("mode_scale", "inverted_notional")
+        inverted_notional = copy.deepcopy(pos_base.get("inverted_notional") or {})
 
         if mode == "off":
             return {
@@ -767,6 +773,10 @@ class StrategyRegistry:
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
                 "fixed_net": copy.deepcopy(pos_base["fixed_net"])
             }
             return {
@@ -779,6 +789,10 @@ class StrategyRegistry:
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
                 "toxicity_adaptive": copy.deepcopy(pos_base["toxicity_adaptive"])
             }
             return {
@@ -791,6 +805,10 @@ class StrategyRegistry:
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
                 "trailing_ratchet": copy.deepcopy(pos_base["trailing_ratchet"])
             }
             return {
@@ -1171,11 +1189,12 @@ class StrategyRegistry:
             strat_config.mode = target_mode
             strat_config.auto_closing_mode = target_mode
             self.active_strategies[strat_id] = strat_config
-            scale_money = float(ac_block.get("positive", {}).get("scale_money", 1.0))
+            raw_sm = ac_block.get("positive", {}).get("scale_money")
+            scale_money_disp = f"{float(raw_sm):.2f}x" if raw_sm is not None else "auto (динамический по марже)"
             logger.info(
                 f"[StrategyRegistry] 🚀 Стратегия [{strat_id}] активирована: "
                 f"mode={target_mode}, start_balance={strat_config.start_balance_usdt:.2f} USDT, "
-                f"scale_money={scale_money:.2f}x (масштаб капитала автоклозера), "
+                f"scale_money={scale_money_disp} (масштаб капитала автоклозера), "
                 f"монеты={strat_symbols}"
             )
 

@@ -4,8 +4,8 @@
     "description": "Stephenson-E [Dual EMA 1d/4h 10/30 | Bearish Fist 6/13 | Half-Peel 50% | Scale 1.5x]",
     "auto_closing": {
         "positive": {
-            "scale_money": null,
-            "auto_scale_money": true
+            "scale_money": 1.5,
+            "auto_scale_money": false
         }
     }
 }

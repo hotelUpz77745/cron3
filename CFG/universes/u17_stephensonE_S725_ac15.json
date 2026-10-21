@@ -1,7 +1,7 @@
 {
     "base_template": "u17_stephensonE",
     "name": "🚂 U17: Stephenson-E [Smart Size 7/25 | Scale 1.5x]",
-    "description": "Stephenson-E [First Order Regime 1d 10/30 | Smart Size 4h 7/25 | Scale 1.5x]",
+    "description": "Stephenson-E [First Order Regime 1d 10/30 | Smart Size 1d 7/25 | Scale 1.5x]",
     "smart_size": {
         "trend_determ": "ema_trend",
         "ema_trend": {
@@ -15,8 +15,8 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": null,
-            "auto_scale_money": true
+            "scale_money": 1.5,
+            "auto_scale_money": false
         }
     }
 }

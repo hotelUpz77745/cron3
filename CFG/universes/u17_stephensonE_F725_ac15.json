@@ -15,8 +15,8 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": null,
-            "auto_scale_money": true
+            "scale_money": 1.5,
+            "auto_scale_money": false
         }
     }
 }
