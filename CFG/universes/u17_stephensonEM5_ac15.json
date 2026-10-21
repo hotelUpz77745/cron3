@@ -1,0 +1,10 @@
+{
+    "base_template": "u17_stephensonEM5",
+    "name": "⚡ U17: Stephenson-EM5 (Scale 1.5x)",
+    "description": "Stephenson-EM5 [Dynamic Volatility | Scale 1.5x]",
+    "auto_closing": {
+        "positive": {
+            "scale_money": 1.5
+        }
+    }
+}

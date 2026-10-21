@@ -1,0 +1,10 @@
+{
+    "base_template": "u17_stephensonE",
+    "name": "🚂 U17: Stephenson-E (Scale 1.5x)",
+    "description": "Stephenson-E [Dual EMA 1d/4h 10/30 | Bearish Fist 6/13 | Half-Peel 50% | Scale 1.5x]",
+    "auto_closing": {
+        "positive": {
+            "scale_money": 1.5
+        }
+    }
+}

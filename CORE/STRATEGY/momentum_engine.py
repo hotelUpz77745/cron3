@@ -52,12 +52,19 @@ class MomentumEngine:
         """
         cfg = ema_cfg or {}
         timeframe = str(cfg.get("timeframe", "4h")).strip()
-        cache_key = (symbol.upper(), timeframe)
-        now = time.time()
+        sma_fast = int(cfg.get("sma_fast", 10))
+        sma_slow = int(cfg.get("sma_slow", 30))
+        confirmation = int(cfg.get("confirmation_candles", 5 if "4h" in timeframe else 3))
+        cache_key = (symbol.upper(), timeframe, sma_fast, sma_slow, confirmation)
+        sim_ts = getattr(client, "current_sim_time", 0)
+        now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
 
         # 0. Instant O(1) Precomputed Trend Lookup for Backtests
         if client and hasattr(client, "get_precomputed_trend"):
-            p_trend = client.get_precomputed_trend(symbol, timeframe)
+            try:
+                p_trend = client.get_precomputed_trend(symbol, timeframe, sma_fast, sma_slow)
+            except TypeError:
+                p_trend = client.get_precomputed_trend(symbol, timeframe)
             if p_trend is not None:
                 return p_trend
 
@@ -135,7 +142,8 @@ class MomentumEngine:
         cfg = kernel_cfg or {}
         timeframe = str(cfg.get("timeframe", "1d")).strip()
         cache_key = (symbol.upper(), f"kernel_{timeframe}")
-        now = time.time()
+        sim_ts = getattr(client, "current_sim_time", 0)
+        now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
 
         # 0. Instant O(1) Precomputed Trend Lookup for Backtests
         if client and hasattr(client, "get_precomputed_trend"):
@@ -284,7 +292,8 @@ class MomentumEngine:
         cfg = adx_cfg or {}
         timeframe = str(cfg.get("timeframe", "1d")).strip()
         cache_key = (symbol.upper(), f"adx_{timeframe}")
-        now = time.time()
+        sim_ts = getattr(client, "current_sim_time", 0)
+        now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
 
         # 0. Instant O(1) Precomputed Trend Lookup for Backtests
         if client and hasattr(client, "get_precomputed_trend"):

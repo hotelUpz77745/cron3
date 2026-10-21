@@ -1,0 +1,10 @@
+{
+    "base_template": "u96_omni_zenith_apex",
+    "name": "🥉 U96: Omni Zenith Apex (Scale 1.5x)",
+    "description": "Omni Zenith Apex [Knife Blocker 1 | Scale 1.5x]",
+    "auto_closing": {
+        "positive": {
+            "scale_money": 1.5
+        }
+    }
+}

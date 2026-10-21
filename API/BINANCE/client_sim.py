@@ -283,7 +283,7 @@ class SimulatedBinanceClient:
                 except Exception as e:
                     logger.warning(f"[SimulatedBinanceClient] Error loading {name}: {e}")
 
-    def get_precomputed_trend(self, symbol: str, timeframe: str) -> Optional[str]:
+    def get_precomputed_trend(self, symbol: str, timeframe: str, sma_fast: int = 10, sma_slow: int = 30) -> Optional[str]:
         self._ensure_historical_klines()
         if not self._precomputed_trends:
             return None
@@ -297,6 +297,10 @@ class SimulatedBinanceClient:
             bucket_ts = (cur_ts // 86400000) * 86400000
         else:
             bucket_ts = (cur_ts // 3600000) * 3600000
+        if sma_fast != 10 or sma_slow != 30:
+            key_custom = f"{symbol.upper().strip()}|{tf}_{sma_fast}_{sma_slow}|{bucket_ts}"
+            if key_custom in self._precomputed_trends:
+                return self._precomputed_trends[key_custom]
         key = f"{symbol.upper().strip()}|{tf}|{bucket_ts}"
         return self._precomputed_trends.get(key)
 

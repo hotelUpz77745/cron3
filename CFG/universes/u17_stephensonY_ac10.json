@@ -1,0 +1,10 @@
+{
+    "base_template": "u17_stephensonY",
+    "name": "☢️ U17: Stephenson-Y (Scale 1.0x)",
+    "description": "Stephenson-Y [Nadaraya-Watson Kernel Regression 1d | Scale 1.0x]",
+    "auto_closing": {
+        "positive": {
+            "scale_money": 1.0
+        }
+    }
+}

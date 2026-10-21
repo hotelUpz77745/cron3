@@ -85,7 +85,8 @@ class TakeProfitManager:
             try:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 if strat and getattr(strat, "smart_tp_cfg", None):
-                    now = time.time()
+                    bot = getattr(self.runtime_manager, "bot_core", None)
+                    now = bot.get_current_time() if (bot and hasattr(bot, "get_current_time")) else time.time()
                     interval = 300
                     if hasattr(self.runtime_manager, "get_heartbeat_interval_for_symbol"):
                         try:
