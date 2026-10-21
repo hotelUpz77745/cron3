@@ -409,7 +409,7 @@ class StrategyApplicator:
             # Уровень считается исполненным, если:
             # 1. Он уже был помечен is_active=True в предыдущем FSM
             # 2. Либо накопленный объем позиции покрывает этот уровень по сетке с учетом допуска
-            was_active = bool(exist_grid.get(lvl_key, {}).get("is_active", False))
+            was_active = bool(exist_grid.get(lvl_key, {}).get("is_active", False)) or bool(lvl_cfg.get("is_active", False))
             covered_by_volume = current_notional >= (cumulative_planned_usdt * tolerance_factor)
 
             if was_active or covered_by_volume:
@@ -651,28 +651,38 @@ class StrategyApplicator:
                     new_side["eff_invest"] = round(old_eff * ratio, 4)
                 else:
                     new_side["eff_invest"] = new_inv if new_inv > 0 else old_eff
-                if "grid" in exist_side and "grid" in new_side:
-                    for g_idx, g_val in exist_side["grid"].items():
-                        if g_idx in new_side["grid"] and isinstance(g_val, dict):
-                            for k in ["is_active", "price", "activated_at", "timestamp", "activation_price"]:
-                                if k in g_val:
-                                    new_side["grid"][g_idx][k] = g_val[k]
+                if "grid" in exist_side and isinstance(exist_side["grid"], dict) and exist_side["grid"]:
+                    # ДЛЯ АКТИВНОЙ ПОЗИЦИИ: Сетка позиции на жестком диске священна!
+                    # Сохраняем геометрию сетки (отступы, курки, объемы, флаги) из рантайма позиции,
+                    # чтобы перезапуск никогда не подменял сетку открытой сделки дефолтами шаблона.
+                    merged_grid = copy.deepcopy(exist_side["grid"])
+                    # Если в свежем шаблоне появились новые более глубокие ступени, аккуратно мержим их
+                    if "grid" in new_side and isinstance(new_side["grid"], dict):
+                        for tmpl_k, tmpl_v in new_side["grid"].items():
+                            if tmpl_k not in merged_grid and isinstance(tmpl_v, dict):
+                                merged_grid[tmpl_k] = copy.deepcopy(tmpl_v)
+                                merged_grid[tmpl_k]["is_active"] = False
+                                merged_grid[tmpl_k]["is_armed"] = False
+                    new_side["grid"] = merged_grid
+
+                    for g_idx, g_val in new_side["grid"].items():
+                        if isinstance(g_val, dict):
                             # Правило: исполненный уровень (is_active=True) никогда не может быть взведён
-                            if new_side["grid"][g_idx].get("is_active"):
-                                new_side["grid"][g_idx]["is_armed"] = False
-                                new_side["grid"][g_idx].pop("armed_at_drawdown", None)
-                                new_side["grid"][g_idx].pop("armed_timestamp", None)
+                            if g_val.get("is_active"):
+                                g_val["is_armed"] = False
+                                g_val.pop("armed_at_drawdown", None)
+                                g_val.pop("armed_timestamp", None)
                                 if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
                                     armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
                                     if isinstance(armed_dict, dict) and g_idx in armed_dict:
                                         armed_dict.pop(g_idx, None)
-                            elif new_side["grid"][g_idx].get("enabled", True) is False:
-                                new_side["grid"][g_idx]["is_active"] = False
-                                new_side["grid"][g_idx]["is_armed"] = False
-                                new_side["grid"][g_idx]["price"] = None
-                                new_side["grid"][g_idx]["activation_price"] = None
-                                new_side["grid"][g_idx].pop("armed_at_drawdown", None)
-                                new_side["grid"][g_idx].pop("armed_timestamp", None)
+                            elif g_val.get("enabled", True) is False:
+                                g_val["is_active"] = False
+                                g_val["is_armed"] = False
+                                g_val["price"] = None
+                                g_val["activation_price"] = None
+                                g_val.pop("armed_at_drawdown", None)
+                                g_val.pop("armed_timestamp", None)
                                 if "trailing_grid_state" in new_side and isinstance(new_side["trailing_grid_state"], dict):
                                     armed_dict = new_side["trailing_grid_state"].get("armed_levels", {})
                                     if isinstance(armed_dict, dict) and g_idx in armed_dict:
@@ -681,11 +691,14 @@ class StrategyApplicator:
                 # Универсальное определение исполненных уровней сетки по FSM-состоянию и конфигу (без хардкодов символов)
                 self.resolve_executed_grid_levels(strategy, symbol, side, new_side, exist_side)
 
-                if "tp_map" in exist_side and "tp_map" in new_side:
-                    for tp_idx, tp_val in exist_side["tp_map"].items():
-                        if tp_idx in new_side["tp_map"] and isinstance(tp_val, dict):
-                            if "is_active" in tp_val:
-                                new_side["tp_map"][tp_idx]["is_active"] = tp_val["is_active"]
+                if "tp_map" in exist_side and isinstance(exist_side["tp_map"], dict) and exist_side["tp_map"]:
+                    # Сохраняем карту TP открытой позиции
+                    merged_tp = copy.deepcopy(exist_side["tp_map"])
+                    if "tp_map" in new_side and isinstance(new_side["tp_map"], dict):
+                        for tmpl_k, tmpl_v in new_side["tp_map"].items():
+                            if tmpl_k not in merged_tp and isinstance(tmpl_v, dict):
+                                merged_tp[tmpl_k] = copy.deepcopy(tmpl_v)
+                    new_side["tp_map"] = merged_tp
             else:
                 new_side.update({
                     "total_volume": 0.0,
