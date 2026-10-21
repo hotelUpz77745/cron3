@@ -257,6 +257,7 @@ class SimulatedBinanceClient:
     _warmup_1d: Dict[str, List[float]] = {}
     _sim_1h: Dict[str, List[Dict[str, Any]]] = {}
     _precomputed_trends: Dict[str, str] = {}
+    _precomputed_atr: Dict[str, float] = {}
 
     @classmethod
     def _ensure_historical_klines(cls):
@@ -274,6 +275,7 @@ class SimulatedBinanceClient:
             ("warmup_1d.json", "_warmup_1d"),
             ("sim_klines_1h.json", "_sim_1h"),
             ("precomputed_ema_trends.json", "_precomputed_trends"),
+            ("precomputed_atr.json", "_precomputed_atr"),
         ]:
             p = backtest_data / name
             if p.exists():
@@ -282,6 +284,23 @@ class SimulatedBinanceClient:
                         setattr(cls, target, json.load(f))
                 except Exception as e:
                     logger.warning(f"[SimulatedBinanceClient] Error loading {name}: {e}")
+
+    def get_precomputed_atr(self, symbol: str, timeframe: str = "1h", period: int = 14) -> Optional[float]:
+        self._ensure_historical_klines()
+        if not self._precomputed_atr:
+            return None
+        cur_ts = int(self.current_sim_time)
+        if not cur_ts:
+            return None
+        tf = str(timeframe).lower().strip()
+        bucket_ts = (cur_ts // 3600000) * 3600000
+        sym_u = symbol.upper().strip()
+        key_p = f"{sym_u}|{tf}_{period}|{bucket_ts}"
+        if key_p in self._precomputed_atr:
+            return float(self._precomputed_atr[key_p])
+        key_s = f"{sym_u}|{tf}|{bucket_ts}"
+        val = self._precomputed_atr.get(key_s)
+        return float(val) if val is not None else None
 
     def get_precomputed_trend(self, symbol: str, timeframe: str, sma_fast: int = 10, sma_slow: int = 30) -> Optional[str]:
         self._ensure_historical_klines()

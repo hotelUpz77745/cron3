@@ -10,6 +10,17 @@
         "distribute_skip": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
     },
     "super_grid": false,
+    "dynamic_atr_grid": {
+        "enabled": true,
+        "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента",
+        "timeframe": "1h",
+        "period": 14,
+        "cache_ttl_sec": 300,
+        "fallback_atr_pct": 2.0,
+        "ref_atr_pct": 2.0,
+        "min_multiplier": 0.75,
+        "max_multiplier": 2.25
+    },
     "smart_grace": {
         "start_period_sec": 150,
         "shift_interval_sec": [
@@ -98,8 +109,17 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": 1.5,
-            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
+            "scale_money": null,
+            "_desc_scale_money": "Масштаб порогов AutoCloser в USDT. При значении null или auto_scale_money=true пороги автоматически масштабируются от фактически задействованной маржи.",
+            "auto_scale_money": true,
+            "_desc_auto_scale_money": "Динамическая привязка масштаба порогов AutoCloser к фактически задействованной марже корзины.",
+            "margin_relative": {
+                "enabled": true,
+                "_desc": "Динамическое масштабирование порогов автоклозера от фактически задействованной маржи корзины",
+                "ref_margin_usdt": 100.0,
+                "min_scale": 0.5,
+                "max_scale": 2.5
+            },
             "trailing_ratchet": {
                 "levels": [
                     {

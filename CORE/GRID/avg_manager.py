@@ -24,8 +24,8 @@ class AverageManager:
     def reset(self, symbol: str, side: str):
         pass
 
-    async def _init_grid_prices(self, runtime_manager, symbol: str, side: str, state, spec_data: dict) -> bool:
-        """Единожды рассчитывает цены для всей сетки на основе initial_entry_price."""
+    async def _init_grid_prices(self, runtime_manager, symbol: str, side: str, state, spec_data: dict, client: Optional[object] = None) -> bool:
+        """Единожды рассчитывает цены для всей сетки на основе initial_entry_price с поддержкой dynamic_atr_grid."""
         grid = state.grid
         initial_price = state.initial_entry_price
         
@@ -36,6 +36,29 @@ class AverageManager:
 
         if initial_price <= 0:
             return False # Еще нет цены для расчета
+
+        # 0. Разрешение конфигурации dynamic_atr_grid
+        atr_grid_cfg = None
+        if getattr(runtime_manager, "strategy_registry", None):
+            try:
+                strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                atr_grid_cfg = getattr(strat, "dynamic_atr_grid_cfg", None)
+                if not atr_grid_cfg and hasattr(strat, "raw_meta"):
+                    atr_grid_cfg = strat.raw_meta.get("dynamic_atr_grid")
+            except Exception:
+                atr_grid_cfg = None
+        if not atr_grid_cfg:
+            from consts import _BASE_CFG, _CFG
+            atr_grid_cfg = _CFG.get("dynamic_atr_grid") or _BASE_CFG.get("dynamic_atr_grid")
+
+        atr_mult = 1.0
+        if atr_grid_cfg and atr_grid_cfg.get("enabled", False):
+            from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
+            atr_mult = await DynamicAtrGridManager.get_grid_atr_multiplier(
+                client=client,
+                symbol=symbol,
+                cfg=atr_grid_cfg
+            )
             
         needs_save = False
         for level_str, level_data in grid.items():
@@ -54,8 +77,14 @@ class AverageManager:
                     needs_save = True
             else:
                 if level_data.get("price") is None:
-                    indent_pct = level_data.get("indent")
-                    if indent_pct is not None:
+                    # Сохраняем базовый отступ для возможности сброса
+                    if "_base_indent" not in level_data and "indent" in level_data:
+                        level_data["_base_indent"] = level_data["indent"]
+                    if "_base_activation" not in level_data and "activation" in level_data:
+                        level_data["_base_activation"] = level_data["activation"]
+
+                    base_indent = level_data.get("_base_indent", level_data.get("indent"))
+                    if base_indent is not None:
                         is_sg_enabled = False
                         if getattr(runtime_manager, "strategy_registry", None):
                             try:
@@ -66,19 +95,30 @@ class AverageManager:
                         elif "super_grid" in _CFG:
                             is_sg_enabled = bool(_CFG["super_grid"].get("enabled", False))
 
+                        indent_pct = base_indent
                         if is_sg_enabled and level_data.get("super_indent") is not None:
                             indent_pct = level_data["super_indent"]
                             
-                        price = TradeMath.calculate_grid_price(initial_price, indent_pct, side, spec_data, symbol)
+                        # Динамическое масштабирование шага сетки через ATR
+                        eff_indent = round(float(indent_pct) * atr_mult, 4)
+                        level_data["indent"] = eff_indent
+                        level_data["effective_indent"] = eff_indent
+                        level_data["atr_mult"] = atr_mult
+
+                        price = TradeMath.calculate_grid_price(initial_price, eff_indent, side, spec_data, symbol)
                         level_data["price"] = price
                         needs_save = True
 
                 # Расчет цены активации (курка) при наличии activation
-                if level_data.get("activation") is not None and level_data.get("activation_price") is None:
-                    act_pct = level_data["activation"]
-                    act_price = TradeMath.calculate_grid_price(initial_price, act_pct, side, spec_data, symbol)
-                    level_data["activation_price"] = act_price
-                    needs_save = True
+                if level_data.get("activation_price") is None:
+                    base_act = level_data.get("_base_activation", level_data.get("activation"))
+                    if base_act is not None:
+                        eff_act = round(float(base_act) * atr_mult, 4)
+                        level_data["activation"] = eff_act
+                        level_data["effective_activation"] = eff_act
+                        act_price = TradeMath.calculate_grid_price(initial_price, eff_act, side, spec_data, symbol)
+                        level_data["activation_price"] = act_price
+                        needs_save = True
                 
         if needs_save:
             # Не вызываем save_cache здесь, это будет сделано в sync_with_fsm
@@ -94,7 +134,7 @@ class AverageManager:
         grid = state.grid
 
         # 1. Расчет отсутствующих цен сетки (если price == None)
-        success = await self._init_grid_prices(runtime_manager, symbol, side, state, spec_data)
+        success = await self._init_grid_prices(runtime_manager, symbol, side, state, spec_data, client=client)
         if not success:
             return
 

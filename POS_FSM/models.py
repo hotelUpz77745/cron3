@@ -136,6 +136,13 @@ class PositionState:
         
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():
+            if "_base_indent" in v:
+                v["indent"] = v.pop("_base_indent")
+            if "_base_activation" in v:
+                v["activation"] = v.pop("_base_activation")
+            v.pop("effective_indent", None)
+            v.pop("effective_activation", None)
+            v.pop("atr_mult", None)
             v["is_active"] = False
             v["is_armed"] = False
             v["price"] = None

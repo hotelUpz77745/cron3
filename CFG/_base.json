@@ -27,6 +27,17 @@
     "signal_heartbeat_tfr": "5m",
     "super_grid": false,
     "_super_grid_desc": "Флаг адаптивной динамической сетки волатильности: true (включено), false (выключено).",
+    "dynamic_atr_grid": {
+        "enabled": true,
+        "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента",
+        "timeframe": "1h",
+        "period": 14,
+        "cache_ttl_sec": 300,
+        "fallback_atr_pct": 2.0,
+        "ref_atr_pct": 2.0,
+        "min_multiplier": 0.75,
+        "max_multiplier": 2.25
+    },
     "notifications": {
         "enabled": true,
         "negative_threshold": -50.0,
@@ -147,8 +158,17 @@
     },
     "auto_closing": {
         "positive": {
-            "scale_money": 1.0,
-            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
+            "scale_money": null,
+            "_desc_scale_money": "Масштаб порогов AutoCloser в USDT. При значении null или auto_scale_money=true пороги автоматически масштабируются от фактически задействованной маржи.",
+            "auto_scale_money": true,
+            "_desc_auto_scale_money": "Динамическая привязка порогов AutoCloser к фактически задействованной марже корзины.",
+            "margin_relative": {
+                "enabled": true,
+                "_desc": "Динамическое масштабирование порогов автоклозера от фактически задействованной маржи корзины",
+                "ref_margin_usdt": 100.0,
+                "min_scale": 0.5,
+                "max_scale": 2.5
+            },
             "fixed_net": {
                 "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
                 "target_net_usdt": 60.0,

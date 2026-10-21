@@ -49,6 +49,14 @@ class ATRProvider:
         cache_key = (symbol, timeframe, period)
         now = time.time()
 
+        if client and hasattr(client, "get_precomputed_atr"):
+            try:
+                pre_atr = client.get_precomputed_atr(symbol, timeframe, period)
+                if pre_atr is not None and pre_atr > 0:
+                    return float(pre_atr)
+            except Exception:
+                pass
+
         cached = cls._cache.get(cache_key)
         if cached is not None:
             val, ts = cached

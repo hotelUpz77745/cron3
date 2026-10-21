@@ -438,9 +438,29 @@ class AutoCloser:
             # Исполнение выбранного режима автозакрытия
             if mode != "off":
                 r_cfg = pos_cfg.get("trailing_ratchet") or {}
-                scale_money = float(pos_cfg.get("scale_money", getattr(strat_cfg, "auto_closing_cfg", {}).get("scale_money", 1.0) if hasattr(strat_cfg, "auto_closing_cfg") else 1.0))
-                if scale_money <= 0:
-                    scale_money = 1.0
+                raw_scale = pos_cfg.get("scale_money", getattr(strat_cfg, "auto_closing_cfg", {}).get("scale_money") if hasattr(strat_cfg, "auto_closing_cfg") else None)
+                auto_scale = bool(pos_cfg.get("auto_scale_money", False) or raw_scale is None or (isinstance(pos_cfg.get("margin_relative"), dict) and pos_cfg["margin_relative"].get("enabled", False)))
+
+                margin_rel_cfg = pos_cfg.get("margin_relative") if isinstance(pos_cfg.get("margin_relative"), dict) else {}
+                ref_margin = float(margin_rel_cfg.get("ref_margin_usdt", 100.0))
+                min_scale = float(margin_rel_cfg.get("min_scale", 0.5))
+                max_scale = float(margin_rel_cfg.get("max_scale", 2.5))
+
+                if auto_scale:
+                    total_margin = 0.0
+                    per_coin = strat_analytics.get("per_coin", {})
+                    if isinstance(per_coin, dict) and per_coin:
+                        for c_data in per_coin.values():
+                            if isinstance(c_data, dict):
+                                total_margin += float(c_data.get("current_margin_usdt", 0.0))
+                    base_mult = float(raw_scale) if (raw_scale is not None and float(raw_scale) > 0) else 1.0
+                    if ref_margin > 0 and total_margin > 0:
+                        calc_scale = (total_margin / ref_margin) * base_mult
+                        scale_money = round(max(min_scale, min(max_scale, calc_scale)), 3)
+                    else:
+                        scale_money = min_scale
+                else:
+                    scale_money = float(raw_scale) if (raw_scale is not None and float(raw_scale) > 0) else 1.0
 
                 r_state = self._trailing_ratchet_state.setdefault(strat_id, {})
                 if r_state.get("iteration_index") != iter_idx:

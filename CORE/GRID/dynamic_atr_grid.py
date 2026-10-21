@@ -1,0 +1,68 @@
+# CORE/GRID/dynamic_atr_grid.py
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+MODULE: CORE.GRID.dynamic_atr_grid
+ROLE: Динамическое масштабирование шагов сетки и курков активации через ATR инструмента
+==============================================================================
+"""
+
+from typing import Optional
+from c_log import UnifiedLogger
+from CORE.SERVICES.VOLATILITY.atr_provider import ATRProvider
+
+logger = UnifiedLogger("DynamicAtrGrid")
+
+
+class DynamicAtrGridManager:
+    """
+    Рассчитывает множитель масштабирования шагов сетки (indent) и курков (activation)
+    на основе текущей волатильности монеты (ATR%) относительно базовой волатильности рынка (ref_atr_pct).
+    Позволяет на волатильных монетах (например, GTC) автоматически расширять шаг сетки,
+    предотвращая преждевременную маржинальную перегрузку на глубоких просадках.
+    """
+
+    @classmethod
+    async def get_grid_atr_multiplier(
+        cls,
+        client: Optional[object],
+        symbol: str,
+        cfg: Optional[dict] = None,
+    ) -> float:
+        """
+        Возвращает коэффициент масштабирования отступов сетки (clamped).
+        Если механика выключена или конфигурация отсутствует, возвращает 1.0 (без изменений).
+        """
+        if not cfg or not cfg.get("enabled", False):
+            return 1.0
+
+        timeframe = str(cfg.get("timeframe", "1h"))
+        period = int(cfg.get("period", 14))
+        cache_ttl_sec = int(cfg.get("cache_ttl_sec", 300))
+        fallback_atr_pct = float(cfg.get("fallback_atr_pct", 2.0))
+        ref_atr_pct = float(cfg.get("ref_atr_pct", 2.0))
+        min_mult = float(cfg.get("min_multiplier", 0.75))
+        max_mult = float(cfg.get("max_multiplier", 2.25))
+
+        if ref_atr_pct <= 0:
+            return 1.0
+
+        try:
+            atr_pct = await ATRProvider.get_atr_pct(
+                client=client,
+                symbol=symbol,
+                timeframe=timeframe,
+                period=period,
+                cache_ttl_sec=cache_ttl_sec,
+                fallback_atr_pct=fallback_atr_pct,
+            )
+            raw_mult = atr_pct / ref_atr_pct
+            clamped_mult = max(min_mult, min(max_mult, raw_mult))
+            clamped_mult = round(clamped_mult, 4)
+            logger.debug(
+                f"[DynamicAtrGrid] [{symbol}] ATR%: {atr_pct:.2f}% | Ref: {ref_atr_pct:.2f}% -> Mult: {clamped_mult:.3f}x"
+            )
+            return clamped_mult
+        except Exception as e:
+            logger.warning(f"[DynamicAtrGrid] [{symbol}] Error computing ATR multiplier ({e}), using 1.0x")
+            return 1.0

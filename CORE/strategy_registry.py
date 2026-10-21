@@ -478,6 +478,18 @@ class StrategyConfig:
             self.tp_backoff_cfg: Dict[str, Any] = copy.deepcopy(raw_backoff)
         else:
             self.tp_backoff_cfg = {"enabled": False}
+
+        raw_atr_grid = (
+            self.active_settings.get("dynamic_atr_grid")
+            or raw_meta.get("dynamic_atr_grid")
+            or self.overrides.get("dynamic_atr_grid")
+            or _BASE_CFG.get("dynamic_atr_grid")
+        )
+        if raw_atr_grid and isinstance(raw_atr_grid, dict):
+            self.dynamic_atr_grid_cfg: Dict[str, Any] = copy.deepcopy(raw_atr_grid)
+        else:
+            self.dynamic_atr_grid_cfg = {"enabled": False}
+
         self.dynamic_atr_tp_cfg: Dict[str, Any] = copy.deepcopy(raw_meta.get("dynamic_atr_tp") or self.overrides.get("dynamic_atr_tp") or {})
         if self.dynamic_atr_tp_cfg.get("enabled"):
             for req_k in ("timeframe", "period", "cache_ttl_sec", "min_guaranteed_floor_pct", "max_ceiling_pct", "fallback_atr_pct", "level_multipliers"):
