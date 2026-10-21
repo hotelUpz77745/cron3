@@ -30,6 +30,9 @@ from ANALYTICS.strategy_stats import StrategyStatsEngine
 
 class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        import ANALYTICS.circuit_breaker as cb
+        cb._ban_until_ms = 0
+
         self.ratchet_cfg = {
             "enabled": True,
             "scale_money": 1.0,
@@ -72,24 +75,24 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(state.get("armed_floor"), "Ratchet must be de-armed when net == 0.0")
         self.assertIn("De-armed", info_zero)
 
-    def test_evaluate_ratchet_min_profit_guarantee_default_five_dollars(self):
-        """When min_guaranteed_profit_usdt is not specified, default to at least 5.0 USDT (> 0)."""
+    def test_evaluate_ratchet_min_profit_guarantee_default_half_step(self):
+        """When min_guaranteed_profit_usdt is not specified, default to half of first step floor (> 0)."""
         state = {
             "armed_floor": 8.0,
             "active_level_idx": 0,
             "armed_level_desc": "L0",
             "highest_net": 15.0,
         }
-        # Default min profit guarantee is max(5.0, 0.5 * 8.0) = 5.0 USDT
-        # If iter_net drops to 3.0 USDT (below 5.0 guarantee), it must be blocked!
+        # Default min profit guarantee is 0.5 * 8.0 = 4.0 USDT
+        # If iter_net drops to 3.0 USDT (below 4.0 guarantee), it must be blocked!
         should_close, trig_floor, info, _ = BaseTrailingSystem.evaluate_ratchet(
             iter_net=3.0,
             iter_age_hours=5.0,
             ratchet_cfg=self.ratchet_cfg,
             state=state,
         )
-        self.assertFalse(should_close, "Ratchet must NOT trigger below minimum guarantee (5.0 USDT)")
-        self.assertIn("MinGuard 5.00", info)
+        self.assertFalse(should_close, "Ratchet must NOT trigger below minimum guarantee (4.0 USDT)")
+        self.assertIn("MinGuard 4.00", info)
 
         # But if iter_net is 8.0 USDT (<= armed_floor 8.0, and >= 5.0), it should normally trigger
         should_close_ok, trig_ok, info_ok, _ = BaseTrailingSystem.evaluate_ratchet(
@@ -371,7 +374,8 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             tmp_path = Path(tmp_dir)
             with patch("ANALYTICS.analytics.ANALYTICS_STATS_DIR", tmp_path / "STATS"), \
-                 patch("ANALYTICS.analytics.ANALYTICS_LEDGERS_DIR", tmp_path / "LEDGERS"):
+                 patch("ANALYTICS.analytics.ANALYTICS_LEDGERS_DIR", tmp_path / "LEDGERS"), \
+                 patch("ANALYTICS.analytics.CACHE_DIR", tmp_path / "CACHE"):
                 
                 # Pre-populate a frozen analytics file
                 stats_dir = tmp_path / "STATS"
@@ -393,6 +397,137 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
                 self.assertFalse(data.get("_floating_synced"), "_read_data must reflect unverified state")
                 self.assertEqual(data.get("cur_balance_usdt"), init_bal + 15.0)
 
+    def test_analytics_fsm_four_states_lifecycle(self):
+        """Verify the 4-state lifecycle of AnalyticsFSM and AutoCloser gating."""
+        from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir)
+            fsm = AnalyticsFSM(stats_dir=p / "STATS", cache_dir=p / "CACHE", log_file=p / "STATS" / "analytics.json")
+            fsm.restore_on_boot(initial_start_balance=600.0)
+
+            # State 1: RESTORED_FROZEN
+            self.assertEqual(fsm.state, AnalyticsState.RESTORED_FROZEN)
+            self.assertFalse(fsm.is_autocloser_ready())
+
+            # State 2: AWAITING_API
+            fsm.transition_to_awaiting_api()
+            self.assertEqual(fsm.state, AnalyticsState.AWAITING_API)
+            self.assertFalse(fsm.is_autocloser_ready())
+
+            # State 3: LIVE_SYNCED
+            fsm.on_api_sync_success({"totalMarginBalance": "620.0"})
+            self.assertEqual(fsm.state, AnalyticsState.LIVE_SYNCED)
+            self.assertFalse(fsm.is_autocloser_ready())
+
+            # State 4: AUTOCLOSER_READY
+            fsm.transition_to_autocloser_ready()
+            self.assertEqual(fsm.state, AnalyticsState.AUTOCLOSER_READY)
+            self.assertTrue(fsm.is_autocloser_ready())
+
+            # API Error disarms back to AWAITING_API
+            fsm.on_api_error("Exchange 502 Bad Gateway")
+            self.assertEqual(fsm.state, AnalyticsState.AWAITING_API)
+            self.assertFalse(fsm.is_autocloser_ready())
+
+    def test_analytics_fsm_cold_start_initialization(self):
+        """When cache is missing, cold start creates base from starting balance and zeroes all PnLs."""
+        from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir)
+            log_f = p / "STATS" / "analytics.json"
+            fsm = AnalyticsFSM(stats_dir=p / "STATS", cache_dir=p / "CACHE", log_file=log_f)
+            self.assertFalse(log_f.exists())
+
+            fsm.restore_on_boot(initial_start_balance=555.0)
+            self.assertTrue(log_f.exists())
+            self.assertEqual(fsm.state, AnalyticsState.RESTORED_FROZEN)
+            self.assertFalse(fsm.is_autocloser_ready())
+
+            disk_data = json.loads(log_f.read_text(encoding="utf-8"))
+            self.assertEqual(disk_data["start_balance_usdt"], 555.0)
+            self.assertEqual(disk_data["cur_balance_usdt"], 555.0)
+            self.assertEqual(disk_data["peak_balance_usdt"], 555.0)
+            self.assertEqual(disk_data["net_profit_usdt"], 0.0)
+            self.assertEqual(disk_data["realized_pnl_usdt"], 0.0)
+            self.assertEqual(disk_data["iteration_index"], 1)
+            self.assertFalse(disk_data["_floating_synced"])
+
+    def test_iteration_index_preservation_across_restarts(self):
+        """Iteration index from CACHE/iteration_state.json must be preserved and never revert to 1."""
+        from ANALYTICS.analytics_fsm import AnalyticsFSM
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir)
+            cache_d = p / "CACHE"
+            cache_d.mkdir(parents=True, exist_ok=True)
+            iter_f = cache_d / "iteration_state.json"
+            iter_f.write_text(json.dumps({
+                "u17_stephensonE": {"iteration_index": 5, "iteration_start_net_profit_usdt": 42.0},
+                "__global__": {"iteration_index": 3, "iteration_start_net_profit_usdt": 100.0}
+            }), encoding="utf-8")
+
+            fsm = AnalyticsFSM(stats_dir=p / "STATS", cache_dir=cache_d, log_file=p / "STATS" / "analytics.json")
+            fsm.restore_on_boot(initial_start_balance=600.0)
+
+            self.assertEqual(fsm.get_iteration_index("u17_stephensonE"), 5)
+            self.assertEqual(fsm.get_iteration_index("__global__"), 3)
+            self.assertEqual(fsm.get_iteration_index("unknown_strat"), 1)
+
+    async def test_auto_closer_gated_by_fsm_fourth_state(self):
+        """AutoCloser.check() must be strictly blocked unless AnalyticsFSM is in AUTOCLOSER_READY."""
+        from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir)
+            fsm = AnalyticsFSM(stats_dir=p / "STATS", cache_dir=p / "CACHE", log_file=p / "STATS" / "analytics.json")
+            fsm.restore_on_boot(initial_start_balance=600.0)
+
+            mock_bot = MagicMock()
+            mock_bot.analytics = MagicMock()
+            mock_bot.analytics.fsm = fsm
+            mock_bot.close_strategy_positions = AsyncMock()
+
+            closer = AutoCloser(mock_bot)
+
+            # In State 1 (RESTORED_FROZEN), AutoCloser must be blocked
+            self.assertEqual(fsm.state, AnalyticsState.RESTORED_FROZEN)
+            await closer.check()
+            mock_bot.close_strategy_positions.assert_not_called()
+
+            # In State 2 (AWAITING_API), AutoCloser must be blocked
+            fsm.transition_to_awaiting_api()
+            await closer.check()
+            mock_bot.close_strategy_positions.assert_not_called()
+
+            # In State 3 (LIVE_SYNCED), AutoCloser must still be blocked
+            fsm.on_api_sync_success()
+            await closer.check()
+            mock_bot.close_strategy_positions.assert_not_called()
+
+    def test_auto_closer_idempotency_via_history_cache(self):
+        """Closed iterations recorded in auto_close_history.json must prevent duplicate closes."""
+        from ANALYTICS.analytics_fsm import AnalyticsFSM
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            p = Path(tmp_dir)
+            fsm = AnalyticsFSM(stats_dir=p / "STATS", cache_dir=p / "CACHE", log_file=p / "STATS" / "analytics.json")
+            fsm.restore_on_boot(initial_start_balance=600.0)
+
+            strat = "u17_stephensonE"
+            self.assertFalse(fsm.is_iteration_closed(strat, 1))
+
+            fsm.mark_iteration_closed(strat, iter_idx=1, details={"close_type": "TRAILING RATCHET", "iter_net": 15.5})
+
+            self.assertTrue(fsm.is_iteration_closed(strat, 1), "Iteration #1 must be marked closed")
+            self.assertFalse(fsm.is_iteration_closed(strat, 2), "Iteration #2 must NOT be marked closed")
+            self.assertEqual(fsm.get_iteration_index(strat), 2, "Next iteration index must be advanced to 2")
+
+            # Check persistent file on disk
+            hist_file = p / "CACHE" / "auto_close_history.json"
+            self.assertTrue(hist_file.exists())
+            hist_data = json.loads(hist_file.read_text(encoding="utf-8"))
+            self.assertEqual(len(hist_data[strat]), 1)
+            self.assertEqual(hist_data[strat][0]["iteration_index"], 1)
+            self.assertEqual(hist_data[strat][0]["iter_net"], 15.5)
+
 
 if __name__ == "__main__":
     unittest.main()
+

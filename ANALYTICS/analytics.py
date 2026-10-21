@@ -27,6 +27,7 @@ from consts import (
 from c_log import UnifiedLogger
 from c_utils import Utils
 
+from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
 from ANALYTICS.circuit_breaker import (
     _BAN_PATTERN,
     _ban_until_ms,
@@ -81,6 +82,13 @@ class AnalyticsManager:
         self._symbol_fsm_positions = {}
         self._strat_velocity_engines = {}
 
+        # 4-State Analytics State Machine & Iteration Coordinator
+        self.fsm = AnalyticsFSM(
+            stats_dir=self.stats_dir,
+            cache_dir=CACHE_DIR,
+            log_file=self.log_file
+        )
+
         # Sub-engines decomposition
         self.ledger_recorder = LedgerRecorder(self)
         self.drawdown_tracker = DrawdownTracker(self)
@@ -105,37 +113,17 @@ class AnalyticsManager:
 
     def _restore_persisted_state(self):
         """
-        Ресторатор аналитики при рестарте системы:
-        Восстанавливает последнее замороженное состояние из JSON-файлов на диске.
+        Ресторатор аналитики при рестарте системы (Состояние 1: RESTORED_FROZEN):
+        Восстанавливает последнее замороженное состояние из JSON-файлов на диске и CACHE/iteration_state.json.
+        Если кэш отсутствует, инициализирует с нуля от стартового баланса.
         Любой пересчет метрик блокируется (_floating_synced = False) до тех пор,
         пока от Binance REST API не получен первый подтвержденный ответ по открытым позициям.
         """
         self._floating_synced = False
-        try:
-            if self.log_file.exists():
-                self._persisted_global_cache = json.loads(self.log_file.read_text(encoding="utf-8"))
-                self._persisted_global_cache["_floating_synced"] = False
-        except Exception as e:
-            logger.error(f"[ANALYTICS_RESTORER] Error reading global analytics: {e}")
-
-        try:
-            if self.stats_dir.exists():
-                for sf in self.stats_dir.glob("analytics_*.json"):
-                    try:
-                        strat_d = json.loads(sf.read_text(encoding="utf-8"))
-                        strat_d["_floating_synced"] = False
-                        self._persisted_strat_cache[sf.stem.replace("analytics_", "")] = strat_d
-                    except Exception:
-                        pass
-        except Exception as e:
-            logger.error(f"[ANALYTICS_RESTORER] Error reading strategy analytics: {e}")
-
-        cur_bal = self._persisted_global_cache.get("cur_balance_usdt", "N/A")
-        net_prof = self._persisted_global_cache.get("net_profit_usdt", "N/A")
-        logger.info(
-            f"[ANALYTICS_RESTORER] 🛡️ Restored frozen analytics: Balance ${cur_bal}, Net ${net_prof}. "
-            f"All metrics locked until first verified REST response."
-        )
+        init_start = float(ANALYTICS_START_BALANCE_USDT)
+        self.fsm.restore_on_boot(initial_start_balance=init_start)
+        self._persisted_global_cache = dict(self.fsm._persisted_global_cache)
+        self._persisted_strat_cache = dict(self.fsm._persisted_strat_cache)
 
     def _ensure_files(self):
         """Ensures directories and baseline JSON / ledger files exist."""

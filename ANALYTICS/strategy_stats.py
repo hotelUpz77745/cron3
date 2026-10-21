@@ -326,16 +326,9 @@ class StrategyStatsEngine:
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
             s_net = float(strat_data.get("net_profit_usdt", 0.0))
-            iter_idx = int(strat_data.get("iteration_index") or iter_cache.get("iteration_index") or 1)
-
-            if iter_idx == 1:
-                iter_start_net = 0.0
-            elif "iteration_start_net_profit_usdt" in strat_data:
-                iter_start_net = float(strat_data["iteration_start_net_profit_usdt"])
-            elif "iteration_start_net_profit_usdt" in iter_cache:
-                iter_start_net = float(iter_cache["iteration_start_net_profit_usdt"])
-            else:
-                iter_start_net = 0.0
+            fsm_i = self.manager.fsm.get_iteration_index(strat_id) if hasattr(self.manager, "fsm") and self.manager.fsm else 1
+            iter_idx = max(int(strat_data.get("iteration_index", 1)), int(iter_cache.get("iteration_index", 1)), fsm_i)
+            iter_start_net = 0.0 if iter_idx == 1 else float(strat_data.get("iteration_start_net_profit_usdt", iter_cache.get("iteration_start_net_profit_usdt", 0.0)))
 
             iter_net = round(s_net - iter_start_net, 4)
             iter_start_ts = strat_data.get("iteration_start_ts") or iter_cache.get("iteration_start_ts") or first_ts_s

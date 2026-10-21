@@ -51,6 +51,7 @@ class TestAnalyticsDecomposition(unittest.TestCase):
         self.mgr.peels_ledger = self.ledgers_dir / "peels_ledger.txt"
         self.mgr.recycling_ledger = self.ledgers_dir / "recycling_ledger.txt"
         self.mgr._ensure_files()
+        self.mgr._floating_synced = True
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
@@ -120,6 +121,7 @@ class TestAnalyticsDecomposition(unittest.TestCase):
         self.assertEqual(res["iteration_index"], 2)
 
     def test_rebase_start_balance(self):
+        self.mgr._write_data({"start_balance_usdt": 500.0, "cur_balance_usdt": 500.0})
         self.mgr.rebase_start_balance(500.0)
         data = self.mgr._read_data()
         self.assertEqual(data["start_balance_usdt"], 500.0)
@@ -189,6 +191,7 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
         self.mgr.peels_ledger = self.ledgers_dir / "peels_ledger.txt"
         self.mgr.recycling_ledger = self.ledgers_dir / "recycling_ledger.txt"
         self.mgr._ensure_files()
+        self.mgr._floating_synced = True
 
     async def asyncTearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)

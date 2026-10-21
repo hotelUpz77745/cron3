@@ -311,6 +311,13 @@ class AutoCloser:
     async def check(self):
         if self._is_closing:
             return
+
+        # Машина состояний аналитики (FSM): AutoCloser разрешен ТОЛЬКО в 4-м состоянии (AUTOCLOSER_READY)
+        fsm = getattr(getattr(self.bot_core, "analytics", None), "fsm", None)
+        if fsm and not fsm.is_autocloser_ready():
+            logger.debug(f"[AUTO_CLOSER] ⏳ Analytics state is {fsm.state.name} (not AUTOCLOSER_READY). AutoCloser execution blocked.")
+            return
+
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path)
         if not app_data:
@@ -428,6 +435,16 @@ class AutoCloser:
 
             strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
             iter_idx = int(strat_analytics.get("iteration_index", 1))
+            if fsm:
+                cached_idx = fsm.get_iteration_index(strat_id)
+                if cached_idx > iter_idx:
+                    iter_idx = cached_idx
+
+            # Идемпотентность: защита от повторного срабатывания закрытия уже закрытой итерации
+            if fsm and fsm.is_iteration_closed(strat_id, iter_idx):
+                logger.debug(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} already closed in history. Skipping duplicate auto-close.")
+                continue
+
             iter_start_net = float(strat_analytics.get("iteration_start_net_profit_usdt", 0.0))
             iter_net_val = strat_analytics.get("iteration_net_profit_usdt")
             if iter_net_val is None:
@@ -676,6 +693,19 @@ class AutoCloser:
                     except Exception as ce:
                         logger.error(f"[AUTO_CLOSER][{strat_id}] Error saving iteration cache: {ce}")
 
+                    if fsm:
+                        c_type = strat_msg.split("(")[1].split(")")[0] if "(" in strat_msg else "AUTO-CLOSE"
+                        fsm.mark_iteration_closed(
+                            strat_id=strat_id,
+                            iter_idx=iter_idx,
+                            details={
+                                "close_type": c_type,
+                                "iter_net": iter_net,
+                                "strat_net": settled_net,
+                                "settled_realized": settled_realized,
+                            }
+                        )
+
                     if hasattr(self.bot_core, "fsm_states"):
                         for sym in strat_cfg.symbols:
                             if sym in self.bot_core.fsm_states:
@@ -707,6 +737,14 @@ class AutoCloser:
 
         net_usdt = float(analytics_data.get("net_profit_usdt", 0.0))
         iter_idx_g = int(analytics_data.get("iteration_index", 1))
+        if fsm:
+            cached_g_idx = fsm.get_iteration_index("__global__")
+            if cached_g_idx > iter_idx_g:
+                iter_idx_g = cached_g_idx
+        if fsm and fsm.is_iteration_closed("__global__", iter_idx_g):
+            logger.debug(f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} already closed in history. Skipping duplicate auto-close.")
+            return
+
         iter_start_net_g = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
         iter_net_g_val = analytics_data.get("iteration_net_profit_usdt")
         if iter_net_g_val is None:
@@ -903,6 +941,17 @@ class AutoCloser:
                     Utils.atomic_write_json(c_file, c_dict, indent=4)
                 except Exception as ce:
                     logger.error(f"[AUTO_CLOSER] Error saving global iteration cache: {ce}")
+
+                if fsm:
+                    fsm.mark_iteration_closed(
+                        strat_id="__global__",
+                        iter_idx=iter_idx_g,
+                        details={
+                            "close_type": "PORTFOLIO AUTO-CLOSE",
+                            "iter_net": iter_net_g,
+                            "strat_net": new_iter_start_net_g,
+                        }
+                    )
 
                 if hasattr(self.bot_core, "fsm_states"):
                     for sym, sides in self.bot_core.fsm_states.items():

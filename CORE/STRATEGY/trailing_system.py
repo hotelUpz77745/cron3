@@ -111,7 +111,7 @@ class BaseTrailingSystem:
         min_profit_floor = float(ratchet_cfg.get("min_guaranteed_profit_usdt") or 0.0)
         if min_profit_floor <= 0.0:
             first_step_floor = float(levels[0].get("floor", 5.0)) * scale_money if levels else 5.0
-            effective_min_profit = max(5.0, 0.5 * first_step_floor)
+            effective_min_profit = max(0.01, 0.5 * first_step_floor)
         else:
             effective_min_profit = min_profit_floor
 

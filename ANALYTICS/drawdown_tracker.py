@@ -63,6 +63,9 @@ class DrawdownTracker:
     async def update_drawdowns(self, client, data: dict, is_lightweight: bool = False) -> bool:
         """Fetches account info to update current unrealized drawdowns globally and per-coin."""
         try:
+            if hasattr(self.manager, "fsm") and self.manager.fsm:
+                self.manager.fsm.transition_to_awaiting_api()
+
             await wait_ban_lifted()
 
             res = await client.fetch_account_info()
@@ -78,11 +81,15 @@ class DrawdownTracker:
                     return False
                 update_ban_from_error(err)
                 logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}. Skipping recalculation until valid API data.")
+                if hasattr(self.manager, "fsm") and self.manager.fsm:
+                    self.manager.fsm.on_api_error(err)
                 return False
 
             acc_data = res.data
             if "positions" not in acc_data or "totalMarginBalance" not in acc_data or not isinstance(acc_data.get("positions"), list):
                 logger.error("[ANALYTICS] fetch_account_info returned empty or invalid data! Skipping recalculation until valid API data.")
+                if hasattr(self.manager, "fsm") and self.manager.fsm:
+                    self.manager.fsm.on_api_error("Empty or invalid account data")
                 return False
 
             positions = acc_data.get("positions", [])
@@ -354,6 +361,8 @@ class DrawdownTracker:
                 self._floating_synced = True
                 self.manager._floating_synced = True
                 data["_floating_synced"] = True
+                if hasattr(self.manager, "fsm") and self.manager.fsm:
+                    self.manager.fsm.on_api_sync_success(data)
                 if hasattr(self.manager, "_persisted_global_cache"):
                     self.manager._persisted_global_cache = data
 
@@ -394,6 +403,13 @@ class DrawdownTracker:
             data["net_velocity"] = round(net_profit_usdt / active_h_g, 2)
 
             iter_idx_g = int(data.get("iteration_index", 1))
+            if hasattr(self.manager, "fsm") and self.manager.fsm:
+                try:
+                    fsm_g = int(self.manager.fsm.get_iteration_index("__global__"))
+                    if fsm_g > iter_idx_g:
+                        iter_idx_g = fsm_g
+                except (TypeError, ValueError):
+                    pass
             iter_start_net_g = float(data.get("iteration_start_net_profit_usdt", 0.0))
             iter_net_g = round(net_profit_usdt - iter_start_net_g, 4)
             iter_start_ts_g = data.get("iteration_start_ts", first_ts_g)
@@ -421,10 +437,14 @@ class DrawdownTracker:
                 data["recovery_factor"] = 0.0
 
             self.manager._update_strategies_stats(data)
+            if hasattr(self.manager, "fsm") and self.manager.fsm:
+                self.manager.fsm.transition_to_autocloser_ready()
             return True
 
         except Exception as e:
             logger.error(f"[ANALYTICS] Error updating drawdowns: {e}\n{traceback.format_exc()}")
+            if hasattr(self.manager, "fsm") and self.manager.fsm:
+                self.manager.fsm.on_api_error(str(e))
             return False
 
     async def sync_lightweight_unrealized_pnl(self, client) -> bool:
@@ -438,6 +458,8 @@ class DrawdownTracker:
             if success:
                 data["last_updated_ts"] = int(time.time() * 1000)
                 self.manager._write_data(data, mark_backup=False)
+                if hasattr(self.manager, "fsm") and self.manager.fsm:
+                    self.manager.fsm.transition_to_autocloser_ready()
                 try:
                     self.manager._update_strategies_stats(data)
                     if getattr(self.manager, "strategy_registry", None):
