@@ -35,7 +35,7 @@
             "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
         },
         "ema_trend": {
-            "timeframe": "1h",
+            "timeframe": "1d",
             "sma_fast": 10,
             "sma_slow": 30,
             "confirmation_candles": 3,

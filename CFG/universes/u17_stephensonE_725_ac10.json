@@ -16,7 +16,7 @@
     "smart_size": {
         "trend_determ": "ema_trend",
         "ema_trend": {
-            "timeframe": "1h",
+            "timeframe": "1d",
             "sma_fast": 7,
             "sma_slow": 25,
             "confirmation_candles": 3,
