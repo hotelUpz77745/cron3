@@ -233,6 +233,18 @@ class BinanceClient:
         await asyncio.sleep(0)
         return []
 
+    async def fetch_income(
+        self,
+        symbol: Optional[str] = None,
+        income_type: Optional[str] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        limit: int = 1000,
+    ) -> APIResponse:
+        """Получение истории доходности в бумажном режиме (пустой список)."""
+        await asyncio.sleep(0)
+        return APIResponse(success=True, data=[])
+
     async def fetch_positions(self, symbol: Optional[str] = None) -> List[dict]:
         await asyncio.sleep(0)
         res = []

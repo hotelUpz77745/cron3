@@ -28,17 +28,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 
 from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
-from ANALYTICS.circuit_breaker import (
-    CircuitBreaker,
-    default_circuit_breaker,
-    _BAN_PATTERN,
-    _ban_until_ms,
-    _update_ban_from_error,
-    _wait_ban_lifted,
-    is_banned,
-    update_ban_from_error,
-    wait_ban_lifted,
-)
+from ANALYTICS.circuit_breaker import CircuitBreaker
 from ANALYTICS.drawdown_tracker import DrawdownTracker
 from ANALYTICS.leaderboard import LeaderboardEngine
 from ANALYTICS.ledger_recorder import LedgerRecorder

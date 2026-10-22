@@ -27,7 +27,6 @@ def calculate_grid_volumes(
     multiplier: float = 1.1,
     total_pct: float = 100.0,
     round_digits: int = 2,
-    invest_size: Optional[float] = None,
 ) -> Tuple[List[float], float]:
     """
     Расчет объемов сетки по геометрической прогрессии:
@@ -134,7 +133,7 @@ def main():
 
     args = parser.parse_args()
 
-    vols, v0 = calculate_grid_volumes(levels=args.levels, multiplier=args.mult, invest_size=args.invest)
+    vols, v0 = calculate_grid_volumes(levels=args.levels, multiplier=args.mult)
     print_grid_table(levels=args.levels, multiplier=args.mult, volumes=vols, invest_size=args.invest)
 
     if args.patch:

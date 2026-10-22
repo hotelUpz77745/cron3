@@ -3,7 +3,7 @@
 """
 ==============================================================================
 MODULE: CORE.SERVICES.TOOLS.restore_missing_tp_orders
-ROLE: Восстановление отсутствующих TP ордеров для открытых позиций на Binance
+ROLE: Восстановление отсутствующих TP ордеров для открытых позиций на Binance Futures
 ==============================================================================
 """
 
@@ -17,23 +17,26 @@ root_dir = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
 from consts import API_KEY, API_SECRET
+from c_log import UnifiedLogger
 from API.BINANCE.client_prod import BinanceClient
 from API.BINANCE.public import BinancePublic
 from CORE._utils import TradeMath, Utils, RiskCalculatingUtils
 from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
 
+logger = UnifiedLogger("RestoreMissingTP")
+
 
 async def restore_missing_tp():
-    print("=" * 80)
-    print("[RESTORE_TP] Проверка и восстановление TP ордеров на Binance Futures...")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("[RESTORE_TP] Проверка и восстановление TP ордеров на Binance Futures...")
+    logger.info("=" * 80)
 
     client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
     
     # 1. Загрузка спецификаций биржи
     instruments = await BinancePublic.get_instruments()
     if not instruments:
-        print("[ERR] Не удалось загрузить спецификации биржи через BinancePublic!")
+        logger.error("[ERR] Не удалось загрузить спецификации биржи через BinancePublic!")
         await client.close()
         return
     spec_data = {"symbols": instruments}
@@ -41,7 +44,7 @@ async def restore_missing_tp():
     # 2. Получение аккаунта и открытых позиций
     acc_res = await client.fetch_account_info()
     if not acc_res.success or not isinstance(acc_res.data, dict):
-        print(f"[ERR] Ошибка получения аккаунта: {acc_res}")
+        logger.error(f"[ERR] Ошибка получения аккаунта: {acc_res.error_msg}")
         await client.close()
         return
 
@@ -50,21 +53,11 @@ async def restore_missing_tp():
         p for p in positions
         if abs(float(p.get("positionAmt", 0.0))) > 1e-8
     ]
-    print(f"[*] Активных позиций на бирже: {len(active_positions)}")
+    logger.info(f"[*] Активных позиций на бирже: {len(active_positions)}")
 
-    # 3. Получение открытых ордеров
-    orders_res = await client._request(
-        "GET",
-        "https://fapi.binance.com/fapi/v1/openOrders",
-        params={"recvWindow": 20000},
-        signed=True,
-    )
-    if not orders_res.success or not isinstance(orders_res.data, list):
-        print(f"[ERR] Ошибка получения открытых ордеров: {orders_res}")
-        await client.close()
-        return
+    # 3. Получение открытых ордеров через официальный метод адаптера
+    open_orders = await client.fetch_open_orders()
 
-    open_orders = orders_res.data
     orders_by_key = {}
     for o in open_orders:
         key = (o["symbol"], o["positionSide"])
@@ -89,11 +82,11 @@ async def restore_missing_tp():
         if orders:
             continue
 
-        print(f"[MISSING TP] Обнаружена позиция без TP ордера: {sym} {pside} (Объем: {pos_amt}, Вход: {entry_price})")
+        logger.warning(f"[MISSING TP] Обнаружена позиция без TP ордера: {sym} {pside} (Объем: {pos_amt}, Вход: {entry_price})")
 
         state = runtime_mgr.get_state(sym, pside)
         if not state:
-            print(f"   [WARN] FSM State не найден в runtime для {sym} {pside}! Пропуск.")
+            logger.warning(f"   [WARN] FSM State не найден в runtime для {sym} {pside}! Пропуск.")
             continue
 
         tp_price = getattr(state, "tp_price", None)
@@ -105,13 +98,13 @@ async def restore_missing_tp():
                 tp_price = entry_price * (1.0 + indent / 100.0)
             else:
                 tp_price = entry_price * (1.0 - indent / 100.0)
-            print(f"   [*] Рассчитан fallback TP: {tp_price:.6f} (индент {indent}%)")
+            logger.info(f"   [*] Рассчитан fallback TP: {tp_price:.6f} (индент {indent}%)")
 
         tp_price = TradeMath.round_price(tp_price, spec_data, sym)
         tp_qty = TradeMath.round_qty(pos_amt, spec_data, sym)
         order_side = "SELL" if pside == "LONG" else "BUY"
 
-        print(f"   [ACTION] Выставление восстановительного TP: {sym} {pside} | {order_side} {tp_qty} @ {tp_price}")
+        logger.info(f"   [ACTION] Выставление восстановительного TP: {sym} {pside} | {order_side} {tp_qty} @ {tp_price}")
         place_res = await client.make_order(
             symbol=sym,
             qty=tp_qty,
@@ -122,19 +115,18 @@ async def restore_missing_tp():
         )
 
         if place_res.success:
-            print(f"   [SUCCESS] TP успешно выставлен! Order ID: {place_res.order_id}")
+            logger.info(f"   [SUCCESS] TP успешно выставлен! Order ID: {place_res.order_id}")
             state.tp_price = tp_price
             runtime_mgr.mark_dirty()
             restored_count += 1
         else:
-            print(f"   [FAILED] Не удалось выставить TP: {place_res.error_msg}")
+            logger.error(f"   [FAILED] Не удалось выставить TP: {place_res.error_msg}")
 
-    print("-" * 80)
-    print(f"[COMPLETED] Восстановлено недостающих TP: {restored_count}")
-    print("=" * 80)
+    logger.info("-" * 80)
+    logger.info(f"[COMPLETED] Восстановлено недостающих TP: {restored_count}")
+    logger.info("=" * 80)
 
-    if client._session:
-        await client._session.close()
+    await client.close()
 
 
 if __name__ == "__main__":

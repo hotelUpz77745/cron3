@@ -155,6 +155,8 @@ REST_FAILSAFE_SEC: float = float(_CFG["app"]["rest_failsafe_sec"])
 INCOME_PAGINATION_DELAY_SEC: float = float(_CFG["app"]["income_pagination_delay_sec"])
 POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounce_sec"])
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
+DEFAULT_TP_PURPOSE: str = str(_CFG["app"]["default_tp_purpose"])
+DEFAULT_AVG_FREE_VOLUME_BEHAVIOR: str = str(_CFG["app"]["default_avg_free_volume_behavior"])
 
 def _resolve_analytics_start_balance() -> float:
     # Канонический источник истины о депозите — секция active_strategies в app.json

@@ -104,11 +104,10 @@ class ReconstructionService:
                     inc_res = None
 
                     while attempts < 3:
-                        inc_res = await client._request(
-                            "GET",
-                            "https://fapi.binance.com/fapi/v1/income",
-                            params={"limit": 1000, "startTime": current_start, "endTime": end_time},
-                            signed=True,
+                        inc_res = await client.fetch_income(
+                            start_time=current_start,
+                            end_time=end_time,
+                            limit=1000,
                         )
                         if inc_res and inc_res.success and isinstance(inc_res.data, list):
                             success_fetch = True

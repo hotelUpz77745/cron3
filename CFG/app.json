@@ -11,6 +11,8 @@
         "income_pagination_delay_sec": 1.5,
         "post_close_sync_debounce_sec": 10.0,
         "bg_unrealized_poll_freq_sec": 10.0,
+        "default_tp_purpose": "self",
+        "default_avg_free_volume_behavior": "distribute_remaining",
         "auto_start": false
     },
     "paths": {

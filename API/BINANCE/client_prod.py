@@ -51,6 +51,8 @@ class BinanceClient:
         self.set_leverage_url = "https://fapi.binance.com/fapi/v1/leverage"
         self.set_margin_url   = "https://fapi.binance.com/fapi/v1/marginType"
         self.leverage_bracket_url = "https://fapi.binance.com/fapi/v1/leverageBracket"
+        self.open_orders_url  = "https://fapi.binance.com/fapi/v1/openOrders"
+        self.income_url       = "https://fapi.binance.com/fapi/v1/income"
 
         # Session manager
         self._session: Optional[aiohttp.ClientSession] = None
@@ -380,7 +382,7 @@ class BinanceClient:
 
         res = await self._request(
             "GET",
-            "https://fapi.binance.com/fapi/v1/openOrders",
+            self.open_orders_url,
             params=params,
             signed=True,
         )
@@ -388,6 +390,32 @@ class BinanceClient:
         if res.success and isinstance(res.data, list):
             return res.data
         return []
+
+    async def fetch_income(
+        self,
+        symbol: Optional[str] = None,
+        income_type: Optional[str] = None,
+        start_time: Optional[int] = None,
+        end_time: Optional[int] = None,
+        limit: int = 1000,
+    ) -> APIResponse:
+        """Получение истории доходности (income history) с Binance Futures."""
+        params: Dict[str, Any] = {"limit": limit, "recvWindow": 20000}
+        if symbol:
+            params["symbol"] = symbol
+        if income_type:
+            params["incomeType"] = income_type
+        if start_time:
+            params["startTime"] = start_time
+        if end_time:
+            params["endTime"] = end_time
+
+        return await self._request(
+            "GET",
+            self.income_url,
+            params=params,
+            signed=True,
+        )
 
     async def fetch_balance(self) -> List[dict]:
         params = {"recvWindow": 20000}
@@ -560,7 +588,7 @@ class BinanceClient:
 
         inc_res = await self._request(
             "GET",
-            "https://fapi.binance.com/fapi/v1/income",
+            self.income_url,
             params=inc_params,
             signed=True,
         )

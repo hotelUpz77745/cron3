@@ -3,7 +3,7 @@
 """
 ==============================================================================
 MODULE: CORE.SERVICES.TOOLS.audit_and_cleanup_orders
-ROLE: Частный утилитный хелпер для аудита и мгновенной очистки лишних ордеров Binance
+ROLE: Аудит и очистка лишних/сиротских ордеров Binance Futures через API-адаптер
 ==============================================================================
 """
 
@@ -24,38 +24,28 @@ root_dir = Path(__file__).resolve().parent.parent.parent.parent
 sys.path.insert(0, str(root_dir))
 
 from consts import API_KEY, API_SECRET
+from c_log import UnifiedLogger
 from API.BINANCE.client_prod import BinanceClient
+
+logger = UnifiedLogger("AuditCleanup")
 
 
 async def audit_and_cleanup():
-    print("=" * 80)
-    print("[AUDIT] Zapusk audita otkrytykh pozitsiy i orderov na Binance Futures...")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("[AUDIT] Запуск аудита открытых позиций и ордеров на Binance Futures...")
+    logger.info("=" * 80)
 
     client = BinanceClient(api_key=API_KEY, api_secret=API_SECRET)
 
-    # 1. Загрузка открытых ордеров
-    orders_res = await client._request(
-        "GET",
-        "https://fapi.binance.com/fapi/v1/openOrders",
-        params={"recvWindow": 20000},
-        signed=True,
-    )
-    if not orders_res.success or not isinstance(orders_res.data, list):
-        print(f"[ERR] Oshibka polucheniya otkrytykh orderov: {orders_res}")
-        if client._session:
-            await client._session.close()
-        return
+    # 1. Загрузка открытых ордеров через официальный метод адаптера
+    open_orders = await client.fetch_open_orders()
+    logger.info(f"[*] Всего активных ордеров на бирже: {len(open_orders)}")
 
-    open_orders = orders_res.data
-    print(f"[*] Vsego aktivnykh orderov na birzhe: {len(open_orders)}")
-
-    # 2. Загрузка открытых позиций
+    # 2. Загрузка открытых позиций через адаптер
     acc_res = await client.fetch_account_info()
     if not acc_res.success or not isinstance(acc_res.data, dict):
-        print(f"[ERR] Oshibka polucheniya akkaunta: {acc_res}")
-        if client._session:
-            await client._session.close()
+        logger.error(f"[ERR] Ошибка получения аккаунта: {acc_res.error_msg}")
+        await client.close()
         return
 
     positions = acc_res.data.get("positions", [])
@@ -67,13 +57,13 @@ async def audit_and_cleanup():
 
     total_wallet = acc_res.data.get("totalWalletBalance", "0")
     total_unrealized = acc_res.data.get("totalUnrealizedProfit", "0")
-    print(f"[*] Balans koshelka: {float(total_wallet):.2f} USDT | Plavayushchiy PnL: {float(total_unrealized):.2f} USDT")
-    print(f"[*] Otkrytykh pozitsiy: {len(active_positions)}")
+    logger.info(f"[*] Баланс кошелька: {float(total_wallet):.2f} USDT | Плавающий PnL: {float(total_unrealized):.2f} USDT")
+    logger.info(f"[*] Открытых позиций: {len(active_positions)}")
     for (sym, pside), amt in active_positions.items():
-        print(f"   - {sym} {pside}: {amt}")
+        logger.info(f"   - {sym} {pside}: {amt}")
 
-    print("-" * 80)
-    print("[*] Analiz sootvetstviya orderov pozitsiyam:")
+    logger.info("-" * 80)
+    logger.info("[*] Анализ соответствия ордеров позициям:")
 
     orders_by_key = {}
     for o in open_orders:
@@ -87,47 +77,36 @@ async def audit_and_cleanup():
         pos_amt = active_positions.get((sym, pside), 0.0)
 
         if pos_amt == 0.0:
-            print(f"[WARN] [SIROTA] Obnaruzhen order bez otkrytoy pozitsii: {sym} {pside} ({len(o_list)} sht.)! Otmena...")
+            logger.warning(f"[SIROTA] Обнаружен ордер без открытой позиции: {sym} {pside} ({len(o_list)} шт.)! Отмена...")
             for o in o_list:
                 oid = o["orderId"]
-                c_res = await client._request(
-                    "DELETE",
-                    "https://fapi.binance.com/fapi/v1/order",
-                    params={"symbol": sym, "orderId": oid, "recvWindow": 20000},
-                    signed=True,
-                )
-                print(f"   [DEL] Otmenen order {oid} po {sym}: {c_res.success}")
+                c_res = await client.cancel_order(symbol=sym, order_id=oid)
+                logger.info(f"   [DEL] Отменен ордер {oid} по {sym}: {c_res.success}")
                 canceled_count += 1
         elif len(o_list) > 1:
-            print(f"[WARN] [DUBL] Obnaruzheno {len(o_list)} orderov na odnu pozitsiyu {sym} {pside}!")
+            logger.warning(f"[DUBL] Обнаружено {len(o_list)} ордеров на одну позицию {sym} {pside}!")
             # Оставляем самый свежий (по времени или ID), остальные отменяем
             sorted_orders = sorted(o_list, key=lambda x: int(x.get("time", 0)), reverse=True)
             keep_order = sorted_orders[0]
-            print(f"   [KEEP] Ostavlyaem aktualnyy TP: ID {keep_order['orderId']} @ {keep_order['price']}")
+            logger.info(f"   [KEEP] Оставляем актуальный TP: ID {keep_order['orderId']} @ {keep_order.get('price')}")
             for old_o in sorted_orders[1:]:
                 oid = old_o["orderId"]
-                c_res = await client._request(
-                    "DELETE",
-                    "https://fapi.binance.com/fapi/v1/order",
-                    params={"symbol": sym, "orderId": oid, "recvWindow": 20000},
-                    signed=True,
-                )
-                print(f"   [DEL] Otmenen dubliruyushchiy order {oid} @ {old_o['price']}: {c_res.success}")
+                c_res = await client.cancel_order(symbol=sym, order_id=oid)
+                logger.info(f"   [DEL] Отменен дублирующий ордер {oid} @ {old_o.get('price')}: {c_res.success}")
                 canceled_count += 1
         else:
             o = o_list[0]
-            print(f"   [OK] {sym} {pside}: order ID {o['orderId']} @ {o['price']} (qty: {o['origQty']}) strogo sinkhronen.")
+            logger.info(f"   [OK] {sym} {pside}: ордер ID {o['orderId']} @ {o.get('price')} (qty: {o.get('origQty')}) синхронен.")
 
-    print("-" * 80)
+    logger.info("-" * 80)
     if canceled_count == 0:
-        print("[SUCCESS] Vse chisto! Nikakikh lishnikh orderov na birzhe net.")
-        print("          Kazhdyy TP tochno sootvetstvuet svoey otkrytoy pozitsii (1 pozitsiya = 1 TP).")
+        logger.info("[SUCCESS] Все чисто! Лишних ордеров на бирже нет.")
+        logger.info("          Каждый TP соответствует своей открытой позиции (1 позиция = 1 TP).")
     else:
-        print(f"[CLEANUP] Uspeshno otmeneno lishnikh orderov: {canceled_count}")
-    print("=" * 80)
+        logger.info(f"[CLEANUP] Успешно отменено лишних ордеров: {canceled_count}")
+    logger.info("=" * 80)
 
-    if client._session:
-        await client._session.close()
+    await client.close()
 
 
 if __name__ == "__main__":
