@@ -1,11 +1,11 @@
 {
-    "updated_at_utc": "2026-10-22 12:37:32 UTC",
+    "updated_at_utc": "2026-10-22 13:23:41 UTC",
     "total_universes_active": 1,
     "evaluated_coins_count": 5,
     "aggregate_start_balance_usdt": 434.0,
     "aggregate_cur_balance_usdt": 459.01,
     "aggregate_peak_balance_usdt": 459.01,
-    "aggregate_min_balance_usdt": 0.0,
+    "aggregate_min_balance_usdt": 150.0,
     "aggregate_net_profit_usdt": 25.01,
     "aggregate_realized_pnl_usdt": 26.18,
     "aggregate_unrealized_pnl_usdt": -1.17,
@@ -14,38 +14,38 @@
         "universe_id": "default",
         "timeframe_hours": 6.0,
         "min_accumulation_hours": 1.0,
-        "accumulation_hours": 2.01,
+        "accumulation_hours": 2.55,
         "is_ready_for_alerts": true,
         "is_interpolated": true,
-        "interpolation_factor": 2.98,
+        "interpolation_factor": 2.35,
         "benchmark_speed": 10.0,
         "slice_description": "Все монеты (5 шт.)",
         "slice_coins_count": 5,
         "slice_trades_count": 3,
         "avg_actual_speed": 0.6,
-        "avg_effective_speed": 1.79,
-        "speed_ratio": 0.179,
-        "deviation_pct": -82.1,
+        "avg_effective_speed": 1.41,
+        "speed_ratio": 0.141,
+        "deviation_pct": -85.9,
         "status": "LOW_VOLATILITY",
         "status_desc": "НЕДОГРЕВ",
         "per_coin": {
             "ICNTUSDT": {
                 "trades": 1,
-                "effective_speed": 2.98,
-                "speed_ratio": 0.3,
-                "status_desc": "НОРМА"
+                "effective_speed": 2.35,
+                "speed_ratio": 0.24,
+                "status_desc": "НЕДОГРЕВ"
             },
             "AVAUSDT": {
                 "trades": 1,
-                "effective_speed": 2.98,
-                "speed_ratio": 0.3,
-                "status_desc": "НОРМА"
+                "effective_speed": 2.35,
+                "speed_ratio": 0.24,
+                "status_desc": "НЕДОГРЕВ"
             },
             "GTCUSDT": {
                 "trades": 1,
-                "effective_speed": 2.98,
-                "speed_ratio": 0.3,
-                "status_desc": "НОРМА"
+                "effective_speed": 2.35,
+                "speed_ratio": 0.24,
+                "status_desc": "НЕДОГРЕВ"
             },
             "GWEIUSDT": {
                 "trades": 0,
@@ -76,7 +76,7 @@
             "iteration_net_profit_usdt": 25.01,
             "iteration_realized_pnl_usdt": 26.18,
             "peak_net_profit_usdt": 25.01,
-            "peak_age_hours": 0.0,
+            "peak_age_hours": 0.8,
             "net_velocity": 250.14,
             "realized_pnl_usdt": 26.18,
             "realized_pnl_gross_usdt": 26.37,
@@ -90,44 +90,42 @@
             "roi_pct": 5.76,
             "mode": "trailing_ratchet",
             "mode_badge": "[RATCHET]",
-            "sizing_mode": "static",
-            "sizing_badge": "[STATIC]",
             "trade_velocity": {
                 "universe_id": "u17_stephensonE__trailing_ratchet",
                 "timeframe_hours": 6.0,
                 "min_accumulation_hours": 1.0,
-                "accumulation_hours": 2.01,
+                "accumulation_hours": 2.55,
                 "is_ready_for_alerts": true,
                 "is_interpolated": true,
-                "interpolation_factor": 2.98,
+                "interpolation_factor": 2.36,
                 "benchmark_speed": 10.0,
                 "slice_description": "Все монеты (5 шт.)",
                 "slice_coins_count": 5,
                 "slice_trades_count": 3,
                 "avg_actual_speed": 0.6,
-                "avg_effective_speed": 1.79,
-                "speed_ratio": 0.179,
-                "deviation_pct": -82.1,
+                "avg_effective_speed": 1.41,
+                "speed_ratio": 0.141,
+                "deviation_pct": -85.9,
                 "status": "LOW_VOLATILITY",
                 "status_desc": "НЕДОГРЕВ",
                 "per_coin": {
                     "ICNTUSDT": {
                         "trades": 1,
-                        "effective_speed": 2.98,
-                        "speed_ratio": 0.3,
-                        "status_desc": "НОРМА"
+                        "effective_speed": 2.36,
+                        "speed_ratio": 0.24,
+                        "status_desc": "НЕДОГРЕВ"
                     },
                     "AVAUSDT": {
                         "trades": 1,
-                        "effective_speed": 2.98,
-                        "speed_ratio": 0.3,
-                        "status_desc": "НОРМА"
+                        "effective_speed": 2.36,
+                        "speed_ratio": 0.24,
+                        "status_desc": "НЕДОГРЕВ"
                     },
                     "GTCUSDT": {
                         "trades": 1,
-                        "effective_speed": 2.98,
-                        "speed_ratio": 0.3,
-                        "status_desc": "НОРМА"
+                        "effective_speed": 2.36,
+                        "speed_ratio": 0.24,
+                        "status_desc": "НЕДОГРЕВ"
                     },
                     "GWEIUSDT": {
                         "trades": 0,

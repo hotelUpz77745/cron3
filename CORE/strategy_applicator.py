@@ -263,11 +263,6 @@ class StrategyApplicator:
             elif hasattr(strategy, "overrides") and "avg_free_volume_behavior" in strategy.overrides:
                 side_data["avg_free_volume_behavior"] = strategy.overrides["avg_free_volume_behavior"]
 
-            # auto_closing и trend_size_depender вынесены на уровень стратегии и не дублируются в рантайм позиций
-            tsd_val = getattr(strategy, "trend_size_depender", None) or getattr(strategy, "sizing_mode", None)
-            if tsd_val:
-                side_data["sizing_mode"] = tsd_val
-
             side_cfgs[side] = side_data
 
         return side_cfgs

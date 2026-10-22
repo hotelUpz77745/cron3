@@ -327,51 +327,12 @@ class StrategyConfig:
             self.mode = "off"
         self.auto_closing_mode: str = self.mode
 
-        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго "trend_size_depender": "static" (строковый тип: "static", "dyn_ema_16")
-        raw_tsd = raw_meta.get("trend_size_depender")
-        active_tsd = self.active_settings.get("trend_size_depender")
-
-        sizing_mode_val = (
-            active_tsd
-            or self.active_settings.get("sizing_mode")
-            or raw_tsd
-            or raw_meta.get("sizing_mode")
-            or self.overrides.get("trend_size_depender")
-            or self.overrides.get("sizing_mode")
-        )
-        if isinstance(sizing_mode_val, dict):
-            sizing_mode_val = sizing_mode_val.get("mode") or sizing_mode_val.get("trend_mode")
-        elif not sizing_mode_val and self.active_settings.get("sizing_modes"):
-            legacy_sm = self.active_settings.get("sizing_modes")
-            sizing_mode_val = legacy_sm[0] if isinstance(legacy_sm, list) and legacy_sm else str(legacy_sm)
-        elif not sizing_mode_val and raw_meta.get("sizing_modes"):
-            legacy_sm = raw_meta.get("sizing_modes")
-            sizing_mode_val = legacy_sm[0] if isinstance(legacy_sm, list) and legacy_sm else str(legacy_sm)
-
-        if sizing_mode_val and isinstance(sizing_mode_val, str):
-            sm = sizing_mode_val.lower().strip()
-            if sm in ("dyn_bb", "dyn_bb_inv", "dyn_inv_16", "dyn_ema_10"):
-                sm = "static"
-            elif sm == "dyn_ema_trend":
-                sm = "dyn_ema_16"
-            self.sizing_mode: str = sm
-        else:
-            self.sizing_mode = "static"
-        self.trend_size_depender: str = self.sizing_mode
-
-        VALID_SIZING_MODES = ("static", "dyn_ema_16")
-        if self.sizing_mode not in VALID_SIZING_MODES:
-            raise ValueError(
-                f"[StrategyConfig][{self.strategy_id}] Неизвестный sizing_mode '{self.sizing_mode}'! "
-                f"Допустимые режимы: {VALID_SIZING_MODES}"
-            )
-
-        # Фабрика конфигурации trend_size_depender:
-        # "static": enabled = false (статический сайзинг 50/50, макро-тренд выключен).
-        # "dyn_ema_16": enabled = true (EMA Trend 4h, быстрая 10 / медленная 30, шкала 16, коридор 33.3% / 66.7%).
-        if self.sizing_mode == "static":
-            self.trend_size_cfg = {"enabled": False, "mode": "static"}
-        elif self.sizing_mode == "dyn_ema_16":
+        # 6. Режим сайзинга: в HRON-3 весь сайзинг по умолчанию статический (базовые объемы сетки).
+        # Вся динамика управляется сугубо через smart_size и/или first_order_weight_regime в паспорте стратегии.
+        raw_tsd = raw_meta.get("trend_size_depender") or self.active_settings.get("trend_size_depender") or raw_meta.get("sizing_mode") or self.active_settings.get("sizing_mode")
+        if isinstance(raw_tsd, str) and raw_tsd.lower().strip() == "dyn_ema_16":
+            self.sizing_mode: str = "dyn_ema_16"
+            self.trend_size_depender: str = "dyn_ema_16"
             self.trend_size_cfg = {
                 "enabled": True,
                 "mode": "dyn_ema_16",
@@ -388,19 +349,10 @@ class StrategyConfig:
                 "min_side_pct": 33.3333,
                 "max_side_pct": 66.6667
             }
-
-        user_tsd_override = (
-            self.active_settings.get("override", {}).get("trend_size_depender")
-            or self.active_settings.get("overrides", {}).get("trend_size_depender")
-        )
-        if isinstance(user_tsd_override, str):
-            self.trend_size_cfg["mode"] = user_tsd_override
-            self.trend_size_cfg["enabled"] = (user_tsd_override != "static")
-        elif user_tsd_override and isinstance(user_tsd_override, dict):
-            self.trend_size_cfg.update(user_tsd_override)
-
-        self.overrides["trend_size_depender"] = self.sizing_mode
-        self.overrides["sizing_mode"] = self.sizing_mode
+        else:
+            self.sizing_mode: str = "static"
+            self.trend_size_depender: str = "static"
+            self.trend_size_cfg = {"enabled": False, "mode": "static"}
 
         # Конфигурация Smart Grace
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)

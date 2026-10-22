@@ -720,8 +720,8 @@ class TestStrategySystem(unittest.TestCase):
         side_cfgs_icnt = applicator.build_side_configs(strat, symbol="ICNTUSDT")
         self.assertEqual(side_cfgs_icnt["LONG"]["invest_size"], exp_invest)
         self.assertEqual(side_cfgs_icnt["SHORT"]["invest_size"], exp_invest)
-        self.assertEqual(side_cfgs_icnt["LONG"]["sizing_mode"], "static")
-        self.assertEqual(side_cfgs_icnt["SHORT"]["sizing_mode"], "static")
+        self.assertNotIn("sizing_mode", side_cfgs_icnt["LONG"])
+        self.assertNotIn("sizing_mode", side_cfgs_icnt["SHORT"])
 
         # Проверка генерации рантайма с per-symbol размерами
         rt_path = applicator.build_runtime_for_symbol("ICNTUSDT", strat)

@@ -698,10 +698,7 @@ class AnalyticsReportService:
         )
         return text, buttons
 
-    SIZING_MODE_BADGES = {
-        "static": ("⚡ Static (50/50)", "Фиксированный сайзинг 50/50 (макро-тренд выключен)"),
-        "dyn_ema_16": ("📈 Dyn EMA 16", "EMA Trend 4h 10/30 (шкала 16, коридор 33.3%..66.7%)"),
-    }
+    SIZING_MODE_BADGES = {}
 
     CLOSER_MODE_BADGES = {
         "classic": ("🎯 Classic", "Фибоначчи кумулятивный трейлинг-тейк"),

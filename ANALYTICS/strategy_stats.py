@@ -479,7 +479,7 @@ class StrategyStatsEngine:
         # Update Leaderboard & portfolio analytics_all.json
         try:
             universes_meta = {
-                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True, "sizing_mode": getattr(scfg, "sizing_mode", "static"), "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))}
+                sid: {**getattr(scfg, "raw_meta", {}), "name": scfg.name, "enabled": True, "auto_closing": getattr(scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {}))}
                 for sid, scfg in self.manager.strategy_registry.get_active_strategies().items()
             }
             entries = self.manager.leaderboard_engine.generate_leaderboard(universes_meta)

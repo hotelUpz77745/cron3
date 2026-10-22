@@ -817,3 +817,24 @@ cron3/
 4. **Устранение сбоя добавления/удаления монет (`'PositionMonitor' object has no attribute 'target_symbols'`)**:
    - В конструкторе `PositionMonitor` (`POS_FSM/pos_stream_monitor.py`) добавлена явная инициализация поля `self.target_symbols: list = list(target_symbols) if target_symbols else []`.
    - В сервисе жизненного цикла символов `SymbolLifecycleManager` (`CORE/SERVICES/symbol_lifecycle_manager.py`) внедрена безопасная проверка атрибута `hasattr(pos_mon, "target_symbols")` при динамическом добавлении (`add_symbol`) и удалении (`remove_symbol`) торговых пар через Telegram-меню "⚙️ Set Coins".
+
+---
+
+### 8.9. Полный Демонтаж Легаси-Полей `"sizing_mode": "static"` и Очистка Аналитики (22.10.2026)
+
+1. **Исключение поля `sizing_mode` и `sizing_badge` из Аналитики и Лидерборда**:
+   - В `ANALYTICS/leaderboard.py` демонтированы устаревшие поля `sizing_mode` и `sizing_badge`, а также фиктивная колонка таблицы лидерборда `Sizing [STATIC]`.
+   - В `ANALYTICS/STATS/analytics_all.json` удалены рудименты `"sizing_mode": "static"` и `"sizing_badge": "[STATIC]"`.
+   - В `ANALYTICS/strategy_stats.py` и `ANALYTICS/drawdown_tracker.py` устранено инжектирование фиктивного `sizing_mode` в метаданные куполов.
+   - В `ANALYTICS/report_service.py` и `TG/universe_commands.py` очищен словарь `SIZING_MODE_BADGES`.
+
+2. **Очистка Рантайма Позиций и Реестра Стратегий**:
+   - В `CORE/strategy_applicator.py` удалена запись `side_data["sizing_mode"] = tsd_val`, загрязнявшая runtime JSON-файлы монет фиктивным значением `"static"`.
+   - В `CORE/strategy_registry.py` упразднена принудительная валидация `VALID_SIZING_MODES` и запись `overrides["sizing_mode"]` / `overrides["trend_size_depender"]`.
+
+3. **Незыблемый Принцип Архитектуры Сайзинга HRON-3**:
+   - Весь базовый сайзинг в системе является статическим по определению (фиксированные объемы и проценты из спецификации сетки стратегии).
+   - Единственными легитимными динамическими регуляторами объемов являются:
+     1. `first_order_weight_regime` (управление первым ордером L0 по дневному тренду).
+     2. `smart_size` (динамический сайзинг по сериям профитов / защите от ножей).
+   - Любые внешние поля `"sizing_mode"` или `"trend_size_depender"` признаны устаревшим техническим долгом и полностью ликвидированы.

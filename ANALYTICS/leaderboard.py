@@ -151,21 +151,6 @@ class LeaderboardEngine:
                 mode = "off"
                 mode_badge = "[OFF]"
 
-        tsd_val = meta.get("trend_size_depender")
-        tsd_mode = tsd_val if isinstance(tsd_val, str) else (tsd_val.get("mode") if isinstance(tsd_val, dict) else None)
-        raw_sm = (
-            meta.get("sizing_mode")
-            or tsd_mode
-            or meta.get("trend_size_mode")
-        )
-        sm_str = str(raw_sm).lower().strip() if raw_sm else "static"
-        if sm_str in ("dyn_ema_16", "dyn_ema_trend"):
-            sizing_mode = "dyn_ema_16"
-            sizing_badge = "[EMA_16]"
-        else:
-            sizing_mode = "static"
-            sizing_badge = "[STATIC]"
-
         # Источник истины для Toxic Defense: Ledger-First подход
         peel_events, peel_vol, peel_pnl = 0, 0.0, 0.0
         rec_events, rec_vol, rec_loss, rec_spent = 0, 0.0, 0.0, 0.0
@@ -271,8 +256,6 @@ class LeaderboardEngine:
             "roi_pct": roi_pct,
             "mode": mode,
             "mode_badge": mode_badge,
-            "sizing_mode": sizing_mode,
-            "sizing_badge": sizing_badge,
             "trade_velocity": data.get("trade_velocity", {}),
             "toxic_defense": toxic_def,
             "peel_events": peel_events,
@@ -305,7 +288,6 @@ class LeaderboardEngine:
     ) -> str:
         """Форматирует компактную ASCII таблицу Leaderboard с динамической подгонкой ширины ID стратегии."""
         active_count = len(entries)
-        has_sizing = any("sizing_badge" in item or "sizing_mode" in item for item in entries)
         title = f"STRATEGIES LEADERBOARD{title_suffix} (Active: {active_count} | Coins: {evaluated_coins_count})"
 
         # Рассчитываем динамическую ширину для Strategy / Universe ID
@@ -313,18 +295,11 @@ class LeaderboardEngine:
         max_uid_len = max([len(str(item.get("universe_id", ""))) for item in entries] + [len(header_title)]) if entries else len(header_title)
         id_width = max(len(header_title), min(38, max_uid_len + 1))
 
-        if has_sizing:
-            header_line = (
-                f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} {'Sizing':<9} "
-                f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
-                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6} {'Def (P/R)':<10}"
-            )
-        else:
-            header_line = (
-                f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} "
-                f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
-                f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6} {'Def (P/R)':<10}"
-            )
+        header_line = (
+            f"{'#':<3} {header_title:<{id_width}} {'Mode':<9} "
+            f"{'Net Profit':<12} {'Iter Net':<13} {'Realized':<11} {'Iter Real':<11} "
+            f"{'Floating':<11} {'Peak Net (Age)':<16} {'Max DD':<10} {'Trades':<7} {'Rec':<6} {'Def (P/R)':<10}"
+        )
 
         total_width = len(header_line)
         header = (
@@ -354,19 +329,11 @@ class LeaderboardEngine:
             uid_short = item.get('universe_id', '')[:id_width]
             def_badge = item.get("defense_badge", "0P/0R")
 
-            if has_sizing:
-                sizing_badge = item.get("sizing_badge", "[STATIC]")
-                row = (
-                    f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} {sizing_badge:<9} "
-                    f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
-                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6} {def_badge:<10}"
-                )
-            else:
-                row = (
-                    f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} "
-                    f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
-                    f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6} {def_badge:<10}"
-                )
+            row = (
+                f"{idx:<3} {uid_short:<{id_width}} {mode_badge:<9} "
+                f"{net_str:<12} {iter_str:<13} {realized_str:<11} {iter_real_str:<11} "
+                f"{unrealized_str:<11} {peak_net_str:<16} {dd_str:<10} {item.get('total_trades', 0):<7} {rec_str:<6} {def_badge:<10}"
+            )
             rows.append(row)
 
         notes_lines = []
@@ -403,10 +370,7 @@ class LeaderboardEngine:
         excluded_modes = ("dyn_bb", "dyn_bb_legacy", "dyn_bb_breakout", "dyn_brk_16", "dyn_brk_10")
         clean_entries = [
             e for e in entries
-            if not (
-                e.get("sizing_mode") in excluded_modes
-                or any(e.get("universe_id", "").endswith(f"__{m}") for m in excluded_modes)
-            )
+            if not any(e.get("universe_id", "").endswith(f"__{m}") for m in excluded_modes)
         ]
 
         if top_limit is not None and top_limit > 0:

@@ -475,7 +475,6 @@ class DrawdownTracker:
                                 **getattr(scfg, "raw_meta", {}),
                                 "name": scfg.name,
                                 "enabled": True,
-                                "sizing_mode": getattr(scfg, "sizing_mode", "static"),
                                 "auto_closing": getattr(
                                     scfg, "auto_closing_cfg", getattr(scfg, "raw_meta", {}).get("auto_closing", {})
                                 ),
