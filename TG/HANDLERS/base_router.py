@@ -181,57 +181,112 @@ def get_base_router(bot_core: Any, template_manager: Any = None) -> Router:
             await message.answer("⚠️ Trading is already running!", reply_markup=get_main_keyboard())
             return
 
-        symbols = bot_core.symbols if hasattr(bot_core, "symbols") and bot_core.symbols else ACTIVE_SYMBOLS
+        # 1. Автоматическое разрешение TemplateManager
         tm = template_manager or getattr(bot_core, "template_manager", None)
+        if not tm:
+            try:
+                from TG.template_manager import TemplateManager
+                tm = TemplateManager(bot_core=bot_core)
+            except Exception as ex:
+                logger.warning(f"Could not initialize TemplateManager fallback: {ex}")
 
-        if tm:
-            for sym in symbols:
-                runtime_path = tm.get_runtime_path(sym)
-                if runtime_path.exists():
-                    try:
-                        if str(runtime_path).endswith(".pkl"):
-                            import pickle
-                            with open(runtime_path, "rb") as f:
-                                data = pickle.load(f)
-                        else:
-                            with open(runtime_path, "r", encoding="utf-8") as f:
-                                data = json.load(f)
+        # 2. Разрешение всех активных символов в системе
+        symbols = []
+        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+            symbols = bot_core.strategy_registry.get_all_active_symbols()
+        if not symbols:
+            symbols = getattr(bot_core, "symbols", None) or []
+        if not symbols:
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            for sdata in (app_data.get("active_strategies") or {}).values():
+                if sdata.get("enabled", True):
+                    for src in [
+                        (sdata.get("LONG") or {}).get("invest_size"),
+                        (sdata.get("SHORT") or {}).get("invest_size"),
+                        sdata.get("invest_size"),
+                        sdata.get("symbols"),
+                    ]:
+                        if isinstance(src, dict):
+                            symbols.extend(src.keys())
+                        elif isinstance(src, list):
+                            symbols.extend(src)
+        if not symbols:
+            from consts import ACTIVE_SYMBOLS
+            symbols = ACTIVE_SYMBOLS
+        symbols = sorted(list(set(s.upper().strip() for s in symbols if s)))
 
-                        lines = [f"<b>{sym} Settings:</b>"]
-                        for side in ["LONG", "SHORT"]:
-                            cfg = data[side]
-                            en = cfg["enable"]
-                            sz = cfg["invest_size"]
-                            lev = cfg["leverage"]
-                            margin = cfg["margin_type"]
+        found_any = False
+        for sym in symbols:
+            runtime_path = tm.get_runtime_path(sym) if tm else None
+            if not runtime_path or not runtime_path.exists():
+                rt_dir = DATA_DIR / "runtime"
+                sym_lower = sym.lower()
+                for p in rt_dir.glob(f"**/{sym_lower}.json"):
+                    runtime_path = p
+                    break
+                if not runtime_path or not runtime_path.exists():
+                    for p in rt_dir.glob(f"**/{sym_lower}.pkl"):
+                        runtime_path = p
+                        break
 
-                            lines.append(f"  <b>{side}</b>: {'✅ On' if en else '❌ Off'}")
-                            if en:
-                                lines.append(f"    ├ Invest: {sz}$ | Lev: {lev}x | {margin}")
-                                grid = cfg["grid"]
-                                indents = []
-                                super_indents = []
-                                for k in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
-                                    lvl_d = grid[k]
-                                    if isinstance(lvl_d, dict) and (lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None):
-                                        indents.append("off")
-                                    else:
-                                        indents.append(str(lvl_d.get("indent") if isinstance(lvl_d, dict) else lvl_d))
-                                    si = lvl_d.get("super_indent") if isinstance(lvl_d, dict) else None
-                                    super_indents.append(str(si) if si is not None else "-")
-                                lines.append(f"    ├ Grid: [{', '.join(indents)}]")
+            if runtime_path and runtime_path.exists():
+                try:
+                    if str(runtime_path).endswith(".pkl"):
+                        import pickle
+                        with open(runtime_path, "rb") as f:
+                            data = pickle.load(f)
+                    else:
+                        with open(runtime_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
 
-                                tp_map = cfg["tp_map"]
-                                tps = []
-                                for k in sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x):
-                                    tp_d = tp_map[k]
-                                    raw_tp_ind = tp_d.get("indent") if isinstance(tp_d, dict) else tp_d
-                                    tps.append(str(raw_tp_ind) if raw_tp_ind is not None else "-")
-                                lines.append(f"    └ TP: [{', '.join(tps)}]")
+                    lines = [f"<b>{sym} Settings:</b>"]
+                    for side in ["LONG", "SHORT"]:
+                        cfg = data.get(side)
+                        if not cfg or not isinstance(cfg, dict):
+                            continue
+                        en = cfg.get("enable", cfg.get("enabled", True))
+                        sz = cfg.get("invest_size", cfg.get("default_invest_size", 0.0))
+                        lev = cfg.get("leverage", 20)
+                        margin = cfg.get("margin_type", "CROSSED")
 
-                        await message.answer("\n".join(lines), parse_mode="HTML")
-                    except Exception as e:
-                        await message.answer(f"<b>{sym}</b>: [Ошибка чтения конфигурации: {e}]", parse_mode="HTML")
+                        lines.append(f"  <b>{side}</b>: {'✅ On' if en else '❌ Off'}")
+                        if en:
+                            lines.append(f"    ├ Invest: {sz}$ | Lev: {lev}x | {margin}")
+                            grid = cfg.get("grid") or {}
+                            indents = []
+                            for k in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
+                                lvl_d = grid[k]
+                                if isinstance(lvl_d, dict) and (lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None):
+                                    indents.append("off")
+                                else:
+                                    indents.append(str(lvl_d.get("indent") if isinstance(lvl_d, dict) else lvl_d))
+                            lines.append(f"    ├ Grid: [{', '.join(indents)}]")
+
+                            tp_map = cfg.get("tp_map") or {}
+                            tps = []
+                            for k in sorted(tp_map.keys(), key=lambda x: int(x) if x.isdigit() else x):
+                                tp_d = tp_map[k]
+                                raw_tp_ind = tp_d.get("indent") if isinstance(tp_d, dict) else tp_d
+                                tps.append(str(raw_tp_ind) if raw_tp_ind is not None else "-")
+                            lines.append(f"    └ TP: [{', '.join(tps)}]")
+
+                    await message.answer("\n".join(lines), parse_mode="HTML")
+                    found_any = True
+                except Exception as e:
+                    await message.answer(f"<b>{sym}</b>: [Ошибка чтения конфигурации: {e}]", parse_mode="HTML")
+
+        if not found_any:
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            active_strats = app_data.get("active_strategies", {})
+            strat_lines = ["📋 <b>Активные стратегии и параметры запуска:</b>"]
+            for sid, scfg in active_strats.items():
+                if scfg.get("enabled", True):
+                    s_name = scfg.get("_comment_alias") or scfg.get("name") or sid
+                    bal = scfg.get("start_balance_usdt", 0.0)
+                    ac = scfg.get("auto_closing_mode") or scfg.get("mode", "trailing_ratchet")
+                    strat_lines.append(f"• <b>{s_name}</b> (<code>{sid}</code>)")
+                    strat_lines.append(f"  Автоклозер: <code>{ac}</code> | Баланс: {bal}$")
+            await message.answer("\n".join(strat_lines), parse_mode="HTML")
 
         await message.answer("<b>Подтвердите настройки запуска:</b>", reply_markup=get_confirm_start_keyboard(), parse_mode="HTML")
 

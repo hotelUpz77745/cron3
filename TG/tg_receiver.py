@@ -90,7 +90,7 @@ class TelegramReceiver:
         """Подключает подсистемы вселенных и все модульные aiogram 3 роутеры."""
         self.dp.include_router(get_universe_router(self.bot_core))
 
-        self.dp.include_router(get_base_router(self.bot_core))
+        self.dp.include_router(get_base_router(self.bot_core, self.template_manager))
         self.dp.include_router(get_positions_router(self.bot_core))
         self.dp.include_router(get_analytics_router(self.bot_core))
         self.dp.include_router(get_coins_router(self.bot_core, self.template_manager))
