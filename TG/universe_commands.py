@@ -1,31 +1,18 @@
 # ==============================================================================
 # Path: TG/universe_commands.py
-# Role: Интерактивное управление вселенными и стратегиями через Telegram (Фасад и обратная совместимость)
+# Role: Фасад сессионного управления вселенными Telegram
 # ==============================================================================
 
-from pathlib import Path
-from typing import Any, Tuple, Dict, List, Optional
-import json
-
-from aiogram import Dispatcher
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-
-from consts import DATA_DIR
-from c_log import UnifiedLogger
-from c_utils import Utils
-from ANALYTICS.report_service import AnalyticsReportService
+from typing import Any, Tuple
+from aiogram.types import InlineKeyboardMarkup
 from TG.HANDLERS.universe_router import (
     universe_session_manager,
-    get_universe_router,
     _build_inline_keyboard,
+    get_universe_router,
 )
-
-logger = UnifiedLogger("TGUniverseCommands")
-
-# Экспорт бейджей для обратной совместимости
-SIZING_MODE_BADGES = AnalyticsReportService.SIZING_MODE_BADGES
-CLOSER_MODE_BADGES = AnalyticsReportService.CLOSER_MODE_BADGES
-PAGE_SIZE = 6
+from ANALYTICS.report_service import AnalyticsReportService
+from consts import DATA_DIR
+from c_utils import Utils
 
 
 def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
@@ -39,54 +26,28 @@ def set_user_universe_id(user_id: int, universe_id: str) -> None:
 
 
 def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
-    """Рендерит страницу со списком вселенных и инлайн-кнопками перехода в панель управления."""
+    """Рендерит страницу со списком вселенных и инлайн-кнопками тумблеров."""
     current_uid = get_user_universe_id(user_id, bot_core)
-
     app_json_path = DATA_DIR / "app.json"
     app_data = Utils.read_json_file(app_json_path) or {}
     active_strats = {
         k: v for k, v in (app_data.get("active_strategies") or {}).items()
         if not k.startswith("_") and isinstance(v, dict)
     }
-
     an = getattr(bot_core, "analytics", None)
     if an and hasattr(an, "report_service") and isinstance(an.report_service, AnalyticsReportService):
         rep_svc = an.report_service
     else:
         rep_svc = AnalyticsReportService()
-
     text, btn_data = rep_svc.render_universes_list(
         current_uid=current_uid,
         active_strats=active_strats,
         page=page,
-        page_size=PAGE_SIZE,
     )
     return text, _build_inline_keyboard(btn_data)
 
 
 def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: int = 1) -> Tuple[str, InlineKeyboardMarkup]:
-    """Рендерит детальную панель купола с инлайн-кнопками переключения сайзинга и автозакрытия."""
+    """Алиас: прямое перенаправление на чистый тумблер стратегий."""
     set_user_universe_id(user_id, uid)
-    app_json_path = DATA_DIR / "app.json"
-    app_data = Utils.read_json_file(app_json_path) or {}
-    active_strats = app_data.get("active_strategies", {})
-    s_cfg = active_strats.get(uid, {})
-
-    an = getattr(bot_core, "analytics", None)
-    if an and hasattr(an, "report_service") and isinstance(an.report_service, AnalyticsReportService):
-        rep_svc = an.report_service
-    else:
-        rep_svc = AnalyticsReportService()
-
-    text, btn_data = rep_svc.render_universe_control_panel(
-        uid=uid,
-        s_cfg=s_cfg,
-        page=page,
-    )
-    return text, _build_inline_keyboard(btn_data)
-
-
-def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
-    """Регистрирует роутер вселенных в Dispatcher (обратная совместимость)."""
-    router = get_universe_router(bot_core)
-    dp.include_router(router)
+    return render_universes_page(user_id, bot_core, page)

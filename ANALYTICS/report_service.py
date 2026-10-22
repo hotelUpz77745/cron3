@@ -698,15 +698,6 @@ class AnalyticsReportService:
         )
         return text, buttons
 
-    SIZING_MODE_BADGES = {}
-
-    CLOSER_MODE_BADGES = {
-        "classic": ("🎯 Classic", "Фибоначчи кумулятивный трейлинг-тейк"),
-        "fixed": ("📌 Fixed", "Плоский тейк-профит по корзине"),
-        "toxic": ("☣️ Toxic", "Институциональный динамический токсик-выход"),
-        "off": ("⏹ Off", "Авто-закрытие отключено"),
-    }
-
     def render_universes_list(
         self,
         current_uid: str,
@@ -735,10 +726,8 @@ class AnalyticsReportService:
         page_entries = strats_items[start_i:end_i]
 
         text_lines = [
-            f"🌌 <b>СПИСОК ВСЕЛЕННЫХ / УПРАВЛЕНИЕ КУПОЛАМИ (Стр. {page}/{total_pages})</b>",
+            f"🌌 <b>Управление стратегиями (куполами)</b> (Стр. {page}/{total_pages})",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            "💡 <i>Сайзинг и входы управляются строго паспортом (first_order_weight_regime / smart_size).</i>",
-            "<i>Для включения/отключения купола нажмите на тумблер ниже:</i>\n",
         ]
 
         buttons: List[List[Dict[str, str]]] = []
@@ -761,52 +750,11 @@ class AnalyticsReportService:
             if not short_name:
                 short_name = sid
 
-            # Монеты
-            symbols = []
-            if isinstance(scfg, dict):
-                symbols = scfg.get("symbols") or []
-                if not symbols:
-                    for inv_src in [
-                        (scfg.get("LONG") or {}).get("invest_size"),
-                        (scfg.get("SHORT") or {}).get("invest_size"),
-                        scfg.get("invest_size"),
-                    ]:
-                        if isinstance(inv_src, dict):
-                            for k in inv_src.keys():
-                                k_clean = str(k).upper().strip()
-                                if k_clean and k_clean not in symbols and k_clean not in ("DEFAULT", "LONG", "SHORT"):
-                                    symbols.append(k_clean)
-            else:
-                symbols = getattr(scfg, "symbols", []) or []
-
-            sym_count = len(symbols)
-            sym_str = ", ".join(symbols[:5]) + (f" (+{sym_count - 5})" if sym_count > 5 else "") if symbols else "нет"
-
-            # Параметры автоклозера и баланса
-            ac_mode = (
-                scfg.get("auto_closing_mode") or scfg.get("mode") or "trailing_ratchet"
-                if isinstance(scfg, dict)
-                else getattr(scfg, "auto_closing_mode", getattr(scfg, "mode", "trailing_ratchet"))
-            )
-            start_bal = (
-                scfg.get("start_balance_usdt", 0.0)
-                if isinstance(scfg, dict)
-                else getattr(scfg, "start_balance_usdt", 0.0)
-            )
-
             status_icon = "🟢" if is_enabled else "⚪"
-            status_text = "ВКЛЮЧЕНА В ТОРГОВЛЮ" if is_enabled else "ОТКЛЮЧЕНА (OFF)"
-            mark = "👉 " if sid == current_uid else ""
+            status_text = "ВКЛЮЧЕНА" if is_enabled else "ОТКЛЮЧЕНА"
+            text_lines.append(f"{status_icon} <b>{short_name}</b> — <b>{status_text}</b>")
 
-            text_lines.append(
-                f"{mark}<b>{short_name}</b>\n"
-                f"• ID: <code>{sid}</code>\n"
-                f"• Статус: <b>{status_icon} {status_text}</b>\n"
-                f"• Автоклозер: <code>{ac_mode}</code> | Баланс: <code>{start_bal:.1f} USDT</code>\n"
-                f"• Монеты ({sym_count}): <code>{sym_str}</code>\n"
-            )
-
-            btn_label = f"🟢 [ВКЛ] {short_name}" if is_enabled else f"⚪ [ВЫКЛ] {short_name}"
+            btn_label = f"🟢 ВКЛ | {short_name}" if is_enabled else f"⚪ ВЫКЛ | {short_name}"
             if len(btn_label) > 38:
                 btn_label = btn_label[:36] + "…"
             buttons.append([{"text": btn_label, "callback_data": f"toggle_univ:{sid}:{page}"}])
@@ -836,11 +784,7 @@ class AnalyticsReportService:
         s_cfg: Dict[str, Any],
         page: int = 1,
     ) -> Tuple[str, List[List[Dict[str, str]]]]:
-        """
-        УСТАРЕЛО (Legacy): Интерактивный сайзинг и выбор режимов через TG демонтированы.
-        Вся динамика управляется паспортом стратегии (first_order_weight_regime / smart_size).
-        Перенаправляет пользователя на тумблерный список стратегий.
-        """
+        """Алиас: прямое перенаправление на чистый список стратегий с тумблерами."""
         return cls().render_universes_list(current_uid=uid, active_strats={uid: s_cfg}, page=page)
 
     @staticmethod
