@@ -857,3 +857,41 @@ cron3/
      - В `CORE/strategy_applicator.py` санитизация взведенных уровней (`cur_dd_pct < act_thresh`) ограничена строгой проверкой наличия реальной рыночной цены (`current_price is not None and float(current_price) > 0`). При REST-синхронизации объемов курки не инвалидируются.
      - Информационные логи `[POSITION_RESTORER]` выводятся строго при фактических обновлениях структуры сетки (`updated == True`), в неизменном состоянии сообщения подавляются.
 
+
+---
+
+### 8.11. Реализация Протокола Самсонова: Институциональная Декомпозиция и Ликвидация Монолитов (22.10.2026)
+
+В рамках масштабного аудита и приведения кодовой базы к стандарту промышленной надежности (Samsonov Protocol, Правила 1–10) выполнен полный цикл рефакторинга:
+
+1. **Декомпозиция Файлов-Монолитов (> 600 строк, Правило 10)**:
+   - **Ликвидация мертвого дубликата клиента**: Удален неиспользуемый файл API/BINANCE/client.py (789 строк ликвидировано). Все компоненты и тесты стандартизированы на API.BINANCE.client_prod.
+   - **Декомпозиция CORE/strategy_registry.py**:
+     - Выделен чистый модуль CORE/STRATEGY/strategy_config.py (286 строк), содержащий класс StrategyConfig и рекурсивный мёрджер deep_merge_dict.
+     - Размер CORE/strategy_registry.py сокращен с 1241 до 625 строк.
+     - Модуль CORE.STRATEGY оформлен с поддержкой ленивого импорта (PEP 562 __getattr__), устранив циклические зависимости между стратегиями и реестром.
+   - **Декомпозиция CORE/strategy_applicator.py**:
+     - Вся логика сканирования FSM-сетки, сверки биржевого нотионала и санитизации курков вынесена в специализированный модуль CORE/GRID/fsm_grid_resolver.py (286 строк, класс FSMGridResolver).
+     - Размер CORE/strategy_applicator.py сокращен с 893 до 644 строк. Сохранена 100% обратная совместимость через статичные методы-делегаты.
+   - **Декомпозиция CORE/SERVICES/auto_closer.py**:
+     - Метод-монолит check() (608 строк) декомпозирован на независимые шаги: _check_strategy_domes() и _check_portfolio().
+     - Алгоритмы оценки карт стагнации и каскадов таймфреймов вынесены в CORE/SERVICES/stagnation_evaluator.py (209 строк, StagnationEvaluator).
+     - Расчет метрик токсичности инвентаря вынесен в CORE/SERVICES/toxicity_extractor.py (58 строк, ToxicityMetricsExtractor).
+     - Дублирующийся блок закрытия позиций, фиксации аналитики и сохранения итерационного кэша вынесен в CORE/SERVICES/dome_closer_executor.py (125 строк, DomeCloserExecutor).
+     - Общий объем uto_closer.py снижен с 919 до 631 строки.
+
+2. **Искоренение Скрытых Дефолтов и Магических Чисел (Правила 2, 3, 3.1)**:
+   - В CORE/GRID/avg_manager.py ликвидирован токсичный скрытый fallback на 100.0 USDT (else: invest_size = 100.0). При отсутствии или некорректном invest_size система выбрасывает явное исключение ValueError («Работай или упади сразу»).
+   - В consts.py введена каноническая константа точности чисел с плавающей точкой FLOAT_ZERO_EPSILON: float = 1e-6. Устранены хардкоды 1e-6 в резолвере FSM и сравнительных операциях.
+   - В CORE/GRID/fsm_grid_resolver.py формализованы константы: MAX_ENTRY_PRICE_DIVERGENCE = 0.40, DEFAULT_VOLUME_TOLERANCE_PCT = 10.0.
+
+3. **Строгая Типизация FSM-Моделей (Правило 1)**:
+   - В POS_FSM/models.py добавлены датаклассы GridLevel и TakeProfitLevel.
+   - В класс PositionState внедрены типобезопасные методы доступа и мутации уровней: get_grid_level(), is_level_active(), mark_level_active(), is_level_peeled(), increment_peel_count(), get_tp_level(), is_tp_active(), mark_tp_active().
+   - Создан пакетный экспортер POS_FSM/__init__.py.
+
+4. **Исправление Сигнатуры PeelingManager.__init__**:
+   - В CORE/STRATEGY/peeling_manager.py конструктор приведен к поддержке прямой передачи peeling_cfg со строгой валидацией типа (Fail-Fast TypeError).
+
+5. **Контроль Целостности**:
+   - Полный прогон тестового набора (python -m unittest discover tests): **462 теста пройдено успешно, 0 ошибок**.
