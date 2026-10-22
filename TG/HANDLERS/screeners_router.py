@@ -5,7 +5,7 @@
 
 import io
 import json
-from typing import Any
+from typing import Any, Optional
 
 from aiogram import F, Router
 from aiogram.filters import Command
