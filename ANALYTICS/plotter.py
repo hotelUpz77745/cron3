@@ -19,11 +19,42 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 try:
-    from consts import ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR
+    from consts import (
+        ANALYTICS_DIR,
+        ANALYTICS_STATS_DIR,
+        ANALYTICS_LEDGERS_DIR,
+        ANALYTICS_START_BALANCE_USDT,
+        _CFG,
+    )
 except ImportError:
     ANALYTICS_DIR = Path(__file__).resolve().parent
     ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"
     ANALYTICS_LEDGERS_DIR = ANALYTICS_DIR / "LEDGERS"
+    ANALYTICS_START_BALANCE_USDT = 434.0
+    _CFG = {}
+
+
+def _resolve_default_start_balance(universe_id: Optional[str] = None) -> float:
+    """Определяет стартовый баланс из конфигурации стратегий CFG/app.json либо ANALYTICS_START_BALANCE_USDT."""
+    if universe_id and isinstance(_CFG, dict):
+        active_strats = _CFG.get("active_strategies", {})
+        if universe_id in active_strats:
+            strat_cfg = active_strats[universe_id]
+            if isinstance(strat_cfg, dict):
+                if "start_balance_usdt" in strat_cfg:
+                    return float(strat_cfg["start_balance_usdt"])
+                if "analytics" in strat_cfg and "start_balance_usdt" in strat_cfg["analytics"]:
+                    return float(strat_cfg["analytics"]["start_balance_usdt"])
+        for s_id, s_cfg in active_strats.items():
+            if not isinstance(s_cfg, dict):
+                continue
+            if s_id.startswith(universe_id) or universe_id.startswith(s_id) or s_cfg.get("template") == universe_id:
+                if "start_balance_usdt" in s_cfg:
+                    return float(s_cfg["start_balance_usdt"])
+                if "analytics" in s_cfg and "start_balance_usdt" in s_cfg["analytics"]:
+                    return float(s_cfg["analytics"]["start_balance_usdt"])
+    return float(ANALYTICS_START_BALANCE_USDT)
+
 
 IMAGES_DIR = ANALYTICS_DIR / "images"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -74,21 +105,22 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     json_path, csv_path = _resolve_paths(universe_id)
     plot_file = IMAGES_DIR / (f"equity_curve_{universe_id}.png" if universe_id else "equity_curve.png")
 
-    start_balance = 57.0
+    default_start_bal = _resolve_default_start_balance(universe_id)
+    start_balance = default_start_bal
     strat_symbols = set()
     iter_start_ts = None
     realized_gross = 0.0
     realized_net = 0.0
     unrealized = 0.0
     net_profit_final = 0.0
-    cur_balance = 57.0
+    cur_balance = default_start_bal
     data = {}
 
     if json_path.exists():
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
+                start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", default_start_bal)))
                 strat_symbols = set(data.get("per_coin", {}).keys()) | set(data.get("historical_symbols", []))
                 iter_start_ts = data.get("iteration_start_ts", data.get("first_trade_ts"))
                 realized_gross = float(data.get("realized_pnl_usdt", 0.0))
@@ -360,7 +392,8 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
     u_suffix = f"_{universe_id}" if universe_id else ""
     plot_file = IMAGES_DIR / f"balance_{clean_sym.lower()}{u_suffix}.png"
 
-    start_balance = 57.0
+    default_start_bal = _resolve_default_start_balance(universe_id)
+    start_balance = default_start_bal
     cdata = {}
     is_active = True
     final_pnl = 0.0
@@ -371,7 +404,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
         try:
             with open(json_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", 57.0)))
+                start_balance = float(data.get("start_balance_usdt", data.get("_rebased_start_balance_usdt", default_start_bal)))
                 iter_start_ts = data.get("iteration_start_ts", data.get("first_trade_ts"))
                 cdata = data.get("per_coin", {}).get(clean_sym, {})
                 if cdata:

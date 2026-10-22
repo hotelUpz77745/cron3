@@ -200,7 +200,7 @@ class TelegramReceiver:
                     "super_grid": getattr(strat, "super_grid_enabled", False),
                     "super_grid_cfg": getattr(strat, "super_grid_cfg", {}),
                     "tp_summary": "Настроен",
-                    "start_balance_usdt": getattr(strat, "start_balance_usdt", 57.0)
+                    "start_balance_usdt": getattr(strat, "start_balance_usdt", ANALYTICS_START_BALANCE_USDT)
                 }
 
         univ_dir = DATA_DIR / "universes"
@@ -256,7 +256,12 @@ class TelegramReceiver:
             final_def = 0.0
         invest_size = final_def if isinstance(raw_inv, dict) else float(raw_inv or final_def)
         leverage = u_meta.get("leverage", 20)
-        start_bal = float((strat_app.get("analytics") or {}).get("start_balance_usdt", u_meta.get("start_balance_usdt", 57.0)))
+        start_bal = float(
+            strat_app.get("start_balance_usdt")
+            or (strat_app.get("analytics") or {}).get("start_balance_usdt")
+            or u_meta.get("start_balance_usdt")
+            or ANALYTICS_START_BALANCE_USDT
+        )
         
         sg_cfg = strat_app.get("super_grid") or u_meta.get("super_grid") or u_meta.get("overrides", {}).get("super_grid", {})
         sg_enabled = sg_cfg.get("enabled", u_meta.get("super_grid_enabled", False))
@@ -581,21 +586,13 @@ class TelegramReceiver:
         import html
         clean_name = html.escape(univ_name)
 
-        # Разрешаем стартовый баланс купола из active_strategies либо ANALYTICS_START_BALANCE_USDT
-        strat_cfg_data = _CFG.get("active_strategies", {}).get(current_uid, {})
-        default_start_bal = 0.0
-        if isinstance(strat_cfg_data, dict):
-            if "analytics" in strat_cfg_data and "start_balance_usdt" in strat_cfg_data["analytics"]:
-                default_start_bal = float(strat_cfg_data["analytics"]["start_balance_usdt"])
-            elif "start_balance_usdt" in strat_cfg_data:
-                default_start_bal = float(strat_cfg_data["start_balance_usdt"])
-        if default_start_bal <= 0.0:
-            default_start_bal = float(ANALYTICS_START_BALANCE_USDT)
+        # Стартовый баланс купола берется строго из CFG/app.json: active_strategies[current_uid]["start_balance_usdt"]
+        strat_cfg_data = _CFG["active_strategies"].get(current_uid, {})
+        start_bal = float(strat_cfg_data["start_balance_usdt"]) if "start_balance_usdt" in strat_cfg_data else float(strat_cfg_data.get("analytics", {}).get("start_balance_usdt", 0.0))
 
-        start_bal = default_start_bal
-        cur_bal = default_start_bal
-        peak_bal = default_start_bal
-        min_bal = default_start_bal
+        cur_bal = start_bal
+        peak_bal = start_bal
+        min_bal = start_bal
         net_profit = 0.0
         realized = 0.0
         unrealized = 0.0
@@ -608,7 +605,7 @@ class TelegramReceiver:
         if analytics_path.exists():
             try:
                 adata = json.loads(analytics_path.read_text(encoding="utf-8"))
-                start_bal = float(adata.get("start_balance_usdt", default_start_bal))
+                start_bal = float(adata.get("start_balance_usdt", start_bal))
                 cur_bal = float(adata.get("cur_balance_usdt", start_bal))
                 peak_bal = float(adata.get("peak_balance_usdt", max(start_bal, cur_bal)))
                 min_bal = float(adata.get("min_balance_usdt", min(start_bal, cur_bal)))
@@ -1325,7 +1322,7 @@ class TelegramReceiver:
             import html
             clean_name = html.escape(univ_name)
             await callback.message.answer(
-                f"Введите новый начальный баланс (start_balance_usdt) для купола <b>{clean_name}</b> (<code>{current_uid}</code>) в USDT (например, 57.0):",
+                f"Введите новый начальный баланс (start_balance_usdt) для купола <b>{clean_name}</b> (<code>{current_uid}</code>) в USDT (например, 100.0):",
                 reply_markup=self._get_back_keyboard(),
                 parse_mode="HTML"
             )
@@ -1343,7 +1340,7 @@ class TelegramReceiver:
                 if new_balance < 0:
                     raise ValueError("Баланс не может быть отрицательным.")
             except ValueError:
-                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 57.0) или нажмите Back:")
+                await message.answer("❌ Некорректное число. Введите баланс еще раз (например, 100.0) или нажмите Back:")
                 return
                 
             st_data = await state.get_data()
