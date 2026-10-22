@@ -30,8 +30,6 @@ class LeaderboardEngine:
         "toxic": "[TOXIC]",
         "fixed_net": "[FIXED]",
         "fixed": "[FIXED]",
-        "alpha_rotation": "[ALPHA]",
-        "alpha": "[ALPHA]",
         "disabled": "[OFF]",
         "off": "[OFF]",
         "no_autoclose": "[OFF]",
