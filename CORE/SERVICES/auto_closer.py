@@ -129,12 +129,12 @@ class AutoCloser:
         now_ms = int(now_sec * 1000)
 
         # 1. Стратегические купола
-        await self._check_strategy_domes(app_data, app_json_path, now_sec, now_ms, fsm)
+        await self._check_strategy_domes(app_data, app_json_path, analytics_data, now_sec, now_ms, fsm)
 
         # 2. Глобальный портфельный автозакрыватель
         await self._check_portfolio(app_data, app_json_path, analytics_data, now_sec, now_ms, fsm)
 
-    async def _check_strategy_domes(self, app_data: dict, app_json_path: Any, now_sec: float, now_ms: int, fsm: Any):
+    async def _check_strategy_domes(self, app_data: dict, app_json_path: Any, analytics_data: dict, now_sec: float, now_ms: int, fsm: Any):
         CLOSE_COOLDOWN_SEC = 45.0
         # 1. СТРАТЕГИЧЕСКИЕ КУПОЛА (PER-STRATEGY AUTO-CLOSING)
         active_strats = {}
@@ -183,9 +183,9 @@ class AutoCloser:
                 continue
 
             strat_stats_path = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
-            strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else analytics_data
+            strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else None
             if not strat_analytics:
-                strat_analytics = analytics_data
+                strat_analytics = analytics_data or {}
 
             if strat_analytics.get("_floating_synced") is False or strat_analytics.get("net_profit_usdt") is None:
                 logger.debug(f"[AUTO_CLOSER][{strat_id}] ⏳ Floating stats unverified by API. Skipping auto-close evaluation.")

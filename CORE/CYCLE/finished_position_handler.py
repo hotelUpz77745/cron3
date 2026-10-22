@@ -8,6 +8,8 @@ ROLE: Отработка завершенных позиций (Profit Recycling
 """
 
 import inspect
+import asyncio
+import time
 from typing import Any, Dict, Optional
 from c_log import UnifiedLogger
 from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
@@ -33,7 +35,7 @@ class FinishedPositionHandler:
         runtime_cfg: dict,
         recycler_cls: Optional[Any] = None,
     ) -> None:
-        sides_to_reset = [side for side in ("LONG", "SHORT") if states[side].is_finished]
+        sides_to_reset = [side for side in ("LONG", "SHORT") if side in states and getattr(states[side], "is_finished", False)]
         if not sides_to_reset:
             return
 
@@ -45,9 +47,9 @@ class FinishedPositionHandler:
             # 1. Cross-Side Profit Recycling
             closed_vol = getattr(states[side], "last_closed_volume", 0.0)
             closed_entry = getattr(states[side], "last_closed_avg_price", 0.0)
-            price_data = bot.prices.get(symbol)
+            price_data = getattr(bot, "prices", {}).get(symbol) if hasattr(bot, "prices") and isinstance(bot.prices, dict) else None
             cur_price = price_data[0] if isinstance(price_data, tuple) else price_data
-            if (not cur_price or cur_price <= 0) and getattr(states[side], "tp_price", None):
+            if (not cur_price or not isinstance(cur_price, (int, float)) or cur_price <= 0) and getattr(states[side], "tp_price", None):
                 cur_price = states[side].tp_price
 
             if closed_vol > 0 and closed_entry > 0 and cur_price and cur_price > 0:
@@ -60,27 +62,38 @@ class FinishedPositionHandler:
                             winning_side=side,
                             realized_profit=realized_pnl,
                             current_price=cur_price,
-                            spec_data=bot.spec_data,
+                            spec_data=getattr(bot, "spec_data", {}),
                         )
                     except Exception as e:
                         logger.error(f"[{symbol}] Error during cross-side recycling: {e}")
 
-            now = bot.get_current_time() if hasattr(bot, "get_current_time") else 0.0
-            if hasattr(states[side], "recent_closes"):
+            now = bot.get_current_time() if hasattr(bot, "get_current_time") else time.time()
+            if hasattr(states[side], "recent_closes") and isinstance(states[side].recent_closes, list):
                 states[side].recent_closes.append(now)
 
-            open_time = runtime_cfg.get(side, {}).get("open_time", 0)
+            open_time = runtime_cfg.get(side, {}).get("open_time", 0) if isinstance(runtime_cfg, dict) else 0
             close_time = int(now * 1000)
             sym_client = bot.get_client_for_symbol(symbol) if hasattr(bot, "get_client_for_symbol") else getattr(bot, "client", None)
             if hasattr(bot, "analytics") and bot.analytics and hasattr(bot.analytics, "record_finished_position"):
-                bot.analytics.record_finished_position(sym_client, symbol, side, open_time, close_time)
+                try:
+                    bot.analytics.record_finished_position(sym_client, symbol, side, open_time, close_time)
+                except Exception as e:
+                    logger.error(f"[{symbol}] Error recording finished position to analytics: {e}")
 
             logger.info(f"[{symbol}] {side} Canceling all limit orders for this side")
             if sym_client and hasattr(sym_client, "cancel_orders_for_side"):
-                await sym_client.cancel_orders_for_side(symbol, side)
+                try:
+                    await sym_client.cancel_orders_for_side(symbol, side)
+                except Exception as e:
+                    logger.error(f"[{symbol}] Error canceling orders for side {side}: {e}")
 
             if hasattr(bot, "runtime_manager") and bot.runtime_manager and hasattr(bot.runtime_manager, "reset_state_to_default"):
                 bot.runtime_manager.reset_state_to_default(symbol, side, states[side])
+            elif hasattr(states[side], "reset"):
+                states[side].reset()
+            else:
+                states[side].is_finished = False
+
             if hasattr(bot, "avg_manager") and bot.avg_manager and hasattr(bot.avg_manager, "reset"):
                 bot.avg_manager.reset(symbol, side)
 

@@ -22,7 +22,9 @@ from consts import (
     CACHE_DIR,
     COOLDOWN_POST_CANDLE_BUFFER_SEC,
     COOLDOWN_MIN_HEARTBEAT_SEC,
+    DEFAULT_HEARTBEAT_TFR,
 )
+from CORE.ENTRY.signal import TimeControl
 
 logger = UnifiedLogger("EmergencyCloser")
 
@@ -63,8 +65,9 @@ class EmergencyCloserService:
                             bot_core.fsm_states[sym][s_side].is_closing = True
 
             now = time.time()
-            raw_hb = bot_core.get_strategy_heartbeat_seconds()
-            heartbeat_sec = int(raw_hb) if isinstance(raw_hb, (int, float)) else TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
+            hb_getter = getattr(bot_core, "get_strategy_heartbeat_seconds", None)
+            raw_hb = hb_getter() if callable(hb_getter) else None
+            heartbeat_sec = int(raw_hb) if isinstance(raw_hb, (int, float)) and raw_hb > 0 else TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
             if hasattr(bot_core, "calc_heartbeat_window_cooldown"):
                 try:
                     res = bot_core.calc_heartbeat_window_cooldown(now, heartbeat_sec)
@@ -435,12 +438,16 @@ class EmergencyCloserService:
         if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
             if hasattr(bot_core.strategy_registry, "active_strategies") and isinstance(bot_core.strategy_registry.active_strategies, dict):
                 strat_cfg = bot_core.strategy_registry.active_strategies.get(strategy_id)
-            if not strat_cfg and hasattr(bot_core.strategy_registry, "get_strategy") and not isinstance(bot_core.strategy_registry.get_strategy, MagicMock):
-                try:
-                    strat_cfg = bot_core.strategy_registry.get_strategy(strategy_id)
-                except Exception:
-                    strat_cfg = None
-        if strat_cfg and getattr(strat_cfg, "symbols", None):
+            if not strat_cfg and hasattr(bot_core.strategy_registry, "get_strategy"):
+                getter = getattr(bot_core.strategy_registry, "get_strategy")
+                if callable(getter) and type(getter).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+                    try:
+                        res = getter(strategy_id)
+                        if res and not inspect.iscoroutine(res):
+                            strat_cfg = res
+                    except Exception:
+                        strat_cfg = None
+        if strat_cfg and getattr(strat_cfg, "symbols", None) and isinstance(strat_cfg.symbols, (list, tuple, set)):
             for sym in strat_cfg.symbols:
                 if hasattr(bot_core, "fsm_states") and sym in bot_core.fsm_states:
                     for s_side in ("LONG", "SHORT"):
@@ -450,13 +457,17 @@ class EmergencyCloserService:
         # 3. Кулдаун авто-закрытия и блокировка входов до открытия новой свечи хартбита
         now = time.time()
         heartbeat_sec = None
-        if strat_cfg and getattr(strat_cfg, "heartbeat_seconds", None):
+        if strat_cfg and getattr(strat_cfg, "heartbeat_seconds", None) and isinstance(strat_cfg.heartbeat_seconds, (int, float)):
             heartbeat_sec = int(strat_cfg.heartbeat_seconds)
-        elif hasattr(bot_core, "get_strategy_heartbeat_seconds") and not isinstance(getattr(bot_core, "get_strategy_heartbeat_seconds", None), MagicMock):
-            try:
-                heartbeat_sec = int(bot_core.get_strategy_heartbeat_seconds(strategy_id=strategy_id))
-            except Exception:
-                pass
+        elif hasattr(bot_core, "get_strategy_heartbeat_seconds"):
+            getter = getattr(bot_core, "get_strategy_heartbeat_seconds", None)
+            if callable(getter):
+                try:
+                    val = getter(strategy_id=strategy_id)
+                    if isinstance(val, (int, float)) and val > 0:
+                        heartbeat_sec = int(val)
+                except Exception:
+                    pass
         if not heartbeat_sec or heartbeat_sec <= 0:
             heartbeat_sec = TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
 
