@@ -276,31 +276,3 @@ class UnifiedLogger:
             f"Stack:\n{traceback.format_exc()}",
             extra=extra or None,
         )
-
-    # ======================================================
-    # MASS WRAP
-    # ======================================================
-    def wrap_object_methods(self, obj: Any, context: Optional[Any] = None):
-        for cls in obj.__class__.mro():
-            if cls is object:
-                continue
-
-            for name, attr in cls.__dict__.items():
-                if name.startswith("_"):
-                    continue
-
-                if name.startswith("__"):
-                    continue
-
-                if not callable(attr):
-                    continue
-
-                try:
-                    original = getattr(obj, name)
-                    if getattr(original, "_is_wrapped", False):
-                        continue
-
-                    wrapped = self.total_exception_decor(original, context)
-                    setattr(obj, name, wrapped)
-                except Exception:
-                    continue
