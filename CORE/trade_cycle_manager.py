@@ -200,7 +200,6 @@ class TradeCycleManager:
                 if eff > 0:
                     base_invest = eff
             state.eff_invest = base_invest
-            invest_size = base_invest
 
             smart_size_mult = 1.0
             if strat and getattr(strat, "smart_size_cfg", None):
