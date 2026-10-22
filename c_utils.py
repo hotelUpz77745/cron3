@@ -364,41 +364,6 @@ class Utils:
         json_str = json.dumps(data, indent=indent, ensure_ascii=False)
         return Utils.atomic_write_text(file_path, json_str, retries=retries, delay=delay)
 
-    @staticmethod
-    def atomic_write_pickle(file_path: Union[str, Path], data: Any, retries: int = 7, delay: float = 0.05) -> bool:
-        """
-        Сверхбыстрая бинарная атомарная запись через pickle с защитой от коллизий на Windows.
-        """
-        import pickle
-        path = Path(file_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = path.with_suffix(f"{path.suffix}.tmp_{os.getpid()}_{time.time_ns()}")
-        try:
-            with open(tmp_path, "wb") as f:
-                pickle.dump(data, f, protocol=pickle.HIGHEST_PROTOCOL)
-                f.flush()
-                os.fsync(f.fileno())
-            for attempt in range(retries):
-                try:
-                    os.replace(tmp_path, path)
-                    return True
-                except (PermissionError, OSError) as e:
-                    if attempt == retries - 1:
-                        try:
-                            if path.exists():
-                                path.unlink()
-                            os.replace(tmp_path, path)
-                            return True
-                        except Exception:
-                            raise e
-                    time.sleep(delay * (attempt + 1))
-        finally:
-            if tmp_path.exists():
-                try:
-                    tmp_path.unlink()
-                except Exception:
-                    pass
-        return False
 
     @staticmethod
     async def wait_for_fsm_sync(state, timeout_sec: float = 3.0, poll_interval: float = 0.01) -> bool:

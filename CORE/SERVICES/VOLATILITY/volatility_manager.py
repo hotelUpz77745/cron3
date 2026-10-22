@@ -146,20 +146,20 @@ class VolatilityManager:
                     logger.info(f"[VolatilityManager] [{symbol}] Игнор: Расчитанная волатильность {adjusted_vol:.2f}% выше или равна максимуму {max_volatility_pct}%. Возвращаемся к использованию стандартных настроек индента.")
                     is_advanced = False
 
-            # Resolve runtime path under strategy dome (.pkl prioritized)
+            # Resolve runtime path under strategy dome (.json prioritized)
             if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "get_runtime_path"):
                 runtime_path = self.bot_core.runtime_manager.get_runtime_path(symbol)
             elif strat:
-                runtime_path = DATA_DIR / "runtime" / strat.strategy_id / f"{symbol.lower()}.pkl"
+                runtime_path = DATA_DIR / "runtime" / strat.strategy_id / f"{symbol.lower()}.json"
                 if not runtime_path.exists():
-                    runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.pkl"
+                    runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
             else:
-                runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.pkl"
+                runtime_path = DATA_DIR / "runtime" / f"{symbol.lower()}.json"
 
             if not runtime_path.exists():
-                cand_json = runtime_path.with_suffix(".json")
-                if cand_json.exists():
-                    runtime_path = cand_json
+                cand_pkl = runtime_path.with_suffix(".pkl")
+                if cand_pkl.exists():
+                    runtime_path = cand_pkl
                 else:
                     continue
                 
@@ -222,12 +222,12 @@ class VolatilityManager:
                         modified = True
                         
                 if modified:
-                    target_save = runtime_path.with_suffix(".pkl")
-                    Utils.atomic_write_pickle(target_save, rt_data)
-                    legacy_json = runtime_path.with_suffix(".json")
-                    if legacy_json.exists():
+                    target_save = runtime_path.with_suffix(".json")
+                    Utils.atomic_write_json(target_save, rt_data, indent=4)
+                    old_pkl = runtime_path.with_suffix(".pkl")
+                    if old_pkl.exists():
                         try:
-                            legacy_json.unlink()
+                            old_pkl.unlink()
                         except Exception:
                             pass
                     if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "caches"):
