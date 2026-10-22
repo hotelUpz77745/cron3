@@ -142,10 +142,54 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         meta = get_strategy_meta(selected_dome, bot_core)
         s_name = meta.get("name", selected_dome)
 
+        # 1. Получаем список монет текущего купола
+        dome_symbols: List[str] = []
+        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+            active_strats = bot_core.strategy_registry.get_active_strategies()
+            if selected_dome in active_strats:
+                dome_symbols = list(active_strats[selected_dome].symbols)
+        if not dome_symbols:
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            dome_symbols = extract_strategy_symbols(app_data.get("active_strategies", {}).get(selected_dome, {}))
+        dome_symbols = sorted(list(set(dome_symbols)))
+
+        # 2. Получаем список всех активных монет в системе
+        system_symbols: List[str] = []
+        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+            system_symbols = bot_core.strategy_registry.get_all_active_symbols()
+        if not system_symbols:
+            system_symbols = getattr(bot_core, "symbols", []) or []
+        if not system_symbols:
+            app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
+            for sid, sdata in app_data.get("active_strategies", {}).items():
+                if sdata.get("enabled", True):
+                    system_symbols.extend(extract_strategy_symbols(sdata))
+        system_symbols = sorted(list(set(system_symbols)))
+
+        dome_coins_str = ", ".join(f"<code>{s}</code>" for s in dome_symbols) if dome_symbols else "<i>нет</i>"
+        all_coins_str = ", ".join(f"<code>{s}</code>" for s in system_symbols) if system_symbols else "<i>нет</i>"
+
+        if set(system_symbols) == set(dome_symbols):
+            coins_info = (
+                f"🪙 <b>Активные монеты в системе ({len(system_symbols)}):</b>\n"
+                f"{all_coins_str}\n"
+            )
+        else:
+            coins_info = (
+                f"🪙 <b>Монеты купола ({len(dome_symbols)}):</b>\n"
+                f"{dome_coins_str}\n\n"
+                f"🌐 <b>Все активные монеты в системе ({len(system_symbols)}):</b>\n"
+                f"{all_coins_str}\n"
+            )
+
         await state.set_state(TGStates.waiting_for_add_symbol)
         await message.answer(
-            f"➕ <b>Добавление монеты в купол</b> <code>{selected_dome}</code> ({s_name})\n\n"
-            f"✍️ Введите тикер монеты (например: <code>DOGEUSDT</code>):\n"
+            f"➕ <b>Добавление монеты в купол</b> <code>{selected_dome}</code>\n"
+            f"🏷️ <b>Стратегия:</b> {s_name}\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{coins_info}"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"✍️ <b>Введите тикер монеты</b> (например: <code>DOGEUSDT</code>):\n"
             f"<i>Монета автоматически вступит в торговлю при получении первого сигнала.</i>",
             reply_markup=get_set_coins_keyboard(),
             parse_mode="HTML",
@@ -178,8 +222,21 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             await state.clear()
             return
 
-        if symbol in getattr(bot_core, "symbols", []):
-            await message.answer(f"⚠️ Монета <b>{symbol}</b> уже активна в системе!", reply_markup=get_set_coins_keyboard(), parse_mode="HTML")
+        # Проверка на наличие монеты в системе
+        system_symbols = []
+        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+            system_symbols = bot_core.strategy_registry.get_all_active_symbols()
+        if not system_symbols:
+            system_symbols = getattr(bot_core, "symbols", []) or []
+
+        if symbol in system_symbols:
+            coins_str = ", ".join(f"<code>{s}</code>" for s in sorted(system_symbols))
+            await message.answer(
+                f"⚠️ Монета <b>{symbol}</b> уже активна в системе!\n\n"
+                f"🪙 <b>Текущие активные монеты ({len(system_symbols)}):</b>\n{coins_str}",
+                reply_markup=get_set_coins_keyboard(),
+                parse_mode="HTML",
+            )
             return
 
         try:
