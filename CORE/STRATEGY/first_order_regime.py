@@ -36,7 +36,7 @@ class FirstOrderRegimeManager:
     - Никаких магических чисел и неявных алиасов.
     """
 
-    SUPPORTED_DYNAMIC_MODES = ("auto_ema", "kernel_forecast", "auto_adx")
+    SUPPORTED_DYNAMIC_MODES = ("auto_ema", "auto_adx")
     SUPPORTED_STATIC_MODES = ("bullish", "neutral", "bearish")
     OFF_MODES = ("off", "none", "null", "disabled", False, None)
 
@@ -113,19 +113,8 @@ class FirstOrderRegimeManager:
 
         mode_str = str(mode).lower().strip()
 
-        # 1. Динамический режим: Kernel Forecast (Nadaraya-Watson)
-        if mode_str == "kernel_forecast":
-            kernel_cfg = regime_cfg["kernel_forecast"]
-            tf_label = kernel_cfg["timeframe"]
-            trend_st = await MomentumEngine.get_kernel_trend_state(
-                symbol=symbol,
-                kernel_cfg=kernel_cfg,
-                client=client,
-            )
-            regime_name = f"ЯДЕРНЫЙ FORECAST (Nadaraya-Watson {tf_label})"
-
-        # 2. Динамический режим: Auto-EMA
-        elif mode_str == "auto_ema":
+        # 1. Динамический режим: Auto-EMA
+        if mode_str == "auto_ema":
             ema_cfg = regime_cfg["auto_ema"]
             tf_label = ema_cfg["timeframe"]
             trend_st = await MomentumEngine.get_ema_trend_state(

@@ -291,39 +291,6 @@ class TrendSizeDepender:
         return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
 
     @classmethod
-    def evaluate_grade_bb(
-        cls,
-        closes: np.ndarray,
-        period: int = 20,
-        multiplier: float = 2.0
-    ) -> int:
-        """
-        Вычисляет относительное отклонение цены от средней линии Боллинджера (Middle BB).
-        NormalizedDev = (Close - Middle) / (Upper - Lower).
-        При цене на внешней границе NormalizedDev = +/-0.5.
-        Делим на 0.5 для нормализации к [-1.0, +1.0] и квантуем в k in [-16, 16].
-        """
-        if len(closes) < 3:
-            return 0
-
-        actual_period = min(len(closes), period)
-        window = closes[-actual_period:]
-        middle = float(np.mean(window))
-        std_val = float(np.std(window))
-
-        if std_val < 1e-8:
-            return 0
-
-        band_span = 2.0 * multiplier * std_val
-        last_close = float(closes[-1])
-        dev = (last_close - middle) / band_span
-
-        norm_dev = dev / 0.5
-        clamped_norm = max(-1.0, min(1.0, norm_dev))
-        grade = int(round(clamped_norm * cls.STEPS_HALF))
-        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
-
-    @classmethod
     def evaluate_grade_bb_inverted_lockout(
         cls,
         closes: np.ndarray,

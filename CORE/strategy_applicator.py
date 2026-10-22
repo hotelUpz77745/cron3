@@ -182,7 +182,6 @@ class StrategyApplicator:
 
                 if mode_val not in (
                     "auto", "auto_ema", "ema_trend",
-                    "kernel", "kernel_forecast", "auto_kernel", "nadaraya_watson",
                     "off", "null", "none", False, None
                 ):
                     resolved_vol = StrategyApplicator.resolve_first_order_volume(

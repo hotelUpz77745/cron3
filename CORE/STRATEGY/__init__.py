@@ -16,7 +16,6 @@ from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.STRATEGY.trend_size_depender import TrendSizeDepender, TrendCalculator
-from CORE.STRATEGY.kernel_regression import KernelForecastEngine, NadarayaWatsonEstimator
 
 __all__ = [
     "StrategyConfig",
@@ -31,6 +30,4 @@ __all__ = [
     "MomentumEngine",
     "TrendSizeDepender",
     "TrendCalculator",
-    "KernelForecastEngine",
-    "NadarayaWatsonEstimator",
 ]

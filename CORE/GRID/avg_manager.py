@@ -2,17 +2,19 @@
 # Role: avg_manager.py module
 
 # ==============================================================================
-# Path: CORE/avg_manager.py
+# Path: CORE/GRID/avg_manager.py
 # Role: Менеджер усреднений (Grid Manager)
 # ==============================================================================
 
 import asyncio
 import time
+from typing import Optional
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 from c_utils import Utils
 
 from consts import _CFG
+from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 
 logger = UnifiedLogger("AvgManager")
@@ -48,7 +50,6 @@ class AverageManager:
             except Exception:
                 atr_grid_cfg = None
         if not atr_grid_cfg:
-            from consts import _CFG
             atr_grid_cfg = _CFG.get("dynamic_atr_grid") or {
                 "enabled": True,
                 "timeframe": "1h",
@@ -63,7 +64,6 @@ class AverageManager:
 
         atr_mult = 1.0
         if atr_grid_cfg and atr_grid_cfg.get("enabled", False):
-            from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
             atr_mult = await DynamicAtrGridManager.get_grid_atr_multiplier(
                 client=client,
                 symbol=symbol,
@@ -115,7 +115,6 @@ class AverageManager:
                             lvl_idx = int(level_str)
                         except Exception:
                             lvl_idx = 1
-                        from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
                         eff_indent = DynamicAtrGridManager.calculate_effective_indent(
                             base_indent=float(indent_pct),
                             level_index=lvl_idx,
