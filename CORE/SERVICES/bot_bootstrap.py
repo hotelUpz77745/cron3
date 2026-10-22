@@ -207,6 +207,8 @@ class BotBootstrapService:
             bot_core._price_task.cancel()
         if bot_core._pos_task:
             bot_core._pos_task.cancel()
+        if getattr(bot_core, "analytics", None):
+            bot_core.analytics.stop_realtime_tracker()
 
         for creds, cl in getattr(bot_core, '_key_clients', {}).items():
             with contextlib.suppress(Exception):
