@@ -190,6 +190,72 @@ class TestAnalyticsSingleSourceOfTruth(unittest.TestCase):
         self.assertEqual(updated["net_profit_usdt"], 12.5)
         self.assertFalse(self.root_analytics_json.exists(), "После _write_data клон в корне также отсутствует!")
 
+    def test_07_autocloser_and_notifier_per_strategy_stats_from_canonical_stats_dir(self):
+        """AutoCloser и NotifierManager читают per-strategy stats строго через ANALYTICS_STATS_DIR без NameError."""
+        from CORE.SERVICES.auto_closer import AutoCloser
+        from CORE.SERVICES.notifier import NotifierManager
+
+        strat_id = "u17_stephensonE__trailing_ratchet"
+        strat_file = self.stats_dir / f"analytics_{strat_id}.json"
+        strat_file.write_text(json.dumps({
+            "net_profit_usdt": 15.0,
+            "iteration_index": 1,
+            "iteration_start_net_profit_usdt": 0.0,
+            "_floating_synced": True
+        }), encoding="utf-8")
+
+        mock_strat = MagicMock()
+        mock_strat.name = "Stephenson"
+        mock_strat.symbols = ["BTCUSDT"]
+        mock_strat.mode = "trailing_ratchet"
+        mock_strat.notifications_cfg = {
+            "enabled": True,
+            "negative_threshold": -10.0,
+            "positive_threshold": 10.0
+        }
+        mock_strat.auto_close_cfg = {
+            "enabled": True,
+            "mode": "trailing_ratchet"
+        }
+
+        mock_bot = MagicMock()
+        mock_bot.symbols = ["BTCUSDT"]
+        mock_bot.strategy_registry = MagicMock(active_strategies={strat_id: mock_strat})
+
+        closer = AutoCloser(mock_bot)
+        notifier = NotifierManager(mock_bot)
+        notifier.send_alert = AsyncMock()
+
+        app_cfg = {
+            "active_strategies": {
+                strat_id: {
+                    "auto_close": {"enabled": True, "mode": "trailing_ratchet"},
+                    "notifications": {"enabled": True, "negative_threshold": -10.0, "positive_threshold": 10.0}
+                }
+            }
+        }
+        (self.cfg_dir / "app.json").write_text(json.dumps(app_cfg), encoding="utf-8")
+
+        with patch("CORE.SERVICES.auto_closer.ANALYTICS_STATS_DIR", self.stats_dir), \
+             patch("CORE.SERVICES.auto_closer.GLOBAL_ANALYTICS_JSON", self.test_analytics_json), \
+             patch("CORE.SERVICES.auto_closer.CACHE_DIR", self.cache_dir), \
+             patch("CORE.SERVICES.auto_closer.DATA_DIR", self.cfg_dir), \
+             patch("CORE.SERVICES.notifier.ANALYTICS_STATS_DIR", self.stats_dir), \
+             patch("CORE.SERVICES.notifier.GLOBAL_ANALYTICS_JSON", self.test_analytics_json), \
+             patch("CORE.SERVICES.notifier.DATA_DIR", self.cfg_dir):
+
+            # Проверяем check_thresholds купола
+            asyncio.run(notifier.check_thresholds())
+            notifier.send_alert.assert_called_once()
+            self.assertIn("ПРОФИЦИТ КУПОЛА [Stephenson]!", notifier.send_alert.call_args[0][0])
+
+            # Проверяем, что auto_closer корректно считывает файл купола через ANALYTICS_STATS_DIR
+            target_path = self.stats_dir / f"analytics_{strat_id}.json"
+            self.assertTrue(target_path.exists())
+            read_strat = Utils.read_json_file(target_path)
+            self.assertEqual(read_strat["net_profit_usdt"], 15.0)
+
 
 if __name__ == "__main__":
     unittest.main()
+

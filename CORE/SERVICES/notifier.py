@@ -10,7 +10,7 @@ ROLE: Сервис Telegram-уведомлений по просадке и пр
 import asyncio
 import os
 import aiohttp
-from consts import DATA_DIR, ANALYTICS_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, TG_ALLOWED_USERS
+from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, TG_ALLOWED_USERS
 from c_utils import Utils
 from c_log import UnifiedLogger
 

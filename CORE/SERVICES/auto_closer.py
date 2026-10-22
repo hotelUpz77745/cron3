@@ -12,7 +12,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional, Dict
-from consts import DATA_DIR, ANALYTICS_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_DIR
+from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
@@ -375,7 +375,7 @@ class AutoCloser:
             if mode == "off":
                 continue
 
-            strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strat_id}.json"
+            strat_stats_path = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
             strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else analytics_data
             if not strat_analytics:
                 strat_analytics = analytics_data
