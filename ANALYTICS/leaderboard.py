@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 from consts import ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
+from ANALYTICS.trade_velocity import TradeVelocityEngine
 
 logger = UnifiedLogger("Leaderboard")
 
@@ -439,9 +440,7 @@ class LeaderboardEngine:
             # Портфельный расчет Trade Velocity
             port_vel = {}
             try:
-                from ANALYTICS.trade_velocity import TradeVelocityEngine
-                from consts import ANALYTICS_LEDGERS_DIR
-                port_ledger = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
+                port_ledger = self.ledgers_dir / "trades_ledger.txt"
                 port_engine = TradeVelocityEngine(universe_id="default", ledger_path=port_ledger)
                 port_vel = port_engine.calculate_velocity({"per_coin": {}})
             except Exception as pe:

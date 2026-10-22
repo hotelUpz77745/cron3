@@ -6,11 +6,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
+from pathlib import Path
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from consts import API_KEY, API_SECRET
 from c_log import UnifiedLogger
-from CORE._utils import TradeMath, Utils
+from CORE._utils import RiskCalculatingUtils, TradeMath, Utils
+from API.BINANCE.client_prod import BinanceClient
+from API.BINANCE.public import BinancePublic
+from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
 
 if TYPE_CHECKING:
     from CORE.bot import BotCore
@@ -160,14 +166,6 @@ class TakeProfitRestorer:
 
 async def standalone_restore():
     """Точка входа для запуска утилиты из консоли: python -m CORE.TP.take_profit_restorer"""
-    import json
-    from pathlib import Path
-    from consts import API_KEY, API_SECRET
-    from API.BINANCE.client_prod import BinanceClient
-    from API.BINANCE.public import BinancePublic
-    from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
-    from CORE._utils import RiskCalculatingUtils
-
     print("=" * 80)
     print("🚀 [STANDALONE TP RESTORER] Аудит и гарантированное восстановление TP ордеров")
     print("=" * 80)

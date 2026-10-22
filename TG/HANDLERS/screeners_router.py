@@ -3,6 +3,7 @@
 # Role: Роутер сервиса скринеров и селекторов (Alpha Selector, Volatility Scanner / Сонник)
 # ==============================================================================
 
+import importlib
 import io
 import json
 from typing import Any, Optional
@@ -17,6 +18,8 @@ from c_log import UnifiedLogger
 from TG.keyboards import get_back_keyboard, get_main_keyboard
 from TG.states import TGStates
 from c_utils import Utils
+from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
+import CORE.SERVICES.VOLATILITY.volatility_scanner as vs
 
 logger = UnifiedLogger("TGScreenersRouter")
 
@@ -144,15 +147,10 @@ class ScreenersRouterHandler:
         status_msg = await callback.message.answer(f"⏳ Сканирование ({selector_type}), пожалуйста подождите...")
 
         try:
-            from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
-
             service = CoinSelectionService(bot_core=self.bot_core)
             target_count = service.get_configured_target_count(selector_type=selector_type)
 
             if selector_type == "volatility_scanner":
-                import importlib
-                import CORE.SERVICES.VOLATILITY.volatility_scanner as vs
-
                 importlib.reload(vs)
                 scanner = vs.VolatilityScanner(client=getattr(self.bot_core, "client", None))
                 await scanner.scan()

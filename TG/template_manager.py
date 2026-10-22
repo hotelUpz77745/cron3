@@ -7,6 +7,7 @@
 # ==============================================================================
 import json
 from pathlib import Path
+import pickle
 from typing import Any, Optional, Dict, List, Union
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -59,7 +60,6 @@ class TemplateManager:
         target_file = self.get_runtime_path(symbol, strategy_id)
         if target_file.exists():
             if str(target_file).endswith(".pkl"):
-                import pickle
                 try:
                     with open(target_file, "rb") as fp:
                         rt_data = pickle.load(fp)

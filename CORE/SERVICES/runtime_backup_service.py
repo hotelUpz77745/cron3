@@ -4,6 +4,8 @@
 # ==============================================================================
 
 import asyncio
+import aiohttp
+import math
 import os
 import sys
 import json
@@ -34,7 +36,6 @@ def sanitize_for_json(obj: Any) -> Any:
     elif isinstance(obj, Decimal):
         return float(obj)
     elif isinstance(obj, float):
-        import math
         if math.isnan(obj) or math.isinf(obj):
             return None
         return obj
@@ -132,7 +133,6 @@ class RuntimeBackupService:
     @classmethod
     async def send_to_telegram(cls, json_path: Path, chat_ids: Optional[List[int]] = None) -> bool:
         """Отправляет сгенерированный JSON-файл в Telegram как документ."""
-        import aiohttp
         token = os.getenv("TG_TOKEN")
         if not token:
             logger.warning("TG_TOKEN not configured in environment. Skipping Telegram send.")

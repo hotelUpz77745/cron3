@@ -13,6 +13,7 @@ import asyncio
 from typing import Optional, List, Dict, Any
 from consts import REQ_TIMEOUT_SEC
 from c_log import UnifiedLogger
+from API.BINANCE.public import BinancePublic
 
 logger = UnifiedLogger("INCOME_COLLECTOR")
 
@@ -86,7 +87,6 @@ class IncomeCollector:
                 if asset == "BNB":
                     if bnb_price == 0.0:
                         try:
-                            from API.BINANCE.public import BinancePublic
                             bulk_p = await BinancePublic.get_prices_bulk(["BNBUSDT"])
                             if "BNBUSDT" in bulk_p:
                                 bnb_price = float(bulk_p["BNBUSDT"])

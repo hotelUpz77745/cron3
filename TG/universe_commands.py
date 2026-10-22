@@ -8,6 +8,7 @@ from aiogram.types import InlineKeyboardMarkup
 from TG.HANDLERS.universe_router import (
     universe_session_manager,
     _build_inline_keyboard,
+    get_universe_router,
 )
 from ANALYTICS.report_service import AnalyticsReportService
 from consts import DATA_DIR
@@ -56,7 +57,6 @@ class UniverseCommandsService:
 
     def setup_universe_handlers(self, dp: Any, bot_core: Any) -> None:
         """Регистрирует роутер вселенных в Dispatcher (обратная совместимость)."""
-        from TG.HANDLERS.universe_router import get_universe_router
         dp.include_router(get_universe_router(bot_core))
 
 

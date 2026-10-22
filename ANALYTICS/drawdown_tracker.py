@@ -21,6 +21,7 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
+from API.BINANCE.public import BinancePublic
 from ANALYTICS.circuit_breaker import (
     CircuitBreaker,
     default_circuit_breaker,
@@ -55,7 +56,6 @@ class DrawdownTracker:
                     return parsed
 
         try:
-            from API.BINANCE.public import BinancePublic
             prices = await BinancePublic.get_prices_bulk(["BNBUSDT"])
             if prices and "BNBUSDT" in prices:
                 val = prices["BNBUSDT"]

@@ -10,6 +10,7 @@ ROLE: Сервис экстренного закрытия позиций и о�
 import asyncio
 import inspect
 import json
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -327,31 +328,40 @@ class EmergencyCloserService:
         Принудительный сброс итерации стратегии и переход на новый цикл.
         Делегирует расчет и запись аналитики в AnalyticsManager, сбрасывает recent_closes и ставит идемпотентный кулдаун.
         """
-        from unittest.mock import MagicMock
-
         # 1. Запись аналитики через сервисный метод (с поддержкой фолбека для тестов с моками)
         res = None
-        if (
-            hasattr(bot_core, "analytics")
-            and hasattr(bot_core.analytics, "reset_strategy_iteration")
-            and not isinstance(bot_core.analytics, MagicMock)
-        ):
-            res = bot_core.analytics.reset_strategy_iteration(strategy_id)
+        if hasattr(bot_core, "analytics") and hasattr(bot_core.analytics, "reset_strategy_iteration"):
+            try:
+                candidate = bot_core.analytics.reset_strategy_iteration(strategy_id)
+                if isinstance(candidate, dict):
+                    res = candidate
+            except Exception:
+                res = None
 
         if not isinstance(res, dict):
-            import CORE.bot as _bot_mod
-
             raw_analytics_dir = getattr(bot_core, "analytics_dir", None)
             if isinstance(raw_analytics_dir, (str, Path)):
                 eff_analytics_dir = Path(raw_analytics_dir)
+            elif isinstance(getattr(bot_core, "ANALYTICS_DIR", None), (str, Path)):
+                eff_analytics_dir = Path(bot_core.ANALYTICS_DIR)
             else:
-                eff_analytics_dir = Path(getattr(_bot_mod, "ANALYTICS_DIR", ANALYTICS_DIR))
+                bot_mod = sys.modules.get("CORE.bot")
+                if bot_mod and isinstance(getattr(bot_mod, "ANALYTICS_DIR", None), (str, Path)):
+                    eff_analytics_dir = Path(bot_mod.ANALYTICS_DIR)
+                else:
+                    eff_analytics_dir = Path(ANALYTICS_DIR)
 
             raw_cache_dir = getattr(bot_core, "cache_dir", None)
             if isinstance(raw_cache_dir, (str, Path)):
                 eff_cache_dir = Path(raw_cache_dir)
+            elif isinstance(getattr(bot_core, "CACHE_DIR", None), (str, Path)):
+                eff_cache_dir = Path(bot_core.CACHE_DIR)
             else:
-                eff_cache_dir = Path(getattr(_bot_mod, "CACHE_DIR", CACHE_DIR))
+                bot_mod = sys.modules.get("CORE.bot")
+                if bot_mod and isinstance(getattr(bot_mod, "CACHE_DIR", None), (str, Path)):
+                    eff_cache_dir = Path(bot_mod.CACHE_DIR)
+                else:
+                    eff_cache_dir = Path(CACHE_DIR)
 
             now_ms = int(time.time() * 1000)
             strat_stats_path = eff_analytics_dir / "STATS" / f"analytics_{strategy_id}.json"
@@ -475,9 +485,11 @@ class EmergencyCloserService:
                 bot_core.symbol_blocked_until[sym.upper()] = max(prev_sym, cooldown_until)
 
         all_active_syms = set()
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry and hasattr(bot_core.strategy_registry, "get_all_active_symbols") and not isinstance(bot_core.strategy_registry.get_all_active_symbols, MagicMock):
+        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry and hasattr(bot_core.strategy_registry, "get_all_active_symbols"):
             try:
-                all_active_syms = {s.upper() for s in bot_core.strategy_registry.get_all_active_symbols()}
+                raw_syms = bot_core.strategy_registry.get_all_active_symbols()
+                if isinstance(raw_syms, (list, tuple, set)):
+                    all_active_syms = {s.upper() for s in raw_syms if isinstance(s, str)}
             except Exception:
                 all_active_syms = set()
         strat_syms = {s.upper() for s in strat_cfg.symbols} if (strat_cfg and getattr(strat_cfg, "symbols", None)) else set()

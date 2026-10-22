@@ -24,6 +24,8 @@ from c_log import UnifiedLogger
 from TG.keyboards import get_back_keyboard, get_main_keyboard
 from TG.states import TGStates
 from TG.universe_commands import get_user_universe_id, set_user_universe_id
+from ANALYTICS.report_service import AnalyticsReportService
+from ANALYTICS.leaderboard import LeaderboardEngine
 
 logger = UnifiedLogger("TGAnalyticsRouter")
 
@@ -48,7 +50,6 @@ class AnalyticsRouterHandler:
         an = getattr(self.bot_core, "analytics", None)
         report_svc = getattr(an, "report_service", None)
         if not report_svc:
-            from ANALYTICS.report_service import AnalyticsReportService
             report_svc = AnalyticsReportService()
         return report_svc
 
@@ -185,7 +186,6 @@ class AnalyticsRouterHandler:
 
         engine = getattr(getattr(self.bot_core, "analytics", None), "leaderboard_engine", None)
         if not engine:
-            from ANALYTICS.leaderboard import LeaderboardEngine
             engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=ANALYTICS_STATS_DIR)
 
         active_strats = {}

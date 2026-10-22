@@ -70,11 +70,11 @@ def get_back_keyboard() -> ReplyKeyboardMarkup:
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from typing import Any, List, Dict
+from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 
 
 def get_strategy_selection_inline_keyboard(active_strategies: Dict[str, Any], symbol: str, bot_core: Any) -> InlineKeyboardMarkup:
     """Инлайн-клавиатура выбора стратегии для монеты."""
-    from TG.strategy_helpers import get_strategy_meta
     buttons = []
     for sid, sdata in active_strategies.items():
         if not sdata.get("enabled", False):
@@ -90,7 +90,6 @@ def get_strategy_selection_inline_keyboard(active_strategies: Dict[str, Any], sy
 
 def get_set_coins_dome_inline_keyboard(active_strats: Dict[str, Any], bot_core: Any) -> InlineKeyboardMarkup:
     """Инлайн-клавиатура выбора купола стратегии для настройки монет."""
-    from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
     buttons = []
     for sid, scfg in active_strats.items():
         if sid.startswith("_") or not isinstance(scfg, (dict, object)):

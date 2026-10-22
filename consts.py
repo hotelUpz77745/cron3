@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import shutil
 from typing import Any, Dict, Optional, List, Union
 
 from dotenv import load_dotenv
@@ -28,7 +29,6 @@ SANDBOX_DIR: Path | None = (
 
 
 def _prepare_sandbox(root: Path) -> None:
-    import shutil
     root.mkdir(parents=True, exist_ok=True)
     plan = {
         "CFG": shutil.ignore_patterns("runtime", "__pycache__"),

@@ -33,6 +33,7 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    """PEP 562 lazy attribute loading to eliminate circular dependencies."""
     if name == "StrategyRegistry":
         from CORE.strategy_registry import StrategyRegistry
         return StrategyRegistry

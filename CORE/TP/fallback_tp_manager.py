@@ -8,7 +8,7 @@
 
 import time
 from c_log import UnifiedLogger
-from CORE._utils import TradeMath, RiskCalculatingUtils
+from CORE._utils import TradeMath, RiskCalculatingUtils, TakeProfitConfigResolver
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 
 logger = UnifiedLogger("FallbackMarketTP")
@@ -141,7 +141,6 @@ class FallbackTpManager:
             else:
                 current_level = level_self
                 
-            from CORE._utils import TakeProfitConfigResolver
             current_level = TakeProfitConfigResolver.get_nearest_level_key(current_level, tp_map)
             if current_level not in tp_map:
                 return

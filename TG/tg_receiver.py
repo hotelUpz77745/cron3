@@ -9,7 +9,10 @@ from typing import Any, Optional, Tuple
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
+
+from ANALYTICS.report_service import AnalyticsReportService
+from ANALYTICS.portfolio_aggregator import PortfolioAggregator
 
 from consts import (
     ANALYTICS_LEDGERS_DIR,
@@ -157,15 +160,11 @@ class TelegramReceiver:
             if hasattr(report_svc, "_mock_return_value"):
                 report_svc = None
         if not report_svc:
-            from ANALYTICS.report_service import AnalyticsReportService
-
             report_svc = AnalyticsReportService()
         active_strats = {}
         if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry and not hasattr(self.bot_core.strategy_registry, "_mock_return_value"):
             active_strats = self.bot_core.strategy_registry.get_active_strategies()
         text, buttons = report_svc.render_portfolio_big_board(current_uid, univ_name, active_strats=active_strats)
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]) for b in r] for r in buttons])
         return text, kb
 
@@ -177,12 +176,8 @@ class TelegramReceiver:
             if hasattr(report_svc, "_mock_return_value"):
                 report_svc = None
         if not report_svc:
-            from ANALYTICS.report_service import AnalyticsReportService
-
             report_svc = AnalyticsReportService()
         text, buttons = report_svc.render_universe_analytics_card(current_uid, univ_name)
-        from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]) for b in r] for r in buttons])
         return text, kb
 
@@ -193,8 +188,6 @@ class TelegramReceiver:
             if hasattr(agg, "_mock_return_value"):
                 agg = None
         if not agg:
-            from ANALYTICS.portfolio_aggregator import PortfolioAggregator
-
             agg = PortfolioAggregator(analytics_manager=getattr(self.bot_core, "analytics", None))
         return agg.get_portfolio_all_data()
 

@@ -16,6 +16,7 @@ from typing import Optional, Callable, Set
 from POS_FSM.pos_stream_monitor import PositionMonitor
 from c_utils import Utils
 from c_log import UnifiedLogger
+from consts import MOCK_MODE
 
 logger = UnifiedLogger("FSM_Stream")
 IS_SHOW_SIGNAL = False
@@ -226,7 +227,6 @@ class PositionStream:
         self._external_stop = False
 
         # Если ключи API не заданы или активирован MOCK_MODE / MOCK_EXCHANGE, работаем в режиме симулятора
-        from consts import MOCK_MODE
         env_mock = os.getenv("MOCK_EXCHANGE")
         force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
         if not self.api_key or force_mock:

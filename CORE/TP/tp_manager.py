@@ -10,8 +10,9 @@ from typing import Optional
 from consts import _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE._utils import TradeMath, RiskCalculatingUtils
+from CORE._utils import TradeMath, RiskCalculatingUtils, TakeProfitConfigResolver
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from CORE.TP.dynamic_atr_tp_manager import DynamicATRTakeProfitManager
 
 logger = UnifiedLogger("TakeProfitManager")
 
@@ -52,7 +53,6 @@ class TakeProfitManager:
         else:
             active_level_str = level_self
 
-        from CORE._utils import TakeProfitConfigResolver
         active_level_str = TakeProfitConfigResolver.get_nearest_level_key(active_level_str, state.tp_map)
         current_tp = state.tp_map.get(active_level_str)
         if not current_tp and override_indent is None:
@@ -73,7 +73,6 @@ class TakeProfitManager:
                 strat = self.runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
                 atr_cfg = getattr(strat, "dynamic_atr_tp_cfg", None)
                 if isinstance(atr_cfg, dict) and atr_cfg.get("enabled"):
-                    from CORE.TP.dynamic_atr_tp_manager import DynamicATRTakeProfitManager
                     base_price_atr = state.avg_entry_price if state.avg_entry_price > 0 else current_price
                     _, atr_tp_pct = await DynamicATRTakeProfitManager.calculate_tp_price(
                         client=client,

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple, Any
 
 from consts import (
+    ACTIVE_SYMBOLS,
     DATA_DIR,
     ANALYTICS_DIR,
     ANALYTICS_STATS_DIR,
@@ -213,7 +214,6 @@ class TradeVelocityEngine:
 
         if not configured_symbols:
             try:
-                from consts import ACTIVE_SYMBOLS
                 configured_symbols = list(ACTIVE_SYMBOLS)
             except Exception:
                 pass

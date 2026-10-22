@@ -5,6 +5,7 @@
 
 import json
 import os
+import pickle
 from typing import Any
 
 from aiogram import F, Router
@@ -24,6 +25,8 @@ from consts import ACTIVE_SYMBOLS, DATA_DIR, _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
 from TG.keyboards import get_confirm_start_keyboard, get_main_keyboard
+from TG.template_manager import TemplateManager
+from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
 
 logger = UnifiedLogger("TGBaseRouter")
 
@@ -95,7 +98,6 @@ class BaseRouterHandler:
 
     async def backup_cmd(self, message: Message):
         try:
-            from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
             status_msg = await message.answer("⏳ Создание рантайм-бэкапа позиций (.pkl ➔ JSON)...")
             res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[message.chat.id])
             p = res.get("file")
@@ -183,7 +185,6 @@ class BaseRouterHandler:
         tm = self.template_manager or getattr(self.bot_core, "template_manager", None)
         if not tm:
             try:
-                from TG.template_manager import TemplateManager
                 tm = TemplateManager(bot_core=self.bot_core)
             except Exception as ex:
                 logger.warning(f"Could not initialize TemplateManager fallback: {ex}")
@@ -209,7 +210,6 @@ class BaseRouterHandler:
                         elif isinstance(src, list):
                             symbols.extend(src)
         if not symbols:
-            from consts import ACTIVE_SYMBOLS
             symbols = ACTIVE_SYMBOLS
         symbols = sorted(list(set(s.upper().strip() for s in symbols if s)))
 
@@ -230,7 +230,6 @@ class BaseRouterHandler:
             if runtime_path and runtime_path.exists():
                 try:
                     if str(runtime_path).endswith(".pkl"):
-                        import pickle
                         with open(runtime_path, "rb") as f:
                             data = pickle.load(f)
                     else:
@@ -391,7 +390,6 @@ class BaseRouterHandler:
         await state.clear()
         await callback.answer("⏳ Создание бэкапа рантайма...")
         try:
-            from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
             res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[callback.message.chat.id])
             p = res.get("file")
             if not res.get("telegram_sent") and p and os.path.exists(p):

@@ -14,8 +14,8 @@ logger = UnifiedLogger("FSMGridResolver")
 
 MAX_ENTRY_PRICE_DIVERGENCE: float = 0.40
 DEFAULT_VOLUME_TOLERANCE_PCT: float = DEFAULT_GRID_VOLUME_TOLERANCE_PCT
-DEFAULT_FIRST_ORDER_VOL_LONG: float = 12.0
-DEFAULT_FIRST_ORDER_VOL_SHORT: float = 7.0
+DEFAULT_FIRST_ORDER_VOL_LONG: float = float(FirstOrderRegimeManager.CANONICAL_PRESETS["bullish"]["LONG"])
+DEFAULT_FIRST_ORDER_VOL_SHORT: float = float(FirstOrderRegimeManager.CANONICAL_PRESETS["bullish"]["SHORT"])
 
 
 class FSMGridResolver:

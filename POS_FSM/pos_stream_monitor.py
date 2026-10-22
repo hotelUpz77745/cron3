@@ -13,6 +13,7 @@ from c_log import UnifiedLogger
 import time
 import asyncio
 from c_utils import Utils
+from CORE.strategy_applicator import StrategyApplicator
 
 logger = UnifiedLogger("FSM_Monitor")
 IS_SHOW_SIGNAL = False
@@ -161,7 +162,6 @@ class PositionMonitor:
                     price_changed = (last_price is None) or (abs(last_price - state.avg_entry_price) > FLOAT_ZERO_EPSILON)
                     if vol_changed or price_changed:
                         try:
-                            from CORE.strategy_applicator import StrategyApplicator
                             StrategyApplicator.resolve_position_state_grid(state, strategy=strat_cfg)
                             state._last_resolved_vol = state.total_volume
                             state._last_resolved_price = state.avg_entry_price

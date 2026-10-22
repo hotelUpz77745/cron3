@@ -16,12 +16,12 @@ from c_utils import Utils
 from consts import _CFG, DEFAULT_GRID_VOLUME_TOLERANCE_PCT
 from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
+from CORE.STRATEGY.peeling_manager import PeelingManager
 
 logger = UnifiedLogger("AvgManager")
 
 class AverageManager:
     def __init__(self, peeling_manager: Optional[Any] = None):
-        from CORE.STRATEGY.peeling_manager import PeelingManager
         self.peeling_manager = peeling_manager if peeling_manager is not None else PeelingManager()
 
     async def process_peel(self, *args, **kwargs) -> bool:
@@ -473,7 +473,6 @@ class AverageManager:
         Проверяет и исполняет частичную разгрузку (LIFO-пилинг) крайнего усреднения сетки.
         Делегирует в выделенный доменный класс PeelingManager.
         """
-        from CORE.STRATEGY.peeling_manager import PeelingManager
         return await PeelingManager.process_peel(
             client=client,
             runtime_manager=runtime_manager,

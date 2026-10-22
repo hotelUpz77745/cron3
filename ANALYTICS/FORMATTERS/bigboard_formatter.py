@@ -15,6 +15,7 @@ from consts import (
     _CFG,
 )
 from c_log import UnifiedLogger
+from ANALYTICS.leaderboard import LeaderboardEngine
 
 logger = UnifiedLogger("BigBoardFormatter")
 
@@ -132,7 +133,6 @@ class BigBoardFormatter:
 
         peel_cnt, peel_vol, rec_cnt, rec_vol = 0, 0.0, 0, 0.0
         try:
-            from ANALYTICS.leaderboard import LeaderboardEngine
             lb_engine = getattr(analytics_manager, "leaderboard_engine", None) or LeaderboardEngine(stats_dir=stats_dir)
             u_summary = lb_engine.calculate_universe_summary(current_uid, {"name": univ_name})
             peel_cnt = int(u_summary.get("peel_events", 0))

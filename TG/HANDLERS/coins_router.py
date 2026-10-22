@@ -25,6 +25,7 @@ from TG.keyboards import (
 from TG.states import TGStates
 from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 from c_utils import Utils
+from CORE.strategy_applicator import StrategyApplicator
 
 logger = UnifiedLogger("TGCoinsRouter")
 
@@ -406,8 +407,6 @@ class CoinsRouterHandler:
                 self.bot_core.strategy_registry.reload(app_data.get("active_strategies", {}))
                 strat_cfg = self.bot_core.strategy_registry.get_strategy(strat_id)
                 if strat_cfg:
-                    from CORE.strategy_applicator import StrategyApplicator
-
                     StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
 
             if self.template_manager and hasattr(self.template_manager, "get_runtime_path"):

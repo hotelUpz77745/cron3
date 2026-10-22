@@ -7,14 +7,15 @@
 # ==============================================================================
 
 import json
+import pickle
 import asyncio
+import copy
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from consts import DATA_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 
-import copy
 logger = UnifiedLogger("RuntimeManager")
 RUNTIME_DIR = DATA_DIR / "runtime"
 
@@ -72,7 +73,6 @@ class RuntimeFsmManager:
         Изначально грузим и фиксируем кеш рантайма из папки стратегии (.json или .pkl).
         Здесь же проводим базовую валидацию конфигурации.
         """
-        import pickle
         for sym in symbols:
             path = self.get_runtime_path(sym, default_ext=".json")
             if path.exists():

@@ -21,6 +21,7 @@ from consts import (
 from c_utils import Utils
 from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from CORE.ENTRY.signal import TimeControl
 
 
 def deep_merge_dict(base: Dict[str, Any], overlay: Dict[str, Any]) -> Dict[str, Any]:
@@ -448,7 +449,6 @@ class StrategyConfigParser:
                 )
 
         tfr_str = str(tfr_val)
-        from CORE.ENTRY.signal import TimeControl
         heartbeat_seconds = TimeControl.interval_to_seconds(tfr_str)
 
         api_key_name = active_settings.get("api_key_name")

@@ -9,6 +9,7 @@ import asyncio
 import contextlib
 import json
 import os
+import socket
 import time
 from pathlib import Path
 from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
@@ -40,7 +41,6 @@ def _is_pid_alive(pid: int) -> bool:
 
 def _is_port_in_use(host: str, port: int) -> bool:
     """Проверяет, слушает ли уже какой-либо процесс этот порт."""
-    import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.3)
         try:

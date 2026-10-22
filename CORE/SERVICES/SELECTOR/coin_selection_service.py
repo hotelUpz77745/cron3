@@ -15,6 +15,8 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.SERVICES.SELECTOR.alpha_coin_selector import AlphaCoinSelector
 from CORE.SERVICES.SELECTOR.samsonov_funnel import SamsonovFunnelSelector
+from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
+from CORE.strategy_applicator import StrategyApplicator
 
 logger = UnifiedLogger("CoinSelectionService")
 
@@ -186,7 +188,6 @@ class CoinSelectionService:
         output_path = DATA_DIR / "volatile_symbols.json"
 
         if not output_path.exists():
-            from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
             scanner = VolatilityScanner(client=getattr(self.bot_core, "client", None))
             await scanner.scan()
 
@@ -350,7 +351,6 @@ class CoinSelectionService:
 
         # Пересборка рантайм-конфигов
         try:
-            from CORE.strategy_applicator import StrategyApplicator
             applicator = StrategyApplicator()
             for sym in clean_symbols:
                 strat_cfg = None

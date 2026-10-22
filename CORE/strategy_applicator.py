@@ -5,6 +5,7 @@
 
 import copy
 import json
+import pickle
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -119,7 +120,6 @@ class StrategyApplicator:
                 existing = Utils.read_json_file(target_file)
             elif target_pkl.exists():
                 try:
-                    import pickle
                     with open(target_pkl, "rb") as fp:
                         existing = pickle.load(fp)
                 except Exception:
@@ -142,7 +142,6 @@ class StrategyApplicator:
                                     pass
                             if not c_data and cand_pkl.exists():
                                 try:
-                                    import pickle
                                     with open(cand_pkl, "rb") as fp:
                                         c_data = pickle.load(fp)
                                 except Exception:
@@ -190,7 +189,6 @@ class StrategyApplicator:
                         existing = Utils.read_json_file(legacy_json)
                     elif legacy_file.exists():
                         try:
-                            import pickle
                             with open(legacy_file, "rb") as fp:
                                 existing = pickle.load(fp)
                         except Exception:
@@ -371,7 +369,6 @@ class StrategyApplicator:
                             if rf.suffix.lower() == ".json":
                                 c_data = Utils.read_json_file(rf)
                             elif rf.suffix.lower() == ".pkl":
-                                import pickle
                                 with open(rf, "rb") as fp:
                                     c_data = pickle.load(fp)
                             if isinstance(c_data, dict):

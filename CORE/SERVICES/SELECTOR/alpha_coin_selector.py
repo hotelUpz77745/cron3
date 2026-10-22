@@ -22,6 +22,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from API.BINANCE.public import BinancePublic, is_valid_symbol
 from CORE.SERVICES.VOLATILITY.klines_cache import KlinesCache
+from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
 
 logger = UnifiedLogger("AlphaCoinSelector")
 VALID_SYMBOL_REGEX = re.compile(r"^[A-Za-z0-9]+$")
@@ -223,11 +224,9 @@ class AlphaCoinSelector:
         candidates_to_fetch = universe_filter or universe
 
         if not candidates_to_fetch and use_vol_pool:
-            from consts import DATA_DIR
             volatile_file = volatile_file_path if volatile_file_path is not None else (DATA_DIR / "volatile_symbols.json")
             if not volatile_file.exists():
                 try:
-                    from CORE.SERVICES.VOLATILITY.volatility_scanner import VolatilityScanner
                     scanner = VolatilityScanner()
                     await scanner.scan()
                 except Exception as e:

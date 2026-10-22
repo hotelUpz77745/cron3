@@ -23,6 +23,10 @@ except ImportError:
     API_CONCURRENT_RATE_LIMIT_SEC = 0.02
 from c_log import UnifiedLogger
 from API.BINANCE.validator import OrderValidator, APIResponse
+from consts import MOCK_MODE
+from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
+from API.BINANCE.leverage_manager import LeverageManager
+from API.BINANCE.income_collector import IncomeCollector, KlineFetcher
 
 logger = UnifiedLogger("BINANCE_API_PROD")
 
@@ -47,7 +51,6 @@ class BinanceClient:
         if mock_mode is not None:
             self.is_mock_mode = bool(mock_mode)
         else:
-            from consts import MOCK_MODE
             env_mock = os.getenv("MOCK_EXCHANGE")
             force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
             self.is_mock_mode = (
@@ -56,7 +59,6 @@ class BinanceClient:
                 or force_mock
             )
         if self.is_mock_mode:
-            from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
             self._mock_provider = get_default_mock_exchange()
             logger.info("[BINANCE_API_PROD] Running in MOCK EXCHANGE mode (credentials empty, app.json mock_mode or MOCK_EXCHANGE=1).")
         else:
@@ -526,21 +528,17 @@ class BinanceClient:
     # LEVERAGE & MARGIN
     # ==================================================
     async def set_leverage(self, symbol: str, leverage: int) -> APIResponse:
-        from API.BINANCE.leverage_manager import LeverageManager
         return await LeverageManager.set_leverage(self, symbol, leverage)
 
     async def set_margin_type(self, symbol: str, margin_type: str) -> APIResponse:
-        from API.BINANCE.leverage_manager import LeverageManager
         return await LeverageManager.set_margin_type(self, symbol, margin_type)
 
     async def get_leverage_bracket(self, symbol: Optional[str] = None) -> APIResponse:
         """GET /fapi/v1/leverageBracket - возвращает спецификацию брекетов плеч."""
-        from API.BINANCE.leverage_manager import LeverageManager
         return await LeverageManager.get_leverage_bracket(self, symbol)
 
     async def get_max_leverage(self, symbol: str) -> Optional[int]:
         """Возвращает максимально доступное кредитное плечо для символа."""
-        from API.BINANCE.leverage_manager import LeverageManager
         return await LeverageManager.get_max_leverage(self, symbol)
 
 
@@ -555,7 +553,6 @@ class BinanceClient:
         end_time: Optional[int] = None,
     ) -> Optional[dict]:
         """Получение REALIZED_PNL и комиссий из userTrades и FUNDING_FEE из income."""
-        from API.BINANCE.income_collector import IncomeCollector
         return await IncomeCollector.get_income_pnl(self, symbol, side, start_time, end_time)
 
     # ==================================================
@@ -568,5 +565,4 @@ class BinanceClient:
         limit: int = 100
     ) -> Optional[List[dict]]:
         """Загрузка исторических свечей (klines)."""
-        from API.BINANCE.income_collector import KlineFetcher
         return await KlineFetcher.get_klines(self, symbol, interval, limit)

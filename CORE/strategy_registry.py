@@ -16,8 +16,9 @@ logger = UnifiedLogger("StrategyRegistry")
 
 
 from CORE.STRATEGY.strategy_config import StrategyConfig, deep_merge_dict
+from CORE.STRATEGY.auto_closing_builder import AutoClosingConfigBuilder
 
-__all__ = ["StrategyConfig", "StrategyRegistry", "deep_merge_dict"]
+__all__ = ["StrategyConfig", "StrategyRegistry", "deep_merge_dict", "AutoClosingConfigBuilder"]
 
 
 class StrategyRegistry:
@@ -52,7 +53,6 @@ class StrategyRegistry:
 
     def _build_mode_auto_closing(self, mode: str, base_ac: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или app.json)."""
-        from CORE.STRATEGY.auto_closing_builder import AutoClosingConfigBuilder
         return AutoClosingConfigBuilder.build_mode_auto_closing(mode, base_ac)
 
     def _load_universes_db(self) -> Dict[str, Dict[str, Any]]:

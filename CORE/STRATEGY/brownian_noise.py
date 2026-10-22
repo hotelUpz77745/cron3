@@ -12,6 +12,7 @@ import secrets
 from typing import Any, Dict, Optional, Tuple
 
 from c_log import UnifiedLogger
+from API.BINANCE.public import BinancePublic
 
 logger = UnifiedLogger("BrownianNoise")
 
@@ -173,7 +174,6 @@ class BrownianNoiseController:
 
         # Запрос свежей цены после сна
         try:
-            from API.BINANCE.public import BinancePublic
             p_fresh = await BinancePublic.get_last_price(symbol)
             if p_fresh and p_fresh > 0:
                 return float(p_fresh)

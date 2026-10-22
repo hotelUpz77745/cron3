@@ -22,6 +22,7 @@ from consts import DATA_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 from ANALYTICS.report_service import AnalyticsReportService
+from CORE.strategy_applicator import StrategyApplicator
 
 logger = UnifiedLogger("TGUniverseRouter")
 
@@ -164,7 +165,6 @@ class UniverseRouterHandler:
             if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
                 try:
                     self.bot_core.strategy_registry.reload(active_strats)
-                    from CORE.strategy_applicator import StrategyApplicator
                     StrategyApplicator().build_all_runtimes(self.bot_core.strategy_registry)
                 except Exception as ex:
                     logger.warning(f"Runtime rebuild notice on universe toggle: {ex}")

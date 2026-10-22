@@ -9,12 +9,15 @@ ROLE: Инкапсуляция конфигурации и нормализац�
 
 import copy
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union, Set, Tuple
 
 from consts import (
     DATA_DIR,
     _CFG,
+    API_KEY,
+    API_SECRET,
     DEFAULT_SMART_GRACE,
     DEFAULT_TIMEFRAME,
     DEFAULT_SHIFT_INTERVAL_SEC,
@@ -147,8 +150,6 @@ class StrategyConfig:
         Также проверяет суффикс стратегии API_KEY_<STRAT_ID>.
         Если не найдены — fallback на базовые глобальные API_KEY и API_SECRET.
         """
-        import os
-        from consts import API_KEY, API_SECRET
         if self.api_key_name:
             custom_key = os.getenv(self.api_key_name)
             custom_sec = os.getenv(self.api_secret_name or "") if self.api_secret_name else None
@@ -171,7 +172,6 @@ class StrategyConfig:
         """
         if self.api_key_name:
             return str(self.api_key_name).strip()
-        import os
         strat_key_env = f"API_KEY_{self.strategy_id.upper()}"
         if os.getenv(strat_key_env):
             return strat_key_env

@@ -37,6 +37,8 @@ from ANALYTICS.portfolio_aggregator import PortfolioAggregator
 from ANALYTICS.reconstruction import ReconstructionService
 from ANALYTICS.report_service import AnalyticsReportService
 from ANALYTICS.strategy_stats import StrategyStatsEngine
+from ANALYTICS.trade_velocity import TradeVelocityEngine
+from CORE.strategy_registry import StrategyRegistry
 
 logger = UnifiedLogger("Analytics")
 
@@ -62,7 +64,6 @@ class AnalyticsManager:
         )
 
         try:
-            from ANALYTICS.trade_velocity import TradeVelocityEngine
             self.velocity_engine = TradeVelocityEngine(universe_id="default", ledger_path=self.txt_file)
         except Exception as ve:
             logger.warning(f"Could not initialize TradeVelocityEngine: {ve}")
@@ -200,7 +201,6 @@ class AnalyticsManager:
         """Гарантирует наличие изолированных файлов аналитики и леджеров по каждой стратегии."""
         if not self.strategy_registry:
             try:
-                from CORE.strategy_registry import StrategyRegistry
                 self.strategy_registry = StrategyRegistry()
             except Exception:
                 return
@@ -335,13 +335,11 @@ class AnalyticsManager:
             if universe_id == "default":
                 if getattr(self, "velocity_engine", None):
                     return self.velocity_engine.calculate_velocity(self._read_data() or {})
-                from ANALYTICS.trade_velocity import TradeVelocityEngine
                 return TradeVelocityEngine(universe_id="default", ledger_path=self.txt_file).calculate_velocity(self._read_data() or {})
             else:
                 if not hasattr(self, "_strat_velocity_engines"):
                     self._strat_velocity_engines = {}
                 if universe_id not in self._strat_velocity_engines:
-                    from ANALYTICS.trade_velocity import TradeVelocityEngine
                     strat_ledger = self.ledgers_dir / f"trades_ledger_{universe_id}.txt"
                     self._strat_velocity_engines[universe_id] = TradeVelocityEngine(universe_id=universe_id, ledger_path=strat_ledger)
                 strat_file = self.stats_dir / f"analytics_{universe_id}.json"

@@ -8,6 +8,7 @@ ROLE: Сервис автоматического закрытия позици�
 """
 
 import asyncio
+import copy
 import json
 import time
 from datetime import datetime, timezone
@@ -317,7 +318,6 @@ class AutoCloser:
                 # РЕЖИМ 1: ITER NET CLASSIC / TRAILING RATCHET
                 # -------------------------------------------------------------
                 elif mode in ("trailing_ratchet", "classic", "iter_net_classic"):
-                    import copy
                     r_cfg_scaled = copy.deepcopy(r_cfg)
                     r_cfg_scaled["scale_money"] = scale_money
                     r_cfg_scaled["scale_factor"] = scale_money

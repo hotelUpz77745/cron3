@@ -8,8 +8,10 @@
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List, Optional, Any, Tuple
 
 from c_log import UnifiedLogger
@@ -264,8 +266,6 @@ class SimulatedBinanceClient:
         if cls._historical_klines_loaded:
             return
         cls._historical_klines_loaded = True
-        import json
-        from pathlib import Path
         backtest_data = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA"
         for name, target in [
             ("warmup_klines_1h.json", "_warmup_1h"),
