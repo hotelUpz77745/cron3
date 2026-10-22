@@ -25,8 +25,44 @@ class PeelingManager:
     В соответствии с Протоколом Разработки:
     - Высокая абстрактность и модульность.
     - Изолированная тестируемость.
-    - Отсутствие скрытых дефолтов.
+    - Отсутствие скрытых дефолтов («Работай или упади сразу»).
     """
+
+    def __init__(
+        self,
+        bot_core: Optional[Any] = None,
+        runtime_manager: Optional[Any] = None,
+        client: Optional[Any] = None,
+        tp_manager: Optional[Any] = None,
+    ):
+        """Инициализация менеджера пилинга с явным инжектированием зависимостей."""
+        self.bot_core = bot_core
+        self.runtime_manager = runtime_manager
+        self.client = client
+        self.tp_manager = tp_manager
+
+    async def process(
+        self,
+        symbol: str,
+        side: str,
+        state: Any,
+        current_price: float,
+        spec_data: dict,
+        client: Optional[Any] = None,
+        runtime_manager: Optional[Any] = None,
+        tp_manager: Optional[Any] = None,
+    ) -> bool:
+        """Экземплярный фасад для исполнения LIFO-пилинга."""
+        return await self.process_peel(
+            client=client or self.client,
+            runtime_manager=runtime_manager or self.runtime_manager,
+            symbol=symbol,
+            side=side,
+            state=state,
+            current_price=current_price,
+            spec_data=spec_data,
+            tp_manager=tp_manager or self.tp_manager,
+        )
 
     @staticmethod
     def has_peel_levels(state: Any) -> bool:
@@ -37,7 +73,7 @@ class PeelingManager:
         if not isinstance(grid, dict):
             return False
         return any(
-            isinstance(v, dict) and v.get("peel_tp_pct") is not None and float(v.get("peel_tp_pct", 0)) > 0
+            isinstance(v, dict) and "peel_tp_pct" in v and v["peel_tp_pct"] is not None and float(v["peel_tp_pct"]) > 0
             for v in grid.values()
         )
 
@@ -77,7 +113,7 @@ class PeelingManager:
         # Находим крайний (наиболее глубокий) активный уровень сетки, еще не прошедший пилинг в этом цикле
         active_levels = [
             int(k) for k, v in grid.items()
-            if isinstance(v, dict) and v.get("is_active") and not v.get("peeled") and v.get("enabled", True) is not False
+            if isinstance(v, dict) and v.get("is_active") and not v.get("peeled", False) and v.get("enabled", True) is not False
         ]
         if not active_levels:
             return False
@@ -93,26 +129,27 @@ class PeelingManager:
             raw_pn = level_data["peel_num"]
             if raw_pn is None:
                 return False
-            try:
-                p_limit = int(raw_pn)
-                if p_limit <= 0:
-                    return False
-            except (ValueError, TypeError):
-                return False
+            p_limit = int(raw_pn)
+            if p_limit <= 0:
+                raise ValueError(f"[PeelingManager] peel_num must be > 0, got {p_limit} on level {cur_level_str}")
         else:
             p_limit = 1
 
-        if level_data.get("peeled") or int(level_data.get("peeled_count", 0)) >= p_limit:
+        is_peeled = bool(level_data["peeled"]) if "peeled" in level_data else bool(level_data.get("peeled", False))
+        peeled_count = int(level_data["peeled_count"]) if "peeled_count" in level_data else int(level_data.get("peeled_count", 0))
+        if is_peeled or peeled_count >= p_limit:
             return False
 
-        # Проверяем наличие настройки пилинга на этом уровне
-        peel_tp_pct = level_data.get("peel_tp_pct")
-        if peel_tp_pct is None or float(peel_tp_pct) <= 0:
+        # Проверяем наличие настройки пилинга на этом уровне (прямое чтение)
+        if "peel_tp_pct" not in level_data or level_data["peel_tp_pct"] is None:
+            return False
+        peel_tp_pct = float(level_data["peel_tp_pct"])
+        if peel_tp_pct <= 0:
             return False
 
-        fill_price = level_data.get("fill_price")
-        if not fill_price or fill_price <= 0:
+        if "fill_price" not in level_data or not level_data["fill_price"] or float(level_data["fill_price"]) <= 0:
             return False
+        fill_price = float(level_data["fill_price"])
 
         # Расчет отскока от цены набора данного колена
         if side == "LONG":
@@ -120,12 +157,16 @@ class PeelingManager:
         else:
             rebound_pct = (fill_price - current_price) / fill_price * 100.0
 
-        if rebound_pct < float(peel_tp_pct):
+        if rebound_pct < peel_tp_pct:
             return False
 
-        # Отскок зафиксирован! Определяем объем разгрузки с учетом peel_ratio
-        peel_ratio = float(level_data.get("peel_ratio") if level_data.get("peel_ratio") is not None else 1.0)
-        peel_ratio = max(0.1, min(1.0, peel_ratio))
+        # Отскок зафиксирован! Определяем объем разгрузки с учетом peel_ratio (прямое чтение)
+        if "peel_ratio" in level_data and level_data["peel_ratio"] is not None:
+            peel_ratio = float(level_data["peel_ratio"])
+            if not (0.1 <= peel_ratio <= 1.0):
+                raise ValueError(f"[PeelingManager] peel_ratio must be in [0.1..1.0], got {peel_ratio}")
+        else:
+            peel_ratio = 1.0
 
         fill_qty = level_data.get("fill_qty")
         if fill_qty and fill_qty > 0:

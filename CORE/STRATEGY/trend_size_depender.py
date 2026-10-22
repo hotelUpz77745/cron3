@@ -99,7 +99,9 @@ class TrendCalculator:
 
 class TrendSizeDepender:
     """
-    Институциональный балансир объемов между LONG и SHORT для боевого бота.
+    [LEGACY ARCHITECTURE] Институциональный балансир объемов между LONG и SHORT.
+    В текущей архитектуре HRON-3 динамическое масштабирование и веса сторон
+    управляются через FirstOrderRegimeManager (Правило Кулака) и MomentumEngine (Smart Size / Knife Blocker).
     """
 
     MIN_SIDE_PCT: float = 33.3333
@@ -108,6 +110,7 @@ class TrendSizeDepender:
     STEPS_HALF: int = 16
     STEP_PCT: float = (MAX_SIDE_PCT - NEUTRAL_PCT) / STEPS_HALF  # ~1.04167%
 
+    # LEGACY: В текущем боте HRON-3 данные 4h режимы не используются (устарели)
     SUPPORTED_MODES: List[str] = [
         "adx_di_4h",
         "ema_spread_4h",
@@ -117,6 +120,15 @@ class TrendSizeDepender:
         "dyn_ema_16",
         "dyn_ema_trend",
     ]
+
+    def __init__(self, trend_size_cfg: Optional[Dict[str, Any]] = None):
+        """Прямая инициализация и валидация конфигурации по правилу Fail-Fast."""
+        self.trend_size_cfg: Optional[Dict[str, Any]] = trend_size_cfg
+        self.enabled: bool = False
+        if trend_size_cfg is not None:
+            if not isinstance(trend_size_cfg, dict):
+                raise TypeError(f"[TrendSizeDepender] trend_size_cfg must be a dict, got {type(trend_size_cfg)}")
+            self.enabled = bool(trend_size_cfg.get("enabled", False))
 
     # Кэш: (symbol, timeframe, trend_mode, scale) -> (inv_long: float, inv_short: float, cached_at: float)
     _cache: Dict[Tuple[str, str, str, int], Tuple[float, float, float]] = {}

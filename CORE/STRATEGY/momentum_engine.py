@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 # ============================================================
 # FILE: CORE/STRATEGY/momentum_engine.py
 # ROLE: Mathematical engine for Smart Grace, Smart Size, Knife Blocker, and Smart TP
@@ -308,11 +309,72 @@ class MomentumEngine:
 
         return start_period + max_extra
 
+    def __init__(
+        self,
+        smart_size_cfg: Optional[Dict[str, Any]] = None,
+        smart_tp_cfg: Optional[Dict[str, Any]] = None,
+    ):
+        """
+        Инициализирует математический движок Smart Size, Knife Blocker и Smart TP.
+        Прямое чтение конфигураций поднято в __init__ по правилу «Работай или упади сразу» (Fail-Fast).
+        Все поля и константы валидируются при запуске программы.
+        """
+        self.smart_size_cfg: Optional[Dict[str, Any]] = smart_size_cfg
+        self.smart_tp_cfg: Optional[Dict[str, Any]] = smart_tp_cfg
+
+        # 1. Smart Size
+        self.profiting_size_weights: Dict[str, float] = {}
+        self.stagnation_min_step: Optional[int] = None
+        self.smart_size_trend_determ: Optional[str] = None
+        self.knife_blocker_enabled: bool = False
+        self.knife_blocker_threshold: int = 2
+
+        if smart_size_cfg is not None:
+            if not isinstance(smart_size_cfg, dict):
+                raise TypeError(f"[MomentumEngine] smart_size_cfg must be a dict, got {type(smart_size_cfg)}")
+            if "profiting_size_weights" in smart_size_cfg:
+                pw = smart_size_cfg["profiting_size_weights"]
+                if not isinstance(pw, dict):
+                    raise TypeError(f"[MomentumEngine] profiting_size_weights must be a dict, got {type(pw)}")
+                self.profiting_size_weights = {str(k): float(v) for k, v in pw.items()}
+
+            if "stagnation_min_step" in smart_size_cfg and smart_size_cfg["stagnation_min_step"] is not None:
+                self.stagnation_min_step = int(smart_size_cfg["stagnation_min_step"])
+
+            if "trend_determ" in smart_size_cfg and smart_size_cfg["trend_determ"] is not None:
+                self.smart_size_trend_determ = str(smart_size_cfg["trend_determ"]).strip()
+
+            if "knife_blocker_enabled" in smart_size_cfg:
+                self.knife_blocker_enabled = bool(smart_size_cfg["knife_blocker_enabled"])
+            elif "knife_blocker" in smart_size_cfg and isinstance(smart_size_cfg["knife_blocker"], dict):
+                self.knife_blocker_enabled = bool(smart_size_cfg["knife_blocker"].get("enabled", False))
+                self.knife_blocker_threshold = int(smart_size_cfg["knife_blocker"].get("threshold", 2))
+
+            if "knife_blocker_threshold" in smart_size_cfg and smart_size_cfg["knife_blocker_threshold"] is not None:
+                self.knife_blocker_threshold = int(smart_size_cfg["knife_blocker_threshold"])
+
+        # 2. Smart TP
+        self.smart_tp_enabled: bool = False
+        self.increments_tp: Dict[str, float] = {}
+        self.smart_tp_trend_determ: Optional[str] = None
+
+        if smart_tp_cfg is not None:
+            if not isinstance(smart_tp_cfg, dict):
+                raise TypeError(f"[MomentumEngine] smart_tp_cfg must be a dict, got {type(smart_tp_cfg)}")
+            self.smart_tp_enabled = bool(smart_tp_cfg.get("enabled", True))
+            if "increments_tp" in smart_tp_cfg:
+                inc = smart_tp_cfg["increments_tp"]
+                if not isinstance(inc, dict):
+                    raise TypeError(f"[MomentumEngine] increments_tp must be a dict, got {type(inc)}")
+                self.increments_tp = {str(k): float(v) for k, v in inc.items()}
+            if "trend_determ" in smart_tp_cfg and smart_tp_cfg["trend_determ"] is not None:
+                self.smart_tp_trend_determ = str(smart_tp_cfg["trend_determ"]).strip()
+
     @classmethod
     def calculate_smart_size_weight(
         cls,
         closed_count: int,
-        smart_size_cfg: Optional[Dict[str, Any]],
+        smart_size_cfg: Optional[Dict[str, Any]] = None,
         side: Optional[str] = None,
         trend_state: Optional[str] = None,
         opp_in_pos: bool = False,
@@ -321,37 +383,37 @@ class MomentumEngine:
         """
         Рассчитывает множитель объема сетки на основе профитабельности стороны.
         По умолчанию 1.00x.
-        
-        Если в smart_size_cfg задан 'stagnation_min_step':
-          - Множители profiting_size_weights применяются ТОЛЬКО если противоположная сторона
-            находится в позиции и набрала cur_step >= stagnation_min_step.
-          - Если противоположная сторона не в позиции или ее шаг < stagnation_min_step,
-            стартовый ордер заходит чистым базовым объемом (1.00x).
-        
-        Если включен dynamic_sizing_mode (например, 'dyn_ema_71'):
-          - Применяем множитель из profiting_size_weights ТОЛЬКО если сторона ордера
-            совпадает с текущим EMA-трендом (LONG при UP или SHORT при DOWN).
-          - Если тренд не совпадает (контртренд, флэт, нестабилен) -> строго 1.00x.
-          
-        Если dynamic_sizing_mode выключен или null:
-          - Классический бестрендовый расчет строго по closed_count.
         """
         if not smart_size_cfg:
             return 1.00
+        engine = cls(smart_size_cfg=smart_size_cfg)
+        return engine.calculate_size_multiplier(
+            closed_count=closed_count,
+            side=side,
+            trend_state=trend_state,
+            opp_in_pos=opp_in_pos,
+            opp_step=opp_step,
+        )
 
-        weights_card = smart_size_cfg.get("profiting_size_weights", {})
-        if not weights_card:
+    def calculate_size_multiplier(
+        self,
+        closed_count: int,
+        side: Optional[str] = None,
+        trend_state: Optional[str] = None,
+        opp_in_pos: bool = False,
+        opp_step: int = 0
+    ) -> float:
+        """Расчет множителя объема на основе провалидированных в __init__ параметров."""
+        if not self.profiting_size_weights:
             return 1.00
 
         # Триггер стагнации (stagnation_min_step)
-        stag_step = smart_size_cfg.get("stagnation_min_step")
-        if stag_step is not None:
-            if not opp_in_pos or int(opp_step) < int(stag_step):
+        if self.stagnation_min_step is not None:
+            if not opp_in_pos or int(opp_step) < int(self.stagnation_min_step):
                 return 1.00
 
         # Проверка флага привязки к тренду (trend_determ: "ema_trend")
-        trend_determ = smart_size_cfg.get("trend_determ")
-        if trend_determ:
+        if self.smart_size_trend_determ:
             is_aligned = False
             if side and trend_state:
                 norm_side = str(side).upper().strip()
@@ -364,8 +426,8 @@ class MomentumEngine:
             if not is_aligned:
                 return 1.00
 
-        for rule, weight in weights_card.items():
-            if cls.match_rule(rule, closed_count):
+        for rule, weight in self.profiting_size_weights.items():
+            if self.match_rule(rule, closed_count):
                 return float(weight)
 
         return 1.00
@@ -374,7 +436,7 @@ class MomentumEngine:
     def calculate_smart_size_multiplier(
         cls,
         closed_count: int,
-        smart_size_cfg: Optional[Dict[str, Any]],
+        smart_size_cfg: Optional[Dict[str, Any]] = None,
         side: Optional[str] = None,
         trend_state: Optional[str] = None,
         opp_in_pos: bool = False,
@@ -391,50 +453,58 @@ class MomentumEngine:
         )
 
     @classmethod
-    def is_knife_blocked(cls, opposite_closed_count: int, smart_size_cfg: Optional[Dict[str, Any]]) -> bool:
+    def is_knife_blocked(cls, opposite_closed_count: int, smart_size_cfg: Optional[Dict[str, Any]] = None) -> bool:
         """
         Проверяет правило Knife Blocker (Cross-Side Awareness).
-        Строго читает нормализованные поля, сформированные на старте в StrategyConfig:
-        - 'knife_blocker_enabled': bool
-        - 'knife_blocker_threshold': int
+        Строго читает нормализованные поля через __init__.
         """
-        if not smart_size_cfg or not smart_size_cfg.get("knife_blocker_enabled"):
+        if not smart_size_cfg:
             return False
+        engine = cls(smart_size_cfg=smart_size_cfg)
+        return engine.check_knife_blocked(opposite_closed_count)
 
-        threshold = int(smart_size_cfg["knife_blocker_threshold"])
-        return opposite_closed_count >= threshold
+    def check_knife_blocked(self, opposite_closed_count: int) -> bool:
+        """Проверка Knife Blocker на инстансе без словарных чтений."""
+        if not self.knife_blocker_enabled:
+            return False
+        return opposite_closed_count >= self.knife_blocker_threshold
 
     @classmethod
     def calculate_smart_tp_multiplier(
         cls,
         closed_count: int,
-        smart_tp_cfg: Optional[Dict[str, Any]],
+        smart_tp_cfg: Optional[Dict[str, Any]] = None,
         side: Optional[str] = None,
         trend_state: Optional[str] = None
     ) -> float:
         """
         Рассчитывает множитель Take-Profit (и страховочного Fallback TP)
         в зависимости от частоты закрытий в пределах eval_window_sec.
-        Если closed_count == 0 (спокойный рынок) -> 1.00x.
-
-        Если trend_determ задан (например, 'ema_trend'):
-          - Применяем множитель ТОЛЬКО если сторона ордера совпадает с текущим EMA-трендом
-            (LONG при UP или SHORT при DOWN).
-          - Если тренд не совпадает (контртренд, флэт, нестабилен) -> строго 1.00x.
-
-        Если trend_determ не задан (null):
-          - Классический бестрендовый расчет строго по closed_count.
         """
-        if not smart_tp_cfg or not smart_tp_cfg.get("enabled", True) or closed_count == 0:
+        if not smart_tp_cfg or closed_count == 0:
+            return 1.00
+        engine = cls(smart_tp_cfg=smart_tp_cfg)
+        return engine.calculate_tp_multiplier(
+            closed_count=closed_count,
+            side=side,
+            trend_state=trend_state,
+        )
+
+    def calculate_tp_multiplier(
+        self,
+        closed_count: int,
+        side: Optional[str] = None,
+        trend_state: Optional[str] = None
+    ) -> float:
+        """Расчет множителя TP на основе провалидированных в __init__ параметров."""
+        if not self.smart_tp_enabled or closed_count == 0:
             return 1.00
 
-        increments = smart_tp_cfg["increments_tp"] if "increments_tp" in smart_tp_cfg else {}
-        if not increments:
+        if not self.increments_tp:
             return 1.00
 
         # Проверка флага привязки к тренду (trend_determ: "ema_trend")
-        trend_determ = smart_tp_cfg.get("trend_determ")
-        if trend_determ:
+        if self.smart_tp_trend_determ:
             is_aligned = False
             if side and trend_state:
                 norm_side = str(side).upper().strip()
@@ -448,8 +518,8 @@ class MomentumEngine:
                 return 1.00
 
         matched_multiplier = 1.00
-        for rule, mult in increments.items():
-            if cls.match_rule(rule, closed_count):
+        for rule, mult in self.increments_tp.items():
+            if self.match_rule(rule, closed_count):
                 mult_val = float(mult)
                 if mult_val > matched_multiplier:
                     matched_multiplier = mult_val

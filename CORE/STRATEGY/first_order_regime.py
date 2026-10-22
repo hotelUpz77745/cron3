@@ -58,6 +58,46 @@ class FirstOrderRegimeManager:
         "bearish": {"LONG": 7.0, "SHORT": 12.0},
     }
 
+    def __init__(self, regime_cfg: Optional[Dict[str, Any]] = None):
+        """
+        Инициализирует менеджер режима первого ордера («Правило кулака Сильной руки»).
+        Прямое чтение конфигураций поднято в __init__ по правилу «Работай или упади сразу» (Fail-Fast).
+        """
+        self.regime_cfg: Optional[Dict[str, Any]] = regime_cfg
+        self.enabled: bool = True
+        self.mode: Optional[str] = None
+        self.presets: Dict[str, Any] = {}
+        self.auto_ema_cfg: Optional[Dict[str, Any]] = None
+
+        if regime_cfg is not None:
+            if not isinstance(regime_cfg, dict):
+                raise TypeError(f"[FirstOrderRegimeManager] regime_cfg must be a dict, got {type(regime_cfg)}")
+            if "enabled" in regime_cfg:
+                self.enabled = bool(regime_cfg["enabled"])
+            if "mode" in regime_cfg:
+                raw_mode = regime_cfg["mode"]
+                if raw_mode is not None and str(raw_mode).lower().strip() not in self.OFF_MODES:
+                    self.mode = str(raw_mode).lower().strip()
+                    if (
+                        self.mode not in self.SUPPORTED_DYNAMIC_MODES
+                        and self.mode not in self.SUPPORTED_STATIC_MODES
+                        and self.mode not in self.MODE_ALIASES
+                    ):
+                        raise ValueError(
+                            f"[FirstOrderRegimeManager] Недопустимый режим first_order_weight_regime: '{self.mode}'. "
+                            f"Разрешены строго: {self.SUPPORTED_DYNAMIC_MODES} или {self.SUPPORTED_STATIC_MODES}."
+                        )
+            if "presets" in regime_cfg:
+                if not isinstance(regime_cfg["presets"], dict):
+                    raise TypeError(f"[FirstOrderRegimeManager] presets must be a dict, got {type(regime_cfg['presets'])}")
+                self.presets = regime_cfg["presets"]
+            if self.mode == "auto_ema":
+                if "auto_ema" not in regime_cfg or not isinstance(regime_cfg["auto_ema"], dict):
+                    raise ValueError("[FirstOrderRegimeManager] 'auto_ema' config dict is required when mode='auto_ema'")
+                self.auto_ema_cfg = regime_cfg["auto_ema"]
+                if "timeframe" not in self.auto_ema_cfg:
+                    raise ValueError("[FirstOrderRegimeManager] 'timeframe' is required in auto_ema config")
+
     @classmethod
     def resolve_static_volume(
         cls,

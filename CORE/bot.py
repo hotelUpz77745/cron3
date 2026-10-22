@@ -21,7 +21,8 @@ from consts import (
     _CFG, DATA_DIR, ANALYTICS_DIR, CACHE_DIR, TIME_SLACK_SEC, SPEC_TTL_SEC,
     STREAMER_PORT, STREAMER_LOCK_NAME, DEFAULT_TIMEFRAME, DEFAULT_HEARTBEAT_TFR,
     COOLDOWN_POST_CANDLE_BUFFER_SEC, COOLDOWN_MIN_HEARTBEAT_SEC,
-    DEFAULT_SMART_GRACE, TG_ENABLED, BACKUP_ENABLED, API_KEY, API_SECRET,
+    DEFAULT_SMART_GRACE, DEFAULT_SMART_SIZE, DEFAULT_SMART_TP,
+    TG_ENABLED, BACKUP_ENABLED, API_KEY, API_SECRET,
     WATCHDOG_TIMEOUT_SEC, WATCHDOG_CHECK_INTERVAL_SEC,
     WATCHDOG_HEARTBEAT_INTERVAL_SEC, WATCHDOG_HEARTBEAT_AUTODELETE_SEC,
     REST_FAILSAFE_SEC
@@ -58,6 +59,7 @@ from CORE.TP.take_profit_restorer import TakeProfitRestorer
 from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 from CORE.STRATEGY.peeling_manager import PeelingManager
 from CORE.STRATEGY.brownian_noise import BrownianNoiseController
+from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.strategy_registry import StrategyRegistry
 from CORE.strategy_applicator import StrategyApplicator
 from CORE.trade_cycle_manager import TradeCycleManager
@@ -69,6 +71,7 @@ BLOCK_ENTRY = False  # Глобальный флаг блокировки вхо
 class BotCore:
     first_order_regime: FirstOrderRegimeManager
     brownian_noise: BrownianNoiseController
+    momentum_engine: MomentumEngine
     trade_cycle: TradeCycleManager
     volatility_manager: VolatilityManager
 
@@ -99,8 +102,9 @@ class BotCore:
         
         # 2. Менеджеры
         self.leverage_manager = LeverageManager()
-        self.brownian_noise = BrownianNoiseController()
+        self.brownian_noise = BrownianNoiseController(smart_grace_cfg=DEFAULT_SMART_GRACE)
         self.first_order_regime = FirstOrderRegimeManager()
+        self.momentum_engine = MomentumEngine(smart_size_cfg=DEFAULT_SMART_SIZE, smart_tp_cfg=DEFAULT_SMART_TP)
         
         self.tp_manager = TakeProfitManager(self.runtime_manager)
         self.tp_restorer = TakeProfitRestorer(self)

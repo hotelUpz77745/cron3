@@ -8,6 +8,7 @@ ROLE: Машина состояний торгового цикла (Signal Proc
 """
 
 import asyncio
+import inspect
 import time
 from typing import Dict, Any, Optional, Tuple, List
 
@@ -147,19 +148,24 @@ class TradeCycleManager:
 
             # Броуновский шум применяется только между ордерами сильной руки (closed_count >= 1).
             # Первый вход (closed_count == 0) открывается строго без задержки!
-            if strat and getattr(strat, "smart_grace_cfg", None) and closed_count >= 1:
-                fresh_price = await BrownianNoiseController.apply_noise_if_needed(
-                    bot_core=self.bot,
-                    symbol=symbol,
-                    side=side,
-                    state=state,
-                    smart_grace_cfg=strat.smart_grace_cfg,
-                    closed_count=closed_count,
-                    current_price=current_price,
-                )
-                if fresh_price is None:
-                    return
-                current_price = fresh_price
+            if closed_count >= 1:
+                brownian_ctrl = getattr(strat, "brownian_controller", None) if strat else None
+                if not brownian_ctrl and hasattr(self.bot, "brownian_noise"):
+                    brownian_ctrl = self.bot.brownian_noise
+
+                if brownian_ctrl and brownian_ctrl.should_apply(closed_count):
+                    res = brownian_ctrl.apply_noise_if_needed(
+                        bot_core=self.bot,
+                        symbol=symbol,
+                        side=side,
+                        state=state,
+                        closed_count=closed_count,
+                        current_price=current_price,
+                    )
+                    fresh_price = await res if inspect.isawaitable(res) else res
+                    if fresh_price is None:
+                        return
+                    current_price = fresh_price
 
             sym_client = self.bot.get_client_for_symbol(symbol)
             # 1. Настройка плеча
@@ -169,21 +175,6 @@ class TradeCycleManager:
             if "invest_size" not in side_cfg or side_cfg["invest_size"] is None:
                 raise ValueError(f"Missing required 'invest_size' in side_cfg for {symbol} ({side})")
             base_invest = float(side_cfg["invest_size"])
-            if not strat and hasattr(self.bot, "strategy_registry") and self.bot.strategy_registry:
-                try:
-                    strat = self.bot.strategy_registry.get_strategy_for_symbol(symbol)
-                except Exception:
-                    active = getattr(self.bot.strategy_registry, "active_strategies", {})
-                    if active and isinstance(active, dict):
-                        strat = next(iter(active.values()), None)
-
-            if strat and getattr(strat, "trend_size_cfg", None) and getattr(strat.trend_size_cfg, "get", lambda k: None)("enabled"):
-                from CORE.STRATEGY.trend_size_depender import TrendSizeDepender
-                eff = await TrendSizeDepender.get_effective_invest_size(
-                    sym_client, symbol, side, base_invest, strat.trend_size_cfg
-                )
-                if eff > 0:
-                    base_invest = eff
             state.eff_invest = base_invest
 
             smart_size_mult = 1.0
@@ -341,7 +332,6 @@ class TradeCycleManager:
                     self.bot.runtime_manager.caches[symbol][side]["eff_invest"] = getattr(state, "eff_invest", 0.0)
                 if hasattr(self.bot.runtime_manager, "save_cache"):
                     s_res = self.bot.runtime_manager.save_cache(symbol)
-                    import inspect
                     if inspect.isawaitable(s_res):
                         await s_res
 
@@ -401,7 +391,6 @@ class TradeCycleManager:
 
         if hasattr(self.bot, "runtime_manager") and hasattr(self.bot.runtime_manager, "save_cache"):
             s_res = self.bot.runtime_manager.save_cache(symbol)
-            import inspect
             if inspect.isawaitable(s_res):
                 await s_res
 
@@ -530,8 +519,9 @@ class TradeCycleManager:
 
                 has_peel = any(isinstance(v, dict) and v.get("peel_tp_pct") for v in getattr(state, "grid", {}).values())
                 peeled = False
-                if has_peel and hasattr(self.bot.avg_manager, "process_peel"):
-                    peeled = await self.bot.avg_manager.process_peel(
+                peel_mgr = getattr(self.bot, "peeling_manager", None) or getattr(self.bot.avg_manager, "peeling_manager", None)
+                if has_peel and peel_mgr:
+                    peeled = await peel_mgr.process_peel(
                         sym_client, self.bot.runtime_manager, symbol, side, state, current_price, self.bot.spec_data, self.bot.tp_manager
                     )
                 if not peeled:

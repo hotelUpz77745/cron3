@@ -20,8 +20,13 @@ from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 logger = UnifiedLogger("AvgManager")
 
 class AverageManager:
-    def __init__(self):
-        pass
+    def __init__(self, peeling_manager: Optional[Any] = None):
+        from CORE.STRATEGY.peeling_manager import PeelingManager
+        self.peeling_manager = peeling_manager if peeling_manager is not None else PeelingManager()
+
+    async def process_peel(self, *args, **kwargs) -> bool:
+        """Делегирует исполнение LIFO-пилинга в PeelingManager."""
+        return await self.peeling_manager.process_peel(*args, **kwargs)
 
     def reset(self, symbol: str, side: str):
         pass

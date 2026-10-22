@@ -29,74 +29,119 @@ class BrownianNoiseController:
     - После окончания паузы обновляется актуальная рыночная цена.
     """
 
-    @staticmethod
-    def should_apply(closed_count: int, smart_grace_cfg: Optional[Dict[str, Any]]) -> bool:
+    def __init__(
+        self,
+        smart_grace_cfg: Optional[Dict[str, Any]] = None,
+        jitter_range: Optional[Tuple[float, float]] = None,
+    ):
+        """
+        Инициализирует контроллер броуновского шума.
+        Прямое чтение и валидация конфигурации подняты сюда по правилу «Работай или упади сразу» (Fail-Fast).
+        Любая некорректная конфигурация броуновского шума вызывает исключение на старте программы.
+        """
+        self.enabled: bool = False
+        self.low: float = 0.0
+        self.high: float = 0.0
+
+        if jitter_range is not None:
+            if not (isinstance(jitter_range, (list, tuple)) and len(jitter_range) == 2):
+                raise ValueError(f"[BrownianNoiseController] jitter_range must be a 2-element tuple/list, got {jitter_range}")
+            low = float(min(jitter_range))
+            high = float(max(jitter_range))
+            if low < 0 or high < low:
+                raise ValueError(f"[BrownianNoiseController] Invalid jitter range: [{low}..{high}]")
+            self.low = low
+            self.high = high
+            self.enabled = self.high > 0
+        elif smart_grace_cfg is not None:
+            if not isinstance(smart_grace_cfg, dict):
+                raise TypeError(f"[BrownianNoiseController] smart_grace_cfg must be a dict, got {type(smart_grace_cfg)}")
+            if "brownian_noise_factor" in smart_grace_cfg:
+                bn_factor = smart_grace_cfg["brownian_noise_factor"]
+                if bn_factor is not None:
+                    if not (isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2):
+                        raise ValueError(f"[BrownianNoiseController] 'brownian_noise_factor' must be a 2-element [low, high] list, got {bn_factor}")
+                    low = float(min(bn_factor))
+                    high = float(max(bn_factor))
+                    if low < 0 or high < low:
+                        raise ValueError(f"[BrownianNoiseController] Invalid jitter range: [{low}..{high}]")
+                    self.low = low
+                    self.high = high
+                    self.enabled = self.high > 0
+
+    def should_apply(
+        self,
+        closed_count: int,
+        smart_grace_cfg: Optional[Dict[str, Any]] = None,
+    ) -> bool:
         """
         Проверяет, должен ли применяться броуновский шум.
-        Шум активен строго при наличии закрытых ордеров в окне (closed_count >= 1).
+        Шум активен строго при наличии закрытых ордеров в окне (closed_count >= 1)
+        и включенном диапазоне джиттера (high > 0).
+        Конфигурация уже прочитана и провалидирована в __init__.
         """
-        if closed_count < 1 or not isinstance(smart_grace_cfg, dict):
-            return False
-        bn_factor = smart_grace_cfg.get("brownian_noise_factor")
-        if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
-            try:
-                low = float(min(bn_factor))
-                high = float(max(bn_factor))
-                return high > 0 and high >= low
-            except (TypeError, ValueError):
-                return False
-        return False
+        # Если передан внешний конфиг для вызова без инстанса, поднимаем валидацию через конструктор
+        if smart_grace_cfg is not None:
+            ctrl = self.__class__(smart_grace_cfg=smart_grace_cfg)
+            return ctrl.should_apply(closed_count)
+        return self.enabled and closed_count >= 1
 
-    @staticmethod
-    def get_jitter_range(smart_grace_cfg: Dict[str, Any]) -> Optional[Tuple[float, float]]:
-        """Извлекает и валидирует диапазон [low, high] из smart_grace_cfg."""
-        bn_factor = smart_grace_cfg.get("brownian_noise_factor")
-        if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
-            low = float(min(bn_factor))
-            high = float(max(bn_factor))
-            if high > 0 and high >= low:
-                return low, high
-        return None
+    def get_jitter_range(
+        self,
+        smart_grace_cfg: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Tuple[float, float]]:
+        """
+        Возвращает диапазон [low, high], провалидированный в __init__.
+        """
+        if smart_grace_cfg is not None:
+            ctrl = self.__class__(smart_grace_cfg=smart_grace_cfg)
+            return ctrl.get_jitter_range()
+        return (self.low, self.high) if self.enabled else None
 
-    @classmethod
     def generate_jitter_seconds(
-        cls,
-        low: float,
-        high: float,
+        self,
+        low: Optional[float] = None,
+        high: Optional[float] = None,
         rng: Optional[Any] = None,
     ) -> float:
         """
         Генерирует дробный джиттер броуновского шума через аппаратную энтропию secrets.
         """
+        l_val = self.low if low is None else float(low)
+        h_val = self.high if high is None else float(high)
         random_gen = rng if rng is not None else secrets.SystemRandom()
-        return round(float(random_gen.uniform(low, high)), 2)
+        return round(float(random_gen.uniform(l_val, h_val)), 2)
 
-    @classmethod
     async def apply_noise_if_needed(
-        cls,
+        self,
         bot_core: Any,
         symbol: str,
         side: str,
         state: Any,
-        smart_grace_cfg: Optional[Dict[str, Any]],
         closed_count: int,
         current_price: float,
+        smart_grace_cfg: Optional[Dict[str, Any]] = None,
         sleep_fn: Optional[Any] = None,
         rng: Optional[Any] = None,
     ) -> Optional[float]:
         """
         Исполняет паузу броуновского шума, если выполнены условия паспорта стратегии.
         Возвращает актуализированную цену current_price, либо None, если вход был прерван.
+        Вся конфигурация поднята в __init__ и доступна через self.
         """
-        if not cls.should_apply(closed_count, smart_grace_cfg):
+        ctrl = self
+        if smart_grace_cfg is not None:
+            ctrl = self.__class__(smart_grace_cfg=smart_grace_cfg)
+
+        if not ctrl.should_apply(closed_count):
             return current_price
 
-        jitter_range = cls.get_jitter_range(smart_grace_cfg)  # type: ignore[arg-type]
+        jitter_range = ctrl.get_jitter_range()
         if not jitter_range:
             return current_price
 
         low, high = jitter_range
-        noise_sleep = cls.generate_jitter_seconds(low, high, rng=rng)
+        noise_sleep = ctrl.generate_jitter_seconds(low=low, high=high, rng=rng)
 
         logger.info(
             f"[{symbol}] {side} Brownian Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) "

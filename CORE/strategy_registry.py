@@ -357,11 +357,16 @@ class StrategyConfig:
             base_smart_grace.update(sg_cfg)
         if "shift_interval_sec" not in base_smart_grace:
             base_smart_grace["shift_interval_sec"] = DEFAULT_SHIFT_INTERVAL_SEC
+        from CORE.STRATEGY.brownian_noise import BrownianNoiseController
+        from CORE.STRATEGY.momentum_engine import MomentumEngine
+
         self.smart_grace_cfg: Dict[str, Any] = base_smart_grace
-        self.brownian_noise_factor: Optional[Tuple[float, float]] = None
-        bn_val = self.smart_grace_cfg.get("brownian_noise_factor")
-        if isinstance(bn_val, (list, tuple)) and len(bn_val) == 2:
-            self.brownian_noise_factor = (float(min(bn_val)), float(max(bn_val)))
+        self.brownian_controller: BrownianNoiseController = BrownianNoiseController(
+            smart_grace_cfg=self.smart_grace_cfg
+        )
+        self.brownian_noise_factor: Optional[Tuple[float, float]] = (
+            self.brownian_controller.get_jitter_range()
+        )
 
         # Конфигурации Smart Size и Smart TP (нормализация на старте)
         base_smart_size = copy.deepcopy(DEFAULT_SMART_SIZE)
@@ -392,6 +397,11 @@ class StrategyConfig:
             base_smart_tp.update(st_cfg)
         self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
         self.smart_tp_trend_determ: Optional[str] = self.smart_tp_cfg.get("trend_determ")
+
+        self.momentum_engine: MomentumEngine = MomentumEngine(
+            smart_size_cfg=self.smart_size_cfg,
+            smart_tp_cfg=self.smart_tp_cfg,
+        )
         raw_min_tp = (
             raw_meta.get("min_tp_indent")
             or self.overrides.get("min_tp_indent")
