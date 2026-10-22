@@ -33,7 +33,9 @@ from ANALYTICS.drawdown_tracker import DrawdownTracker
 from ANALYTICS.leaderboard import LeaderboardEngine
 from ANALYTICS.ledger_recorder import LedgerRecorder
 from ANALYTICS.metrics import AnalyticsMathEngine
+from ANALYTICS.portfolio_aggregator import PortfolioAggregator
 from ANALYTICS.reconstruction import ReconstructionService
+from ANALYTICS.report_service import AnalyticsReportService
 from ANALYTICS.strategy_stats import StrategyStatsEngine
 
 logger = UnifiedLogger("Analytics")
@@ -87,6 +89,12 @@ class AnalyticsManager:
         self.drawdown_tracker = DrawdownTracker(self, circuit_breaker=self.circuit_breaker)
         self.strategy_stats = StrategyStatsEngine(self)
         self.reconstruction = ReconstructionService(self)
+        self.portfolio_aggregator = PortfolioAggregator(
+            self, stats_dir=self.stats_dir, ledgers_dir=self.ledgers_dir
+        )
+        self.report_service = AnalyticsReportService(
+            self, stats_dir=self.stats_dir, ledgers_dir=self.ledgers_dir
+        )
 
         self._floating_synced = False
         self._persisted_global_cache: dict = {}
@@ -342,6 +350,10 @@ class AnalyticsManager:
         except Exception as e:
             logger.warning(f"[ANALYTICS] Failed to get trade velocity for {universe_id}: {e}")
             return {}
+
+    def get_portfolio_analytics(self) -> Tuple[Dict[str, Any], Dict[str, dict], str]:
+        """Возвращает агрегированные сводные данные портфеля (agg_summary, agg_per_coin, last_trade_dt_str)."""
+        return self.portfolio_aggregator.get_portfolio_all_data()
 
     # ============================================================
     # DELEGATED: Iteration Cache & Strategy Stats
