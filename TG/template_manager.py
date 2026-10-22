@@ -12,7 +12,6 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from consts import DATA_DIR
 
-from RUNTIME_FSM.runtime_builder import build_runtime_caches
 logger = UnifiedLogger("TemplateManager")
 
 class TemplateManager:

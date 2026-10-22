@@ -15,8 +15,8 @@ from consts import API_KEY, TG_ENABLED
 from c_log import UnifiedLogger
 from API.BINANCE.public import BinancePublic
 from POS_FSM.pos_stream import PositionStream
-from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
-from RUNTIME_FSM.runtime_builder import build_runtime_caches, prompt_runtime_check
+from POS_FSM.pos_stream_monitor import PositionMonitor
+from RUNTIME_FSM.runtime_builder import RuntimeBuilder, build_runtime_caches, prompt_runtime_check
 from CORE.strategy_registry import StrategyRegistry
 from CORE.strategy_applicator import StrategyApplicator
 
@@ -48,9 +48,10 @@ class BotBootstrapService:
             return False
 
         # Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        created_new = build_runtime_caches(bot_core.symbols, registry=bot_core.strategy_registry)
+        runtime_builder = RuntimeBuilder(registry=bot_core.strategy_registry)
+        created_new = runtime_builder.build_caches(bot_core.symbols)
         if created_new and not TG_ENABLED:
-            prompt_runtime_check()
+            runtime_builder.prompt_check()
 
         # Первый расчет волатильности
         if bot_core.volatility_manager:

@@ -1,94 +1,141 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\RUNTIME_FSM\runtime_builder.py
-# Role: runtime_builder.py module
-
 # ==============================================================================
 # Path: RUNTIME_FSM/runtime_builder.py
-# Role: Сборка пер-символьных рантайм конфигураций при старте
+# Role: Сборка пер-символьных рантайм конфигураций при старте системы (OOP)
 # ==============================================================================
 
-import os
-import sys
 import json
+import os
+import pickle
+import sys
 from pathlib import Path
-from consts import _CFG, DATA_DIR, AVOID_CHECK_RUNTIME_CFG
+from typing import List, Optional
+
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE.strategy_registry import StrategyRegistry
+from consts import AVOID_CHECK_RUNTIME_CFG, DATA_DIR, _CFG
 from CORE.strategy_applicator import StrategyApplicator
+from CORE.strategy_registry import StrategyRegistry
 
-from typing import Optional, List
 logger = UnifiedLogger("RuntimeBuilder")
 
-RUNTIME_DIR = DATA_DIR / "runtime"
 
-def _ensure_dirs():
-    RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+class RuntimeBuilder:
+    """
+    Класс-строитель рантайм-кэшей конфигураций символов и стратегий.
+    Отвечает за компиляцию активных стратегий в файлы CFG/runtime/{strategy_id}/{symbol}.json
+    при старте торгового ядра и обработку миграций.
+    """
+
+    def __init__(
+        self,
+        runtime_dir: Optional[Path] = None,
+        registry: Optional[StrategyRegistry] = None,
+        applicator: Optional[StrategyApplicator] = None,
+        avoid_check: Optional[bool] = None,
+    ):
+        self.runtime_dir = runtime_dir or (DATA_DIR / "runtime")
+        self.registry = registry
+        self.applicator = applicator or StrategyApplicator()
+        self.avoid_check = avoid_check if avoid_check is not None else AVOID_CHECK_RUNTIME_CFG
+        self.logger = logger
+        self.ensure_dirs()
+
+    def ensure_dirs(self) -> None:
+        """Гарантирует существование директории рантайма."""
+        self.runtime_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_registry(self) -> Optional[StrategyRegistry]:
+        """Возвращает или лениво инициализирует StrategyRegistry."""
+        if self.registry is None:
+            try:
+                self.registry = StrategyRegistry()
+            except Exception as e:
+                self.logger.warning(f"Could not load StrategyRegistry: {e}.")
+                self.registry = None
+        return self.registry
+
+    def build_caches(self, symbols: Optional[List[str]] = None) -> bool:
+        """
+        Собирает и синхронизирует рантайм-файлы конфигураций для списка символов.
+        Возвращает True, если был создан хотя бы один новый файл конфигурации.
+        """
+        self.ensure_dirs()
+        registry = self.get_registry()
+        target_symbols = (
+            symbols
+            if symbols is not None
+            else (registry.get_all_active_symbols() if registry else [])
+        )
+        created_new = False
+
+        for symbol in target_symbols:
+            sym_lower = symbol.lower()
+            strat = registry.get_strategy_for_symbol(symbol) if registry else None
+
+            if strat:
+                target_dir = self.runtime_dir / strat.strategy_id
+                target_file = target_dir / f"{sym_lower}.json"
+                was_existing = target_file.exists()
+                self.applicator.build_runtime_for_symbol(symbol, strat, target_dir=target_dir)
+                if not was_existing and target_file.exists():
+                    created_new = True
+            else:
+                target_file = self.runtime_dir / f"{sym_lower}.json"
+                target_pkl = self.runtime_dir / f"{sym_lower}.pkl"
+                if not target_file.exists():
+                    if target_pkl.exists():
+                        try:
+                            with open(target_pkl, "rb") as fp:
+                                data = pickle.load(fp)
+                        except Exception:
+                            data = {}
+                        Utils.atomic_write_json(target_file, data, indent=4)
+                        try:
+                            target_pkl.unlink()
+                        except Exception:
+                            pass
+                        created_new = True
+                    else:
+                        self.logger.error(
+                            f"[RUNTIME_BUILDER] No strategy assigned for symbol {symbol}! Skipping runtime creation."
+                        )
+                        continue
+
+        return created_new
+
+    def prompt_check(self) -> None:
+        """Интерактивная проверка настроек рантайма перед боевым стартом."""
+        if not self.avoid_check:
+            self.logger.info("=" * 60)
+            self.logger.info("ВНИМАНИЕ! Проверьте настройки рантайма (.json) в CFG/runtime/")
+            self.logger.info("Если все верно, нажмите Enter для продолжения...")
+            self.logger.info("=" * 60)
+            try:
+                input()
+            except EOFError:
+                self.logger.warning("No interactive stdin found, skipping runtime check pause.")
+            except KeyboardInterrupt:
+                self.logger.warning("Прервано пользователем.")
+                sys.exit(0)
+
+
+# Синглтон по умолчанию и функции-фасады обратной совместимости
+default_runtime_builder = RuntimeBuilder()
+
 
 def build_runtime_caches(
     symbols: Optional[List[str]] = None,
     registry: Optional[StrategyRegistry] = None,
-    target_runtime_dir: Optional[Path] = None
+    target_runtime_dir: Optional[Path] = None,
 ) -> bool:
-    rt_dir = target_runtime_dir or RUNTIME_DIR
-    rt_dir.mkdir(parents=True, exist_ok=True)
-    created_new = False
+    """Функциональный фасад для сборки рантайма через RuntimeBuilder."""
+    if target_runtime_dir or registry:
+        builder = RuntimeBuilder(runtime_dir=target_runtime_dir, registry=registry)
+    else:
+        builder = default_runtime_builder
+    return builder.build_caches(symbols=symbols)
 
-    if registry is None:
-        try:
-            registry = StrategyRegistry()
-        except Exception as e:
-            logger.warning(f"Could not load StrategyRegistry: {e}.")
-            registry = None
 
-    if symbols is None:
-        symbols = registry.get_all_active_symbols() if registry else []
-
-    applicator = StrategyApplicator()
-
-    for symbol in symbols:
-        sym_lower = symbol.lower()
-        strat = registry.get_strategy_for_symbol(symbol) if registry else None
-
-        if strat:
-            target_dir = rt_dir / strat.strategy_id
-            target_file = target_dir / f"{sym_lower}.json"
-            was_existing = target_file.exists()
-            applicator.build_runtime_for_symbol(symbol, strat, target_dir=target_dir)
-            if not was_existing and target_file.exists():
-                created_new = True
-        else:
-            target_file = rt_dir / f"{sym_lower}.json"
-            target_pkl = rt_dir / f"{sym_lower}.pkl"
-            if not target_file.exists():
-                if target_pkl.exists():
-                    import pickle
-                    try:
-                        with open(target_pkl, "rb") as fp:
-                            data = pickle.load(fp)
-                    except Exception:
-                        data = {}
-                    Utils.atomic_write_json(target_file, data, indent=4)
-                    try:
-                        target_pkl.unlink()
-                    except Exception:
-                        pass
-                    created_new = True
-                else:
-                    logger.error(f"[RUNTIME_BUILDER] No strategy assigned for symbol {symbol}! Skipping runtime creation.")
-                    continue
-
-    return created_new
-
-def prompt_runtime_check():
-    if not AVOID_CHECK_RUNTIME_CFG:
-        print("\n" + "="*60)
-        print("ВНИМАНИЕ! Проверьте настройки рантайма (.json) в CFG/runtime/")
-        print("Если все верно, нажмите Enter для продолжения...")
-        print("="*60 + "\n")
-        try:
-            input()
-        except EOFError:
-            logger.warning("No interactive stdin found, skipping runtime check pause.")
-        except KeyboardInterrupt:
-            print("Прервано пользователем.")
-            sys.exit(0)
+def prompt_runtime_check() -> None:
+    """Функциональный фасад для интерактивной паузы проверки рантайма."""
+    default_runtime_builder.prompt_check()
