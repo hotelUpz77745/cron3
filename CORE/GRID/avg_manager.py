@@ -13,7 +13,7 @@ from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 from c_utils import Utils
 
-from consts import _CFG
+from consts import _CFG, DEFAULT_GRID_VOLUME_TOLERANCE_PCT
 from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 
@@ -330,7 +330,12 @@ class AverageManager:
                 invest_size * (float(grid[k].get("volume", 0.0)) / 100.0)
                 for k in sorted_keys if (int(k) if k.isdigit() else 999) <= cand_idx
             )
-            tolerance_factor = 0.90  # 10% volume tolerance
+            # Толерантность объема сетки из паспорта стратегии / app.json, либо канонический дефолт
+            res_cfg = side_c.get("fsm_level_resolution", {}) if isinstance(side_c, dict) else {}
+            if not res_cfg:
+                res_cfg = _CFG.get("fsm_level_resolution", {}) if isinstance(_CFG, dict) else {}
+            tol_pct = Utils.safe_float(res_cfg.get("volume_tolerance_pct"), DEFAULT_GRID_VOLUME_TOLERANCE_PCT)
+            tolerance_factor = 1.0 - (tol_pct / 100.0)
             cur_entry = state.avg_entry_price if state.avg_entry_price > 0 else current_price
             current_notional = abs(float(state.total_volume)) * cur_entry
 

@@ -16,6 +16,7 @@ from typing import Dict, Any, Optional
 from consts import (
     ANALYTICS_START_BALANCE_USDT,
     CACHE_DIR,
+    FLOAT_ZERO_EPSILON,
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -139,7 +140,7 @@ class StrategyStatsEngine:
             for sym, c_info in existing_per_coin.items():
                 c_trades = int(c_info.get("total_trades", c_info.get("trades", 0)))
                 c_pnl = abs(float(c_info.get("realized_pnl_net_usdt", c_info.get("realized_pnl_usdt", 0.0))))
-                if c_trades > 0 or c_pnl > 1e-6:
+                if c_trades > 0 or c_pnl > FLOAT_ZERO_EPSILON:
                     all_strat_symbols.add(sym)
 
             # Сохраняем персистентный список historical_symbols стратегии
@@ -153,7 +154,7 @@ class StrategyStatsEngine:
             for sym, c_info in per_coin_global.items():
                 c_trades = int(c_info.get("total_trades", c_info.get("trades", 0)))
                 c_pnl = abs(float(c_info.get("realized_pnl_net_usdt", c_info.get("realized_pnl_usdt", 0.0))))
-                if c_trades > 0 or c_pnl > 1e-6:
+                if c_trades > 0 or c_pnl > FLOAT_ZERO_EPSILON:
                     # Если на счете 1 активная стратегия, либо монета не принадлежит ни одной другой активной стратегии
                     if len(active_strats) <= 1:
                         all_strat_symbols.add(sym)

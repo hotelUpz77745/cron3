@@ -882,16 +882,26 @@ cron3/
 
 2. **Искоренение Скрытых Дефолтов и Магических Чисел (Правила 2, 3, 3.1)**:
    - В CORE/GRID/avg_manager.py ликвидирован токсичный скрытый fallback на 100.0 USDT (else: invest_size = 100.0). При отсутствии или некорректном invest_size система выбрасывает явное исключение ValueError («Работай или упади сразу»).
-   - В consts.py введена каноническая константа точности чисел с плавающей точкой FLOAT_ZERO_EPSILON: float = 1e-6. Устранены хардкоды 1e-6 в резолвере FSM и сравнительных операциях.
-   - В CORE/GRID/fsm_grid_resolver.py формализованы константы: MAX_ENTRY_PRICE_DIVERGENCE = 0.40, DEFAULT_VOLUME_TOLERANCE_PCT = 10.0.
+   - В consts.py введены канонические константы точности и толерантности:
+     * `FLOAT_ZERO_EPSILON: float = 1e-6`
+     * `QTY_ZERO_EPSILON: float = 1e-8`
+     * `DEFAULT_GRID_VOLUME_TOLERANCE_PCT: float = 10.0`
+     * `DEFAULT_GRID_VOLUME_TOLERANCE_RATIO: float = 0.10`
+   - Полностью выжжены все хардкоды `1e-6` в ядре и аналитике: в `POS_FSM/pos_stream_monitor.py`, `CORE/strategy_applicator.py`, `CORE/SERVICES/symbol_lifecycle_manager.py`, `CORE/SERVICES/bot_bootstrap.py`, `ANALYTICS/strategy_stats.py`, `ANALYTICS/plotter.py`.
+   - В `CORE/GRID/avg_manager.py` ликвидирован хардкод толерантности объема сетки `tolerance_factor = 0.90`. Толерантность теперь разрешается динамически из паспорта стратегии / `app.json` через единый источник истины с опорой на `DEFAULT_GRID_VOLUME_TOLERANCE_PCT`.
+   - В `c_utils.py` внедрены строгие валидаторы `Utils.strict_float` и `Utils.strict_int` (Fail-Fast при None или поврежденных строках с фиксацией имени поля в исключении) во избежание генерации фальшивых нулей.
+   - В `CORE/_utils.py` (`TradeMath`) внедрена строгая fail-fast проверка параметров торговых формул (`calculate_order_volume`: `price > 0`, `invest_size > 0`; `calculate_take_profit_price`: `avg_entry_price > 0`).
 
 3. **Строгая Типизация FSM-Моделей (Правило 1)**:
    - В POS_FSM/models.py добавлены датаклассы GridLevel и TakeProfitLevel.
    - В класс PositionState внедрены типобезопасные методы доступа и мутации уровней: get_grid_level(), is_level_active(), mark_level_active(), is_level_peeled(), increment_peel_count(), get_tp_level(), is_tp_active(), mark_tp_active().
    - Создан пакетный экспортер POS_FSM/__init__.py.
+   - Сохранены в неприкосновенности защитные флаги идемпотентности жизненного цикла (`in_position_papper`).
 
 4. **Исправление Сигнатуры PeelingManager.__init__**:
    - В CORE/STRATEGY/peeling_manager.py конструктор приведен к поддержке прямой передачи peeling_cfg со строгой валидацией типа (Fail-Fast TypeError).
 
-5. **Контроль Целостности**:
-   - Полный прогон тестового набора (python -m unittest discover tests): **462 теста пройдено успешно, 0 ошибок**.
+5. **Контроль Целостности и Новые Тесты**:
+   - Создан целевой набор тестов `tests/test_fail_fast_and_precision.py` (7 тестов).
+   - Полный прогон тестового набора (python -m unittest discover tests): **469 тестов пройдено успешно (469 passed, 2 skipped, 0 failures)**.
+

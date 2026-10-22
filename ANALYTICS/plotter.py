@@ -24,6 +24,7 @@ try:
         ANALYTICS_STATS_DIR,
         ANALYTICS_LEDGERS_DIR,
         ANALYTICS_START_BALANCE_USDT,
+        FLOAT_ZERO_EPSILON,
         _CFG,
     )
 except ImportError:
@@ -31,6 +32,7 @@ except ImportError:
     ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"
     ANALYTICS_LEDGERS_DIR = ANALYTICS_DIR / "LEDGERS"
     ANALYTICS_START_BALANCE_USDT = 434.0
+    FLOAT_ZERO_EPSILON = 1e-6
     _CFG = {}
 
 
@@ -498,7 +500,7 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
             if i <= peak_idx:
                 scaled_c = c * (target_peak / raw_max) if raw_max > 0 else c
             else:
-                if abs(raw_max - raw_final) > 1e-6:
+                if abs(raw_max - raw_final) > FLOAT_ZERO_EPSILON:
                     scaled_c = target_peak + (c - raw_max) * ((target_peak - target_final) / (raw_max - raw_final))
                 else:
                     scaled_c = target_final

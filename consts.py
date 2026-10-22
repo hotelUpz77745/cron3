@@ -272,3 +272,6 @@ TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slic
 # NUMERICAL PRECISION & EPSILONS (Samsonov Protocol Rule 3 & 3.1)
 # ============================================================
 FLOAT_ZERO_EPSILON: float = 1e-6
+QTY_ZERO_EPSILON: float = 1e-8
+DEFAULT_GRID_VOLUME_TOLERANCE_PCT: float = 10.0
+DEFAULT_GRID_VOLUME_TOLERANCE_RATIO: float = 0.10

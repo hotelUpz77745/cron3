@@ -14,7 +14,7 @@ from typing import Any, Optional, Dict, List
 
 from c_log import UnifiedLogger
 from c_utils import Utils
-from consts import DATA_DIR
+from consts import DATA_DIR, FLOAT_ZERO_EPSILON
 from API.BINANCE.public import BinancePublic
 from POS_FSM.models import PositionState
 from CORE.strategy_applicator import StrategyApplicator
@@ -236,7 +236,7 @@ class SymbolLifecycleManager:
             fsm_dict = self.bot.fsm_states[symbol]
             if isinstance(fsm_dict, dict):
                 for side, fsm in fsm_dict.items():
-                    if getattr(fsm, "in_position", False) or abs(float(getattr(fsm, "total_volume", 0.0))) > 1e-6:
+                    if getattr(fsm, "in_position", False) or abs(float(getattr(fsm, "total_volume", 0.0))) > FLOAT_ZERO_EPSILON:
                         raise RuntimeError(f"Cannot delete '{symbol}': active {side} position is currently open. Close position first.")
 
         logger.info(f"[{symbol}] Dynamically deleting symbol from BotCore and app.json...")

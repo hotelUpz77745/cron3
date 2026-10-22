@@ -27,6 +27,11 @@ class TradeMath:
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
         qty_precision = precisions[0] if precisions else 3
         
+        if price <= 0:
+            raise ValueError(f"[{symbol}] calculate_order_volume: price must be positive, got {price}")
+        if invest_size <= 0:
+            raise ValueError(f"[{symbol}] calculate_order_volume: invest_size must be positive, got {invest_size}")
+
         # invest_size (например, 100 USDT). Доля в USDT:
         usdt_volume = invest_size * (volume_percent / 100.0)
         
@@ -54,6 +59,9 @@ class TradeMath:
         Для LONG: TP выше средней цены входа.
         Для SHORT: TP ниже средней цены входа.
         """
+        if avg_entry_price <= 0:
+            raise ValueError(f"[{symbol}] calculate_take_profit_price: avg_entry_price must be positive, got {avg_entry_price}")
+
         precisions = Utils.get_spec_precisions(symbol_info, symbol)
         price_precision = precisions[1] if precisions else (8 if avg_entry_price < 1.0 else 2)
         

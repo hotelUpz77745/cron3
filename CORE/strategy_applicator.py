@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from consts import DATA_DIR, BASE_DIR
+from consts import DATA_DIR, BASE_DIR, FLOAT_ZERO_EPSILON
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.strategy_registry import StrategyConfig, StrategyRegistry
@@ -430,7 +430,7 @@ class StrategyApplicator:
             new_side = copy.deepcopy(side_cfg)
             exist_side = existing.get(side, {})
             # Если позиция открыта, сохраняем состояние FSM
-            if exist_side.get("in_position", False) or abs(Utils.safe_float(exist_side.get("total_volume"), 0.0)) > 1e-6:
+            if exist_side.get("in_position", False) or abs(Utils.safe_float(exist_side.get("total_volume"), 0.0)) > FLOAT_ZERO_EPSILON:
                 for state_key in [
                     "total_volume", "avg_entry_price", "pre_avg_price",
                     "initial_entry_price", "open_time", "next_avg_price",
@@ -605,7 +605,7 @@ class StrategyApplicator:
                                 has_pos = any(
                                     isinstance(s_val, dict) and (
                                         s_val.get("in_position")
-                                        or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6
+                                        or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > FLOAT_ZERO_EPSILON
                                     )
                                     for s_val in c_data.values()
                                 )

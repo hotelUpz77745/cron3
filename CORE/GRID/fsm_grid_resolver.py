@@ -5,14 +5,14 @@
 
 from typing import Any, Dict, Optional
 
-from consts import FLOAT_ZERO_EPSILON
+from consts import FLOAT_ZERO_EPSILON, DEFAULT_GRID_VOLUME_TOLERANCE_PCT
 from c_log import UnifiedLogger
 from c_utils import Utils
 
 logger = UnifiedLogger("FSMGridResolver")
 
 MAX_ENTRY_PRICE_DIVERGENCE: float = 0.40
-DEFAULT_VOLUME_TOLERANCE_PCT: float = 10.0
+DEFAULT_VOLUME_TOLERANCE_PCT: float = DEFAULT_GRID_VOLUME_TOLERANCE_PCT
 DEFAULT_FIRST_ORDER_VOL_LONG: float = 12.0
 DEFAULT_FIRST_ORDER_VOL_SHORT: float = 7.0
 

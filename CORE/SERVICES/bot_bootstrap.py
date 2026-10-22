@@ -15,6 +15,7 @@ from consts import (
     PRICE_STREAM_READY_TIMEOUT_SEC,
     PRICE_STREAM_SNAPSHOT_TIMEOUT_SEC,
     POS_STREAM_CONNECT_TIMEOUT_SEC,
+    FLOAT_ZERO_EPSILON,
 )
 from c_log import UnifiedLogger
 from API.BINANCE.public import BinancePublic
@@ -156,7 +157,7 @@ class BotBootstrapService:
             strat = bot_core.strategy_registry.get_strategy_for_symbol(sym) if bot_core.strategy_registry else None
             for s_side in ("LONG", "SHORT"):
                 st = bot_core.fsm_states.get(sym, {}).get(s_side)
-                if st and st.in_position and abs(st.total_volume) > 1e-6:
+                if st and st.in_position and abs(st.total_volume) > FLOAT_ZERO_EPSILON:
                     cur_p = bot_core.prices.get(sym, (0.0, 0))[0] if sym in bot_core.prices else None
                     StrategyApplicator.resolve_position_state_grid(st, strategy=strat, current_price=cur_p)
 

@@ -36,6 +36,37 @@ def now() -> int:
 
 class Utils:        
     @staticmethod
+    def strict_float(value: Any, field_name: str = "value") -> float:
+        """
+        Строгое преобразование в float по Протоколу Самсонова (Rule 2: Fail-Fast).
+        Выбрасывает ValueError при None или неконвертируемом значении.
+        Предотвращает фальшивые нули в финансовых расчетах (объемы, цены, invest_size).
+        """
+        if value is None:
+            raise ValueError(f"Strict float validation error: field '{field_name}' is None")
+        try:
+            return float(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Strict float validation error: field '{field_name}' has invalid value {value!r}: {e}"
+            ) from e
+
+    @staticmethod
+    def strict_int(value: Any, field_name: str = "value") -> int:
+        """
+        Строгое преобразование в int по Протоколу Самсонова (Rule 2: Fail-Fast).
+        Выбрасывает ValueError при None или неконвертируемом значении.
+        """
+        if value is None:
+            raise ValueError(f"Strict int validation error: field '{field_name}' is None")
+        try:
+            return int(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Strict int validation error: field '{field_name}' has invalid value {value!r}: {e}"
+            ) from e
+
+    @staticmethod
     def safe_float(value: Any, default: float = 0.0) -> float:
         """Преобразует значение в float, если не удалось — возвращает default"""
         try:

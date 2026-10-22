@@ -7,6 +7,7 @@
 # ==============================================================================
 
 from typing import Dict, Any, Tuple, Optional, List
+from consts import FLOAT_ZERO_EPSILON
 from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
 import time
@@ -153,11 +154,11 @@ class PositionMonitor:
                 # Универсальная синхронизация сетки с биржей: если есть позиция,
                 # размечаем все покрытые объемом уровни как исполненные (is_active=True).
                 # Защита от спама на каждом тике: запускаем только при фактическом изменении объема/цены
-                if state and state.in_position and abs(state.total_volume) > 1e-6:
+                if state and state.in_position and abs(state.total_volume) > FLOAT_ZERO_EPSILON:
                     last_vol = getattr(state, "_last_resolved_vol", None)
                     last_price = getattr(state, "_last_resolved_price", None)
-                    vol_changed = (last_vol is None) or (abs(last_vol - state.total_volume) > 1e-6)
-                    price_changed = (last_price is None) or (abs(last_price - state.avg_entry_price) > 1e-6)
+                    vol_changed = (last_vol is None) or (abs(last_vol - state.total_volume) > FLOAT_ZERO_EPSILON)
+                    price_changed = (last_price is None) or (abs(last_price - state.avg_entry_price) > FLOAT_ZERO_EPSILON)
                     if vol_changed or price_changed:
                         try:
                             from CORE.strategy_applicator import StrategyApplicator
