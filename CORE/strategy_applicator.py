@@ -168,12 +168,17 @@ class StrategyApplicator:
             if grid_override:
                 side_data["grid"] = copy.deepcopy(grid_override)
 
-            # 4.1. Адаптация веса первого ордера grid_0 по режиму рынка (Bullish 12/7, Neutral 9/9, Bearish 7/12)
-            regime_cfg = (
-                getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
+            active_regime = getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
+            raw_regime = (
+                (getattr(strategy, "raw_meta", {}) or {}).get("first_order_weight_regime")
                 or (getattr(strategy, "overrides", {}) or {}).get("first_order_weight_regime")
-                or (getattr(strategy, "raw_meta", {}) or {}).get("first_order_weight_regime")
             )
+            if isinstance(raw_regime, dict) and active_regime is not None and not isinstance(active_regime, dict):
+                regime_cfg = copy.deepcopy(raw_regime)
+                regime_cfg["mode"] = active_regime
+            else:
+                regime_cfg = active_regime or raw_regime
+
             if regime_cfg and "grid" in side_data and "0" in side_data["grid"]:
                 mode_val = regime_cfg.get("mode") if isinstance(regime_cfg, dict) else regime_cfg
                 base_raw_vol = side_data["grid"]["0"].get("volume")
@@ -290,48 +295,11 @@ class StrategyApplicator:
     @staticmethod
     def resolve_first_order_volume(regime_cfg: Any, side: str, default_vol: float) -> float:
         """
-        «Правило кулака Сильной руки» (Strong Hand Fist Rule):
-        Разрешает объем капитала стартового удара (grid_0) для стороны side (LONG / SHORT).
-        ВНИМАНИЕ: Управляет ИСКЛЮЧИТЕЛЬНО первым ордером (grid_0), уровни усреднения сетки (L1+) не затрагиваются.
-        Поддерживает:
-        - Литералы: 'bullish' (12% Long / 7% Short), 'neutral' (9% Long / 9% Short), 'bearish' (7% Long / 12% Short).
-        - Числа: 1 (bullish), 0 (neutral), -1 (bearish).
-        - Авто-режим: 'auto' / 'auto_ema' (динамический выбор по глобальной EMA).
-        - Структурированный словарь с 'mode' и 'presets'.
+        Делегат к каноническому менеджеру FirstOrderRegimeManager (Single Source of Truth).
+        Исключает дублирование пресетов и скрытые дефолты (Правило 2, 3 Протокола).
         """
-        mode = "bullish"
-        presets = {
-            "bullish": {"LONG": 12.0, "SHORT": 7.0},
-            "neutral": {"LONG": 9.0, "SHORT": 9.0},
-            "bearish": {"LONG": 7.0, "SHORT": 12.0},
-        }
-        if isinstance(regime_cfg, dict):
-            mode = regime_cfg.get("mode", "bullish")
-            if "presets" in regime_cfg and isinstance(regime_cfg["presets"], dict):
-                for k, v in regime_cfg["presets"].items():
-                    if isinstance(v, dict):
-                        presets[str(k).lower()] = {s.upper(): float(vol) for s, vol in v.items()}
-        elif isinstance(regime_cfg, (str, int)):
-            mode = regime_cfg
-
-        # Отключение фичи: off / null / none / false / disabled -> возврат базового объема из сетки
-        if mode is None or str(mode).lower().strip() in ("off", "null", "none", "false", "disabled"):
-            return default_vol
-
-        # Нормализация режима
-        if mode in (1, "1", "bull", "bullish", "long_heavy"):
-            mode_key = "bullish"
-        elif mode in (0, "0", "flat", "neutral", "symmetric"):
-            mode_key = "neutral"
-        elif mode in (-1, "-1", "bear", "bearish", "short_heavy"):
-            mode_key = "bearish"
-        else:
-            mode_key = str(mode).lower()
-
-        preset = presets.get(mode_key)
-        if preset and side.upper() in preset:
-            return float(preset[side.upper()])
-        return default_vol
+        from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+        return FirstOrderRegimeManager.resolve_static_volume(regime_cfg, side, default_vol)
 
     @staticmethod
     def resolve_executed_grid_levels(strategy: StrategyConfig, symbol: str, side: str, new_side: dict, exist_side: dict):
@@ -602,86 +570,89 @@ class StrategyApplicator:
         side_configs = self.build_side_configs(strategy, symbol=symbol)
 
         existing = {}
-        if target_file.exists():
-            existing = Utils.read_json_file(target_file)
-        elif target_pkl.exists():
-            try:
-                import pickle
-                with open(target_pkl, "rb") as fp:
-                    existing = pickle.load(fp)
-            except Exception:
-                existing = {}
-        else:
-            # Поиск активного состояния позиции по всем куполам (при переименовании стратегии или смене темплейта)
-            active_cand = None
-            any_cand = None
-            rt_root = DATA_DIR / "runtime"
-            if rt_root.exists():
-                for sub_dir in rt_root.iterdir():
-                    if sub_dir.is_dir() and sub_dir != runtime_dir:
-                        cand_json = sub_dir / f"{symbol.lower()}.json"
-                        cand_pkl = sub_dir / f"{symbol.lower()}.pkl"
-                        c_data = None
-                        if cand_json.exists():
-                            try:
-                                c_data = Utils.read_json_file(cand_json)
-                            except Exception:
-                                pass
-                        if not c_data and cand_pkl.exists():
-                            try:
-                                import pickle
-                                with open(cand_pkl, "rb") as fp:
-                                    c_data = pickle.load(fp)
-                            except Exception:
-                                pass
-                        if c_data and isinstance(c_data, dict):
-                            has_pos = any(
-                                isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6)
-                                for s_val in c_data.values()
-                            )
-                            if has_pos:
-                                active_cand = c_data
-                                logger.info(f"[{symbol}] Found active position state in existing dome '{sub_dir.name}'. Migrating FSM state to '{runtime_dir.name}'!")
-                                break
-                            elif any_cand is None:
-                                any_cand = c_data
-
-            if not active_cand:
-                # Fallback к бэкапу рантайма, если в куполах пусто
-                backup_latest = BASE_DIR / "CACHE" / "backups" / "runtime_backup_latest.json"
-                if backup_latest.exists():
-                    try:
-                        b_raw = Utils.read_json_file(backup_latest) or {}
-                        strategies_pool = b_raw.get("strategies", b_raw) if isinstance(b_raw, dict) else {}
-                        for d_name, d_syms in strategies_pool.items():
-                            if isinstance(d_syms, dict) and symbol.lower() in d_syms:
-                                cand_b = d_syms[symbol.lower()]
-                                if isinstance(cand_b, dict) and any(
-                                    isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6)
-                                    for s_val in cand_b.values()
-                                ):
-                                    active_cand = cand_b
-                                    logger.info(f"[{symbol}] Found active position state in backup '{backup_latest.name}'. Migrating FSM state!")
-                                    break
-                    except Exception:
-                        pass
-
-            if active_cand:
-                existing = active_cand
-            elif any_cand:
-                existing = any_cand
+        if not force:
+            if target_file.exists():
+                existing = Utils.read_json_file(target_file)
+            elif target_pkl.exists():
+                try:
+                    import pickle
+                    with open(target_pkl, "rb") as fp:
+                        existing = pickle.load(fp)
+                except Exception:
+                    existing = {}
             else:
-                legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
-                legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
-                if legacy_json.exists():
-                    existing = Utils.read_json_file(legacy_json)
-                elif legacy_file.exists():
-                    try:
-                        import pickle
-                        with open(legacy_file, "rb") as fp:
-                            existing = pickle.load(fp)
-                    except Exception:
-                        existing = {}
+                # Поиск активного состояния позиции по всем куполам (при переименовании стратегии или смене темплейта)
+                active_cand = None
+                any_cand = None
+                rt_root = DATA_DIR / "runtime"
+                if rt_root.exists():
+                    for sub_dir in rt_root.iterdir():
+                        if sub_dir.is_dir() and sub_dir != runtime_dir:
+                            cand_json = sub_dir / f"{symbol.lower()}.json"
+                            cand_pkl = sub_dir / f"{symbol.lower()}.pkl"
+                            c_data = None
+                            if cand_json.exists():
+                                try:
+                                    c_data = Utils.read_json_file(cand_json)
+                                except Exception:
+                                    pass
+                            if not c_data and cand_pkl.exists():
+                                try:
+                                    import pickle
+                                    with open(cand_pkl, "rb") as fp:
+                                        c_data = pickle.load(fp)
+                                except Exception:
+                                    pass
+                            if c_data and isinstance(c_data, dict):
+                                has_pos = any(
+                                    isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 0.0)
+                                    for s_val in c_data.values()
+                                )
+                                if has_pos:
+                                    active_cand = c_data
+                                    logger.info(f"[{symbol}] Found active position state in existing dome '{sub_dir.name}'. Migrating FSM state to '{runtime_dir.name}'!")
+                                    break
+                                elif any_cand is None:
+                                    any_cand = c_data
+
+                if not active_cand:
+                    # Fallback к бэкапу рантайма, если в куполах пусто
+                    backup_latest = BASE_DIR / "CACHE" / "backups" / "runtime_backup_latest.json"
+                    if backup_latest.exists():
+                        try:
+                            b_raw = Utils.read_json_file(backup_latest) or {}
+                            strategies_pool = b_raw.get("strategies", b_raw) if isinstance(b_raw, dict) else {}
+                            for d_name, d_syms in strategies_pool.items():
+                                if isinstance(d_syms, dict) and symbol.lower() in d_syms:
+                                    cand_b = d_syms[symbol.lower()]
+                                    if isinstance(cand_b, dict) and any(
+                                        isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 0.0)
+                                        for s_val in cand_b.values()
+                                    ):
+                                        active_cand = cand_b
+                                        logger.info(f"[{symbol}] Found active position state in backup '{backup_latest.name}'. Migrating FSM state!")
+                                        break
+                        except Exception:
+                            pass
+
+                if active_cand:
+                    existing = active_cand
+                elif any_cand:
+                    existing = any_cand
+                else:
+                    legacy_json = (DATA_DIR / "runtime") / f"{symbol.lower()}.json"
+                    legacy_file = (DATA_DIR / "runtime") / f"{symbol.lower()}.pkl"
+                    if legacy_json.exists():
+                        existing = Utils.read_json_file(legacy_json)
+                    elif legacy_file.exists():
+                        try:
+                            import pickle
+                            with open(legacy_file, "rb") as fp:
+                                existing = pickle.load(fp)
+                        except Exception:
+                            existing = {}
+        else:
+            logger.info(f"[{symbol}] Forced runtime rebuild (force=True). Previous FSM cache ignored.")
 
         new_data: Dict[str, Any] = {}
         for side, side_cfg in side_configs.items():

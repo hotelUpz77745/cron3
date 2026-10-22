@@ -37,10 +37,7 @@ class BrownianNoiseController:
         """
         if closed_count < 1 or not isinstance(smart_grace_cfg, dict):
             return False
-        bn_factor = (
-            smart_grace_cfg.get("brownian_noise_factor")
-            or smart_grace_cfg.get("white_noise_factor")
-        )
+        bn_factor = smart_grace_cfg.get("brownian_noise_factor")
         if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
             try:
                 low = float(min(bn_factor))
@@ -53,10 +50,7 @@ class BrownianNoiseController:
     @staticmethod
     def get_jitter_range(smart_grace_cfg: Dict[str, Any]) -> Optional[Tuple[float, float]]:
         """Извлекает и валидирует диапазон [low, high] из smart_grace_cfg."""
-        bn_factor = (
-            smart_grace_cfg.get("brownian_noise_factor")
-            or smart_grace_cfg.get("white_noise_factor")
-        )
+        bn_factor = smart_grace_cfg.get("brownian_noise_factor")
         if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
             low = float(min(bn_factor))
             high = float(max(bn_factor))

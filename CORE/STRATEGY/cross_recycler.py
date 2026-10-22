@@ -13,7 +13,7 @@ from consts import DEFAULT_TAKER_FEE_RATE
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath, RiskCalculatingUtils
 
-logger = UnifiedLogger("CrossRecycler")
+logger = UnifiedLogger("CrossSideProfitRecycler")
 
 
 class CrossSideProfitRecycler:
@@ -278,7 +278,7 @@ class CrossSideProfitRecycler:
             return None
 
         pos_vol = abs(float(getattr(losing_state, "total_volume", 0.0)))
-        if pos_vol <= 1e-8:
+        if pos_vol <= 0.0:
             return None
 
         cur_level = int(RiskCalculatingUtils.get_current_grid_level(losing_state.grid))
@@ -305,8 +305,12 @@ class CrossSideProfitRecycler:
         if effective_ratio <= 0.0:
             return None
         burn_budget = realized_profit * effective_ratio
+        loss_per_unit = max(loss_per_unit, 0.0)
+        if loss_per_unit <= 0.0:
+            return None
         raw_qty = burn_budget / loss_per_unit
-        max_allowed_qty = pos_vol * (max_slice_pct / 100.0)
+        max_slice_ratio = max_slice_pct / 100.0
+        max_allowed_qty = pos_vol * max_slice_ratio
         actual_qty = min(raw_qty, max_allowed_qty)
 
         rounded_qty = TradeMath.round_qty(actual_qty, spec_data, symbol)
@@ -358,11 +362,13 @@ class CrossSideProfitRecycler:
                 logger.warning(f"[{strat_id}][{symbol}] Failed to sync position after burn: {e}")
 
             if not synced:
-                new_abs = max(0.0, pos_vol - rounded_qty)
+                if rounded_qty >= pos_vol:
+                    new_abs = 0.0
+                else:
+                    new_abs = max(0.0, pos_vol - rounded_qty)
                 losing_state.total_volume = -new_abs if losing_state.total_volume < 0 else new_abs
 
-            if abs(losing_state.total_volume) <= 1e-8:
-                losing_state.total_volume = 0.0
+            if losing_state.total_volume == 0.0:
                 losing_state.set_in_position(False)
                 losing_state.is_finished = True
 
@@ -381,7 +387,7 @@ class CrossSideProfitRecycler:
                     pass
 
             # Если позиция осталась активна, актуализируем лимитный TP ордер под новый уменьшенный объем
-            if losing_state.in_position and abs(losing_state.total_volume) > 1e-8:
+            if losing_state.in_position and losing_state.total_volume != 0.0:
                 if hasattr(universe, "tp_manager") and hasattr(universe.tp_manager, "place_take_profit"):
                     try:
                         opposite_state = fsm_states.get(symbol, {}).get(winning_side)
@@ -448,6 +454,3 @@ class CrossSideProfitRecycler:
                 f"[{strat_id}][{symbol}] Cross-side recycling order failed: {res.error_msg}"
             )
             return None
-
-
-CrossRecycler = CrossSideProfitRecycler

@@ -36,9 +36,27 @@ class FirstOrderRegimeManager:
     - Никаких магических чисел и неявных алиасов.
     """
 
-    SUPPORTED_DYNAMIC_MODES = ("auto_ema", "auto_adx")
+    SUPPORTED_DYNAMIC_MODES = ("auto_ema",)
     SUPPORTED_STATIC_MODES = ("bullish", "neutral", "bearish")
     OFF_MODES = ("off", "none", "null", "disabled", False, None)
+
+    MODE_ALIASES = {
+        "bull": "bullish",
+        "long_heavy": "bullish",
+        "1": "bullish",
+        "flat": "neutral",
+        "symmetric": "neutral",
+        "0": "neutral",
+        "bear": "bearish",
+        "short_heavy": "bearish",
+        "-1": "bearish",
+    }
+
+    CANONICAL_PRESETS = {
+        "bullish": {"LONG": 12.0, "SHORT": 7.0},
+        "neutral": {"LONG": 9.0, "SHORT": 9.0},
+        "bearish": {"LONG": 7.0, "SHORT": 12.0},
+    }
 
     @classmethod
     def resolve_static_volume(
@@ -49,7 +67,7 @@ class FirstOrderRegimeManager:
     ) -> float:
         """
         Разрешает базовый объем первого ордера для стороны side (LONG/SHORT)
-        на основе статического режима или дефолтных пресетов.
+        на основе статического режима или пресетов стратегии.
         """
         if regime_cfg is None:
             return default_vol
@@ -71,20 +89,22 @@ class FirstOrderRegimeManager:
             # Для динамических режимов при статической инициализации берем fallback (bullish)
             mode_str = "bullish"
 
-        # Дефолтные эталонные пресеты паспорта стратегии (если не переопределены в конфиге)
         side_key = side.upper()
+
+        # 1. Прямой поиск в кастомных пресетах паспорта
         if mode_str in presets and isinstance(presets[mode_str], dict) and side_key in presets[mode_str]:
             return float(presets[mode_str][side_key])
 
-        # Канонические пресеты
-        canonical_presets = {
-            "bullish": {"LONG": 12.0, "SHORT": 7.0},
-            "neutral": {"LONG": 9.0, "SHORT": 9.0},
-            "bearish": {"LONG": 7.0, "SHORT": 12.0},
-        }
-        if mode_str in canonical_presets and side_key in canonical_presets[mode_str]:
-            return float(canonical_presets[mode_str][side_key])
+        # 2. Поиск через нормализованный алиас (bull, 1, flat, 0, bear, -1)
+        norm_mode = cls.MODE_ALIASES.get(mode_str, mode_str)
+        if norm_mode in presets and isinstance(presets[norm_mode], dict) and side_key in presets[norm_mode]:
+            return float(presets[norm_mode][side_key])
 
+        # 3. Канонические пресеты Кулака Сильной Руки (12/7, 9/9, 7/12)
+        if norm_mode in cls.CANONICAL_PRESETS and side_key in cls.CANONICAL_PRESETS[norm_mode]:
+            return float(cls.CANONICAL_PRESETS[norm_mode][side_key])
+
+        # 4. Если пресетов для режима нет в паспорте, возвращается базовый объем сетки
         return default_vol
 
     @classmethod
@@ -98,7 +118,7 @@ class FirstOrderRegimeManager:
         strategy_id: str = "",
     ) -> float:
         """
-        Динамически оценивает состояние рынка по старшему таймфрейму (auto_ema или kernel_forecast)
+        Динамически оценивает состояние рынка по старшему таймфрейму (auto_ema)
         и возвращает адаптированный процент первого ордера grid_0.
         
         Конфиг читается строго напрямую через [''] без скрытых дефолтов!
@@ -129,18 +149,18 @@ class FirstOrderRegimeManager:
             )
             regime_name = f"AUTO-EMA ({tf_label})"
 
-        # 3. Динамический режим: Auto-ADX
-        elif mode_str == "auto_adx":
-            adx_cfg = regime_cfg["auto_adx"]
-            tf_label = adx_cfg["timeframe"]
-            trend_st = await MomentumEngine.get_adx_trend_state(
-                symbol=symbol,
-                adx_cfg=adx_cfg,
-                client=client,
-            )
-            regime_name = f"AUTO-ADX ({tf_label})"
+        # 2. Динамический режим: Auto-ADX (закомментирован: в текущих конфигах отсутствует, может быть включен позже)
+        # elif mode_str == "auto_adx":
+        #     adx_cfg = regime_cfg["auto_adx"]
+        #     tf_label = adx_cfg["timeframe"]
+        #     trend_st = await MomentumEngine.get_adx_trend_state(
+        #         symbol=symbol,
+        #         adx_cfg=adx_cfg,
+        #         client=client,
+        #     )
+        #     regime_name = f"AUTO-ADX ({tf_label})"
 
-        # 4. Статические режимы
+        # 3. Статические режимы
         elif mode_str in cls.SUPPORTED_STATIC_MODES:
             return cls.resolve_static_volume(regime_cfg, side, default_vol)
 

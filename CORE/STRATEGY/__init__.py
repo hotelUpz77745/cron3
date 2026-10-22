@@ -11,7 +11,7 @@ from CORE.strategy_registry import StrategyConfig, StrategyRegistry
 from CORE.strategy_applicator import StrategyApplicator
 from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 from CORE.STRATEGY.peeling_manager import PeelingManager
-from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler, CrossRecycler
+from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE.STRATEGY.momentum_engine import MomentumEngine
@@ -24,7 +24,6 @@ __all__ = [
     "FirstOrderRegimeManager",
     "PeelingManager",
     "CrossSideProfitRecycler",
-    "CrossRecycler",
     "BaseTrailingSystem",
     "BrownianNoiseController",
     "MomentumEngine",

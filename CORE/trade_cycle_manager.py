@@ -20,6 +20,7 @@ from consts import (
 )
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
+from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 
 logger = UnifiedLogger("TradeCycleManager")
 
@@ -147,34 +148,18 @@ class TradeCycleManager:
             # Броуновский шум применяется только между ордерами сильной руки (closed_count >= 1).
             # Первый вход (closed_count == 0) открывается строго без задержки!
             if strat and getattr(strat, "smart_grace_cfg", None) and closed_count >= 1:
-                bn_factor = (
-                    strat.smart_grace_cfg.get("brownian_noise_factor")
-                    or strat.smart_grace_cfg.get("white_noise_factor")
+                fresh_price = await BrownianNoiseController.apply_noise_if_needed(
+                    bot_core=self.bot,
+                    symbol=symbol,
+                    side=side,
+                    state=state,
+                    smart_grace_cfg=strat.smart_grace_cfg,
+                    closed_count=closed_count,
+                    current_price=current_price,
                 )
-                if isinstance(bn_factor, (list, tuple)) and len(bn_factor) == 2:
-                    low = float(min(bn_factor))
-                    high = float(max(bn_factor))
-                    if high > 0 and high >= low and getattr(self.bot, "current_sim_time", None) is None:
-                        import CORE.bot as _bot_mod
-                        noise_sleep = round(_bot_mod.secrets.SystemRandom().uniform(low, high), 2)
-                        logger.info(
-                            f"[{symbol}] {side} Brownian Noise Factor: sleeping {noise_sleep}s (range [{low}..{high}]s) "
-                            f"between strong-hand orders (closed orders in window: {closed_count})."
-                        )
-                        await _bot_mod.asyncio.sleep(noise_sleep)
-                        if (
-                            getattr(self.bot, 'is_paused', False) is True 
-                            or getattr(self.bot, 'entry_blocked', False) is True
-                            or (getattr(self.bot, "_closing_symbols", None) and symbol.upper() in self.bot._closing_symbols)
-                            or getattr(state, "is_closing", False) is True
-                            or getattr(state, "in_position", False) is True
-                        ):
-                            logger.warning(f"[{symbol}] {side}: Entry aborted after brownian noise sleep.")
-                            state.in_position_papper = False
-                            return
-                        p_fresh = await _bot_mod.BinancePublic.get_last_price(symbol)
-                        if p_fresh and p_fresh > 0:
-                            current_price = float(p_fresh)
+                if fresh_price is None:
+                    return
+                current_price = fresh_price
 
             sym_client = self.bot.get_client_for_symbol(symbol)
             # 1. Настройка плеча
@@ -204,17 +189,10 @@ class TradeCycleManager:
             smart_size_mult = 1.0
             if strat and getattr(strat, "smart_size_cfg", None):
                 trend_state = None
-                trend_determ = strat.smart_size_cfg.get("trend_determ") or strat.smart_size_cfg.get("dynamic_sizing_mode")
+                trend_determ = getattr(strat, "smart_size_trend_determ", None)
                 if trend_determ:
-                    if str(trend_determ).startswith("adx"):
-                        adx_cfg = strat.smart_size_cfg.get("adx_trend") or {"timeframe": "1d", "period": 14, "adx_threshold": 25.0}
-                        trend_state = await MomentumEngine.get_adx_trend_state(
-                            symbol=symbol,
-                            adx_cfg=adx_cfg,
-                            client=sym_client
-                        )
-                    else:
-                        ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                    ema_cfg = strat.smart_size_cfg.get("ema_trend")
+                    if ema_cfg:
                         trend_state = await MomentumEngine.get_ema_trend_state(
                             symbol=symbol,
                             ema_cfg=ema_cfg,

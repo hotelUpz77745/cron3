@@ -88,21 +88,21 @@ class PeelingManager:
         if not level_data:
             return False
 
-        # Проверяем настройку peel_num / peel_once
+        # Проверяем настройку peel_num (допустимое количество пилингов на колене)
         if "peel_num" in level_data:
             raw_pn = level_data["peel_num"]
             if raw_pn is None:
                 return False
             try:
-                if int(raw_pn) <= 0:
+                p_limit = int(raw_pn)
+                if p_limit <= 0:
                     return False
             except (ValueError, TypeError):
                 return False
-        elif "peel_once" in level_data and level_data["peel_once"] is None:
-            return False
+        else:
+            p_limit = 1
 
-        # Уровень не должен быть ранее отпилен (СТРОГО 1 раз на колене)
-        if level_data.get("peeled") or int(level_data.get("peeled_count", 0)) >= 1:
+        if level_data.get("peeled") or int(level_data.get("peeled_count", 0)) >= p_limit:
             return False
 
         # Проверяем наличие настройки пилинга на этом уровне
@@ -196,18 +196,18 @@ class PeelingManager:
                     else:
                         state.total_volume = min(0.0, round(state.total_volume + peel_qty, 8))
 
-                if abs(state.total_volume) <= 1e-8:
+                if abs(state.total_volume) == 0.0:
                     state.in_position = False
                     state.is_finished = True
 
                 peeled_count = int(level_data.get("peeled_count", 0)) + 1
                 level_data["peeled_count"] = peeled_count
 
-                # Пилинг СТРОГО 1 раз на колене (Правило: p_limit = 1)
+                # Лимит допустимого числа пилингов на колене задается peel_num
                 raw_peel_num = level_data.get("peel_num")
                 if raw_peel_num is not None:
                     try:
-                        p_limit = max(1, min(1, int(raw_peel_num)))
+                        p_limit = max(1, int(raw_peel_num))
                     except (ValueError, TypeError):
                         p_limit = 1
                 else:
@@ -278,7 +278,7 @@ class PeelingManager:
                     runtime_manager.mark_dirty()
 
                 # Если позиция осталась активной, обновляем TP
-                if state.in_position and abs(state.total_volume) > 1e-8:
+                if state.in_position and state.total_volume != 0.0:
                     if tp_manager and hasattr(tp_manager, "place_take_profit"):
                         try:
                             await tp_manager.place_take_profit(

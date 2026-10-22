@@ -92,11 +92,7 @@ class StrategyConfig:
         # Разрешение invest_size: строго на уровне клиента (active_settings), с безопасным fallback
         # 1. Приоритет клиента (active_settings)
         act_long_inv = (self.active_settings.get("LONG") or {}).get("invest_size")
-        if act_long_inv is None:
-            act_long_inv = self.active_settings.get("invest_size_long")
         act_short_inv = (self.active_settings.get("SHORT") or {}).get("invest_size")
-        if act_short_inv is None:
-            act_short_inv = self.active_settings.get("invest_size_short")
         act_inv = self.active_settings.get("invest_size")
 
         # 2. Fallback на raw_meta (обратная совместимость со старыми тестами/шаблонами)
@@ -354,7 +350,7 @@ class StrategyConfig:
             self.trend_size_depender: str = "static"
             self.trend_size_cfg = {"enabled": False, "mode": "static"}
 
-        # Конфигурация Smart Grace
+        # Конфигурация Smart Grace & Brownian Noise
         base_smart_grace = copy.deepcopy(DEFAULT_SMART_GRACE)
         sg_cfg = raw_meta.get("smart_grace") or self.overrides.get("smart_grace")
         if sg_cfg and isinstance(sg_cfg, dict):
@@ -362,21 +358,40 @@ class StrategyConfig:
         if "shift_interval_sec" not in base_smart_grace:
             base_smart_grace["shift_interval_sec"] = DEFAULT_SHIFT_INTERVAL_SEC
         self.smart_grace_cfg: Dict[str, Any] = base_smart_grace
+        self.brownian_noise_factor: Optional[Tuple[float, float]] = None
+        bn_val = self.smart_grace_cfg.get("brownian_noise_factor")
+        if isinstance(bn_val, (list, tuple)) and len(bn_val) == 2:
+            self.brownian_noise_factor = (float(min(bn_val)), float(max(bn_val)))
 
-        # Конфигурации Smart Size и Smart TP
+        # Конфигурации Smart Size и Smart TP (нормализация на старте)
         base_smart_size = copy.deepcopy(DEFAULT_SMART_SIZE)
         ss_cfg = raw_meta.get("smart_size") or self.overrides.get("smart_size")
         if ss_cfg and isinstance(ss_cfg, dict):
             base_smart_size.update(ss_cfg)
-            if "knife_blocker_threshold" in ss_cfg and "knife_blocker_enabled" not in ss_cfg:
-                base_smart_size["knife_blocker_enabled"] = ss_cfg["knife_blocker_threshold"] is not None
+
         self.smart_size_cfg: Dict[str, Any] = base_smart_size
+        self.smart_size_trend_determ: Optional[str] = self.smart_size_cfg.get("trend_determ")
+        
+        # Knife blocker нормализация: пре-инициализируем прямые флаги и порог
+        if ss_cfg and "knife_blocker_threshold" in ss_cfg and "knife_blocker_enabled" not in ss_cfg:
+            self.knife_blocker_enabled: bool = ss_cfg["knife_blocker_threshold"] is not None
+            self.knife_blocker_threshold: int = int(ss_cfg["knife_blocker_threshold"])
+        elif "knife_blocker" in self.smart_size_cfg and isinstance(self.smart_size_cfg["knife_blocker"], dict):
+            kb = self.smart_size_cfg["knife_blocker"]
+            self.knife_blocker_enabled: bool = bool(kb.get("enabled", False))
+            self.knife_blocker_threshold: int = int(kb.get("threshold", 2))
+        else:
+            self.knife_blocker_enabled: bool = bool(self.smart_size_cfg.get("knife_blocker_enabled", False))
+            self.knife_blocker_threshold: int = int(self.smart_size_cfg.get("knife_blocker_threshold", 2))
+        self.smart_size_cfg["knife_blocker_enabled"] = self.knife_blocker_enabled
+        self.smart_size_cfg["knife_blocker_threshold"] = self.knife_blocker_threshold
 
         base_smart_tp = copy.deepcopy(DEFAULT_SMART_TP)
         st_cfg = raw_meta.get("smart_tp") or self.overrides.get("smart_tp")
         if st_cfg and isinstance(st_cfg, dict):
             base_smart_tp.update(st_cfg)
         self.smart_tp_cfg: Dict[str, Any] = base_smart_tp
+        self.smart_tp_trend_determ: Optional[str] = self.smart_tp_cfg.get("trend_determ")
         raw_min_tp = (
             raw_meta.get("min_tp_indent")
             or self.overrides.get("min_tp_indent")
@@ -421,6 +436,13 @@ class StrategyConfig:
             for req_k in ("min_drawdown_pct", "max_slice_pct"):
                 if req_k not in self.cross_recycling_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required cross_side_recycling field: '{req_k}'")
+            self.recycling_min_drawdown_pct: float = float(self.cross_recycling_cfg["min_drawdown_pct"])
+            self.recycling_max_slice_pct: float = float(self.cross_recycling_cfg["max_slice_pct"])
+            self.recycling_max_slice_ratio: float = self.recycling_max_slice_pct / 100.0
+        else:
+            self.recycling_min_drawdown_pct = 0.0
+            self.recycling_max_slice_pct = 0.0
+            self.recycling_max_slice_ratio = 0.0
 
         # 7. Фильтр динамической микро-ступени волатильности (Micro-Step Filter Dome)
         raw_ms_filter = (
