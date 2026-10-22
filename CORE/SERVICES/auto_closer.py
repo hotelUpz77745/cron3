@@ -16,6 +16,9 @@ from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_D
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
+from CORE.SERVICES.stagnation_evaluator import StagnationEvaluator
+from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
+from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -78,235 +81,30 @@ class AutoCloser:
 
     @classmethod
     def match_rule_adaptive(cls, rule: str, eval_val: float, ref_target: float) -> tuple[bool, float]:
-        rule = rule.strip()
-        is_pct = rule.endswith("%")
-        clean_rule = rule[:-1].strip() if is_pct else rule
-
-        op = "=="
-        raw_num = clean_rule
-        for candidate_op in ("<=", ">=", "==", "<", ">"):
-            if clean_rule.startswith(candidate_op):
-                op = candidate_op
-                raw_num = clean_rule[len(candidate_op):].strip()
-                break
-
-        try:
-            val_num = float(raw_num)
-            threshold_val = (val_num / 100.0 * ref_target) if is_pct else val_num
-        except ValueError:
-            logger.warning(f"[AUTO_CLOSER] Invalid rule format: '{rule}'")
-            return False, 0.0
-
-        ops = {
-            "<=": eval_val <= threshold_val,
-            ">=": eval_val >= threshold_val,
-            "==": abs(eval_val - threshold_val) < 1e-4,
-            "<": eval_val < threshold_val,
-            ">": eval_val > threshold_val,
-        }
-        return ops.get(op, False), threshold_val
+        matched, thresh = StagnationEvaluator.match_rule_adaptive(rule, eval_val, ref_target)
+        if matched:
+            cls._last_matched_rule = StagnationEvaluator.last_matched_rule
+        return matched, thresh
 
     @classmethod
     def match_rule_float(cls, rule: str, val: float, ref_target: float = 1.0) -> bool:
-        matched, _ = cls.match_rule_adaptive(rule, val, ref_target)
-        return matched
+        return StagnationEvaluator.match_rule_float(rule, val, ref_target)
 
     @staticmethod
     def parse_card_target(raw_target: Any) -> tuple[Optional[float], bool]:
-        if raw_target is None or raw_target is False:
-            return None, False
-        if isinstance(raw_target, (int, float)):
-            return float(raw_target), True
-        if isinstance(raw_target, dict) and raw_target.get("enabled", True):
-            for k in ("target", "threshold", "val", "value"):
-                if k in raw_target and raw_target[k] is not None:
-                    return float(raw_target[k]), True
-        return None, False
+        return StagnationEvaluator.parse_card_target(raw_target)
 
     @classmethod
     def evaluate_stagnation_target(
-        cls,
-        analytics_dict: dict,
-        pos_cfg: dict
+        cls, analytics_dict: dict, pos_cfg: dict
     ) -> tuple[Optional[float], bool, str, float]:
-        """
-        Вычисляет динамический целевой порог по карте стагнации (stagnation_card).
-        Возвращает (effective_threshold, is_stagnation_active, stag_info, reference_top_target).
-        """
-        if not pos_cfg.get("enabled", True):
-            return None, False, "", 0.0
-
-        base_th = pos_cfg.get("threshold")
-        if base_th == 0 or base_th == 0.0:
-            base_th = None
-
-        if pos_cfg.get("stagnation_enabled") is False:
-            return base_th, False, "", (base_th or 0.0)
-
-        stag_cfg = pos_cfg.get("stagnation")
-        if stag_cfg is None:
-            # Поддержка плоской структуры: stagnation_card или timeframes прямо внутри pos_cfg
-            stag_cfg = pos_cfg if ("stagnation_card" in pos_cfg or "card" in pos_cfg or "timeframes" in pos_cfg) else {}
-
-        if not stag_cfg or not stag_cfg.get("enabled", True):
-            return base_th, False, "", (base_th or 0.0)
-
-        now_ms = int(time.time() * 1000)
-        iter_net = float(analytics_dict.get("iteration_net_profit_usdt", analytics_dict.get("net_profit_usdt", 0.0)))
-        peak_age_h = float(analytics_dict.get("iteration_peak_age_hours", analytics_dict.get("peak_age_hours", 0.0)))
-        velocity = float(analytics_dict.get("iteration_net_velocity", analytics_dict.get("net_velocity", 0.0)))
-        if "iteration_net_velocity" not in analytics_dict and "net_velocity" not in analytics_dict:
-            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
-            active_h = max(0.05, (now_ms - first_ts) / 3600000.0)
-            velocity = round(iter_net / active_h, 2)
-
-        # ------------------------------------------------------------------
-        # 1. РЕЖИМ ГРАДИЕНТНОГО КАСКАДА ПО ТАЙМФРЕЙМАМ (1h -> 6h -> 12h -> 24h)
-        # ------------------------------------------------------------------
-        tf_dict = stag_cfg.get("timeframes") or pos_cfg.get("timeframes")
-        if tf_dict and isinstance(tf_dict, dict):
-            # Главный инвариант: фиксация строго при положительном Net
-            if iter_net <= 0.0:
-                return None, False, "Net <= 0", 0.0
-
-            first_ts = analytics_dict.get("iteration_start_ts", analytics_dict.get("first_trade_ts", now_ms))
-            iter_age_hours = max(0.0, (now_ms - first_ts) / 3600000.0)
-            eval_val = velocity if stag_cfg.get("mode", "velocity") == "velocity" else peak_age_h
-
-            tf_keys = list(tf_dict.keys())
-            priority_order = ["1h", "6h", "12h", "24h"]
-            sorted_keys = [k for k in priority_order if k in tf_dict] + [k for k in tf_keys if k not in priority_order]
-
-            matched_any_target = None
-            matched_any_info = ""
-
-            for tf_key in sorted_keys:
-                tf_cfg = tf_dict[tf_key]
-                if not isinstance(tf_cfg, dict) or not tf_cfg.get("enabled", True):
-                    continue
-                min_age = float(tf_cfg.get("min_age_hours", 0.0))
-                if iter_age_hours < min_age:
-                    continue
-
-                card = tf_cfg.get("card") or tf_cfg.get("stagnation_card", {})
-                if not card:
-                    continue
-
-                for rule, raw_target in card.items():
-                    target_float, is_en = cls.parse_card_target(raw_target)
-                    if not is_en or target_float is None:
-                        continue
-                    is_matched, _ = cls.match_rule_adaptive(rule, eval_val, target_float)
-                    if is_matched:
-                        safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                        matched_any_target = target_float
-                        matched_any_info = f"[{tf_key.upper()} matched '{safe_rule}' (vel {eval_val:.2f}$/h, age {iter_age_hours:.1f}h) -> target {target_float} USDT]"
-                        if iter_net >= target_float:
-                            cls._last_matched_rule = f"{tf_key}:{rule}"
-                            return target_float, True, matched_any_info, target_float
-                        else:
-                            # Правило скорости подошло, но профита не хватает -> спуск к следующему таймфрейму
-                            break
-
-            return matched_any_target, False, matched_any_info, (matched_any_target or 0.0)
-
-        # ------------------------------------------------------------------
-        # 2. ЛЕГАСИ РЕЖИМ: ОДНОРОДНАЯ КАРТА СО СТАТИЧЕСКИМ MIN_FLOOR
-        card = stag_cfg.get("stagnation_card") or stag_cfg.get("card", {})
-        if not card:
-            return base_th, False, "", (base_th or 0.0)
-
-        min_floor = float(stag_cfg.get("min_floor", 7.0))
-        mode = stag_cfg.get("mode", "auto")
-        velocity_pct_of = stag_cfg.get("velocity_pct_of", "top_target")
-
-        if mode == "auto":
-            first_key = next(iter(card.keys()), "")
-            mode = "time" if ("<" in first_key and any(c.isdigit() and int(c) >= 3 for c in first_key) and "%" not in first_key) else "velocity"
-
-        eval_val = velocity if mode == "velocity" else peak_age_h
-        active_targets: list[float] = [
-            float(t) for rt in card.values()
-            for t, is_en in [cls.parse_card_target(rt)]
-            if is_en and t is not None
-        ]
-        if not active_targets:
-            return base_th, False, "", float(base_th or 0.0)
-
-        top_target = max(active_targets)
-        reference_top = float(base_th if base_th is not None else top_target)
-
-        for rule, raw_target in card.items():
-            target_float, is_en = cls.parse_card_target(raw_target)
-            if not is_en or target_float is None:
-                continue
-            ref_target = reference_top if velocity_pct_of == "top_target" else target_float
-            is_matched, calc_threshold = cls.match_rule_adaptive(rule, eval_val, ref_target)
-            if is_matched:
-                cls._last_matched_rule = rule
-                effective_target = float(max(target_float, min_floor))
-                unit = "$/h" if mode == "velocity" else "h"
-                safe_rule = rule.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-                info = f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' ({calc_threshold:.2f}{unit}) -> target {effective_target} USDT]" if "%" in rule else f"[{mode.upper()} {eval_val:.2f}{unit} matched '{safe_rule}' -> target {effective_target} USDT]"
-                return effective_target, effective_target < reference_top, info, reference_top
-
-        cls._last_matched_rule = ""
-        return (base_th if base_th is not None else reference_top), False, "", reference_top
+        target, is_stag, info, ref = StagnationEvaluator.evaluate_stagnation_target(analytics_dict, pos_cfg)
+        cls._last_matched_rule = StagnationEvaluator.last_matched_rule
+        return target, is_stag, info, ref
 
     @classmethod
     def extract_toxicity_metrics(cls, strat_cfg, analytics_dict: dict, bot_core) -> tuple[float, float, float, float]:
-        """
-        Извлекает компоненты инвентаря для расчета Toxicity Score:
-          - margin_load: текущая загрузка маржи (0.0..1.0)
-          - depth_ratio: максимальное погружение сетки (0.0..1.0)
-          - float_ratio: отношение висящего минуса к накопленному профиту
-          - delta_recovery: степень рассасывания ямы просадки (0.0..1.0)
-        """
-        cur_floating = float(analytics_dict.get("unrealized_pnl_usdt", 0.0))
-        max_dd = float(analytics_dict.get("max_drawdown_usdt", cur_floating))
-        realized = float(analytics_dict.get("iteration_realized_pnl_usdt", analytics_dict.get("realized_pnl_usdt", 0.0)))
-        deposit = float(getattr(strat_cfg, "start_balance_usdt", 4000.0))
-
-        # Margin Load
-        total_margin = 0.0
-        per_coin = analytics_dict.get("per_coin", {})
-        if isinstance(per_coin, dict) and per_coin:
-            for c_data in per_coin.values():
-                if isinstance(c_data, dict):
-                    total_margin += float(c_data.get("current_margin_usdt", 0.0))
-        margin_load = (total_margin / deposit) if deposit > 0 else 0.0
-
-        # Max Depth Ratio
-        max_step = 0
-        fsm_mgr = getattr(bot_core, "runtime_manager", None)
-        fsm_states = getattr(fsm_mgr, "fsm_states", None) if fsm_mgr else getattr(bot_core, "position_states", None)
-        if isinstance(fsm_states, dict) and fsm_states:
-            for sym_sides in fsm_states.values():
-                if isinstance(sym_sides, dict):
-                    for st in sym_sides.values():
-                        step = getattr(st, "active_step", 0)
-                        if isinstance(step, int) and step > max_step:
-                            max_step = step
-                elif hasattr(sym_sides, "active_step"):
-                    step = getattr(sym_sides, "active_step", 0)
-                    if isinstance(step, int) and step > max_step:
-                        max_step = step
-        elif isinstance(per_coin, dict) and per_coin:
-            for c_data in per_coin.values():
-                if isinstance(c_data, dict):
-                    g_load = float(c_data.get("current_grid_load_pct", 0.0))
-                    approx_step = int(g_load / 12.5)
-                    if approx_step > max_step:
-                        max_step = approx_step
-        depth_ratio = min(1.0, max_step / 8.0)
-
-        # Float Ratio
-        float_ratio = abs(cur_floating) / (abs(cur_floating) + max(0.0, realized) + 1.0)
-
-        # Delta Recovery
-        delta_recovery = ToxicityEngine.calculate_delta_recovery(cur_floating, max_dd)
-
-        return margin_load, depth_ratio, float_ratio, delta_recovery
+        return ToxicityMetricsExtractor.extract(strat_cfg, analytics_dict, bot_core)
 
     async def check(self):
         if self._is_closing:
@@ -325,10 +123,17 @@ class AutoCloser:
         analytics_data = Utils.read_json_file(GLOBAL_ANALYTICS_JSON)
         if not analytics_data:
             return
-        CLOSE_COOLDOWN_SEC = 45.0
         now_sec = time.time()
         now_ms = int(now_sec * 1000)
 
+        # 1. Стратегические купола
+        await self._check_strategy_domes(app_data, app_json_path, now_sec, now_ms, fsm)
+
+        # 2. Глобальный портфельный автозакрыватель
+        await self._check_portfolio(app_data, app_json_path, analytics_data, now_sec, now_ms, fsm)
+
+    async def _check_strategy_domes(self, app_data: dict, app_json_path: Any, now_sec: float, now_ms: int, fsm: Any):
+        CLOSE_COOLDOWN_SEC = 45.0
         # 1. СТРАТЕГИЧЕСКИЕ КУПОЛА (PER-STRATEGY AUTO-CLOSING)
         active_strats = {}
         if hasattr(self.bot_core, "strategy_registry"):
@@ -601,79 +406,30 @@ class AutoCloser:
                 try:
                     self._is_closing = True
                     self._last_close_ts[strat_id] = time.time()
-                    await self.bot_core.close_strategy_positions(strat_id)
-                    self._trailing_ratchet_state[strat_id] = {}
-
-                    # Считываем свежие данные аналитики после закрытия ордеров
-                    fresh_strat_analytics = Utils.read_json_file(strat_stats_path) if strat_stats_path.exists() else strat_analytics
-                    settled_net = round(float(fresh_strat_analytics.get("net_profit_usdt", strat_net)), 4)
-                    settled_realized = round(float(fresh_strat_analytics.get("realized_pnl_net_usdt", fresh_strat_analytics.get("realized_pnl_usdt", 0.0))), 4)
-
-                    now_ms = int(time.time() * 1000)
-                    fresh_strat_analytics["iteration_index"] = next_iter_idx
-                    fresh_strat_analytics["iteration_start_net_profit_usdt"] = settled_net
-                    fresh_strat_analytics["iteration_net_profit_usdt"] = 0.0
-                    fresh_strat_analytics["iteration_start_realized_pnl_usdt"] = settled_realized
-                    fresh_strat_analytics["iteration_realized_pnl_usdt"] = 0.0
-                    fresh_strat_analytics["iteration_start_ts"] = now_ms
-                    fresh_strat_analytics["iteration_peak_net_profit_usdt"] = 0.0
-                    fresh_strat_analytics["iteration_peak_ts"] = now_ms
-                    fresh_strat_analytics["iteration_peak_age_hours"] = 0.0
-                    fresh_strat_analytics["iteration_net_velocity"] = 0.0
-                    if strat_stats_path:
-                        Utils.atomic_write_json(strat_stats_path, fresh_strat_analytics, indent=4)
-
-                    try:
-                        c_file = CACHE_DIR / "iteration_state.json"
-                        c_dict = json.loads(c_file.read_text(encoding="utf-8")) if c_file.exists() else {}
-                        prev_entry = c_dict.get(strat_id, {})
-                        c_dict[strat_id] = {
-                            "iteration_index": next_iter_idx,
-                            "iteration_start_net_profit_usdt": settled_net,
-                            "iteration_start_realized_pnl_usdt": settled_realized,
-                            "iteration_realized_pnl_usdt": 0.0,
-                            "iteration_start_ts": now_ms,
-                            "iteration_peak_net_profit_usdt": 0.0,
-                            "iteration_peak_ts": now_ms,
-                            "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", 0.0),
-                            "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
-                            "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
-                            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                        }
-                        Utils.atomic_write_json(c_file, c_dict, indent=4)
-                    except Exception as ce:
-                        logger.error(f"[AUTO_CLOSER][{strat_id}] Error saving iteration cache: {ce}")
-
-                    if fsm:
-                        c_type = strat_msg.split("(")[1].split(")")[0] if "(" in strat_msg else "AUTO-CLOSE"
-                        fsm.mark_iteration_closed(
-                            strat_id=strat_id,
-                            iter_idx=iter_idx,
-                            details={
-                                "close_type": c_type,
-                                "iter_net": iter_net,
-                                "strat_net": settled_net,
-                                "settled_realized": settled_realized,
-                            }
-                        )
-
-                    if hasattr(self.bot_core, "fsm_states"):
-                        for sym in strat_cfg.symbols:
-                            if sym in self.bot_core.fsm_states:
-                                for s_side in ("LONG", "SHORT"):
-                                    if s_side in self.bot_core.fsm_states[sym]:
-                                        self.bot_core.fsm_states[sym][s_side].recent_closes = []
-
-                    Utils.write_json_file(app_json_path, app_data)
-                    if strat_msg and getattr(self.bot_core, 'notifier', None):
-                        strat_msg = strat_msg.replace("базовая точка Net: <b>0.00 USDT</b>", f"базовая точка Net: <b>{settled_net:+.2f} USDT</b>")
-                        await self.bot_core.notifier.send_alert(strat_msg)
-
+                    await DomeCloserExecutor.execute_close(
+                        bot_core=self.bot_core,
+                        strat_id=strat_id,
+                        is_global=False,
+                        strat_cfg=strat_cfg,
+                        iter_idx=iter_idx,
+                        next_iter_idx=next_iter_idx,
+                        iter_net=iter_net,
+                        strat_net=strat_net,
+                        stats_path=strat_stats_path,
+                        raw_analytics=strat_analytics,
+                        app_data=app_data,
+                        app_json_path=app_json_path,
+                        action_msg=strat_msg,
+                        trailing_ratchet_state=self._trailing_ratchet_state,
+                    )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")
                 finally:
                     self._is_closing = False
 
+
+    async def _check_portfolio(self, app_data: dict, app_json_path: Any, analytics_data: dict, now_sec: float, now_ms: int, fsm: Any):
+        CLOSE_COOLDOWN_SEC = 45.0
         # 2. ГЛОБАЛЬНЫЙ ПОРТФЕЛЬНЫЙ AUTO-CLOSING (если задан на верхнем уровне)
         auto_cfg = app_data.get("auto_closing")
         if not auto_cfg:
@@ -863,55 +619,22 @@ class AutoCloser:
         if triggered:
             try:
                 self._last_close_ts["__global__"] = time.time()
-                await self.bot_core.close_all_positions()
-                self._trailing_ratchet_state["__global__"] = {}
-
-                now_ms = int(time.time() * 1000)
-                analytics_data["iteration_index"] = next_iter_idx_g
-                analytics_data["iteration_start_net_profit_usdt"] = new_iter_start_net_g
-                analytics_data["iteration_net_profit_usdt"] = 0.0
-                analytics_data["iteration_start_ts"] = now_ms
-                analytics_data["iteration_peak_net_profit_usdt"] = 0.0
-                analytics_data["iteration_peak_ts"] = now_ms
-                analytics_data["iteration_peak_age_hours"] = 0.0
-                analytics_data["iteration_net_velocity"] = 0.0
-                Utils.atomic_write_json(GLOBAL_ANALYTICS_JSON, analytics_data, indent=4)
-
-                try:
-                    c_file = CACHE_DIR / "iteration_state.json"
-                    c_dict = json.loads(c_file.read_text(encoding="utf-8")) if c_file.exists() else {}
-                    c_dict["__global__"] = {
-                        "iteration_index": next_iter_idx_g,
-                        "iteration_start_net_profit_usdt": new_iter_start_net_g,
-                        "iteration_start_ts": now_ms,
-                        "iteration_peak_net_profit_usdt": 0.0,
-                        "iteration_peak_ts": now_ms,
-                        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
-                    }
-                    Utils.atomic_write_json(c_file, c_dict, indent=4)
-                except Exception as ce:
-                    logger.error(f"[AUTO_CLOSER] Error saving global iteration cache: {ce}")
-
-                if fsm:
-                    fsm.mark_iteration_closed(
-                        strat_id="__global__",
-                        iter_idx=iter_idx_g,
-                        details={
-                            "close_type": "PORTFOLIO AUTO-CLOSE",
-                            "iter_net": iter_net_g,
-                            "strat_net": new_iter_start_net_g,
-                        }
-                    )
-
-                if hasattr(self.bot_core, "fsm_states"):
-                    for sym, sides in self.bot_core.fsm_states.items():
-                        for s_side, s_obj in sides.items():
-                            if hasattr(s_obj, "recent_closes"):
-                                s_obj.recent_closes = []
-
-                Utils.write_json_file(app_json_path, app_data)
-                if action_msg and getattr(self.bot_core, 'notifier', None):
-                    await self.bot_core.notifier.send_alert(action_msg)
+                await DomeCloserExecutor.execute_close(
+                    bot_core=self.bot_core,
+                    strat_id="__global__",
+                    is_global=True,
+                    strat_cfg=None,
+                    iter_idx=iter_idx_g,
+                    next_iter_idx=next_iter_idx_g,
+                    iter_net=iter_net_g,
+                    strat_net=net_usdt,
+                    stats_path=GLOBAL_ANALYTICS_JSON,
+                    raw_analytics=analytics_data,
+                    app_data=app_data,
+                    app_json_path=app_json_path,
+                    action_msg=action_msg,
+                    trailing_ratchet_state=self._trailing_ratchet_state,
+                )
             except Exception as e:
                 logger.error(f"[AUTO_CLOSER] Error during portfolio auto-close: {e}")
             finally:
