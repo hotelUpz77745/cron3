@@ -239,11 +239,5 @@ TRADE_VELOCITY_BENCHMARK_TRADES: float = float(TRADE_VELOCITY_CFG.get("benchmark
 TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slice")
 
 
-# ============================================================
-# RISK SYSTEM
-# ============================================================
-RISK_SYSTEM_CFG: dict = _CFG.get("risk_system", {})
-RISK_SYSTEM_ENABLED: bool = bool(RISK_SYSTEM_CFG.get("enabled", False))
-RISK_SYSTEM_MIN_BALANCE: Optional[float] = float(RISK_SYSTEM_CFG["min_balance_threshold_usdt"]) if RISK_SYSTEM_CFG.get("min_balance_threshold_usdt") is not None else None
-RISK_SYSTEM_MAX_BALANCE: Optional[float] = float(RISK_SYSTEM_CFG["max_balance_threshold_usdt"]) if RISK_SYSTEM_CFG.get("max_balance_threshold_usdt") is not None else None
+
 

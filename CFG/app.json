@@ -174,13 +174,6 @@
             "_info_on_enabled_true": "When enabled=true, bot prints reminders for /backup and CLI export."
         }
     },
-    "risk_system": {
-        "enabled": false,
-        "min_balance_threshold_usdt": null,
-        "max_balance_threshold_usdt": null,
-        "_desc_min_balance_threshold_usdt": "Global risk handbrake: minimum balance threshold in USDT. If cur_balance_usdt falls below this, bot liquidates all positions at market, pauses and alerts Telegram. null = disabled.",
-        "_desc_max_balance_threshold_usdt": "Global profit handbrake: maximum balance threshold in USDT. If cur_balance_usdt rises above this, bot liquidates all positions at market, pauses and alerts Telegram. null = disabled."
-    },
     "trade_velocity": {
         "enabled": true,
         "timeframe_hours": 6.0,
