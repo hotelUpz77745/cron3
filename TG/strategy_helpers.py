@@ -92,7 +92,7 @@ class StrategyMetadataHelper:
         else:
             final_def = 0.0
         invest_size = final_def if isinstance(raw_inv, dict) else float(raw_inv or final_def)
-        leverage = u_meta.get("leverage", 20)
+        leverage = strat_app.get("leverage") or u_meta.get("leverage", 20)
         start_bal = float(
             strat_app.get("start_balance_usdt")
             or (strat_app.get("analytics") or {}).get("start_balance_usdt")

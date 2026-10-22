@@ -342,6 +342,12 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
             self.assertIn("tp_map", data["SHORT"])
             self.assertFalse(data["SHORT"].get("_inheritance_base_side", True))
 
+        # 6. Проверка StrategyMetadataHelper: чтение client leverage из app.json
+        from TG.strategy_helpers import StrategyMetadataHelper
+        u17_meta = StrategyMetadataHelper.get_strategy_meta("u17_stephensonE__trailing_ratchet")
+        self.assertEqual(u17_meta["leverage"], 20)
+        self.assertIn("Stephenson", u17_meta["name"])
+
     # =========================================================================
     # 7. УПРАВЛЕНИЕ first_order_weight_regime ЧЕРЕЗ enabled: true / false
     # =========================================================================
