@@ -268,6 +268,7 @@ TRADE_VELOCITY_MIN_ACCUMULATION_HOURS: float = float(TRADE_VELOCITY_CFG.get("min
 TRADE_VELOCITY_BENCHMARK_TRADES: float = float(TRADE_VELOCITY_CFG.get("benchmark_trades_per_coin", 10.0))
 TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slice")
 
-
-
-
+# ============================================================
+# NUMERICAL PRECISION & EPSILONS (Samsonov Protocol Rule 3 & 3.1)
+# ============================================================
+FLOAT_ZERO_EPSILON: float = 1e-6
