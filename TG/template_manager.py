@@ -139,7 +139,7 @@ class TemplateManager:
             if side in user_data and side in final_data:
                 for key in user_data[side].keys():
                     if key in user_data[side]:
-                        if isinstance(base_data[side][key], dict):
+                        if isinstance(final_data[side].get(key), dict):
                             # Для вложенных словарей (grid, tp_map)
                             if key not in final_data[side]:
                                 final_data[side][key] = {}

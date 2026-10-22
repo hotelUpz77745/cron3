@@ -151,6 +151,9 @@ class LedgerRecorder:
         rebound_pct: float,
         peel_qty: float,
         rem_pos_qty: float,
+        avg_entry_price: float = 0.0,
+        realized_loss: float = 0.0,
+        **kwargs,
     ):
         """Записывает операцию Sub-grid Peel в бухгалтерский леджер и обновляет агрегированную аналитику."""
         try:
@@ -160,6 +163,13 @@ class LedgerRecorder:
                 micro_pnl = round((float(peel_price) - float(fill_price)) * float(peel_qty), 4)
             else:
                 micro_pnl = round((float(fill_price) - float(peel_price)) * float(peel_qty), 4)
+
+            # Если realized_loss не передан явно, но известна средняя цена позиции, рассчитываем биржевой убыток
+            if abs(float(realized_loss)) <= 1e-8 and avg_entry_price > 0:
+                if str(side).upper() == "LONG":
+                    realized_loss = round((float(peel_price) - float(avg_entry_price)) * float(peel_qty), 4)
+                else:
+                    realized_loss = round((float(avg_entry_price) - float(peel_price)) * float(peel_qty), 4)
 
             # 1. Запись в общий peels_ledger.txt
             cnt = 1
@@ -184,6 +194,7 @@ class LedgerRecorder:
                 peel_vol_usdt,
                 micro_pnl,
                 round(float(rem_pos_qty), 4),
+                round(float(realized_loss), 4),
             ]
 
             with open(self.peels_ledger, mode="a", newline="", encoding="utf-8") as f:
@@ -199,7 +210,7 @@ class LedgerRecorder:
                         writer.writerow([
                             "Id", "Timestamp (UTC)", "Strategy", "Symbol", "Side", "Level",
                             "Fill Price", "Peel Price", "Rebound %", "Peel Qty",
-                            "Peel Vol (USDT)", "Micro PnL (USDT)", "Remaining Pos Qty"
+                            "Peel Vol (USDT)", "Micro PnL (USDT)", "Remaining Pos Qty", "Realized Loss (USDT)"
                         ])
                 s_cnt = 1
                 try:
@@ -217,26 +228,28 @@ class LedgerRecorder:
             if data:
                 if "toxic_defense" not in data:
                     data["toxic_defense"] = {
-                        "subgrid_peeling": {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0},
+                        "subgrid_peeling": {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0, "peel_loss_usdt": 0.0},
                         "cross_recycling": {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0}
                     }
-                sg = data["toxic_defense"].setdefault("subgrid_peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0})
+                sg = data["toxic_defense"].setdefault("subgrid_peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0, "peel_loss_usdt": 0.0})
                 sg["events_count"] = int(sg.get("events_count", 0)) + 1
                 sg["total_peeled_usdt"] = round(float(sg.get("total_peeled_usdt", 0.0)) + peel_vol_usdt, 4)
                 sg["locked_micro_pnl_usdt"] = round(float(sg.get("locked_micro_pnl_usdt", 0.0)) + micro_pnl, 4)
+                sg["peel_loss_usdt"] = round(float(sg.get("peel_loss_usdt", 0.0)) + float(realized_loss), 4)
 
                 cdata = data.setdefault("per_coin", {}).setdefault(symbol, {})
-                cpeel = cdata.setdefault("peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0})
+                cpeel = cdata.setdefault("peeling", {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0, "peel_loss_usdt": 0.0})
                 cpeel["events_count"] = int(cpeel.get("events_count", 0)) + 1
                 cpeel["total_peeled_usdt"] = round(float(cpeel.get("total_peeled_usdt", 0.0)) + peel_vol_usdt, 4)
                 cpeel["locked_micro_pnl_usdt"] = round(float(cpeel.get("locked_micro_pnl_usdt", 0.0)) + micro_pnl, 4)
+                cpeel["peel_loss_usdt"] = round(float(cpeel.get("peel_loss_usdt", 0.0)) + float(realized_loss), 4)
 
                 self.manager._write_data(data)
                 self.manager._update_strategies_stats(data)
 
             logger.info(
                 f"[{strategy_id}][{symbol}] 🍊 Subgrid Peel accounted: Vol ${peel_vol_usdt:.2f}, "
-                f"Micro PnL ${micro_pnl:+.2f}, Rem: {rem_pos_qty:.4f}"
+                f"Realized Loss ${realized_loss:+.2f}, Micro PnL ${micro_pnl:+.2f}, Rem: {rem_pos_qty:.4f}"
             )
         except Exception as e:
             logger.error(f"[record_subgrid_peel] Error recording peel: {e}")

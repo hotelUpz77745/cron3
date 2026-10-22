@@ -122,33 +122,14 @@ class StrategyStatsEngine:
             strat_init_bal = float(strat_cfg.analytics_cfg.get("start_balance_usdt", strat_cfg.start_balance_usdt))
             if not strat_data:
                 strat_data = {
-                    "universe_id": strat_id,
-                    "name": strat_cfg.name,
-                    "start_balance_usdt": strat_init_bal,
-                    "_rebased_start_balance_usdt": strat_init_bal,
-                    "first_trade_ts": now_ms,
-                    "cur_balance_usdt": strat_init_bal,
-                    "peak_balance_usdt": strat_init_bal,
-                    "min_balance_usdt": strat_init_bal,
-                    "_current_trough_usdt": strat_init_bal,
-                    "total_trades": 0,
-                    "winning_trades": 0,
-                    "winrate_pct": 0.0,
-                    "realized_pnl_usdt": 0.0,
-                    "net_profit_usdt": 0.0,
-                    "unrealized_pnl_usdt": 0.0,
-                    "max_drawdown_usdt": 0.0,
-                    "max_drawdown_pct": 0.0,
-                    "recovery_factor": 0.0,
-                    "iteration_index": 1,
-                    "iteration_start_net_profit_usdt": 0.0,
-                    "iteration_net_profit_usdt": 0.0,
-                    "iteration_start_ts": now_ms,
-                    "iteration_peak_net_profit_usdt": 0.0,
-                    "iteration_peak_ts": now_ms,
-                    "iteration_peak_age_hours": 0.0,
-                    "iteration_net_velocity": 0.0,
-                    "per_coin": {},
+                    "universe_id": strat_id, "name": strat_cfg.name, "start_balance_usdt": strat_init_bal,
+                    "_rebased_start_balance_usdt": strat_init_bal, "first_trade_ts": now_ms, "cur_balance_usdt": strat_init_bal,
+                    "peak_balance_usdt": strat_init_bal, "min_balance_usdt": strat_init_bal, "_current_trough_usdt": strat_init_bal,
+                    "total_trades": 0, "winning_trades": 0, "winrate_pct": 0.0, "realized_pnl_usdt": 0.0,
+                    "net_profit_usdt": 0.0, "unrealized_pnl_usdt": 0.0, "max_drawdown_usdt": 0.0, "max_drawdown_pct": 0.0,
+                    "recovery_factor": 0.0, "iteration_index": 1, "iteration_start_net_profit_usdt": 0.0,
+                    "iteration_net_profit_usdt": 0.0, "iteration_start_ts": now_ms, "iteration_peak_net_profit_usdt": 0.0,
+                    "iteration_peak_ts": now_ms, "iteration_peak_age_hours": 0.0, "iteration_net_velocity": 0.0, "per_coin": {},
                 }
 
             strat_symbols = list(strat_cfg.symbols)
@@ -432,7 +413,12 @@ class StrategyStatsEngine:
             strat_peel_txt = self.manager.ledgers_dir / f"peels_ledger_{strat_id}.txt"
             strat_rec_txt = self.manager.ledgers_dir / f"recycling_ledger_{strat_id}.txt"
 
-            strat_peel_cnt, strat_peel_vol, strat_peel_pnl = 0, 0.0, 0.0
+            # Toxic Defense Aggregation for Strategy (Source of Truth: Strategy Ledgers)
+            strat_peel_txt = self.manager.ledgers_dir / f"peels_ledger_{strat_id}.txt"
+            strat_rec_txt = self.manager.ledgers_dir / f"recycling_ledger_{strat_id}.txt"
+
+            strat_peel_cnt, strat_peel_vol, strat_peel_pnl, strat_peel_loss = 0, 0.0, 0.0, 0.0
+            c_peels, c_recs = {}, {}
             if strat_peel_txt.exists():
                 try:
                     with open(strat_peel_txt, "r", encoding="utf-8") as pf:
@@ -440,15 +426,19 @@ class StrategyStatsEngine:
                         next(r, None)
                         for row in r:
                             if len(row) >= 12:
-                                strat_peel_cnt += 1
-                                strat_peel_vol += float(row[10])
-                                strat_peel_pnl += float(row[11])
+                                s, v, m = row[3], float(row[10]), float(row[11])
+                                l = float(row[13]) if len(row) >= 14 else m
+                                strat_peel_cnt += 1; strat_peel_vol += v; strat_peel_pnl += m; strat_peel_loss += l
+                                cp = c_peels.setdefault(s, {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0, "peel_loss_usdt": 0.0})
+                                cp["events_count"] += 1; cp["total_peeled_usdt"] = round(cp["total_peeled_usdt"] + v, 4)
+                                cp["locked_micro_pnl_usdt"] = round(cp["locked_micro_pnl_usdt"] + m, 4); cp["peel_loss_usdt"] = round(cp["peel_loss_usdt"] + l, 4)
                 except Exception:
                     pass
             if strat_peel_cnt == 0:
                 strat_peel_cnt = sum(c.get("peeling", {}).get("events_count", 0) for c in strat_per_coin.values())
                 strat_peel_vol = sum(c.get("peeling", {}).get("total_peeled_usdt", 0.0) for c in strat_per_coin.values())
                 strat_peel_pnl = sum(c.get("peeling", {}).get("locked_micro_pnl_usdt", 0.0) for c in strat_per_coin.values())
+                strat_peel_loss = sum(c.get("peeling", {}).get("peel_loss_usdt", 0.0) for c in strat_per_coin.values())
 
             strat_rec_cnt, strat_rec_vol, strat_rec_spent, strat_rec_absorbed = 0, 0.0, 0.0, 0.0
             if strat_rec_txt.exists():
@@ -458,10 +448,11 @@ class StrategyStatsEngine:
                         next(r, None)
                         for row in r:
                             if len(row) >= 13:
-                                strat_rec_cnt += 1
-                                strat_rec_vol += float(row[10])
-                                strat_rec_absorbed += float(row[11])
-                                strat_rec_spent += float(row[12])
+                                s, v, l, sp = row[3], float(row[10]), float(row[11]), float(row[12])
+                                strat_rec_cnt += 1; strat_rec_vol += v; strat_rec_absorbed += l; strat_rec_spent += sp
+                                cr = c_recs.setdefault(s, {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0})
+                                cr["events_count"] += 1; cr["burned_volume_usdt"] = round(cr["burned_volume_usdt"] + v, 4)
+                                cr["loss_absorbed_usdt"] = round(cr["loss_absorbed_usdt"] + l, 4); cr["profit_spent_usdt"] = round(cr["profit_spent_usdt"] + sp, 4)
                 except Exception:
                     pass
             if strat_rec_cnt == 0:
@@ -470,8 +461,16 @@ class StrategyStatsEngine:
                 strat_rec_spent = sum(c.get("cross_recycling", {}).get("profit_spent_usdt", 0.0) for c in strat_per_coin.values())
                 strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
 
+            for sym, cd in strat_per_coin.items():
+                if sym in c_peels: cd["peeling"] = c_peels[sym]
+                if sym in c_recs: cd["cross_recycling"] = c_recs[sym]
+                pl = abs(min(0.0, float(cd.get("peeling", {}).get("peel_loss_usdt", 0.0))))
+                rl = abs(float(cd.get("cross_recycling", {}).get("loss_absorbed_usdt", cd.get("cross_recycling", {}).get("profit_spent_usdt", 0.0))))
+                r_net = float(cd.get("realized_pnl_net_usdt", cd.get("realized_pnl_usdt", 0.0)))
+                cd["gross_realized_usdt"] = round(r_net + pl + rl + abs(float(cd.get("commission_usdt", 0.0))) - float(cd.get("funding_usdt", 0.0)), 4)
+
             strat_data["toxic_defense"] = {
-                "subgrid_peeling": {"events_count": strat_peel_cnt, "total_peeled_usdt": round(strat_peel_vol, 4), "locked_micro_pnl_usdt": round(strat_peel_pnl, 4)},
+                "subgrid_peeling": {"events_count": strat_peel_cnt, "total_peeled_usdt": round(strat_peel_vol, 4), "peel_loss_usdt": round(strat_peel_loss, 4), "locked_micro_pnl_usdt": round(strat_peel_pnl, 4)},
                 "cross_recycling": {"events_count": strat_rec_cnt, "burned_volume_usdt": round(strat_rec_vol, 4), "profit_spent_usdt": round(strat_rec_spent, 4), "loss_absorbed_usdt": round(strat_rec_absorbed, 4)},
             }
 

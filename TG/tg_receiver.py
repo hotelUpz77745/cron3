@@ -466,6 +466,19 @@ class TelegramReceiver:
                     if float(cinfo.get("risk_reward_ratio", 0.0)) != 0:
                         coin_entry["risk_reward_ratio"] = round((coin_entry["risk_reward_ratio"] + float(cinfo.get("risk_reward_ratio", 0.0))) / 2.0, 4) if coin_entry["risk_reward_ratio"] != 0 else float(cinfo.get("risk_reward_ratio", 0.0))
 
+                    coin_peel = cinfo.get("peeling", {})
+                    coin_rec = cinfo.get("cross_recycling", {})
+                    p_loss = abs(float(coin_peel.get("peel_loss_usdt", 0.0)))
+                    r_loss = abs(float(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
+                    c_gross = float(cinfo.get("gross_realized_usdt", 0.0))
+                    if c_gross <= 0.0:
+                        c_gross = float(cinfo.get("realized_pnl_net_usdt", cinfo.get("realized_pnl_usdt", 0.0))) + p_loss + r_loss
+                    coin_entry["peel_loss_usdt"] = round(coin_entry.get("peel_loss_usdt", 0.0) + p_loss, 4)
+                    coin_entry["rec_loss_usdt"] = round(coin_entry.get("rec_loss_usdt", 0.0) + r_loss, 4)
+                    coin_entry["peel_count"] = int(coin_entry.get("peel_count", 0)) + int(coin_peel.get("events_count", 0))
+                    coin_entry["rec_count"] = int(coin_entry.get("rec_count", 0)) + int(coin_rec.get("events_count", 0))
+                    coin_entry["gross_realized_usdt"] = round(coin_entry.get("gross_realized_usdt", 0.0) + c_gross, 4)
+
             except Exception as e:
                 logger.error(f"Error parsing {p}: {e}")
 
@@ -1724,9 +1737,21 @@ class TelegramReceiver:
 
             cdata = agg_per_coin[symbol]
             u_count = cdata.get("universes_active", 0)
+            p_loss = abs(float(cdata.get("peel_loss_usdt", 0.0)))
+            r_loss = abs(float(cdata.get("rec_loss_usdt", 0.0)))
+            p_cnt = int(cdata.get("peel_count", 0))
+            r_cnt = int(cdata.get("rec_count", 0))
+            gross_tp = float(cdata.get("gross_realized_usdt", 0.0))
+            if gross_tp <= 0.0:
+                gross_tp = float(cdata.get("realized_pnl_net_usdt", 0.0)) + p_loss + r_loss
+            gross_tp = max(0.0, round(gross_tp, 2))
+
             msg_coins = f"<b>🪙 PORTFOLIO METRICS: {symbol}</b> (Все купола: {u_count})\n\n"
             msg_coins += f"  • Trades: <b>{cdata.get('total_trades', 0)}</b> (Wins: <b>{cdata.get('winning_trades', 0)}</b>)\n"
             msg_coins += f"  • Net Profit: <b>{cdata.get('net_profit_usdt', 0.0):,.2f}</b> USDT\n"
+            msg_coins += f"  • Чистый TP (без сжога): <b>+{gross_tp:,.2f}</b> USDT\n"
+            msg_coins += f"  • Сожжено на пиллинге: <b>-{p_loss:,.2f}</b> USDT ({p_cnt} срез.)\n"
+            msg_coins += f"  • Сожжено на ресайклере: <b>-{r_loss:,.2f}</b> USDT ({r_cnt} сжиг.)\n"
             msg_coins += f"  • Realized (Net): <b>{cdata.get('realized_pnl_net_usdt', 0.0):,.2f}</b> USDT\n"
             msg_coins += f"  • Fees: Comm <b>{cdata.get('commission_usdt', 0.0):,.2f}</b> / Fund <b>{cdata.get('funding_usdt', 0.0):,.2f}</b>\n"
             msg_coins += f"  • Max Drawdown: <b>{cdata.get('max_drawdown', 0.0):,.2f}</b> USDT\n"
@@ -2112,7 +2137,18 @@ class TelegramReceiver:
                     else:
                         medal = "▪️"
                         
+                    coin_peel = cdata.get("peeling", {})
+                    coin_rec = cdata.get("cross_recycling", {})
+                    p_loss = abs(safe_float(coin_peel.get("peel_loss_usdt", 0.0)))
+                    r_loss = abs(safe_float(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
+                    realized_net = round(safe_float(cdata.get("realized_pnl_net_usdt", 0)), 2)
+                    gross_tp = safe_float(cdata.get("gross_realized_usdt", 0.0))
+                    if gross_tp <= 0.0:
+                        gross_tp = realized_net + p_loss + r_loss
+                    gross_tp = max(0.0, round(gross_tp, 2))
+
                     lines.append(f"{medal} <b>{sym}</b>{active_badge}: {val_str}")
+                    lines.append(f"   └ 🛡️ TP: <b>+{gross_tp:.2f}$</b> | Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b>")
                 
                 # Add inline keyboard to switch criterion
                 switch_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -2292,8 +2328,15 @@ class TelegramReceiver:
                         ccomm = float(cdata.get('commission_usdt', 0))
                         cfund = float(cdata.get('funding_usdt', 0))
                         
+                        p_loss = abs(float(cdata.get("peeling", {}).get("peel_loss_usdt", 0.0)))
+                        r_loss = abs(float(cdata.get("cross_recycling", {}).get("loss_absorbed_usdt", cdata.get("cross_recycling", {}).get("profit_spent_usdt", 0.0))))
+                        gross_tp = float(cdata.get("gross_realized_usdt", 0.0))
+                        if gross_tp <= 0.0:
+                            gross_tp = crealized_net + p_loss + r_loss
                         lines.append(f"  Net Profit: {cdata.get('net_profit_usdt', 0):,.2f} USDT")
-                        lines.append(f"  Realized (Gross): {crealized:,.2f} USDT")
+                        lines.append(f"  Realized (Gross TP без сжога): +{gross_tp:,.2f} USDT")
+                        lines.append(f"  Сожжено на пиллинге: -{p_loss:,.2f} USDT ({cdata.get('peeling', {}).get('events_count', 0)} срез.)")
+                        lines.append(f"  Сожжено на ресайклере: -{r_loss:,.2f} USDT ({cdata.get('cross_recycling', {}).get('events_count', 0)} рецикл.)")
                         lines.append(f"  Realized (Net): {crealized_net:,.2f} USDT")
                         lines.append(f"  Fees: Comm {ccomm:,.2f} / Fund {cfund:,.2f}")
                         lines.append(f"  Unrealized PnL: {cdata.get('current_drawdown', 0):,.2f} USDT")

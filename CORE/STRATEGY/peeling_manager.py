@@ -157,6 +157,13 @@ class PeelingManager:
                 f"Rebound +{rebound_pct:.2f}% >= {peel_tp_pct}% from fill {fill_price}. Closing peel vol {peel_qty} (ratio {peel_ratio})"
             )
 
+            # Фиксируем среднюю цену входа ДО срезки для точного расчета биржевого убытка
+            entry_before_peel = float(state.avg_entry_price or 0.0)
+            if entry_before_peel > 0:
+                peel_loss = round((current_price - entry_before_peel) * peel_qty, 4) if side == "LONG" else round((entry_before_peel - current_price) * peel_qty, 4)
+            else:
+                peel_loss = 0.0
+
             res = await client.make_order(
                 symbol=symbol,
                 qty=peel_qty,
@@ -261,6 +268,8 @@ class PeelingManager:
                             rebound_pct=rebound_pct,
                             peel_qty=peel_qty,
                             rem_pos_qty=abs(state.total_volume),
+                            avg_entry_price=entry_before_peel,
+                            realized_loss=peel_loss,
                         )
                 except Exception as e:
                     logger.warning(f"[{symbol}] Failed to record subgrid peel: {e}")
