@@ -6,8 +6,6 @@
 from dataclasses import dataclass, field
 from typing import Optional
 
-from consts import DEFAULT_TP_PURPOSE, DEFAULT_AVG_FREE_VOLUME_BEHAVIOR
-
 @dataclass
 class PositionState:
     symbol: str = ""
@@ -35,8 +33,8 @@ class PositionState:
     
     grid: dict = field(default_factory=dict)
     tp_map: dict = field(default_factory=dict)
-    tp_purpose: str = DEFAULT_TP_PURPOSE
-    avg_free_volume_behavior: str = DEFAULT_AVG_FREE_VOLUME_BEHAVIOR
+    tp_purpose: Optional[str] = None
+    avg_free_volume_behavior: Optional[str] = None
     trailing_tp_state: dict = field(default_factory=dict)
     trailing_grid_state: dict = field(default_factory=dict)
     recent_closes: list = field(default_factory=list)

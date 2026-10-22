@@ -18,7 +18,16 @@ from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
 from aiogram.types import ErrorEvent
 
 from c_log import UnifiedLogger
-from consts import TG_TOKEN, ANALYTICS_DIR, ANALYTICS_STATS_DIR, ANALYTICS_LEDGERS_DIR, TG_ALLOWED_USERS, ACTIVE_SYMBOLS, BASE_DIR
+from consts import (
+    TG_TOKEN,
+    ANALYTICS_DIR,
+    ANALYTICS_STATS_DIR,
+    ANALYTICS_LEDGERS_DIR,
+    TG_ALLOWED_USERS,
+    ACTIVE_SYMBOLS,
+    BASE_DIR,
+    ANALYTICS_START_BALANCE_USDT,
+)
 from TG.template_manager import TemplateManager
 
 try:
@@ -572,10 +581,21 @@ class TelegramReceiver:
         import html
         clean_name = html.escape(univ_name)
 
-        start_bal = 150.0
-        cur_bal = 150.0
-        peak_bal = 150.0
-        min_bal = 150.0
+        # Разрешаем стартовый баланс купола из active_strategies либо ANALYTICS_START_BALANCE_USDT
+        strat_cfg_data = _CFG.get("active_strategies", {}).get(current_uid, {})
+        default_start_bal = 0.0
+        if isinstance(strat_cfg_data, dict):
+            if "analytics" in strat_cfg_data and "start_balance_usdt" in strat_cfg_data["analytics"]:
+                default_start_bal = float(strat_cfg_data["analytics"]["start_balance_usdt"])
+            elif "start_balance_usdt" in strat_cfg_data:
+                default_start_bal = float(strat_cfg_data["start_balance_usdt"])
+        if default_start_bal <= 0.0:
+            default_start_bal = float(ANALYTICS_START_BALANCE_USDT)
+
+        start_bal = default_start_bal
+        cur_bal = default_start_bal
+        peak_bal = default_start_bal
+        min_bal = default_start_bal
         net_profit = 0.0
         realized = 0.0
         unrealized = 0.0
@@ -588,7 +608,7 @@ class TelegramReceiver:
         if analytics_path.exists():
             try:
                 adata = json.loads(analytics_path.read_text(encoding="utf-8"))
-                start_bal = float(adata.get("start_balance_usdt", 150.0))
+                start_bal = float(adata.get("start_balance_usdt", default_start_bal))
                 cur_bal = float(adata.get("cur_balance_usdt", start_bal))
                 peak_bal = float(adata.get("peak_balance_usdt", max(start_bal, cur_bal)))
                 min_bal = float(adata.get("min_balance_usdt", min(start_bal, cur_bal)))
