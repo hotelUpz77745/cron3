@@ -162,7 +162,10 @@ class AverageManager:
 
     async def process(self, client, runtime_manager, symbol: str, side: str, state, opposite_state, current_price: float, spec_data: dict, tp_manager):
         """Проверяет и выполняет логику усреднения для позиции с поддержкой трейлинга."""
-        if not state.in_position or state.pending_avg or current_price is None:
+        if hasattr(state, "can_start_averaging"):
+            if not state.can_start_averaging() or current_price is None:
+                return
+        elif not state.in_position or state.pending_avg or current_price is None:
             return
 
         grid = state.grid

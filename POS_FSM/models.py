@@ -23,6 +23,54 @@ class GridLevel:
     peeled_count: int = 0
     armed_at_drawdown: Optional[float] = None
     armed_timestamp: Optional[float] = None
+    order_id: Optional[Union[int, str]] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GridLevel":
+        if not isinstance(data, dict):
+            return cls()
+        return cls(
+            indent=float(data.get("indent") or 0.0),
+            volume=float(data.get("volume") or data.get("vol") or 0.0),
+            is_active=bool(data.get("is_active", False)),
+            is_armed=bool(data.get("is_armed", False)),
+            enabled=bool(data.get("enabled", True)),
+            activation=float(data["activation"]) if data.get("activation") is not None else None,
+            price=float(data["price"]) if data.get("price") is not None else None,
+            activation_price=float(data["activation_price"]) if data.get("activation_price") is not None else None,
+            zone=int(data["zone"]) if data.get("zone") is not None else None,
+            peeled=bool(data.get("peeled", False)),
+            peeled_count=int(data.get("peeled_count", data.get("peel_count", 0))),
+            armed_at_drawdown=float(data["armed_at_drawdown"]) if data.get("armed_at_drawdown") is not None else None,
+            armed_timestamp=float(data["armed_timestamp"]) if data.get("armed_timestamp") is not None else None,
+            order_id=data.get("order_id"),
+        )
+
+    @property
+    def peel_count(self) -> int:
+        return self.peeled_count
+
+    @peel_count.setter
+    def peel_count(self, val: int):
+        self.peeled_count = int(val)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "indent": self.indent,
+            "volume": self.volume,
+            "is_active": self.is_active,
+            "is_armed": self.is_armed,
+            "enabled": self.enabled,
+            "activation": self.activation,
+            "price": self.price,
+            "activation_price": self.activation_price,
+            "zone": self.zone,
+            "peeled": self.peeled,
+            "peeled_count": self.peeled_count,
+            "armed_at_drawdown": self.armed_at_drawdown,
+            "armed_timestamp": self.armed_timestamp,
+            "order_id": self.order_id,
+        }
 
 
 @dataclass
@@ -39,6 +87,60 @@ class TakeProfitLevel:
     armed_at_gain: Optional[float] = None
     armed_floor: Optional[float] = None
     armed_timestamp: Optional[float] = None
+    order_id: Optional[Union[int, str]] = None
+
+    @property
+    def profit(self) -> float:
+        return self.indent
+
+    @profit.setter
+    def profit(self, val: float):
+        self.indent = float(val)
+
+    @property
+    def close(self) -> float:
+        return self.volume
+
+    @close.setter
+    def close(self, val: float):
+        self.volume = float(val)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "TakeProfitLevel":
+        if not isinstance(data, dict):
+            return cls()
+        indent_val = data.get("indent") if data.get("indent") is not None else (data.get("profit") if data.get("profit") is not None else data.get("profit_pct"))
+        vol_val = data.get("volume") if data.get("volume") is not None else (data.get("close") if data.get("close") is not None else (data.get("vol") if data.get("vol") is not None else data.get("close_pct")))
+        return cls(
+            indent=float(indent_val or 0.0),
+            volume=float(vol_val or 0.0),
+            is_active=bool(data.get("is_active", False)),
+            is_armed=bool(data.get("is_armed", False)),
+            enabled=bool(data.get("enabled", True)),
+            activation=float(data["activation"]) if data.get("activation") is not None else None,
+            price=float(data["price"]) if data.get("price") is not None else None,
+            activation_price=float(data["activation_price"]) if data.get("activation_price") is not None else None,
+            armed_at_gain=float(data["armed_at_gain"]) if data.get("armed_at_gain") is not None else None,
+            armed_floor=float(data["armed_floor"]) if data.get("armed_floor") is not None else None,
+            armed_timestamp=float(data["armed_timestamp"]) if data.get("armed_timestamp") is not None else None,
+            order_id=data.get("order_id"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "indent": self.indent,
+            "volume": self.volume,
+            "is_active": self.is_active,
+            "is_armed": self.is_armed,
+            "enabled": self.enabled,
+            "activation": self.activation,
+            "price": self.price,
+            "activation_price": self.activation_price,
+            "armed_at_gain": self.armed_at_gain,
+            "armed_floor": self.armed_floor,
+            "armed_timestamp": self.armed_timestamp,
+            "order_id": self.order_id,
+        }
 
 
 @dataclass
@@ -260,10 +362,68 @@ class PositionState:
         lvl = self.tp_map.get(k)
         return bool(lvl.get("is_active", False)) if isinstance(lvl, dict) else False
 
-    def mark_tp_active(self, level_key: Union[str, int]) -> None:
-        """Помечает уровень карты тейк-профитов как исполненный."""
+    def mark_tp_active(self, level_key: Union[str, int], is_active: bool = True) -> None:
+        """Помечает уровень карты тейк-профитов как исполненный/активный."""
         k = str(level_key)
         if k in self.tp_map and isinstance(self.tp_map[k], dict):
-            self.tp_map[k]["is_active"] = True
-            self.tp_map[k]["is_armed"] = False
+            self.tp_map[k]["is_active"] = bool(is_active)
+            if is_active:
+                self.tp_map[k]["is_armed"] = False
+
+    def get_typed_grid_level(self, level_key: Union[str, int]) -> Optional[GridLevel]:
+        """Возвращает типизированную структуру GridLevel для указанного уровня (или None если не найден)."""
+        k = str(level_key)
+        if k not in self.grid or not isinstance(self.grid[k], dict):
+            return None
+        return GridLevel.from_dict(self.grid[k])
+
+    def get_typed_tp_level(self, level_key: Union[str, int]) -> Optional[TakeProfitLevel]:
+        """Возвращает типизированную структуру TakeProfitLevel для указанного уровня (или None если не найден)."""
+        k = str(level_key)
+        if k not in self.tp_map or not isinstance(self.tp_map[k], dict):
+            return None
+        return TakeProfitLevel.from_dict(self.tp_map[k])
+
+    def iter_grid_levels(self) -> list:
+        """Итерирует по всем уровням сетки, возвращая список пар (str_key, GridLevel)."""
+        items = []
+        for k in sorted(self.grid.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
+            lvl = self.grid[k]
+            if isinstance(lvl, dict):
+                items.append((str(k), GridLevel.from_dict(lvl)))
+        return items
+
+    def iter_tp_levels(self) -> list:
+        """Итерирует по всем уровням TP-карты, возвращая список пар (str_key, TakeProfitLevel)."""
+        items = []
+        for k in sorted(self.tp_map.keys(), key=lambda x: int(x) if str(x).isdigit() else str(x)):
+            lvl = self.tp_map[k]
+            if isinstance(lvl, dict):
+                items.append((str(k), TakeProfitLevel.from_dict(lvl)))
+        return items
+
+    def active_grid_keys(self) -> list:
+        """Возвращает список ключей исполненных уровней сетки."""
+        return [
+            str(k) for k, v in self.grid.items()
+            if isinstance(v, dict) and v.get("is_active") and v.get("enabled", True) is not False
+        ]
+
+    def can_start_averaging(self) -> bool:
+        """
+        Проверяет соблюдение инвариантов FSM для запуска усреднения:
+        - Позиция открыта (in_position == True).
+        - Предыдущее усреднение не находится в процессе исполнения (pending_avg == False).
+        - Позиция не ликвидируется / не закрывается (is_closing == False).
+        - Позиция не помечена на сброс (is_finished == False).
+        """
+        return bool(self.in_position and not self.pending_avg and not self.is_closing and not self.is_finished)
+
+    def can_peel(self) -> bool:
+        """Проверяет соблюдение инвариантов FSM для частичной разгрузки (пилинга)."""
+        return bool(self.in_position and not self.pending_peel and not self.is_closing and not self.is_finished)
+
+    def can_place_tp(self) -> bool:
+        """Проверяет соблюдение инвариантов FSM для выставления / подтяжки TP."""
+        return bool(self.in_position and not self.pending_rolling_tp and not self.is_closing and not self.is_finished)
 

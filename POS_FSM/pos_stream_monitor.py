@@ -7,7 +7,7 @@
 # ==============================================================================
 
 from typing import Dict, Any, Tuple, Optional, List
-from consts import FLOAT_ZERO_EPSILON
+from consts import FLOAT_ZERO_EPSILON, QTY_ZERO_EPSILON
 from POS_FSM.models import PositionState
 from c_log import UnifiedLogger
 import time
@@ -145,7 +145,7 @@ class PositionMonitor:
                 # Check for desync before updating
                 state = self.states.get(sym, {}).get(side)
                 if state:
-                    if abs(state.total_volume - pos_amt) > 1e-8 or abs(state.avg_entry_price - entry_price) > 1e-8:
+                    if abs(state.total_volume - pos_amt) > QTY_ZERO_EPSILON or abs(state.avg_entry_price - entry_price) > FLOAT_ZERO_EPSILON:
                         if state.in_position or abs(pos_amt) > 0:
                             logger.warning(f"[REST_FALLBACK] Stream desync detected for {sym} {side}! WS missed an update. Forcing FSM update from REST. Local Qty: {state.total_volume}, Remote Qty: {pos_amt}")
 
