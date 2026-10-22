@@ -565,10 +565,16 @@ class StrategyApplicator:
 
         active_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and grid[k].get("is_active")]
         unexecuted_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and not grid[k].get("is_active")]
-        logger.info(
-            f"[POSITION_RESTORER] [{sym_name}] {side_name}: Синхронизация сетки завершена! "
-            f"Исполнено: {active_lvls}, В ожидании: {unexecuted_lvls}, Notional: {current_notional:.2f} USDT, Base Price: {base_p}"
-        )
+        if updated:
+            logger.info(
+                f"[POSITION_RESTORER] [{sym_name}] {side_name}: Синхронизация сетки завершена! "
+                f"Исполнено: {active_lvls}, В ожидании: {unexecuted_lvls}, Notional: {current_notional:.2f} USDT, Base Price: {base_p}"
+            )
+        else:
+            logger.debug(
+                f"[POSITION_RESTORER] [{sym_name}] {side_name}: Синхронизация сетки (без изменений). "
+                f"Исполнено: {active_lvls}, В ожидании: {unexecuted_lvls}"
+            )
 
         return updated
 

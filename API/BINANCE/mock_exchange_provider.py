@@ -318,15 +318,21 @@ class MockExchangeProvider:
         sym = symbol.upper().strip()
         side_u = side.upper().strip()
         pos_side = position_side.upper().strip()
+        if pos_side == "BOTH":
+            pos_side = "LONG" if side_u == "BUY" else "SHORT"
+
+        is_market = market_type.upper() == "MARKET"
+        order_status = "FILLED" if is_market else "NEW"
+        exec_qty = str(qty) if is_market else "0.0"
 
         order_data = {
             "orderId": oid,
             "symbol": sym,
-            "status": "NEW",
+            "status": order_status,
             "clientOrderId": f"mock_order_{oid}",
             "price": str(price or 0.0),
             "origQty": str(qty),
-            "executedQty": "0.0",
+            "executedQty": exec_qty,
             "cumQuote": "0.0",
             "timeInForce": "GTC",
             "type": market_type.upper(),
@@ -336,7 +342,54 @@ class MockExchangeProvider:
             "time": int(time.time() * 1000),
             "updateTime": int(time.time() * 1000),
         }
-        self._open_orders.append(order_data)
+        if not is_market:
+            self._open_orders.append(order_data)
+        else:
+            # Немедленное исполнение рыночного ордера и обновление позиции в MockExchange
+            pos_key = f"{sym}_{pos_side}"
+            pos = self._positions.get(pos_key)
+            if not pos:
+                pos = {
+                    "symbol": sym,
+                    "positionSide": pos_side,
+                    "positionAmt": 0.0,
+                    "entryPrice": 0.0,
+                    "markPrice": float(price or 0.0) or 1.0,
+                    "unrealizedProfit": 0.0,
+                    "initialMargin": 0.0,
+                    "maintMargin": 0.0,
+                    "isolated": False,
+                    "leverage": 20,
+                }
+                self._positions[pos_key] = pos
+
+            cur_amt = float(pos.get("positionAmt", 0.0))
+            cur_p = float(price or pos.get("markPrice") or 1.0)
+            if pos_side == "LONG":
+                if side_u == "BUY":
+                    new_amt = cur_amt + qty
+                    pos["positionAmt"] = round(new_amt, 4)
+                    pos["entryPrice"] = cur_p
+                else:  # SELL (closing / reducing long)
+                    new_amt = max(0.0, cur_amt - qty)
+                    pos["positionAmt"] = round(new_amt, 4)
+                    if new_amt == 0.0:
+                        pos["entryPrice"] = 0.0
+                        pos["unrealizedProfit"] = 0.0
+            elif pos_side == "SHORT":
+                if side_u == "SELL":
+                    new_amt = cur_amt - qty  # shorts are negative positionAmt
+                    pos["positionAmt"] = round(new_amt, 4)
+                    pos["entryPrice"] = cur_p
+                else:  # BUY (closing / reducing short)
+                    new_amt = min(0.0, cur_amt + qty)
+                    pos["positionAmt"] = round(new_amt, 4)
+                    if new_amt == 0.0:
+                        pos["entryPrice"] = 0.0
+                        pos["unrealizedProfit"] = 0.0
+
+            pos["markPrice"] = cur_p
+
         logger.info(f"[MOCK_EXCHANGE] Placed order: {sym} {pos_side} {side_u} {qty} @ {price} (ID: {oid})")
         return APIResponse(success=True, data=order_data)
 
