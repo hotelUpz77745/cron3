@@ -59,24 +59,24 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 400.0,
-                    "AVAUSDT": 400.0,
-                    "GTCUSDT": 400.0,
-                    "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400.0
+                    "ICNTUSDT": 200.0,
+                    "AVAUSDT": 200.0,
+                    "GTCUSDT": 200.0,
+                    "GWEIUSDT": 200.0,
+                    "SOLVUSDT": 200.0
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 400.0,
-                    "AVAUSDT": 400.0,
-                    "GTCUSDT": 400.0,
-                    "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400.0
+                    "ICNTUSDT": 200.0,
+                    "AVAUSDT": 200.0,
+                    "GTCUSDT": 200.0,
+                    "GWEIUSDT": 200.0,
+                    "SOLVUSDT": 200.0
                 }
             },
             "start_balance_usdt": 434.0
@@ -97,15 +97,15 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {}
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {}
             },
-            "start_balance_usdt": 400.0
+            "start_balance_usdt": 434.0
         }
     },
     "telegram": {

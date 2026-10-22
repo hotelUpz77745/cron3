@@ -21,11 +21,8 @@ from c_log import UnifiedLogger
 from TG.HANDLERS.analytics_router import get_analytics_router
 from TG.HANDLERS.base_router import get_base_router
 from TG.HANDLERS.coins_router import get_coins_router
-from TG.HANDLERS.grid_router import get_grid_router
 from TG.HANDLERS.positions_router import get_positions_router
 from TG.HANDLERS.screeners_router import get_screeners_router
-from TG.HANDLERS.settings_router import get_settings_router
-from TG.HANDLERS.super_grid_router import get_super_grid_router
 from TG.keyboards import (
     get_back_keyboard,
     get_confirm_start_keyboard,
@@ -89,15 +86,11 @@ class TelegramReceiver:
     def _setup_routes(self):
         """Подключает подсистемы вселенных и все модульные aiogram 3 роутеры."""
         self.dp.include_router(get_universe_router(self.bot_core))
-
         self.dp.include_router(get_base_router(self.bot_core, self.template_manager))
         self.dp.include_router(get_positions_router(self.bot_core))
         self.dp.include_router(get_analytics_router(self.bot_core))
         self.dp.include_router(get_coins_router(self.bot_core, self.template_manager))
-        self.dp.include_router(get_grid_router(self.bot_core, self.template_manager))
-        self.dp.include_router(get_super_grid_router(self.bot_core))
         self.dp.include_router(get_screeners_router(self.bot_core))
-        self.dp.include_router(get_settings_router(self.bot_core))
 
     # =========================================================
     # COMPATIBILITY HELPERS FOR TESTS AND LEGACY CALLERS

@@ -20,11 +20,36 @@ from c_utils import Utils
 logger = UnifiedLogger("TGCoinsRouter")
 
 
-def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> Router:
-    """Фабрика роутера управления монетами куполов стратегий."""
-    router = Router(name="coins_router")
+class CoinsRouterHandler:
+    """Класс-обработчик управления составом торговых монет куполов стратегий."""
 
-    async def _ask_strategy_for_symbol(msg_or_cb: Any, state: FSMContext, symbol: str, edit_msg: bool = False):
+    def __init__(self, bot_core: Any, template_manager: Optional[Any] = None):
+        self.bot_core = bot_core
+        self.template_manager = template_manager
+        self.router = Router(name="coins_router")
+        self._register_routes()
+
+    def _register_routes(self) -> None:
+        r = self.router
+        r.message(F.text == "⚙️ Set Coins")(self.on_set_coins)
+        r.callback_query(F.data == "set_coins_cancel")(self.cb_set_coins_cancel)
+        r.callback_query(F.data.startswith("set_coins_dome:"))(self.process_set_coins_dome_select)
+        r.message(F.text.in_({"➕ Добавить монету", "➕ Add"}))(self.on_add_btn)
+        r.message(TGStates.waiting_for_add_symbol)(self.process_add_symbol)
+        r.callback_query(F.data.startswith("add_pick_strat_"))(self.process_add_pick_strat)
+        r.callback_query(F.data.startswith("add_run_"))(self.process_add_run)
+        r.callback_query(F.data.startswith("add_back_strats_"))(self.process_add_back_strats)
+        r.callback_query(F.data == "add_cancel")(self.process_add_cancel)
+        r.callback_query(F.data.startswith("add_cust_"))(self.process_add_cust)
+        r.message(TGStates.waiting_for_add_custom_invest)(self.process_add_custom_invest_input)
+        r.message(TGStates.waiting_for_add_custom_lev)(self.process_add_custom_lev_input)
+        r.callback_query(F.data.startswith("add_catalog_"))(self.process_add_catalog)
+        r.message(F.text.in_({"🗑️ Удалить монету", "🗑️ Del"}))(self.on_del_btn)
+        r.callback_query(F.data.startswith("del_dome_coin:"))(self.process_del_dome_coin)
+        r.callback_query(F.data == "del_dome_coin_cancel")(self.process_del_dome_coin_cancel)
+        r.message(F.text.in_({"🔙 Назад", "🔙 Back"}))(self.on_back_from_coins)
+
+    async def _ask_strategy_for_symbol(self, msg_or_cb: Any, state: FSMContext, symbol: str, edit_msg: bool = False):
         app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
         active_strategies = app_data.get("active_strategies", {})
 
@@ -32,7 +57,7 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         for sid, sdata in active_strategies.items():
             if not sdata.get("enabled", False):
                 continue
-            meta = get_strategy_meta(sid, bot_core)
+            meta = get_strategy_meta(sid, self.bot_core)
             s_name = meta.get("name", sid)
             buttons.append([InlineKeyboardButton(text=f"🎯 {s_name[:38]}", callback_data=f"add_pick_strat_{symbol}_{sid}")])
 
@@ -53,12 +78,11 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             await msg_or_cb.answer(text, reply_markup=keyboard, parse_mode="HTML")
         await state.set_state(TGStates.waiting_for_add_strategy_choice)
 
-    @router.message(F.text == "⚙️ Set Coins")
-    async def on_set_coins(message: Message, state: FSMContext):
+    async def on_set_coins(self, message: Message, state: FSMContext):
         await state.clear()
         active_strats = {}
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            active_strats = bot_core.strategy_registry.get_active_strategies()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            active_strats = self.bot_core.strategy_registry.get_active_strategies()
         else:
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
             active_strats = app_data.get("active_strategies", {})
@@ -71,7 +95,7 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         for sid, scfg in active_strats.items():
             if sid.startswith("_") or not isinstance(scfg, (dict, object)):
                 continue
-            meta = get_strategy_meta(sid, bot_core)
+            meta = get_strategy_meta(sid, self.bot_core)
             s_name = meta.get("name", sid)
             clean_title = s_name.encode("ascii", "ignore").decode("ascii").strip() or sid
             symbols = extract_strategy_symbols(scfg)
@@ -86,29 +110,27 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         )
         await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
 
-    @router.callback_query(F.data == "set_coins_cancel")
-    async def cb_set_coins_cancel(callback: CallbackQuery, state: FSMContext):
+    async def cb_set_coins_cancel(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         await state.clear()
         try:
             await callback.message.delete()
         except Exception:
             pass
-        status = "⏸️ Paused" if getattr(bot_core, "is_paused", False) else "▶️ Running"
+        status = "⏸️ Paused" if getattr(self.bot_core, "is_paused", False) else "▶️ Running"
         await callback.message.answer(f"<b>Control Panel</b>\nСтатус бота: {status}", reply_markup=get_main_keyboard(), parse_mode="HTML")
 
-    @router.callback_query(F.data.startswith("set_coins_dome:"))
-    async def process_set_coins_dome_select(callback: CallbackQuery, state: FSMContext):
+    async def process_set_coins_dome_select(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         sid = callback.data.split("set_coins_dome:")[1]
         await state.update_data(selected_dome=sid)
 
-        meta = get_strategy_meta(sid, bot_core)
+        meta = get_strategy_meta(sid, self.bot_core)
         s_name = meta.get("name", sid)
 
         symbols: List[str] = []
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            active_strats = bot_core.strategy_registry.get_active_strategies()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            active_strats = self.bot_core.strategy_registry.get_active_strategies()
             if sid in active_strats:
                 symbols = list(active_strats[sid].symbols)
         if not symbols:
@@ -132,20 +154,19 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         )
         await callback.message.answer(text, reply_markup=get_set_coins_keyboard(), parse_mode="HTML")
 
-    @router.message(F.text.in_({"➕ Добавить монету", "➕ Add"}))
-    async def on_add_btn(message: Message, state: FSMContext):
+    async def on_add_btn(self, message: Message, state: FSMContext):
         data = await state.get_data()
         selected_dome = data.get("selected_dome")
         if not selected_dome:
-            return await on_set_coins(message, state)
+            return await self.on_set_coins(message, state)
 
-        meta = get_strategy_meta(selected_dome, bot_core)
+        meta = get_strategy_meta(selected_dome, self.bot_core)
         s_name = meta.get("name", selected_dome)
 
         # 1. Получаем список монет текущего купола
         dome_symbols: List[str] = []
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            active_strats = bot_core.strategy_registry.get_active_strategies()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            active_strats = self.bot_core.strategy_registry.get_active_strategies()
             if selected_dome in active_strats:
                 dome_symbols = list(active_strats[selected_dome].symbols)
         if not dome_symbols:
@@ -155,10 +176,10 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
 
         # 2. Получаем список всех активных монет в системе
         system_symbols: List[str] = []
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            system_symbols = bot_core.strategy_registry.get_all_active_symbols()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            system_symbols = self.bot_core.strategy_registry.get_all_active_symbols()
         if not system_symbols:
-            system_symbols = getattr(bot_core, "symbols", []) or []
+            system_symbols = getattr(self.bot_core, "symbols", []) or []
         if not system_symbols:
             app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
             for sid, sdata in app_data.get("active_strategies", {}).items():
@@ -195,11 +216,10 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             parse_mode="HTML",
         )
 
-    @router.message(TGStates.waiting_for_add_symbol)
-    async def process_add_symbol(message: Message, state: FSMContext):
+    async def process_add_symbol(self, message: Message, state: FSMContext):
         if message.text in {"🔙 Назад", "🔙 Back"}:
             await state.clear()
-            status = "⏸️ Paused" if getattr(bot_core, "is_paused", False) else "▶️ Running"
+            status = "⏸️ Paused" if getattr(self.bot_core, "is_paused", False) else "▶️ Running"
             await message.answer(f"<b>Control Panel</b>\nСтатус бота: {status}", reply_markup=get_main_keyboard(), parse_mode="HTML")
             return
 
@@ -224,10 +244,10 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
 
         # Проверка на наличие монеты в системе
         system_symbols = []
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            system_symbols = bot_core.strategy_registry.get_all_active_symbols()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            system_symbols = self.bot_core.strategy_registry.get_all_active_symbols()
         if not system_symbols:
-            system_symbols = getattr(bot_core, "symbols", []) or []
+            system_symbols = getattr(self.bot_core, "symbols", []) or []
 
         if symbol in system_symbols:
             coins_str = ", ".join(f"<code>{s}</code>" for s in sorted(system_symbols))
@@ -240,10 +260,10 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             return
 
         try:
-            await bot_core.add_symbol(symbol, strategy_id=selected_dome)
+            await self.bot_core.add_symbol(symbol, strategy_id=selected_dome)
             symbols = []
-            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-                active_strats = bot_core.strategy_registry.get_active_strategies()
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = self.bot_core.strategy_registry.get_active_strategies()
                 if selected_dome in active_strats:
                     symbols = list(active_strats[selected_dome].symbols)
             if not symbols:
@@ -265,8 +285,7 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         await state.set_state(None)
         await state.update_data(selected_dome=selected_dome)
 
-    @router.callback_query(F.data.startswith("add_pick_strat_"))
-    async def process_add_pick_strat(callback: CallbackQuery, state: FSMContext):
+    async def process_add_pick_strat(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         parts = callback.data.split("_")
         if len(parts) < 5:
@@ -275,7 +294,7 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         strat_id = "_".join(parts[4:])
 
         await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
-        meta = get_strategy_meta(strat_id, bot_core)
+        meta = get_strategy_meta(strat_id, self.bot_core)
         sg_str = "✅ Включен" if meta.get("super_grid") else "❌ Выключен"
         def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
 
@@ -299,8 +318,7 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         )
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
-    @router.callback_query(F.data.startswith("add_run_"))
-    async def process_add_run(callback: CallbackQuery, state: FSMContext):
+    async def process_add_run(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         parts = callback.data.split("_")
         if len(parts) < 4:
@@ -308,8 +326,8 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         symbol = parts[2]
         strat_id = "_".join(parts[3:])
 
-        await bot_core.add_symbol(symbol, strategy_id=strat_id)
-        meta = get_strategy_meta(strat_id, bot_core)
+        await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
+        meta = get_strategy_meta(strat_id, self.bot_core)
         def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
 
         await callback.message.edit_text(
@@ -323,14 +341,12 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         await callback.message.answer("Монета активна в торговом пуле.", reply_markup=get_set_coins_keyboard())
         await state.clear()
 
-    @router.callback_query(F.data.startswith("add_back_strats_"))
-    async def process_add_back_strats(callback: CallbackQuery, state: FSMContext):
+    async def process_add_back_strats(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         symbol = callback.data.replace("add_back_strats_", "")
-        await _ask_strategy_for_symbol(callback, state, symbol, edit_msg=True)
+        await self._ask_strategy_for_symbol(callback, state, symbol, edit_msg=True)
 
-    @router.callback_query(F.data == "add_cancel")
-    async def process_add_cancel(callback: CallbackQuery, state: FSMContext):
+    async def process_add_cancel(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         try:
             await callback.message.delete()
@@ -338,14 +354,13 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             pass
         await state.clear()
 
-    @router.callback_query(F.data.startswith("add_cust_"))
-    async def process_add_cust(callback: CallbackQuery, state: FSMContext):
+    async def process_add_cust(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         parts = callback.data.split("_")
         symbol = parts[2]
         strat_id = "_".join(parts[3:])
         await state.update_data(pending_symbol=symbol, pending_strat=strat_id)
-        meta = get_strategy_meta(strat_id, bot_core)
+        meta = get_strategy_meta(strat_id, self.bot_core)
         def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
 
         await callback.message.answer(
@@ -357,16 +372,15 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         )
         await state.set_state(TGStates.waiting_for_add_custom_invest)
 
-    @router.message(TGStates.waiting_for_add_custom_invest)
-    async def process_add_custom_invest_input(message: Message, state: FSMContext):
+    async def process_add_custom_invest_input(self, message: Message, state: FSMContext):
         if message.text == "🔙 Back":
             await state.clear()
-            return await on_set_coins(message, state)
+            return await self.on_set_coins(message, state)
         try:
             val = float(message.text.strip().replace(",", "."))
             data = await state.get_data()
             strat_id = data.get("pending_strat")
-            meta = get_strategy_meta(strat_id, bot_core)
+            meta = get_strategy_meta(strat_id, self.bot_core)
             def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
             invest = val if val > 0 else def_inv
             await state.update_data(custom_invest=invest)
@@ -382,22 +396,21 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         except ValueError:
             await message.answer("❌ Введите корректное число (например, <code>300</code>):", parse_mode="HTML")
 
-    @router.message(TGStates.waiting_for_add_custom_lev)
-    async def process_add_custom_lev_input(message: Message, state: FSMContext):
+    async def process_add_custom_lev_input(self, message: Message, state: FSMContext):
         if message.text == "🔙 Back":
             await state.clear()
-            return await on_set_coins(message, state)
+            return await self.on_set_coins(message, state)
         try:
             val = int(message.text.strip())
             data = await state.get_data()
             symbol = data.get("pending_symbol")
             strat_id = data.get("pending_strat")
-            meta = get_strategy_meta(strat_id, bot_core)
+            meta = get_strategy_meta(strat_id, self.bot_core)
             lev = val if 1 <= val <= 50 else meta.get("leverage", 20)
             def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
             invest = data.get("custom_invest", def_inv)
 
-            await bot_core.add_symbol(symbol, strategy_id=strat_id)
+            await self.bot_core.add_symbol(symbol, strategy_id=strat_id)
 
             app_json_path = DATA_DIR / "app.json"
             app_data = Utils.read_json_file(app_json_path) or {}
@@ -409,16 +422,16 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
                     strat_entry[side]["invest_size"][symbol] = float(invest)
             Utils.write_json_file(app_json_path, app_data)
 
-            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-                bot_core.strategy_registry.reload(app_data.get("active_strategies", {}))
-                strat_cfg = bot_core.strategy_registry.get_strategy(strat_id)
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                self.bot_core.strategy_registry.reload(app_data.get("active_strategies", {}))
+                strat_cfg = self.bot_core.strategy_registry.get_strategy(strat_id)
                 if strat_cfg:
                     from CORE.strategy_applicator import StrategyApplicator
 
                     StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
 
-            if template_manager and hasattr(template_manager, "get_runtime_path"):
-                rt_path = template_manager.get_runtime_path(symbol, strat_id)
+            if self.template_manager and hasattr(self.template_manager, "get_runtime_path"):
+                rt_path = self.template_manager.get_runtime_path(symbol, strat_id)
                 if rt_path.exists():
                     rt_data = Utils.read_json_file(rt_path) or {}
                     for side in ("LONG", "SHORT"):
@@ -426,11 +439,11 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
                             rt_data[side]["invest_size"] = invest
                             rt_data[side]["leverage"] = lev
                     Utils.write_json_file(rt_path, rt_data)
-                    if hasattr(bot_core, "runtime_configs") and symbol in bot_core.runtime_configs:
+                    if hasattr(self.bot_core, "runtime_configs") and symbol in self.bot_core.runtime_configs:
                         for side in ("LONG", "SHORT"):
-                            if side in bot_core.runtime_configs[symbol]:
-                                bot_core.runtime_configs[symbol][side]["invest_size"] = invest
-                                bot_core.runtime_configs[symbol][side]["leverage"] = lev
+                            if side in self.bot_core.runtime_configs[symbol]:
+                                self.bot_core.runtime_configs[symbol][side]["invest_size"] = invest
+                                self.bot_core.runtime_configs[symbol][side]["leverage"] = lev
 
             await message.answer(
                 f"✅ <b>Монета {symbol} успешно настроена и запущена!</b>\n\n"
@@ -446,12 +459,11 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
         except ValueError:
             await message.answer("❌ Введите корректное целое число (от 1 до 50):", parse_mode="HTML")
 
-    @router.callback_query(F.data.startswith("add_catalog_"))
-    async def process_add_catalog(callback: CallbackQuery):
+    async def process_add_catalog(self, callback: CallbackQuery):
         await callback.answer()
         symbol = callback.data.replace("add_catalog_", "")
-        if hasattr(bot_core, "strategy_registry") and getattr(bot_core.strategy_registry, "universes_db", None):
-            univ_data = bot_core.strategy_registry.universes_db
+        if hasattr(self.bot_core, "strategy_registry") and getattr(self.bot_core.strategy_registry, "universes_db", None):
+            univ_data = self.bot_core.strategy_registry.universes_db
         else:
             univ_dir = DATA_DIR / "universes"
             if univ_dir.exists():
@@ -473,16 +485,15 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             parse_mode="HTML",
         )
 
-    @router.message(F.text.in_({"🗑️ Удалить монету", "🗑️ Del"}))
-    async def on_del_btn(message: Message, state: FSMContext):
+    async def on_del_btn(self, message: Message, state: FSMContext):
         data = await state.get_data()
         selected_dome = data.get("selected_dome")
         if not selected_dome:
-            return await on_set_coins(message, state)
+            return await self.on_set_coins(message, state)
 
         symbols: List[str] = []
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            active_strats = bot_core.strategy_registry.get_active_strategies()
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+            active_strats = self.bot_core.strategy_registry.get_active_strategies()
             if selected_dome in active_strats:
                 symbols = list(active_strats[selected_dome].symbols)
         if not symbols:
@@ -515,14 +526,13 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             parse_mode="HTML",
         )
 
-    @router.callback_query(F.data.startswith("del_dome_coin:"))
-    async def process_del_dome_coin(callback: CallbackQuery):
+    async def process_del_dome_coin(self, callback: CallbackQuery):
         await callback.answer()
         parts = callback.data.split(":")
         dome_id = parts[1]
         sym = parts[2]
         try:
-            res = await bot_core.delete_symbol(sym)
+            res = await self.bot_core.delete_symbol(sym)
             if res:
                 await callback.message.edit_text(
                     f"✅ Монета <b>{sym}</b> успешно удалена из купола <code>{dome_id}</code>.",
@@ -537,19 +547,21 @@ def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> R
             logger.error(f"Error deleting symbol {sym}: {e}")
             await callback.message.edit_text(f"❌ Ошибка удаления монеты {sym}: {e}")
 
-    @router.callback_query(F.data == "del_dome_coin_cancel")
-    async def process_del_dome_coin_cancel(callback: CallbackQuery):
+    async def process_del_dome_coin_cancel(self, callback: CallbackQuery):
         await callback.answer()
         try:
             await callback.message.delete()
         except Exception:
             pass
 
-    @router.message(F.text.in_({"🔙 Назад", "🔙 Back"}))
-    async def on_back_from_coins(message: Message, state: FSMContext):
+    async def on_back_from_coins(self, message: Message, state: FSMContext):
         await state.clear()
-        status = "⏸️ Paused" if getattr(bot_core, "is_paused", False) else "▶️ Running"
+        status = "⏸️ Paused" if getattr(self.bot_core, "is_paused", False) else "▶️ Running"
         text = f"<b>Control Panel</b>\nСтатус бота: {status}"
         await message.answer(text, reply_markup=get_main_keyboard(), parse_mode="HTML")
 
-    return router
+
+def get_coins_router(bot_core: Any, template_manager: Optional[Any] = None) -> Router:
+    """Фабрика роутера управления монетами куполов стратегий."""
+    handler = CoinsRouterHandler(bot_core=bot_core, template_manager=template_manager)
+    return handler.router

@@ -74,20 +74,21 @@ def _build_inline_keyboard(buttons_data: List[List[Dict[str, str]]]) -> InlineKe
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def get_universe_router(bot_core: Any) -> Router:
-    """
-    Фабрика aiogram 3 Router для работы со списком вселенных и панелью управления куполом.
-    ТГ слой выступает тупым исполнителем (Dumb Executor), делегируя рендеринг в AnalyticsReportService.
-    """
-    router = Router(name="universe_router")
+class UniverseRouterHandler:
+    """Класс-обработчик тумблеров и навигации по вселенным (Set Universes)."""
 
-    def _get_report_service() -> AnalyticsReportService:
-        an = getattr(bot_core, "analytics", None)
+    def __init__(self, bot_core: Any):
+        self.bot_core = bot_core
+        self.router = Router(name="universe_router")
+        self._register_routes()
+
+    def _get_report_service(self) -> AnalyticsReportService:
+        an = getattr(self.bot_core, "analytics", None)
         if an and hasattr(an, "report_service") and isinstance(an.report_service, AnalyticsReportService):
             return an.report_service
         return AnalyticsReportService()
 
-    def _get_configured_strategies() -> Dict[str, Any]:
+    def _get_configured_strategies(self) -> Dict[str, Any]:
         """Возвращает все сконфигурированные стратегии куполов из app.json (включая отключенные)."""
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) or {}
@@ -97,16 +98,24 @@ def get_universe_router(bot_core: Any) -> Router:
             if not k.startswith("_") and isinstance(v, dict)
         }
 
-    @router.message(Command("universes"))
-    @router.message(F.text == "🌌 Set Universes")
-    async def cmd_universes(message: Message, state: FSMContext):
+    def _register_routes(self) -> None:
+        r = self.router
+        r.message(Command("universes"))(self.cmd_universes)
+        r.message(F.text == "🌌 Set Universes")(self.cmd_universes)
+        r.callback_query(F.data.startswith("univ_page:"))(self.cb_universe_page)
+        r.callback_query(F.data.startswith("toggle_univ:"))(self.cb_toggle_universe)
+        r.callback_query(F.data.startswith("manage_univ:") | F.data.startswith("use_univ:"))(self.cb_legacy_manage_universe)
+        r.callback_query(F.data.startswith("back_to_univ_list:"))(self.cb_back_to_univ_list)
+        r.callback_query(F.data.startswith("set_sizing:") | F.data.startswith("set_closer:"))(self.cb_legacy_sizing_closer)
+
+    async def cmd_universes(self, message: Message, state: FSMContext):
         """Обработка кнопки главного меню '🌌 Set Universes' и команды /universes."""
         logger.info(f"[TG] 🌌 User {message.from_user.id} requested 'Set Universes' menu.")
         await state.clear()
         page = 1
-        current_uid = universe_session_manager.get_user_universe_id(message.from_user.id, bot_core)
-        configured_strats = _get_configured_strategies()
-        text, btn_data = _get_report_service().render_universes_list(
+        current_uid = universe_session_manager.get_user_universe_id(message.from_user.id, self.bot_core)
+        configured_strats = self._get_configured_strategies()
+        text, btn_data = self._get_report_service().render_universes_list(
             current_uid=current_uid,
             active_strats=configured_strats,
             page=page,
@@ -114,17 +123,16 @@ def get_universe_router(bot_core: Any) -> Router:
         kb = _build_inline_keyboard(btn_data)
         await message.answer(text, reply_markup=kb, parse_mode="HTML")
 
-    @router.callback_query(F.data.startswith("univ_page:"))
-    async def cb_universe_page(callback: CallbackQuery):
+    async def cb_universe_page(self, callback: CallbackQuery):
         target = callback.data.split("univ_page:")[1]
         if target == "noop":
             await callback.answer()
             return
         try:
             page = int(target)
-            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            configured_strats = _get_configured_strategies()
-            text, btn_data = _get_report_service().render_universes_list(
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, self.bot_core)
+            configured_strats = self._get_configured_strategies()
+            text, btn_data = self._get_report_service().render_universes_list(
                 current_uid=current_uid,
                 active_strats=configured_strats,
                 page=page,
@@ -136,8 +144,7 @@ def get_universe_router(bot_core: Any) -> Router:
                 logger.error(f"Error in cb_universe_page: {e}")
         await callback.answer()
 
-    @router.callback_query(F.data.startswith("toggle_univ:"))
-    async def cb_toggle_universe(callback: CallbackQuery):
+    async def cb_toggle_universe(self, callback: CallbackQuery):
         """Прямой тумблер включения/отключения стратегии купола [ВКЛ / ВЫКЛ]."""
         parts = callback.data.split(":")
         uid = parts[1]
@@ -154,19 +161,19 @@ def get_universe_router(bot_core: Any) -> Router:
             Utils.atomic_write_json(app_json_path, app_data)
 
             # Перезагружаем реестр стратегий и пересобираем рантаймы
-            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
                 try:
-                    bot_core.strategy_registry.reload(active_strats)
+                    self.bot_core.strategy_registry.reload(active_strats)
                     from CORE.strategy_applicator import StrategyApplicator
-                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
+                    StrategyApplicator().build_all_runtimes(self.bot_core.strategy_registry)
                 except Exception as ex:
                     logger.warning(f"Runtime rebuild notice on universe toggle: {ex}")
 
             logger.info(f"[TG] 🌌 Стратегия [{uid}] переключена: enabled={new_state}")
 
-            configured_strats = _get_configured_strategies()
-            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            text, btn_data = _get_report_service().render_universes_list(
+            configured_strats = self._get_configured_strategies()
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, self.bot_core)
+            text, btn_data = self._get_report_service().render_universes_list(
                 current_uid=current_uid,
                 active_strats=configured_strats,
                 page=page,
@@ -183,17 +190,16 @@ def get_universe_router(bot_core: Any) -> Router:
         else:
             await callback.answer(f"❌ Стратегия {uid} не найдена в app.json", show_alert=True)
 
-    @router.callback_query(F.data.startswith("manage_univ:") | F.data.startswith("use_univ:"))
-    async def cb_legacy_manage_universe(callback: CallbackQuery):
+    async def cb_legacy_manage_universe(self, callback: CallbackQuery):
         """Безопасный перехват устаревших инлайн-кнопок управления."""
         parts = callback.data.split(":")
         uid = parts[1]
         page = int(parts[2]) if len(parts) > 2 else 1
         universe_session_manager.set_user_universe_id(callback.from_user.id, uid)
 
-        configured_strats = _get_configured_strategies()
-        current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-        text, btn_data = _get_report_service().render_universes_list(
+        configured_strats = self._get_configured_strategies()
+        current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, self.bot_core)
+        text, btn_data = self._get_report_service().render_universes_list(
             current_uid=current_uid,
             active_strats=configured_strats,
             page=page,
@@ -205,14 +211,13 @@ def get_universe_router(bot_core: Any) -> Router:
             pass
         await callback.answer("Управление куполами переведено на тумблер [ВКЛ / ВЫКЛ]", show_alert=False)
 
-    @router.callback_query(F.data.startswith("back_to_univ_list:"))
-    async def cb_back_to_univ_list(callback: CallbackQuery):
+    async def cb_back_to_univ_list(self, callback: CallbackQuery):
         parts = callback.data.split(":")
         page = int(parts[1]) if len(parts) > 1 else 1
         try:
-            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            configured_strats = _get_configured_strategies()
-            text, btn_data = _get_report_service().render_universes_list(
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, self.bot_core)
+            configured_strats = self._get_configured_strategies()
+            text, btn_data = self._get_report_service().render_universes_list(
                 current_uid=current_uid,
                 active_strats=configured_strats,
                 page=page,
@@ -224,17 +229,16 @@ def get_universe_router(bot_core: Any) -> Router:
                 logger.error(f"Error returning to universes list: {e}")
         await callback.answer()
 
-    @router.callback_query(F.data.startswith("set_sizing:") | F.data.startswith("set_closer:"))
-    async def cb_legacy_sizing_closer(callback: CallbackQuery):
+    async def cb_legacy_sizing_closer(self, callback: CallbackQuery):
         """Информационный ответ при нажатии устаревших кнопок сайзинга из старых сообщений."""
         await callback.answer(
             "⚠️ Интерактивный сайзинг упразднен.\nДинамика объемов управляется строго паспортом стратегии (first_order_weight_regime / smart_size).",
             show_alert=True,
         )
         try:
-            configured_strats = _get_configured_strategies()
-            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            text, btn_data = _get_report_service().render_universes_list(
+            configured_strats = self._get_configured_strategies()
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, self.bot_core)
+            text, btn_data = self._get_report_service().render_universes_list(
                 current_uid=current_uid,
                 active_strats=configured_strats,
                 page=1,
@@ -244,4 +248,8 @@ def get_universe_router(bot_core: Any) -> Router:
         except Exception:
             pass
 
-    return router
+
+def get_universe_router(bot_core: Any) -> Router:
+    """Фабрика роутера списка вселенных и тумблеров стратегий."""
+    handler = UniverseRouterHandler(bot_core=bot_core)
+    return handler.router

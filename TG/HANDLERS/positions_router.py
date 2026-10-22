@@ -22,16 +22,25 @@ from TG.states import TGStates
 logger = UnifiedLogger("TGPositionsRouter")
 
 
-def get_positions_router(bot_core: Any) -> Router:
-    """Фабрика роутера закрытия позиций."""
-    router = Router(name="positions_router")
+class PositionsRouterHandler:
+    """Класс-обработчик экстренного закрытия позиций (Dumb Shell: делегирует закрытие в BotCore)."""
 
-    @router.message(F.text == "🚨 Close All")
-    async def on_close_all(message: Message, state: FSMContext):
+    def __init__(self, bot_core: Any):
+        self.bot_core = bot_core
+        self.router = Router(name="positions_router")
+        self._register_routes()
+
+    def _register_routes(self) -> None:
+        r = self.router
+        r.message(F.text == "🚨 Close All")(self.on_close_all)
+        r.callback_query(F.data.startswith("close_dome_"))(self.on_close_dome_callback)
+        r.message(StateFilter(TGStates.waiting_for_close_all_confirm))(self.process_close_all_confirm)
+
+    async def on_close_all(self, message: Message, state: FSMContext):
         await state.clear()
         active_strats = {}
-        if hasattr(bot_core, "strategy_registry"):
-            reg = bot_core.strategy_registry
+        if hasattr(self.bot_core, "strategy_registry"):
+            reg = self.bot_core.strategy_registry
             active_strats = reg.get_active_strategies() if hasattr(reg, "get_active_strategies") else getattr(reg, "active_strategies", {})
 
         buttons = []
@@ -55,8 +64,7 @@ def get_positions_router(bot_core: Any) -> Router:
             parse_mode="HTML",
         )
 
-    @router.callback_query(F.data.startswith("close_dome_"))
-    async def on_close_dome_callback(callback: CallbackQuery, state: FSMContext):
+    async def on_close_dome_callback(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
         cdata = callback.data
         if cdata == "close_dome_cancel":
@@ -84,7 +92,7 @@ def get_positions_router(bot_core: Any) -> Router:
             return
 
         strat_id = cdata.replace("close_dome_", "")
-        strat = bot_core.strategy_registry.get_strategy(strat_id) if hasattr(bot_core, "strategy_registry") else None
+        strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
         strat_name = getattr(strat, "name", None) or strat_id
         symbols_str = ", ".join(strat.symbols) if (strat and hasattr(strat, "symbols") and strat.symbols) else "нет"
 
@@ -103,8 +111,7 @@ def get_positions_router(bot_core: Any) -> Router:
             parse_mode="HTML",
         )
 
-    @router.message(StateFilter(TGStates.waiting_for_close_all_confirm))
-    async def process_close_all_confirm(message: Message, state: FSMContext):
+    async def process_close_all_confirm(self, message: Message, state: FSMContext):
         data = await state.get_data()
         target = data.get("target_close_dome")
         await state.clear()
@@ -117,10 +124,10 @@ def get_positions_router(bot_core: Any) -> Router:
         if target == "all":
             msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=get_main_keyboard())
             try:
-                reset_report = await bot_core.close_all_positions(reset_iterations=True)
+                reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
                 active_tfrs = []
-                if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-                    for s in bot_core.strategy_registry.active_strategies.values():
+                if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                    for s in self.bot_core.strategy_registry.active_strategies.values():
                         t = getattr(s, "signal_heartbeat_tfr", None)
                         if t and t not in active_tfrs:
                             active_tfrs.append(t)
@@ -133,7 +140,7 @@ def get_positions_router(bot_core: Any) -> Router:
                 if reset_report:
                     lines.append("\n🔄 <b>Сброс циклов куполов (Positive Auto-Closing):</b>")
                     for strat_id, info in reset_report.items():
-                        s_obj = bot_core.strategy_registry.get_strategy(strat_id) if hasattr(bot_core, "strategy_registry") else None
+                        s_obj = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
                         name = getattr(s_obj, "name", None) or strat_id
                         lines.append(
                             f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
@@ -145,13 +152,13 @@ def get_positions_router(bot_core: Any) -> Router:
                 await msg.edit_text(f"❌ Произошла ошибка при закрытии всех куполов: {e}")
         elif target:
             strat_id = target
-            strat = bot_core.strategy_registry.get_strategy(strat_id) if hasattr(bot_core, "strategy_registry") else None
+            strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
             strat_name = getattr(strat, "name", None) or strat_id
             tfr_strat_label = getattr(strat, "signal_heartbeat_tfr", "5m") if strat else "5m"
             msg = await message.answer(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", reply_markup=get_main_keyboard(), parse_mode="HTML")
             try:
-                await bot_core.close_strategy_positions(strat_id)
-                info = await bot_core.reset_strategy_iteration(strat_id)
+                await self.bot_core.close_strategy_positions(strat_id)
+                info = await self.bot_core.reset_strategy_iteration(strat_id)
                 lines = [
                     f"✅ <b>Купол [{strat_name}] успешно закрыт!</b>",
                     f"Позиции монет закрыты по рынку, ордера отменены.",
@@ -166,4 +173,8 @@ def get_positions_router(bot_core: Any) -> Router:
         else:
             await message.answer("❌ Купол для закрытия не найден.", reply_markup=get_main_keyboard())
 
-    return router
+
+def get_positions_router(bot_core: Any) -> Router:
+    """Фабрика роутера закрытия позиций."""
+    handler = PositionsRouterHandler(bot_core=bot_core)
+    return handler.router
