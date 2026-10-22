@@ -5,8 +5,6 @@
 
 from __future__ import annotations
 
-import html
-import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +17,9 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from ANALYTICS.plotter import generate_equity_curve, generate_balance_curve
+from ANALYTICS.FORMATTERS.bigboard_formatter import BigBoardFormatter
+from ANALYTICS.FORMATTERS.coin_card_formatter import CoinCardFormatter
+from ANALYTICS.FORMATTERS.universe_list_formatter import UniverseListFormatter
 
 logger = UnifiedLogger("AnalyticsReportService")
 
@@ -28,6 +29,7 @@ class AnalyticsReportService:
     Канонический сервис формирования аналитических карточек, лидерборда,
     ранжирования монет и выгрузки графиков. Вся бизнес-логика и рендеринг аналитики
     сосредоточены здесь, освобождая Telegram-слой от вычислений (Dumb Executor).
+    Делегирует специализированное форматирование модулям из ANALYTICS/FORMATTERS/.
     """
 
     def __init__(self, analytics_manager=None, stats_dir: Optional[Path] = None, ledgers_dir: Optional[Path] = None):
@@ -74,629 +76,69 @@ class AnalyticsReportService:
     @staticmethod
     def format_trade_velocity_block(vel_dict: Optional[Dict[str, Any]], title: str = "Trade Velocity (Частота сделок)") -> str:
         """Форматирует информационный блок Trade Velocity строго по данным без скрытого хардкода."""
-        if not vel_dict or not isinstance(vel_dict, dict) or "timeframe_hours" not in vel_dict:
-            return f"⚡ <b>{title}:</b>\n└ <code>Нет данных о скорости сделок</code>\n\n"
-
-        tf_h = float(vel_dict["timeframe_hours"])
-        acc_h = float(vel_dict.get("accumulation_hours") or 0.0)
-        min_acc = float(vel_dict.get("min_accumulation_hours") or tf_h)
-        benchmark = float(vel_dict.get("benchmark_speed") or 0.0)
-        slice_trades = int(vel_dict.get("slice_trades_count") or 0)
-        slice_coins = int(vel_dict.get("slice_coins_count") or 0)
-        status_desc = str(vel_dict.get("status_desc") or "Накопление")
-        status = str(vel_dict.get("status") or "ACCUMULATING")
-
-        if status == "HIGH_VOLATILITY":
-            status_icon = "🔥"
-        elif status == "LOW_VOLATILITY":
-            status_icon = "❄️"
-        elif status == "ACCUMULATING":
-            status_icon = "⏳"
-        else:
-            status_icon = "🟢"
-
-        if not vel_dict.get("is_ready_for_alerts") or vel_dict.get("avg_effective_speed") is None:
-            return (
-                f"⚡ <b>{title}:</b>\n"
-                f"├ <b>Скорость:</b> ⏳ <i>Накопление ({acc_h:.1f}ч из {min_acc:.1f}ч)</i>\n"
-                f"├ <b>Сделок в окне:</b> <code>{slice_trades} сд.</code> ({slice_coins} монет)\n"
-                f"└ <b>Эталон:</b> <code>{benchmark:.1f} сд/монета за {tf_h:.1f}ч</code>\n\n"
-            )
-
-        eff_speed = float(vel_dict.get("avg_effective_speed") or 0.0)
-        ratio = float(vel_dict.get("speed_ratio") or 1.0)
-        dev_pct = float(vel_dict.get("deviation_pct") or 0.0)
-        dev_sign = "+" if dev_pct > 0 else ""
-
-        return (
-            f"⚡ <b>{title}:</b>\n"
-            f"├ <b>Скорость:</b> <b>{eff_speed:.2f} сд/монета</b> ({status_icon} <b>{status_desc}</b>)\n"
-            f"├ <b>Активность:</b> <code>x{ratio:.2f}</code> ({dev_sign}{dev_pct:.1f}% к эталону {benchmark:.1f})\n"
-            f"└ <b>Окно ({tf_h:.1f}ч):</b> <code>{slice_trades} сд.</code> на {slice_coins} монет (накоплено <code>{acc_h:.1f}ч</code>)\n\n"
-        )
+        return BigBoardFormatter.format_trade_velocity_block(vel_dict, title=title)
 
     def render_universe_analytics_card(self, current_uid: str, univ_name: str) -> Tuple[str, List[List[Dict[str, str]]]]:
         """Формирует HTML-текст и кнопки карточки детальной аналитики купола."""
-        clean_name = html.escape(univ_name)
-        strat_cfg = _CFG.get("active_strategies", {}).get(current_uid, {}) if isinstance(_CFG, dict) else {}
-        cfg_start = float(strat_cfg.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT)) if isinstance(strat_cfg, dict) else float(ANALYTICS_START_BALANCE_USDT)
-
-        start_bal = cfg_start
-        cur_bal = cfg_start
-        peak_bal = cfg_start
-        min_bal = cfg_start
-        net_profit = 0.0
-        realized = 0.0
-        unrealized = 0.0
-        max_dd = 0.0
-        recovery = 0.0
-        trades_cnt = 0
-        iter_idx = 1
-        dome_vel = None
-
-        analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
-        if not analytics_path.exists():
-            matches = list(self.stats_dir.glob(f"analytics_{current_uid}*.json"))
-            if matches:
-                analytics_path = sorted(matches)[0]
-
-        if analytics_path.exists():
-            try:
-                adata = json.loads(analytics_path.read_text(encoding="utf-8"))
-                start_bal = float(adata.get("start_balance_usdt", start_bal))
-                cur_bal = float(adata.get("cur_balance_usdt", start_bal))
-                peak_bal = float(adata.get("peak_balance_usdt", max(start_bal, cur_bal)))
-                min_bal = float(adata.get("min_balance_usdt", min(start_bal, cur_bal)))
-                net_profit = float(adata.get("net_profit_usdt", 0.0))
-                realized = float(adata.get("realized_pnl_net_usdt", adata.get("realized_pnl_usdt", 0.0)))
-                unrealized = float(adata.get("unrealized_pnl_usdt", 0.0))
-                max_dd = float(adata.get("max_drawdown_usdt", 0.0))
-                recovery = float(adata.get("recovery_factor", 0.0))
-                trades_cnt = int(adata.get("total_trades", 0))
-                iter_idx = int(adata.get("iteration_index", 1))
-                dome_vel = adata.get("trade_velocity")
-            except Exception as e:
-                logger.error(f"[REPORT_SERVICE] Error reading analytics for {current_uid}: {e}")
-
-        if not dome_vel and self.analytics_manager and hasattr(self.analytics_manager, "get_trade_velocity"):
-            dome_vel = self.analytics_manager.get_trade_velocity(current_uid)
-
-        vel_block = self.format_trade_velocity_block(dome_vel, title="⚡ Trade Velocity (Купол)")
-
-        roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
-        net_sign = "+" if net_profit > 0 else ""
-        roi_sign = "+" if roi_pct > 0 else ""
-        real_sign = "+" if realized > 0 else ""
-        unreal_sign = "+" if unrealized > 0 else ""
-
-        peel_cnt, peel_vol, rec_cnt, rec_vol = 0, 0.0, 0, 0.0
-        try:
-            from ANALYTICS.leaderboard import LeaderboardEngine
-            lb_engine = getattr(self.analytics_manager, "leaderboard_engine", None) or LeaderboardEngine(stats_dir=self.stats_dir)
-            u_summary = lb_engine.calculate_universe_summary(current_uid, {"name": univ_name})
-            peel_cnt = int(u_summary.get("peel_events", 0))
-            peel_vol = float(u_summary.get("peel_vol_usdt", 0.0))
-            rec_cnt = int(u_summary.get("rec_events", 0))
-            rec_vol = float(u_summary.get("rec_burn_usdt", 0.0))
-        except Exception:
-            pass
-
-        def_line = f"├ <b>Дефенс:</b> 🍊 {peel_cnt} пилинг ({peel_vol:.1f}$) | ♻️ {rec_cnt} рециклер ({rec_vol:.1f}$)\n"
-
-        text = (
-            f"📊 <b>АНАЛИТИКА КУПОЛА СТРАТЕГИИ</b>\n"
-            f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
-            f"💰 <b>Баланс и Пики купола:</b>\n"
-            f"├ <b>Текущий баланс:</b> <code>{cur_bal:,.2f}$</code>\n"
-            f"├ <b>Начальный баланс:</b> <code>{start_bal:,.2f}$</code>\n"
-            f"├ <b>ATH (Пик баланса):</b> <code>{peak_bal:,.2f}$</code>\n"
-            f"└ <b>Дно (Минимум):</b> <code>{min_bal:,.2f}$</code>\n\n"
-            f"📈 <b>Результаты купола:</b>\n"
-            f"├ <b>Net Profit:</b> <b>{net_sign}{net_profit:,.2f}$</b> ({roi_sign}{roi_pct:.2f}%)\n"
-            f"├ <b>Realized:</b> {real_sign}{realized:,.2f}$ | <b>Floating:</b> {unreal_sign}{unrealized:,.2f}$\n"
-            f"{def_line}"
-            f"├ <b>Max Drawdown:</b> {max_dd:,.2f}$ | <b>Recovery:</b> {recovery:.2f}\n"
-            f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
-            f"{vel_block}"
-            f"<i>Выберите раздел аналитики:</i>"
+        return BigBoardFormatter.render_universe_analytics_card(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+            analytics_manager=self.analytics_manager,
         )
 
-        buttons = [
-            [{"text": "🏆 Рейтинг монет", "callback_data": f"arank:net:{current_uid}:new"}],
-            [{"text": "🪙 Аналитика по монетам", "callback_data": f"analytics_coin_menu:{current_uid}"}],
-            [{"text": "📈 График эквити", "callback_data": f"analytics_chart:{current_uid}"}],
-            [{"text": "📝 Лента сделок (TXT)", "callback_data": f"analytics_txt:{current_uid}"}],
-            [{"text": "📄 Выгрузить весь отчет (TXT)", "callback_data": f"analytics_full_report:{current_uid}"}],
-            [
-                {"text": "🔄 Сменить вселенную", "callback_data": "univ_page:1"},
-                {"text": "🏆 Лидерборд стратегий", "callback_data": "analytics_bb_leaderboard"},
-            ],
-            [{"text": "📚 Шпаргалка (Cheat Sheet)", "callback_data": "analytics_cheat_sheet"}],
-        ]
-
-        return text, buttons
-
-    def render_portfolio_big_board(self, current_uid: str, univ_name: str, active_strats: Optional[dict] = None) -> Tuple[str, List[List[Dict[str, str]]]]:
+    def render_portfolio_big_board(
+        self, current_uid: str, univ_name: str, active_strats: Optional[dict] = None
+    ) -> Tuple[str, List[List[Dict[str, str]]]]:
         """Формирует HTML-текст и кнопки портфельного Биг Борда."""
-        portfolio_summary = {}
-        engine = getattr(self.analytics_manager, "leaderboard_engine", None)
-        if engine and hasattr(engine, "get_portfolio_summary"):
-            try:
-                active_strats = active_strats or {}
-                universes_meta = {
-                    sid: {**getattr(scfg, "raw_meta", {}), "name": getattr(scfg, "name", sid), "enabled": True}
-                    for sid, scfg in active_strats.items()
-                }
-                entries = engine.generate_leaderboard(universes_meta)
-                portfolio_summary = engine.get_portfolio_summary(entries)
-            except Exception as e:
-                logger.error(f"[REPORT_SERVICE] Error getting portfolio summary: {e}")
-
-        if not portfolio_summary:
-            p_path = self.stats_dir / "analytics_all.json"
-            if p_path.exists():
-                try:
-                    portfolio_summary = json.loads(p_path.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
-
-        clean_name = html.escape(univ_name)
-        start_bal = float(portfolio_summary.get("aggregate_start_balance_usdt", 0.0))
-        cur_bal = float(portfolio_summary.get("aggregate_cur_balance_usdt", start_bal))
-        peak_bal = float(portfolio_summary.get("aggregate_peak_balance_usdt", max(start_bal, cur_bal)))
-        min_bal = float(portfolio_summary.get("aggregate_min_balance_usdt", min(start_bal, cur_bal)))
-        net_profit = float(portfolio_summary.get("aggregate_net_profit_usdt", 0.0))
-        realized = float(portfolio_summary.get("aggregate_realized_pnl_usdt", 0.0))
-        unrealized = float(portfolio_summary.get("aggregate_unrealized_pnl_usdt", 0.0))
-        trades_cnt = int(portfolio_summary.get("aggregate_total_trades", 0))
-        active_count = int(portfolio_summary.get("total_universes_active", len(active_strats) if active_strats else 1))
-
-        roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
-        net_sign = "+" if net_profit > 0 else ""
-        roi_sign = "+" if roi_pct > 0 else ""
-        real_sign = "+" if realized > 0 else ""
-        unreal_sign = "+" if unrealized > 0 else ""
-
-        port_vel = portfolio_summary.get("trade_velocity")
-        if not port_vel and self.analytics_manager and hasattr(self.analytics_manager, "get_trade_velocity"):
-            port_vel = self.analytics_manager.get_trade_velocity("default")
-        vel_block = self.format_trade_velocity_block(port_vel, title="Trade Velocity (Частота сделок портфеля)")
-
-        text = (
-            f"🏛️ <b>ПОРТФЕЛЬНЫЙ БИГ БОРД (КУМУЛЯТИВНЫЙ БАЛАНС)</b>\n"
-            f"🌐 <i>Агрегированная сводка по всем стратегиям ({active_count} куполов)</i>\n\n"
-            f"💰 <b>Капитал портфеля:</b>\n"
-            f"├ <b>Текущий баланс:</b> <code>{cur_bal:,.2f}$</code>\n"
-            f"├ <b>Начальный баланс:</b> <code>{start_bal:,.2f}$</code>\n"
-            f"├ <b>ATH (Пик баланса):</b> <code>{peak_bal:,.2f}$</code>\n"
-            f"└ <b>Дно (Минимум):</b> <code>{min_bal:,.2f}$</code>\n\n"
-            f"📊 <b>Совокупный PnL:</b>\n"
-            f"├ <b>Net Profit:</b> <b>{net_sign}{net_profit:,.2f}$</b> ({roi_sign}{roi_pct:.2f}%)\n"
-            f"├ <b>Realized:</b> <code>{real_sign}{realized:,.2f}$</code>\n"
-            f"├ <b>Floating (Нереализ.):</b> <code>{unreal_sign}{unrealized:,.2f}$</code>\n"
-            f"└ <b>Всего сделок:</b> <code>{trades_cnt}</code>\n\n"
-            f"{vel_block}"
-            f"🌌 <b>Текущий выбранный купол:</b>\n"
-            f"▶️ <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
-            f"<i>Выберите действие или перейдите в детальную аналитику купола:</i>"
+        return BigBoardFormatter.render_portfolio_big_board(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+            active_strats=active_strats,
+            analytics_manager=self.analytics_manager,
         )
-
-        short_uid = (current_uid[:20] + "..") if len(current_uid) > 20 else current_uid
-        buttons = [
-            [{"text": f"🌌 Аналитика купола: {short_uid}", "callback_data": f"analytics_dome:{current_uid}"}],
-            [
-                {"text": "🔄 Сменить купол", "callback_data": "univ_page:1"},
-                {"text": "🏆 Лидерборд стратегий", "callback_data": "analytics_bb_leaderboard"},
-            ],
-        ]
-
-        return text, buttons
 
     def render_full_report_text(self, current_uid: str, univ_name: str) -> str:
         """Формирует полный детальный текстовый отчет для выгрузки в файл TXT со всеми глобальными и per-coin метриками."""
-        analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
-        if not analytics_path.exists():
-            matches = list(self.stats_dir.glob(f"analytics_{current_uid}*.json"))
-            if matches:
-                analytics_path = sorted(matches)[0]
-            else:
-                return f"No analytics found for {current_uid}"
-
-        try:
-            data = json.loads(analytics_path.read_text(encoding="utf-8"))
-            lines = [
-                "=" * 50,
-                f"STRATEGY DOME ANALYTICS REPORT: {univ_name} ({current_uid})",
-                "=" * 50 + "\n",
-            ]
-
-            def _f(v, d=0.0):
-                try:
-                    return float(v) if v is not None else d
-                except (ValueError, TypeError):
-                    return d
-
-            def _i(v, d=0):
-                try:
-                    return int(v) if v is not None else d
-                except (ValueError, TypeError):
-                    return d
-
-            # 1. Balances
-            start_val = _f(data.get("start_balance_usdt", 0))
-            cur_val = _f(data.get("cur_balance_usdt", start_val))
-            peak_val = _f(data.get("peak_balance_usdt", cur_val))
-            min_val = _f(data.get("min_balance_usdt", cur_val))
-
-            lines.append("Balances:")
-            lines.append(f"  Start: {start_val:,.2f} USDT")
-            lines.append(f"  Current: {cur_val:,.2f} USDT")
-            lines.append(f"  Peak: {peak_val:,.2f} USDT")
-            lines.append(f"  Min (Bottom): {min_val:,.2f} USDT\n")
-
-            # 2. Performance (Global)
-            per_coin_dict = data.get("per_coin", {})
-            realized = _f(data.get("realized_pnl_usdt", 0))
-            realized_net = _f(data.get("realized_pnl_net_usdt", realized))
-            comm = _f(data.get("total_commission_usdt", 0))
-            fund = _f(data.get("total_funding_usdt", 0))
-            if comm == 0.0 and per_coin_dict:
-                comm = sum(_f(c.get("commission_usdt", 0.0)) for c in per_coin_dict.values())
-            if fund == 0.0 and per_coin_dict:
-                fund = sum(_f(c.get("funding_usdt", 0.0)) for c in per_coin_dict.values())
-
-            net_profit = _f(data.get("net_profit_usdt", 0))
-            unrealized = _f(data.get("unrealized_pnl_usdt", 0))
-            max_dd = _f(data.get("max_drawdown_usdt", 0))
-            rec_factor = _f(data.get("recovery_factor", 0))
-            perf_growth = _f(data.get("performance_usdt", peak_val - start_val))
-            roi = _f(data.get("roi_pct", (net_profit / start_val * 100.0) if start_val > 0 else 0.0))
-
-            gload_pct = _f(data.get("grid_load_pct", 0))
-            curr_gload = _f(data.get("current_grid_load_usdt", 0))
-            tot_gsize = _f(data.get("total_grid_size_usdt", 0))
-            max_gload_pct = _f(data.get("max_grid_load_pct", 0))
-
-            mload_pct = _f(data.get("margin_load_pct", 0))
-            tot_mused = _f(data.get("total_margin_used_usdt", 0))
-            max_mload_pct = _f(data.get("max_margin_load_pct", 0))
-
-            free_m = _f(data.get("free_margin_usdt", cur_val - tot_mused))
-            free_m_pct = _f(data.get("free_margin_pct", (free_m / cur_val * 100.0) if cur_val > 0 else 0.0))
-            min_free_m = _f(data.get("min_free_margin_usdt", free_m))
-
-            total_trades = _i(data.get("total_trades", 0))
-            win_trades = _i(data.get("winning_trades", 0))
-            winrate = _f(data.get("winrate_pct", (win_trades / total_trades * 100.0) if total_trades > 0 else 0.0))
-
-            lines.append("Performance:")
-            lines.append(f"  Net Profit: {net_profit:+,.2f} USDT")
-            lines.append(f"  Realized PnL (Gross): {realized:+,.2f} USDT")
-            lines.append(f"  Realized PnL (Net): {realized_net:+,.2f} USDT")
-            lines.append(f"  Total Commission: {comm:,.4f} USDT")
-            lines.append(f"  Total Funding: {fund:,.4f} USDT")
-            lines.append(f"  Unrealized PnL: {unrealized:+,.2f} USDT")
-            lines.append(f"  Max Drawdown: {max_dd:,.2f} USDT")
-            lines.append(f"  Performance (Peak-Start): {perf_growth:+,.2f} USDT")
-            lines.append(f"  ROI: {roi:.2f}%")
-            lines.append(f"  Grid Load: {gload_pct:.2f}% ({curr_gload:,.2f} / {tot_gsize:,.2f} USDT | Max: {max_gload_pct:.2f}%)")
-            lines.append(f"  Margin Load: {mload_pct:.2f}% (Used: {tot_mused:,.2f} USDT | Max: {max_mload_pct:.2f}%)")
-            lines.append(f"  Free Margin: {free_m:,.2f} USDT ({free_m_pct:.2f}% | Min: {min_free_m:,.2f} USDT)")
-            lines.append(f"  Recovery Factor: {rec_factor:.2f}")
-            lines.append(f"  Trades: {total_trades} (Wins: {win_trades} | {winrate:.1f}%)\n")
-
-            # 3. Iteration info
-            it_idx = data.get("iteration_index", 1)
-            it_net = _f(data.get("iteration_net_profit_usdt", net_profit))
-            it_vel = _f(data.get("iteration_net_velocity", 0))
-            lines.append("Trading Activity & Iteration:")
-            lines.append(f"  Iteration: #{it_idx} (Net: {it_net:+,.2f} USDT | Velocity: {it_vel:.2f} $/h)\n")
-
-            # 4. Toxic Defense / Subgrid Peeling
-            td = data.get("toxic_defense", {})
-            if td:
-                peel = td.get("subgrid_peeling", {})
-                rec = td.get("cross_recycling", {})
-                p_cnt = _i(peel.get("events_count"))
-                r_cnt = _i(rec.get("events_count"))
-                if p_cnt > 0 or r_cnt > 0:
-                    lines.append("Toxic Defense & Peeling:")
-                    lines.append(
-                        f"  Subgrid Peeling: {p_cnt} events | "
-                        f"Loss: -{_f(peel.get('peel_loss_usdt')):.2f} USDT | "
-                        f"Micro-PnL: +{_f(peel.get('locked_micro_pnl_usdt')):.2f} USDT"
-                    )
-                    lines.append(
-                        f"  Cross-Recycling: {r_cnt} events | "
-                        f"Loss Absorbed: -{_f(rec.get('loss_absorbed_usdt')):.2f} USDT | "
-                        f"Profit Spent: {_f(rec.get('profit_spent_usdt')):.2f} USDT\n"
-                    )
-
-            # 5. PER-COIN METRICS
-            lines.append("=" * 50)
-            lines.append("PER-COIN METRICS")
-            lines.append("=" * 50 + "\n")
-
-            for sym, c in sorted(per_coin_dict.items(), key=lambda x: _f(x[1].get("net_profit_usdt", 0)), reverse=True):
-                is_active = c.get("is_active_symbol", c.get("is_active", True))
-                status_str = "[АКТИВНА]" if is_active else "[ВЫВЕДЕНА / АРХИВ]"
-
-                c_trades = _i(c.get("total_trades", c.get("trades", 0)))
-                c_wins = _i(c.get("winning_trades", c.get("win_count", 0)))
-                c_wr = _f(c.get("winrate_pct", (c_wins / c_trades * 100.0) if c_trades > 0 else 0.0))
-
-                c_np = _f(c.get("net_profit_usdt", 0))
-                c_roi = round(c_np / start_val * 100.0, 2) if start_val > 0 else 0.0
-                c_roi_sign = "+" if c_roi > 0 else ""
-
-                c_realized_gross = _f(c.get("realized_pnl_usdt", c.get("gross_realized_usdt", 0)))
-                c_realized_net = _f(c.get("realized_pnl_net_usdt", c_realized_gross))
-                c_comm = _f(c.get("commission_usdt", 0))
-                c_fund = _f(c.get("funding_usdt", 0))
-
-                c_unrealized = _f(c.get("current_drawdown", _f(c.get("long_unrealized", 0)) + _f(c.get("short_unrealized", 0))))
-                c_max_dd = _f(c.get("max_drawdown", 0))
-                c_min_dd = _f(c.get("min_drawdown", 0))
-
-                c_avg_daily = _f(c.get("avg_daily_profit", 0))
-                c_gload_pct = _f(c.get("current_grid_load_pct", 0))
-                c_gload_usdt = _f(c.get("current_grid_load_usdt", 0))
-                c_gcap_usdt = _f(c.get("grid_capacity_usdt", 0))
-                c_max_gload_pct = _f(c.get("max_grid_load_pct", 0))
-
-                c_mused = _f(c.get("current_margin_usdt", 0))
-                c_mload_pct = _f(c.get("margin_load_pct", 0))
-                c_max_mused = _f(c.get("max_margin_usdt", 0))
-
-                c_pos_size = _f(c.get("max_position_size", c_gload_usdt))
-                c_rec = _f(c.get("recovery_factor", 0))
-                c_rrr = _f(c.get("risk_reward_ratio", 0))
-                c_abs_rec = _f(c.get("abs_recovery_factor", 0))
-
-                lines.append(f"--- {sym} {status_str} ---")
-                lines.append(f"  Trades: {c_trades} (Wins: {c_wins} | {c_wr:.1f}%)")
-                lines.append(f"  Net Profit: {c_np:+,.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI)")
-                lines.append(f"  Realized (Gross): {c_realized_gross:+,.2f} USDT")
-                lines.append(f"  Realized (Net): {c_realized_net:+,.2f} USDT")
-                lines.append(f"  Fees: Comm {c_comm:,.4f} / Fund {c_fund:,.4f}")
-                lines.append(f"  Unrealized PnL: {c_unrealized:+,.2f} USDT")
-                lines.append(f"  Hist. Drawdown: Max {c_max_dd:,.2f} / Min {c_min_dd:,.2f} USDT")
-                lines.append(f"  Avg Daily Profit (Net): {c_avg_daily:+,.2f} USDT")
-                lines.append(f"  Grid Load: {c_gload_pct:.2f}% ({c_gload_usdt:,.2f} / {c_gcap_usdt:,.2f} USDT | Max: {c_max_gload_pct:.2f}%)")
-                lines.append(f"  Margin Used: {c_mused:,.2f} USDT ({c_mload_pct:.2f}% balance | Max: {c_max_mused:,.2f} USDT)")
-                lines.append(f"  Max Position Size: {c_pos_size:,.2f} USDT")
-                lines.append(f"  Recovery Factor: {c_rec:.2f}")
-                lines.append(f"  Risk/Reward Ratio: {c_rrr:.2f}")
-                lines.append(f"  Abs Recovery Factor: {c_abs_rec:.2f}\n")
-
-            return "\n".join(lines)
-        except Exception as e:
-            return f"Error building full report for {current_uid}: {e}"
+        return BigBoardFormatter.render_full_report_text(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+        )
 
     def render_ranking_report(
         self, current_uid: str, univ_name: str, criterion: str = "net", active_symbols: Optional[List[str]] = None
     ) -> Tuple[List[str], List[List[Dict[str, str]]]]:
         """Формирует отчет рейтинга монет по выбранному критерию (net, rec, abs_rec)."""
-        clean_name = html.escape(univ_name)
-        analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
-        if not analytics_path.exists():
-            matches = list(self.stats_dir.glob(f"analytics_{current_uid}*.json"))
-            if matches:
-                analytics_path = sorted(matches)[0]
-
-        if not analytics_path.exists():
-            return [f"Analytics JSON для купола <code>{current_uid}</code> не найден."], []
-
-        try:
-            data = json.loads(analytics_path.read_text(encoding="utf-8"))
-            per_coin = dict(data.get("per_coin", {}))
-
-            if active_symbols:
-                for s_sym in active_symbols:
-                    per_coin.setdefault(
-                        s_sym,
-                        {
-                            "net_profit_usdt": 0.0,
-                            "realized_pnl_net_usdt": 0.0,
-                            "recovery_factor": 0.0,
-                            "abs_recovery_factor": 0.0,
-                            "total_trades": 0,
-                        },
-                    )
-
-            if not per_coin:
-                return [f"Нет данных по монетам для купола <code>{current_uid}</code>."], []
-
-            def _sf(v, d=0.0):
-                try:
-                    return float(v) if v is not None else d
-                except (ValueError, TypeError):
-                    return d
-
-            if criterion == "rec":
-                sorted_coins = sorted(per_coin.items(), key=lambda x: _sf(x[1].get("recovery_factor", -float("inf"))), reverse=True)
-                title = "по Recovery Factor (Тек) (больше = лучше)"
-            elif criterion == "abs_rec":
-                sorted_coins = sorted(per_coin.items(), key=lambda x: _sf(x[1].get("abs_recovery_factor", -float("inf"))), reverse=True)
-                title = "по Abs Recovery (Пик/DD) (больше = лучше)"
-            else:
-                criterion = "net"
-                sorted_coins = sorted(per_coin.items(), key=lambda x: _sf(x[1].get("net_profit_usdt", -float("inf"))), reverse=True)
-                title = "по Net Profit (больше = лучше)"
-
-            strat_cfg = _CFG.get("active_strategies", {}).get(current_uid, {}) if isinstance(_CFG, dict) else {}
-            cfg_start = float(strat_cfg.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT)) if isinstance(strat_cfg, dict) else float(ANALYTICS_START_BALANCE_USDT)
-            st_bal = _sf(data.get("start_balance_usdt", cfg_start))
-
-            lines = [f"<b>🏆 Рейтинг монет [Купол: {clean_name}] ({title})</b>\n"]
-            for i, (sym, cdata) in enumerate(sorted_coins, 1):
-                if criterion == "rec":
-                    rec = _sf(cdata.get("recovery_factor", 0.0))
-                    net = _sf(cdata.get("net_profit_usdt", 0.0))
-                    dd = abs(_sf(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
-                    val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i>"
-                elif criterion == "abs_rec":
-                    abs_rec = _sf(cdata.get("abs_recovery_factor", 0.0))
-                    peak = _sf(cdata.get("peak_net_profit_usdt", max(0.0, _sf(cdata.get("net_profit_usdt", 0.0)))))
-                    dd = abs(_sf(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
-                    val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик Net: {peak:+.2f} / |DD|: {dd:.2f})</i>"
-                else:
-                    net_profit = round(_sf(cdata.get("net_profit_usdt", 0)), 2)
-                    realized_net = round(_sf(cdata.get("realized_pnl_net_usdt", 0)), 2)
-                    tr = cdata.get("total_trades", cdata.get("trades", 0))
-                    c_roi = round(net_profit / st_bal * 100.0, 2) if st_bal > 0 else 0.0
-                    c_roi_sign = "+" if c_roi > 0 else ""
-                    val_str = f"{net_profit:+.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI) <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
-
-                is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
-                active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
-                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▪️"
-
-                coin_peel = cdata.get("peeling", {})
-                coin_rec = cdata.get("cross_recycling", {})
-                p_loss = abs(_sf(coin_peel.get("peel_loss_usdt", 0.0)))
-                r_loss = abs(_sf(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
-                realized_net = round(_sf(cdata.get("realized_pnl_net_usdt", 0)), 2)
-                gross_tp = _sf(cdata.get("gross_realized_usdt", 0.0))
-                if gross_tp <= 0.0:
-                    gross_tp = realized_net + p_loss + r_loss
-                gross_tp = max(0.0, round(gross_tp, 2))
-
-                lines.append(f"{medal} <b>{sym}</b>{active_badge}: {val_str}")
-                lines.append(f"   └ 🛡️ TP: <b>+{gross_tp:.2f}$</b> | Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b>")
-
-            switch_buttons = [
-                [
-                    {"text": "Net Profit", "callback_data": f"arank:net:{current_uid}:s"},
-                    {"text": "Recovery (Тек)", "callback_data": f"arank:rec:{current_uid}:s"},
-                    {"text": "Abs Recovery", "callback_data": f"arank:abs_rec:{current_uid}:s"},
-                ],
-                [{"text": "❌ Закрыть рейтинг", "callback_data": "delete_ranking_msg"}],
-            ]
-
-            messages = []
-            curr = ""
-            for line in lines:
-                if len(curr) + len(line) + 1 > 4000:
-                    messages.append(curr)
-                    curr = line + "\n"
-                else:
-                    curr += line + "\n"
-            if curr:
-                messages.append(curr)
-
-            return messages, switch_buttons
-        except Exception as e:
-            logger.error(f"[REPORT_SERVICE] Error generating ranking for {current_uid}: {e}")
-            return [f"⚠️ Ошибка отображения рейтинга монет: {e}"], []
+        return CoinCardFormatter.render_ranking_report(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+            criterion=criterion,
+            active_symbols=active_symbols,
+        )
 
     def render_coin_detail_report(self, current_uid: str, univ_name: str, symbol: str, is_active: bool) -> Optional[str]:
         """Формирует текстовый отчет детализации по конкретной монете."""
-        clean_name = html.escape(univ_name)
-        status_text = "🟢 Активна" if is_active else "🔴 Отключена"
-        analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
-        if not analytics_path.exists():
-            matches = list(self.stats_dir.glob(f"analytics_{current_uid}*.json"))
-            if matches:
-                analytics_path = sorted(matches)[0]
-
-        if not analytics_path.exists():
-            return None
-
-        try:
-            data = json.loads(analytics_path.read_text(encoding="utf-8"))
-            per_coin = data.get("per_coin", {})
-            if symbol not in per_coin:
-                return None
-            cdata = per_coin[symbol]
-
-            net_profit = float(cdata.get("net_profit_usdt", 0.0))
-            realized = float(cdata.get("realized_pnl_usdt", 0.0))
-            realized_net = float(cdata.get("realized_pnl_net_usdt", realized))
-            max_np = float(cdata.get("max_net_profit", net_profit))
-            min_np = float(cdata.get("min_net_profit", net_profit))
-            cur_dd = float(cdata.get("current_drawdown", 0.0))
-            max_dd = float(cdata.get("max_drawdown", 0.0))
-            trades = int(cdata.get("total_trades", cdata.get("trades", 0)))
-            wins = int(cdata.get("winning_trades", cdata.get("win_count", 0)))
-            wr = float(cdata.get("winrate_pct", 0.0))
-            comm = float(cdata.get("commission_usdt", 0.0))
-            fund = float(cdata.get("funding_usdt", 0.0))
-            gload = float(cdata.get("current_grid_load_pct", 0.0))
-            mused = float(cdata.get("current_margin_usdt", 0.0))
-
-            strat_cfg = _CFG.get("active_strategies", {}).get(current_uid, {}) if isinstance(_CFG, dict) else {}
-            cfg_start = float(strat_cfg.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT)) if isinstance(strat_cfg, dict) else float(ANALYTICS_START_BALANCE_USDT)
-            start_bal_u = float(data.get("start_balance_usdt", cfg_start))
-
-            coin_roi_pct = round((net_profit / start_bal_u * 100.0), 2) if start_bal_u > 0 else 0.0
-            coin_roi_sign = "+" if coin_roi_pct > 0 else ""
-
-            rec = float(cdata.get("recovery_factor", 0.0))
-            abs_rec = float(cdata.get("abs_recovery_factor", 0.0))
-            avg_daily = float(cdata.get("avg_daily_profit", 0.0))
-            rrr = float(cdata.get("risk_reward_ratio", 0.0))
-            max_pos = float(cdata.get("max_position_size", 0.0))
-
-            return (
-                f"🪙 <b>ДЕТАЛИЗАЦИЯ БАЛАНСОВ: {symbol}</b> ({status_text})\n"
-                f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
-                f"💰 <b>БАЛАНСЫ И PnL:</b>\n"
-                f"  • <b>Текущий PnL (Floating):</b> <code>{cur_dd:+.2f} USDT</code>\n"
-                f"  • <b>Пиковый Net Profit:</b> <code>{max_np:+.2f} USDT</code>\n"
-                f"  • <b>Самый низкий Net Profit:</b> <code>{min_np:+.2f} USDT</code>\n"
-                f"  • <b>Исторический Max Drawdown:</b> <code>{max_dd:.2f} USDT</code>\n"
-                f"  • <b>Накопленный Net Profit:</b> <code>{net_profit:+.2f} USDT</code> ({coin_roi_sign}{coin_roi_pct:.2f}% ROI)\n"
-                f"  • <b>Realized PnL (Net):</b> <code>{realized_net:+.2f} USDT</code> (Gross: <code>{realized:+.2f} $</code>)\n\n"
-                f"📊 <b>ТОРГОВЫЕ МЕТРИКИ:</b>\n"
-                f"  • Сделок: <b>{trades}</b> (Побед: {wins} | {wr:.1f}%)\n"
-                f"  • Grid Load: <b>{gload:.1f}%</b> | Margin Used: <b>{mused:.2f} USDT</b>\n"
-                f"  • Комиссии / Funding: Comm <b>{comm:.4f} $</b> | Fund <b>{fund:.4f} $</b>\n"
-                f"  • Recovery Factor: <b>{rec:.2f}</b> (Abs: <b>{abs_rec:.2f}</b>)\n"
-                f"  • Ср. профит/день: <b>{avg_daily:+.2f} $</b> | R/R: <b>{rrr:.2f}</b> | Max Pos: <b>{max_pos:.2f} $</b>\n"
-            )
-        except Exception as e:
-            logger.error(f"[REPORT_SERVICE] Error reading per_coin for {symbol}: {e}")
-            return None
+        return CoinCardFormatter.render_coin_detail_report(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+            symbol=symbol,
+            is_active=is_active,
+        )
 
     def render_coin_menu(
         self, current_uid: str, univ_name: str, active_symbols: List[str]
     ) -> Tuple[str, List[List[Dict[str, str]]]]:
         """Формирует меню выбора монеты купола со статусами активности."""
-        clean_name = html.escape(univ_name)
-        universe_coins = set(active_symbols)
-
-        analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
-        if analytics_path.exists():
-            try:
-                data = json.loads(analytics_path.read_text(encoding="utf-8"))
-                if "per_coin" in data:
-                    universe_coins.update(data["per_coin"].keys())
-            except Exception:
-                pass
-
-        if not universe_coins:
-            return f"❌ Нет данных о монетах для аналитики вселенной <code>{current_uid}</code>.", []
-
-        buttons = []
-        row = []
-        for coin in sorted(universe_coins):
-            is_active = coin in active_symbols
-            status_icon = "🟢" if is_active else "⏸"
-            status_tag = "" if is_active else " [неактивна]"
-            row.append({"text": f"🪙 {coin}{status_tag} {status_icon}", "callback_data": f"analytics_coin:{coin}:{current_uid}"})
-            if len(row) == 2:
-                buttons.append(row)
-                row = []
-        if row:
-            buttons.append(row)
-        buttons.append([{"text": "🔙 Назад", "callback_data": f"analytics_dome:{current_uid}"}])
-
-        text = (
-            f"🪙 <b>Монеты вселенной:</b> {clean_name} (<code>{current_uid}</code>)\n"
-            f"Выберите монету для детальной аналитики баланса:"
+        return CoinCardFormatter.render_coin_menu(
+            stats_dir=self.stats_dir,
+            current_uid=current_uid,
+            univ_name=univ_name,
+            active_symbols=active_symbols,
         )
-        return text, buttons
 
     def render_universes_list(
         self,
@@ -705,77 +147,13 @@ class AnalyticsReportService:
         page: int = 1,
         page_size: int = 5,
     ) -> Tuple[str, List[List[Dict[str, str]]]]:
-        """
-        Формирует презентационный текст и чистую структуру кнопок-тумблеров [ВКЛ / ВЫКЛ] для куполов стратегий.
-        В HRON-3 динамика сайзинга управляется строго паспортом стратегии (first_order_weight_regime / smart_size).
-        Сеттер стратегий является прямым бинарным переключателем.
-        """
-        # Фильтруем служебные поля
-        strats_items = [
-            (sid, scfg)
-            for sid, scfg in active_strats.items()
-            if not sid.startswith("_") and (isinstance(scfg, dict) or hasattr(scfg, "raw_meta"))
-        ]
-
-        total_entries = len(strats_items)
-        total_pages = max(1, (total_entries + page_size - 1) // page_size)
-        page = max(1, min(page, total_pages))
-
-        start_i = (page - 1) * page_size
-        end_i = min(start_i + page_size, total_entries)
-        page_entries = strats_items[start_i:end_i]
-
-        text_lines = [
-            f"🌌 <b>Управление стратегиями (куполами)</b> (Стр. {page}/{total_pages})",
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        ]
-
-        buttons: List[List[Dict[str, str]]] = []
-
-        for sid, scfg in page_entries:
-            is_enabled = (
-                bool(scfg.get("enabled", True))
-                if isinstance(scfg, dict)
-                else bool(getattr(scfg, "enabled", True))
-            )
-
-            # Получаем отображаемое имя
-            raw_alias = ""
-            if isinstance(scfg, dict):
-                raw_alias = scfg.get("_comment_alias") or scfg.get("name") or sid
-            else:
-                raw_alias = getattr(scfg, "name", sid)
-
-            short_name = raw_alias.split("[")[0].strip() if "[" in raw_alias else raw_alias
-            if not short_name:
-                short_name = sid
-
-            status_icon = "🟢" if is_enabled else "⚪"
-            status_text = "ВКЛЮЧЕНА" if is_enabled else "ОТКЛЮЧЕНА"
-            text_lines.append(f"{status_icon} <b>{short_name}</b> — <b>{status_text}</b>")
-
-            btn_label = f"🟢 ВКЛ | {short_name}" if is_enabled else f"⚪ ВЫКЛ | {short_name}"
-            if len(btn_label) > 38:
-                btn_label = btn_label[:36] + "…"
-            buttons.append([{"text": btn_label, "callback_data": f"toggle_univ:{sid}:{page}"}])
-
-        text_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-
-        # Строка навигации пагинации
-        if total_pages > 1:
-            nav_row = []
-            if page > 1:
-                nav_row.append({"text": "⬅️ Назад", "callback_data": f"univ_page:{page - 1}"})
-            nav_row.append({"text": f"📄 {page}/{total_pages}", "callback_data": "univ_page:noop"})
-            if page < total_pages:
-                nav_row.append({"text": "Вперед ➡️", "callback_data": f"univ_page:{page + 1}"})
-            buttons.append(nav_row)
-
-        buttons.append([
-            {"text": "🔄 Обновить", "callback_data": f"univ_page:{page}"},
-            {"text": "🔙 В меню аналитики", "callback_data": "analytics_back_to_univ"},
-        ])
-        return "\n".join(text_lines), buttons
+        """Формирует презентационный текст и кнопки-тумблеры [ВКЛ / ВЫКЛ] для куполов стратегий."""
+        return UniverseListFormatter.render_universes_list(
+            current_uid=current_uid,
+            active_strats=active_strats,
+            page=page,
+            page_size=page_size,
+        )
 
     @classmethod
     def render_universe_control_panel(
@@ -790,21 +168,4 @@ class AnalyticsReportService:
     @staticmethod
     def render_cheat_sheet() -> str:
         """Возвращает шпаргалку (Cheat Sheet) по метрикам аналитики."""
-        return (
-            "<b>📚 Analytics Cheat Sheet (Global)</b>\n"
-            "▪️ <b>roi_pct</b>: Return on Investment (%) → <i>(Cur_Balance - Start_Balance) / Start_Balance * 100</i>\n"
-            "▪️ <b>grid_load_pct</b>: Grid Capacity Utilization (%) → <i>Current Grid Load / Total Grid Size * 100</i>\n"
-            "▪️ <b>margin_load_pct</b>: Margin Usage (%) → <i>Margin Used / Floating Balance * 100</i>\n"
-            "▪️ <b>free_margin_usdt</b>: Free Margin → <i>Floating Balance - Margin Used</i>\n"
-            "▪️ <b>recovery_factor</b>: Recovery Factor → <i>Net Profit / |Max Drawdown|</i>\n"
-            "▪️ <b>abs_recovery_factor</b>: Abs Recovery Factor → <i>Peak Net Profit / |Max Drawdown|</i>\n"
-            "▪️ <b>realized_pnl_usdt</b>: Total realized profit from all closed trades\n"
-            "▪️ <b>net_profit_usdt</b>: True mathematical growth → <i>Realized PnL + Unrealized PnL</i>\n"
-            "▪️ <b>cur_balance_usdt</b>: Current margin balance → <i>Start Balance + Net Profit</i>\n\n"
-            "<b>🪙 Per-Coin Metrics</b>\n"
-            "▪️ <b>avg_daily_profit</b>: Average profit per active day of trading\n"
-            "▪️ <b>max_position_size</b>: Max historical notional size actually reached (real volume * price)\n"
-            "▪️ <b>risk_reward_ratio</b>: <i>|Max Drawdown| / Avg Daily Profit</i>\n"
-            "▪️ <b>recovery_factor</b> / <b>abs_recovery_factor</b>: Current and absolute recovery factors\n"
-            "▪️ <b>max_drawdown</b> / <b>min_drawdown</b>: Max/Min historical floating drawdowns\n"
-        )
+        return BigBoardFormatter.render_cheat_sheet()

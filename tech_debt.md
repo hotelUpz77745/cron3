@@ -898,10 +898,21 @@ cron3/
    - Создан пакетный экспортер POS_FSM/__init__.py.
    - Сохранены в неприкосновенности защитные флаги идемпотентности жизненного цикла (`in_position_papper`).
 
-4. **Исправление Сигнатуры PeelingManager.__init__**:
-   - В CORE/STRATEGY/peeling_manager.py конструктор приведен к поддержке прямой передачи peeling_cfg со строгой валидацией типа (Fail-Fast TypeError).
+4. **Декомпозиция Аналитики и Telegram (Правило 1: SRP и лимит 600 строк)**:
+   - `ANALYTICS/report_service.py` декомпозирован с 811 строк до 157 строк.
+   - Создан специализированный пакет `ANALYTICS/FORMATTERS/` с чистым разделением обязанностей:
+     * `BigBoardFormatter` (290 строк): расчет и форматирование портфельного Биг Борда, сводок куполов, блока Trade Velocity и полных текстовых отчетов.
+     * `CoinCardFormatter` (224 строки): форматирование карточек деталей монет, меню выбора монет и рейтингов по Net Profit / Recovery Factor / Abs Recovery.
+     * `UniverseListFormatter` (80 строк): рендеринг списков куполов и бинарных кнопок-тумблеров.
+   - В `TG/keyboards.py` централизованы инлайн-клавиатуры управления монетами (`get_strategy_selection_inline_keyboard`, `get_set_coins_dome_inline_keyboard`, `get_launch_params_inline_keyboard`, `get_catalog_selection_inline_keyboard`, `get_delete_coins_inline_keyboard`), размер `TG/HANDLERS/coins_router.py` снижен с 568 до 514 строк.
 
-5. **Контроль Целостности и Новые Тесты**:
+5. **Chaos Engineering и Стресс-Устойчивость (Правило 2: Fail-Fast и Самоисцеление)**:
+   - В `CORE/GRID/avg_manager.py` пайплайн отправки усреднения обернут в `try...finally: state.pending_avg = False; state.next_avg_price = None`, гарантируя снятие блокировки `pending_avg` при сетевом таймауте, 429 ошибке биржи или сбое шлюза.
+   - Уровень сетки при сбое ордера безопасно откатывается из `is_active=True` в `False` с установкой кулдауна `failed_cooldown_until`, предотвращая спам биржи.
+
+6. **Контроль Целостности и Новые Тесты**:
    - Создан целевой набор тестов `tests/test_fail_fast_and_precision.py` (7 тестов).
-   - Полный прогон тестового набора (python -m unittest discover tests): **469 тестов пройдено успешно (469 passed, 2 skipped, 0 failures)**.
+   - Создан стресс-тестовый модуль `tests/test_chaos_resilience.py` (4 теста).
+   - Полный прогон тестового набора (`python -m unittest discover tests`): **473 теста пройдено успешно (473 passed, 2 skipped, 0 failures)**.
+
 

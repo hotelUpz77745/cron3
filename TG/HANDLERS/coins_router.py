@@ -12,7 +12,16 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from consts import DATA_DIR
 from c_log import UnifiedLogger
-from TG.keyboards import get_back_keyboard, get_main_keyboard, get_set_coins_keyboard
+from TG.keyboards import (
+    get_back_keyboard,
+    get_main_keyboard,
+    get_set_coins_keyboard,
+    get_strategy_selection_inline_keyboard,
+    get_set_coins_dome_inline_keyboard,
+    get_launch_params_inline_keyboard,
+    get_catalog_selection_inline_keyboard,
+    get_delete_coins_inline_keyboard,
+)
 from TG.states import TGStates
 from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 from c_utils import Utils
@@ -53,23 +62,12 @@ class CoinsRouterHandler:
         app_data = Utils.read_json_file(DATA_DIR / "app.json") or {}
         active_strategies = app_data.get("active_strategies", {})
 
-        buttons = []
-        for sid, sdata in active_strategies.items():
-            if not sdata.get("enabled", False):
-                continue
-            meta = get_strategy_meta(sid, self.bot_core)
-            s_name = meta.get("name", sid)
-            buttons.append([InlineKeyboardButton(text=f"🎯 {s_name[:38]}", callback_data=f"add_pick_strat_{symbol}_{sid}")])
-
-        buttons.append([InlineKeyboardButton(text="🌐 Выбрать другой универсум...", callback_data=f"add_catalog_{symbol}")])
-        buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="add_cancel")])
-
         text = (
             f"🪙 Добавление монеты: <b>{symbol}</b>\n\n"
             f"🎯 <b>Выберите стратегию, под которую назначить монету:</b>\n"
             f"<i>Каждая монета торгуется по правилам выбранной стратегии (сетка, тейк-профиты, плечо, Super Grid).</i>"
         )
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        keyboard = get_strategy_selection_inline_keyboard(active_strategies, symbol, self.bot_core)
         if edit_msg and isinstance(msg_or_cb, CallbackQuery):
             await msg_or_cb.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
         elif isinstance(msg_or_cb, CallbackQuery):
@@ -91,24 +89,12 @@ class CoinsRouterHandler:
             await message.answer("⚠️ В системе нет активных куполов стратегий.", reply_markup=get_main_keyboard())
             return
 
-        buttons = []
-        for sid, scfg in active_strats.items():
-            if sid.startswith("_") or not isinstance(scfg, (dict, object)):
-                continue
-            meta = get_strategy_meta(sid, self.bot_core)
-            s_name = meta.get("name", sid)
-            clean_title = s_name.encode("ascii", "ignore").decode("ascii").strip() or sid
-            symbols = extract_strategy_symbols(scfg)
-            cnt = len(symbols)
-            btn_text = f"🪐 {clean_title[:28]} ({cnt} мон.)"
-            buttons.append([InlineKeyboardButton(text=btn_text, callback_data=f"set_coins_dome:{sid}")])
-
-        buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="set_coins_cancel")])
         text = (
             "⚙️ <b>Управление монетами куполов</b>\n\n"
             "<b>Шаг 1: Выберите купол стратегии</b>, в котором хотите настроить список монет:"
         )
-        await message.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons), parse_mode="HTML")
+        keyboard = get_set_coins_dome_inline_keyboard(active_strats, self.bot_core)
+        await message.answer(text, reply_markup=keyboard, parse_mode="HTML")
 
     async def cb_set_coins_cancel(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
@@ -309,13 +295,7 @@ class CoinsRouterHandler:
             f"• <b>Super Grid (волатильность):</b> <b>{sg_str}</b>\n\n"
             f"Запустить сразу с параметрами стратегии или настроить параметры кастомно?"
         )
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🚀 Запустить с параметрами стратегии", callback_data=f"add_run_{symbol}_{strat_id}")],
-                [InlineKeyboardButton(text="⚙️ Настроить параметры (Invest/Lev)", callback_data=f"add_cust_{symbol}_{strat_id}")],
-                [InlineKeyboardButton(text="🔙 Назад к стратегиям", callback_data=f"add_back_strats_{symbol}")],
-            ]
-        )
+        keyboard = get_launch_params_inline_keyboard(symbol, strat_id)
         await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
 
     async def process_add_run(self, callback: CallbackQuery, state: FSMContext):
@@ -471,13 +451,7 @@ class CoinsRouterHandler:
             else:
                 univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
 
-        buttons = []
-        for uid, udata in list(univ_data.items())[:12]:
-            u_name = udata.get("name", uid)
-            buttons.append([InlineKeyboardButton(text=f"🌐 {u_name[:35]}", callback_data=f"add_pick_strat_{symbol}_{uid}")])
-
-        buttons.append([InlineKeyboardButton(text="🔙 Назад к активным", callback_data=f"add_back_strats_{symbol}")])
-        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        keyboard = get_catalog_selection_inline_keyboard(univ_data, symbol)
         await callback.message.edit_text(
             f"🌐 <b>Каталог стратегий (Universes) для {symbol}</b>\n\n"
             f"Выберите любую стратегию из базы для активации и запуска:",
@@ -508,21 +482,11 @@ class CoinsRouterHandler:
             )
             return
 
-        buttons = []
-        row = []
-        for sym in sorted(symbols):
-            row.append(InlineKeyboardButton(text=f"❌ {sym}", callback_data=f"del_dome_coin:{selected_dome}:{sym}"))
-            if len(row) == 2:
-                buttons.append(row)
-                row = []
-        if row:
-            buttons.append(row)
-        buttons.append([InlineKeyboardButton(text="🔙 Отмена", callback_data="del_dome_coin_cancel")])
-
+        keyboard = get_delete_coins_inline_keyboard(symbols, selected_dome)
         await message.answer(
             f"🗑️ <b>Удаление монеты из купола</b> <code>{selected_dome}</code>\n\n"
             f"<i>Нажмите на монету для удаления:</i>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=buttons),
+            reply_markup=keyboard,
             parse_mode="HTML",
         )
 

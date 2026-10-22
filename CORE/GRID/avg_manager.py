@@ -369,9 +369,19 @@ class AverageManager:
         level_data["timestamp"] = int(now_sec * 1000)
 
         # 6. Асинхронно ставим ордер и ждем завершения полного пайплайна
-        await self._execute_averaging_order(
-            client, runtime_manager, symbol, side, candidate_level, level_data, current_price, spec_data, state, opposite_state, tp_manager
-        )
+        try:
+            await self._execute_averaging_order(
+                client, runtime_manager, symbol, side, candidate_level, level_data, current_price, spec_data, state, opposite_state, tp_manager
+            )
+        except Exception as e:
+            logger.error(f"[{symbol}] {side} Critical error during averaging execution: {e}", exc_info=True)
+            level_data["is_active"] = False
+            level_data["timestamp"] = None
+            level_data["failed_cooldown_until"] = time.time() + 30.0
+            raise
+        finally:
+            state.pending_avg = False
+            state.next_avg_price = None
 
     async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager):
         side_c = {}
