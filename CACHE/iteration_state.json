@@ -3,13 +3,13 @@
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
-        "iteration_start_ts": 1792630317398,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792630317398,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
+        "iteration_realized_pnl_usdt": 26.184,
+        "iteration_start_ts": 1792436098073,
+        "iteration_peak_net_profit_usdt": 25.014,
+        "iteration_peak_ts": 1792672611540,
+        "historical_peak_net_profit_usdt": 25.014,
+        "historical_peak_net_ts": 1792672611540,
         "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-22 00:54:38 UTC"
+        "updated_at": "2026-10-22 12:37:32 UTC"
     }
 }

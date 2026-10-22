@@ -81,12 +81,18 @@ class BinanceWsInterpreter:
 IS_SHOW_SIGNAL = False
 
 class PositionMonitor:
-    def __init__(self, states_cache: Dict[str, Dict[str, PositionState]], target_symbols: Optional[list] = None):
+    def __init__(
+        self,
+        states_cache: Dict[str, Dict[str, PositionState]],
+        target_symbols: Optional[list] = None,
+        strategy_registry: Optional[Any] = None,
+    ):
         """
         states_cache - ссылка на кеш состояний из торгового ядра (например, BotCore.fsm_states).
         Формат: {symbol: {"LONG": PositionState, "SHORT": PositionState}}
         """
         self.states = states_cache
+        self.strategy_registry = strategy_registry
         if target_symbols:
             for symbol in target_symbols:
                 if symbol not in self.states:
@@ -118,6 +124,13 @@ class PositionMonitor:
             binance_positions[(sym, side)] = pos
 
         for sym in symbols:
+            strat_cfg = None
+            if self.strategy_registry and hasattr(self.strategy_registry, "get_strategy_for_symbol"):
+                try:
+                    strat_cfg = self.strategy_registry.get_strategy_for_symbol(sym)
+                except Exception:
+                    pass
+
             for side in ["LONG", "SHORT"]:
                 pos = binance_positions.get((sym, side))
                 if pos:
@@ -141,9 +154,9 @@ class PositionMonitor:
                 if state and state.in_position and abs(state.total_volume) > 1e-6:
                     try:
                         from CORE.strategy_applicator import StrategyApplicator
-                        StrategyApplicator.resolve_position_state_grid(state)
-                    except Exception:
-                        pass
+                        StrategyApplicator.resolve_position_state_grid(state, strategy=strat_cfg)
+                    except Exception as e:
+                        logger.error(f"[REST_SYNC] Error resolving grid for {sym} {side}: {e}", exc_info=True)
 
     def update_from_stream(self, symbol: str, side: str, pos_amt: float, entry_price: float):
         if symbol not in self.states:
@@ -187,6 +200,14 @@ class PositionMonitor:
                 state.fallback_price = None
                 state.next_avg_price = None
                 if getattr(state, "initial_entry_price", 0.0) <= 0:
+                    state.initial_entry_price = entry_price
+            else:
+                # Если позиция уже активна в памяти (восстановлена из кэша), проверяем критический рассинхрон initial_entry_price
+                cached_init = getattr(state, "initial_entry_price", 0.0)
+                if cached_init > 0 and entry_price > 0 and abs(cached_init - entry_price) / entry_price > 0.40:
+                    logger.warning(
+                        f"[MONITOR] [{symbol}] {side}: initial_entry_price ({cached_init}) diverges from exchange entry ({entry_price}) by >40%! Resyncing to {entry_price}."
+                    )
                     state.initial_entry_price = entry_price
             
             # Позиция активна: set_in_position(True) автоматически сбросит in_position_papper в False

@@ -449,9 +449,17 @@ class StrategyApplicator:
         eff_invest = invest_size
         if eff_invest is None or eff_invest <= 0:
             eff_invest = float(getattr(state, "eff_invest", 0.0) or 0.0)
-        if (eff_invest is None or eff_invest <= 0) and strategy and hasattr(strategy, "sides"):
-            side_cfg = strategy.sides.get(getattr(state, "side", ""), {})
-            eff_invest = float(side_cfg.get("invest_size", 0.0) or 0.0)
+        if (eff_invest is None or eff_invest <= 0) and strategy:
+            if hasattr(strategy, "get_invest_size"):
+                try:
+                    eff_invest = float(strategy.get_invest_size(getattr(state, "side", ""), getattr(state, "symbol", None)))
+                except Exception:
+                    pass
+            elif hasattr(strategy, "sides") and isinstance(strategy.sides, dict):
+                side_cfg = strategy.sides.get(getattr(state, "side", ""), {})
+                eff_invest = float(side_cfg.get("invest_size", 0.0) or 0.0)
+        if eff_invest and eff_invest > 0 and getattr(state, "eff_invest", 0.0) <= 0:
+            state.eff_invest = eff_invest
         if eff_invest is None or eff_invest <= 0:
             return False
 
@@ -465,13 +473,43 @@ class StrategyApplicator:
         if entry_price <= 0:
             return False
 
+        sym_name = getattr(state, "symbol", "") or "UNKNOWN"
+        side_name = getattr(state, "side", "") or "UNKNOWN"
+        updated = False
+
+        # Проверка критического рассинхрона initial_entry_price со средней ценой биржи (>40%)
+        cached_init_p = float(getattr(state, "initial_entry_price", 0.0) or 0.0)
+        if cached_init_p > 0 and entry_price > 0:
+            divergence = abs(cached_init_p - entry_price) / entry_price
+            if divergence > 0.40:
+                logger.warning(
+                    f"[POSITION_RESTORER] [{sym_name}] {side_name}: ⚠️ Обнаружен критический рассинхрон initial_entry_price! "
+                    f"Кэш: {cached_init_p}, Биржа (avg): {entry_price} (расхождение {divergence * 100:.1f}% > 40%). "
+                    f"Синхронизируем initial_entry_price с биржевой ценой!"
+                )
+                state.initial_entry_price = entry_price
+                for l_k, l_v in grid.items():
+                    if isinstance(l_v, dict) and not l_v.get("is_active"):
+                        l_v["price"] = None
+                        l_v["activation_price"] = None
+                updated = True
+
         current_notional = current_vol * entry_price
         trailing_state = getattr(state, "trailing_grid_state", {})
         armed_dict = trailing_state.get("armed_levels", {}) if isinstance(trailing_state, dict) else {}
 
+        # Расчет текущей просадки для санитизации ложно взведенных курков неисполненных ступеней
+        cur_dd_pct = 0.0
+        check_p = float(current_price) if (current_price and float(current_price) > 0) else entry_price
+        base_p = float(getattr(state, "initial_entry_price", 0.0) or entry_price)
+        if base_p > 0 and check_p > 0:
+            if side_name.upper() == "LONG":
+                cur_dd_pct = max(0.0, (base_p - check_p) / base_p * 100.0)
+            else:
+                cur_dd_pct = max(0.0, (check_p - base_p) / base_p * 100.0)
+
         sorted_keys = sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else 999)
         cumulative_planned_usdt = 0.0
-        updated = False
 
         for lvl_key in sorted_keys:
             lvl_cfg = grid[lvl_key]
@@ -500,6 +538,10 @@ class StrategyApplicator:
             if was_active or covered_by_volume:
                 if not was_active:
                     lvl_cfg["is_active"] = True
+                    logger.info(
+                        f"[POSITION_RESTORER] [{sym_name}] {side_name}: Уровень {lvl_key} отмечен как ИСПОЛНЕННЫЙ (is_active=True). "
+                        f"Покрыт биржевым объемом: notional {current_notional:.2f} >= planned {cumulative_planned_usdt * tolerance_factor:.2f} USDT"
+                    )
                     updated = True
                 lvl_cfg["is_armed"] = False
                 lvl_cfg.pop("armed_at_drawdown", None)
@@ -507,6 +549,31 @@ class StrategyApplicator:
                 if isinstance(armed_dict, dict) and lvl_key in armed_dict:
                     armed_dict.pop(lvl_key, None)
                     updated = True
+            else:
+                # Для неисполненных уровней: если текущая просадка МЕНЬШЕ курка активации,
+                # сбрасываем залипшие старые флаги взведения
+                raw_act = lvl_cfg.get("activation")
+                if raw_act is not None:
+                    act_thresh = abs(float(raw_act))
+                    if cur_dd_pct < act_thresh:
+                        if lvl_cfg.get("is_armed") or (isinstance(armed_dict, dict) and lvl_key in armed_dict):
+                            lvl_cfg["is_armed"] = False
+                            lvl_cfg.pop("armed_at_drawdown", None)
+                            lvl_cfg.pop("armed_timestamp", None)
+                            if isinstance(armed_dict, dict):
+                                armed_dict.pop(lvl_key, None)
+                            logger.info(
+                                f"[POSITION_RESTORER] [{sym_name}] {side_name}: Сброшен ложный/устаревший курок уровня {lvl_key} "
+                                f"(Текущая просадка {cur_dd_pct:.2f}% < порога {act_thresh:.2f}%)"
+                            )
+                            updated = True
+
+        active_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and grid[k].get("is_active")]
+        unexecuted_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and not grid[k].get("is_active")]
+        logger.info(
+            f"[POSITION_RESTORER] [{sym_name}] {side_name}: Синхронизация сетки завершена! "
+            f"Исполнено: {active_lvls}, В ожидании: {unexecuted_lvls}, Notional: {current_notional:.2f} USDT, Base Price: {base_p}"
+        )
 
         return updated
 

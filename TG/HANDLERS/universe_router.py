@@ -9,7 +9,14 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from aiogram import F, Router
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from consts import DATA_DIR
 from c_log import UnifiedLogger
@@ -86,6 +93,23 @@ def get_universe_router(bot_core: Any) -> Router:
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) or {}
         return app_data.get("active_strategies", {})
+
+    @router.message(Command("universes"))
+    @router.message(F.text == "🌌 Set Universes")
+    async def cmd_universes(message: Message, state: FSMContext):
+        """Обработка кнопки главного меню '🌌 Set Universes' и команды /universes."""
+        logger.info(f"[TG] 🌌 User {message.from_user.id} requested 'Set Universes' menu.")
+        await state.clear()
+        page = 1
+        current_uid = universe_session_manager.get_user_universe_id(message.from_user.id, bot_core)
+        active_strats = _get_active_strategies()
+        text, btn_data = _get_report_service().render_universes_list(
+            current_uid=current_uid,
+            active_strats=active_strats,
+            page=page,
+        )
+        kb = _build_inline_keyboard(btn_data)
+        await message.answer(text, reply_markup=kb, parse_mode="HTML")
 
     @router.callback_query(F.data.startswith("univ_page:"))
     async def cb_universe_page(callback: CallbackQuery):

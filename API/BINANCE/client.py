@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import aiohttp
+import os
 import time
 import hmac
 import hashlib
@@ -32,6 +33,7 @@ class BinanceClient:
     Поддерживает:
       - Боевую торговлю через реальное подписанное REST API Binance Futures
       - Бумажную торговлю при наличии virtual_executor (симуляция исполнения)
+      - Мок-режим (MockExchangeProvider) при пустых ключах или MOCK_EXCHANGE=1
       - Загрузку свечей (klines) с ограничением частоты запросов
     """
 
@@ -44,6 +46,18 @@ class BinanceClient:
         self.api_secret = api_secret
         self.validator = OrderValidator(logger)
         self.virtual_executor: Optional[Any] = None
+
+        self.is_mock_mode: bool = (
+            not self.api_key
+            or not self.api_secret
+            or os.getenv("MOCK_EXCHANGE") == "1"
+        )
+        if self.is_mock_mode:
+            from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
+            self._mock_provider = get_default_mock_exchange()
+            logger.info("[BINANCE_API] Running in MOCK EXCHANGE mode (credentials empty or MOCK_EXCHANGE=1).")
+        else:
+            self._mock_provider = None
 
         self.create_order_url = "https://fapi.binance.com/fapi/v1/order"
         self.cancel_order_url = self.create_order_url
@@ -250,6 +264,18 @@ class BinanceClient:
         reduce_only: bool = False,
         concurrent_mode: bool = False,
     ) -> APIResponse:
+        # Мок-режим (MockExchangeProvider)
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.make_order(
+                symbol=symbol,
+                qty=qty,
+                side=side,
+                position_side=position_side,
+                market_type=market_type,
+                price=price,
+                reduce_only=reduce_only,
+            )
+
         # Режим симуляции (Paper Trading)
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
@@ -298,6 +324,11 @@ class BinanceClient:
         symbol: str,
         order_id_list: List[int],
     ) -> APIResponse:
+        if self.is_mock_mode and self._mock_provider:
+            for oid in order_id_list:
+                await self._mock_provider.cancel_order(symbol, oid)
+            return APIResponse(success=True, data=[])
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return APIResponse(success=True, data=[], meta={"paper_trading": True})
@@ -325,6 +356,9 @@ class BinanceClient:
     # ==================================================
     async def cancel_all_orders(self, symbol: str) -> APIResponse:
         """Отменить все открытые ордера по символу."""
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.cancel_all_orders(symbol)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return APIResponse(success=True, data=[], meta={"paper_trading": True})
@@ -348,6 +382,9 @@ class BinanceClient:
     # ==================================================
     async def cancel_orders_for_side(self, symbol: str, position_side: str):
         """Отменяет все открытые ордера по символу для указанной стороны (LONG или SHORT)."""
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.cancel_orders_for_side(symbol, position_side)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return APIResponse(success=True, data=[], meta={"paper_trading": True})
@@ -371,6 +408,9 @@ class BinanceClient:
     # ACCOUNT INFO
     # ==================================================
     async def fetch_account_info(self) -> APIResponse:
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.fetch_account_info()
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return APIResponse(success=True, data={"positions": []}, meta={"paper_trading": True})
@@ -387,6 +427,9 @@ class BinanceClient:
     # POSITIONS
     # ==================================================
     async def fetch_positions(self, symbol: Optional[str] = None) -> List[dict]:
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.fetch_positions(symbol)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return []
@@ -414,6 +457,9 @@ class BinanceClient:
     # OPEN ORDERS
     # ==================================================
     async def fetch_open_orders(self, symbol: Optional[str] = None) -> List[dict]:
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.fetch_open_orders(symbol)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return []
@@ -446,6 +492,15 @@ class BinanceClient:
         limit: int = 1000,
     ) -> APIResponse:
         """Получение истории доходности (income history) с Binance Futures."""
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.fetch_income(
+                symbol=symbol,
+                income_type=income_type,
+                start_time=start_time,
+                end_time=end_time,
+                limit=limit,
+            )
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.01)
             return APIResponse(success=True, data=[])
@@ -471,6 +526,9 @@ class BinanceClient:
     # LEVERAGE
     # ==================================================
     async def set_leverage(self, symbol: str, leverage: int) -> APIResponse:
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.set_leverage(symbol, leverage)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.1)
             return APIResponse(success=True, data={"leverage": leverage}, meta={"paper_trading": True})
@@ -490,6 +548,9 @@ class BinanceClient:
     # MARGIN TYPE
     # ==================================================
     async def set_margin_type(self, symbol: str, margin_type: str) -> APIResponse:
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.set_margin_type(symbol, margin_type)
+
         if getattr(self, "virtual_executor", None):
             await asyncio.sleep(0.05)
             return APIResponse(
@@ -511,6 +572,9 @@ class BinanceClient:
 
     async def get_leverage_bracket(self, symbol: Optional[str] = None) -> APIResponse:
         """GET /fapi/v1/leverageBracket - возвращает спецификацию брекетов плеч."""
+        if self.is_mock_mode and self._mock_provider:
+            return await self._mock_provider.get_leverage_bracket(symbol)
+
         params = {"recvWindow": 20000}
         if symbol:
             params["symbol"] = symbol.upper()
@@ -555,6 +619,27 @@ class BinanceClient:
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Optional[dict]:
+        if self.is_mock_mode and self._mock_provider:
+            if self._mock_provider.simulate_analytics_network_error or os.getenv("MOCK_ANALYTICS_NETWORK_ERROR") == "1":
+                return None
+            inc_res = await self._mock_provider.fetch_income(
+                symbol=symbol,
+                start_time=start_time,
+                end_time=end_time,
+            )
+            if not inc_res.success:
+                return None
+            records = inc_res.data or []
+            gross = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "REALIZED_PNL")
+            comm = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "COMMISSION")
+            fund = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "FUNDING_FEE")
+            return {
+                "gross_pnl": gross,
+                "commission": comm,
+                "funding_fee": fund,
+                "net_pnl": gross + comm + fund,
+            }
+
         trade_params = {
             "symbol": symbol,
             "recvWindow": 20000,

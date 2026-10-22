@@ -64,7 +64,7 @@ class TelegramReceiver:
 
         async def check_user_message(handler, event: Message, data: dict):
             if TG_ALLOWED_USERS and event.from_user.id not in TG_ALLOWED_USERS:
-                logger.warning(f"Unauthorized access attempt by {event.from_user.id}")
+                logger.warning(f"[TG] Unauthorized access attempt by {event.from_user.id} ({getattr(event.from_user, 'username', 'no_user')}): '{event.text}'")
                 return
             if not event.text and not event.document:
                 await event.answer(
@@ -72,14 +72,16 @@ class TelegramReceiver:
                     "Пожалуйста, не отправляйте фото, видео, стикеры или пустые сообщения."
                 )
                 return
+            logger.info(f"[TG] 📩 Message from user {event.from_user.id}: '{event.text}'")
             return await handler(event, data)
 
         self.dp.message.outer_middleware.register(check_user_message)
 
         async def check_user_callback(handler, event: CallbackQuery, data: dict):
             if TG_ALLOWED_USERS and event.from_user.id not in TG_ALLOWED_USERS:
-                logger.warning(f"Unauthorized callback attempt by {event.from_user.id}")
+                logger.warning(f"[TG] Unauthorized callback attempt by {event.from_user.id} ({getattr(event.from_user, 'username', 'no_user')}): '{event.data}'")
                 return
+            logger.info(f"[TG] 🔘 Callback from user {event.from_user.id}: '{event.data}'")
             return await handler(event, data)
 
         self.dp.callback_query.outer_middleware.register(check_user_callback)

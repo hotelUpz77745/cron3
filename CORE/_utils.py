@@ -296,6 +296,12 @@ class SpecManager:
         logger = UnifiedLogger("SpecManager")
         
         try:
+            if not self.bot_core.spec_data.get("symbols"):
+                cached_specs = Utils.read_json_file(CACHE_DIR / "specifications.json")
+                if cached_specs and cached_specs.get("symbols"):
+                    self.bot_core.spec_data = cached_specs
+                    logger.info("[SpecManager] Preloaded exchange specifications from disk cache.")
+
             while self.is_running:
                 data = await BinancePublic.get_instruments()
                 if data:

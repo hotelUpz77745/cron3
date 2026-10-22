@@ -80,7 +80,11 @@ class BotBootstrapService:
         bot_core.spec_manager.start()
         bot_core._price_task = asyncio.create_task(bot_core.price_stream.run(bot_core._on_tick), name="price_stream")
 
-        bot_core.pos_monitor = PositionMonitor(states_cache=bot_core.fsm_states, target_symbols=bot_core.symbols)
+        bot_core.pos_monitor = PositionMonitor(
+            states_cache=bot_core.fsm_states,
+            target_symbols=bot_core.symbols,
+            strategy_registry=bot_core.strategy_registry,
+        )
         bot_core.runtime_manager.populate_fsm_from_cache(bot_core.fsm_states)
 
         bot_core.pos_stream = PositionStream(

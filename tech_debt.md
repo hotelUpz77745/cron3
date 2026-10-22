@@ -793,3 +793,22 @@ cron3/
 
 
 
+
+
+
+
+
+            <!-- "5": {
+                "role": "L5: Тяжелая Артиллерия (Зона 3: глубинная броня, Фибо -55.0% / курок -60.0%, объем 25.0%, Half-Peel 50%, peel_num=1)",
+                "enabled": true,
+                "indent": -55.0,
+                "activation": -60.0,
+                "volume": 25.0,
+                "super_indent": null,
+                "activated_at": null,
+                "timestamp": null,
+                "peel_tp_pct": 1.5,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
+                "zone": 3
+            }, -- а где и как помечается флаг состояния пиллинга что он выполнил паспорт -- "peel_num": 1,? -->

@@ -6,7 +6,7 @@
 from API.BINANCE.public import BinancePublic
 from API.BINANCE.price_stream import BinanceHotPriceStream, HotPriceTick
 from API.BINANCE.validator import OrderValidator, APIResponse
-from API.BINANCE.client import BinanceClient
+from API.BINANCE.client_prod import BinanceClient
 from API.BINANCE.client_sim import SimulatedBinanceClient
 from API.BINANCE.historical_trades import BinanceVisionTradeParser
 from API.BINANCE import client_paper

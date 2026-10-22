@@ -7,7 +7,9 @@
 # ==============================================================================
 
 import asyncio
+import contextlib
 import inspect
+import os
 import aiohttp
 import json
 from typing import Optional, Callable, Set
@@ -222,6 +224,23 @@ class PositionStream:
 
     async def start(self):
         self._external_stop = False
+
+        # Если ключи API не заданы или активирован MOCK_EXCHANGE, работаем в режиме симулятора
+        if not self.api_key or os.getenv("MOCK_EXCHANGE") == "1":
+            logger.info("[MASTER WS] Operating in MOCK mode. Bypassing Binance private WS connection.")
+            if self.client and self.target_symbols:
+                with contextlib.suppress(Exception):
+                    await self.monitor.sync_from_rest(self.client, list(self.target_symbols))
+            self.ready = True
+            self.is_connected = True
+            try:
+                while not self._external_stop and not self.stop_flag():
+                    await asyncio.sleep(1.0)
+            finally:
+                self.ready = False
+                self.is_connected = False
+            return
+
         try:
             while not self._external_stop and not self.stop_flag():
                 self.session = await self._create_session()
