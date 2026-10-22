@@ -24,6 +24,7 @@ from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
 from RUNTIME_FSM.runtime_builder import RuntimeBuilder, build_runtime_caches, prompt_runtime_check
 from CORE.strategy_registry import StrategyRegistry
 from CORE.strategy_applicator import StrategyApplicator
+from CORE.SERVICES.notional_validator import NotionalCapacityValidator
 
 if TYPE_CHECKING:
     from CORE.bot import BotCore
@@ -51,6 +52,10 @@ class BotBootstrapService:
 
         if not bot_core.is_running:
             return False
+
+        # 0. Институциональная пре-трейд валидация достаточности капитала (min notional >= 7.0 USDT)
+        if bot_core.strategy_registry:
+            NotionalCapacityValidator.validate_or_abort(bot_core.strategy_registry, bot_core=bot_core)
 
         # Сборка и проверка рантайм кешей (создание отсутствующих JSON)
         created_new = build_runtime_caches(bot_core.symbols, registry=bot_core.strategy_registry)

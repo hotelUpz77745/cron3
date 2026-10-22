@@ -5,7 +5,10 @@
         "spec_ttl_sec": 900,
         "time_slack_sec": 0.15,
         "req_timeout_sec": 10.0,
-        "avoid_check_runtime_cfg": false,
+        "check_min_notional": true,
+        "_desc_check_min_notional": "Строгая пре-трейд валидация достаточности капитала (invest_size) на соответствие минимальному биржевому номиналу ордеров Binance Futures (min_order_notional_usdt=7.0 USDT). Валидирует ордера сетки, пилинг и рециркуляцию прямо в паспорте стратегии до старта торгов.",
+        "min_order_notional_usdt": 7.0,
+        "_desc_min_order_notional_usdt": "Минимальный допустимый номинал ордера в USDT на Binance Futures (7.0 USDT с запасом от лимита 5-6 USDT).",
         "api_rate_limit_sec": 0.2,
         "rest_failsafe_sec": 1.0,
         "income_pagination_delay_sec": 1.5,
@@ -52,24 +55,24 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 400.0,
-                    "AVAUSDT": 400.0,
-                    "GTCUSDT": 400.0,
-                    "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400.0
+                    "ICNTUSDT": 200.0,
+                    "AVAUSDT": 200.0,
+                    "GTCUSDT": 200.0,
+                    "GWEIUSDT": 200.0,
+                    "SOLVUSDT": 200.0
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 400.0,
-                    "AVAUSDT": 400.0,
-                    "GTCUSDT": 400.0,
-                    "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400.0
+                    "ICNTUSDT": 200.0,
+                    "AVAUSDT": 200.0,
+                    "GTCUSDT": 200.0,
+                    "GWEIUSDT": 200.0,
+                    "SOLVUSDT": 200.0
                 }
             },
             "start_balance_usdt": 434.0
@@ -90,12 +93,12 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {}
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 200.0,
                 "invest_size": {}
             },
             "start_balance_usdt": 434.0

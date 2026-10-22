@@ -12,7 +12,7 @@ from typing import List, Optional
 
 from c_log import UnifiedLogger
 from c_utils import Utils
-from consts import AVOID_CHECK_RUNTIME_CFG, DATA_DIR, _CFG
+from consts import DATA_DIR, _CFG
 from CORE.strategy_applicator import StrategyApplicator
 from CORE.strategy_registry import StrategyRegistry
 
@@ -36,7 +36,7 @@ class RuntimeBuilder:
         self.runtime_dir = runtime_dir or (DATA_DIR / "runtime")
         self.registry = registry
         self.applicator = applicator or StrategyApplicator()
-        self.avoid_check = avoid_check if avoid_check is not None else AVOID_CHECK_RUNTIME_CFG
+        self.avoid_check = avoid_check
         self.logger = logger
         self.ensure_dirs()
 
@@ -104,19 +104,11 @@ class RuntimeBuilder:
         return created_new
 
     def prompt_check(self) -> None:
-        """Интерактивная проверка настроек рантайма перед боевым стартом."""
-        if not self.avoid_check:
-            self.logger.info("=" * 60)
-            self.logger.info("ВНИМАНИЕ! Проверьте настройки рантайма (.json) в CFG/runtime/")
-            self.logger.info("Если все верно, нажмите Enter для продолжения...")
-            self.logger.info("=" * 60)
-            try:
-                input()
-            except EOFError:
-                self.logger.warning("No interactive stdin found, skipping runtime check pause.")
-            except KeyboardInterrupt:
-                self.logger.warning("Прервано пользователем.")
-                sys.exit(0)
+        """Пре-трейд валидация достаточности капитала (invest_size >= min notional) перед боевым стартом."""
+        from CORE.SERVICES.notional_validator import NotionalCapacityValidator
+        registry = self.get_registry()
+        if registry:
+            NotionalCapacityValidator.validate_or_abort(registry)
 
 
 # Синглтон по умолчанию и функции-фасады обратной совместимости

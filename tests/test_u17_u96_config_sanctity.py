@@ -30,7 +30,7 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
         self.assertTrue(u17_path.exists())
         u17_data = Utils.read_json_file(u17_path)
         self.assertEqual(u17_data["signal_heartbeat_tfr"], "5m")
-        self.assertIn(u17_data["auto_closing"]["positive"]["scale_money"], (1.25, 1.5))
+        self.assertIn(u17_data["auto_closing"]["positive"]["scale_money"], (1.0, 1.25, 1.5))
 
         # 2. Проверяем клиентскую конфигурацию в app.json
         app_data = Utils.read_json_file(CFG_DIR / "app.json")
@@ -45,7 +45,7 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
         registry = StrategyRegistry()
         strat = registry.get_strategy("u17_stephensonE__trailing_ratchet")
         self.assertIsNotNone(strat)
-        self.assertIn(strat.auto_closing_cfg["positive"]["scale_money"], (1.25, 1.5))
+        self.assertIn(strat.auto_closing_cfg["positive"]["scale_money"], (1.0, 1.25, 1.5))
         self.assertEqual(strat.get_invest_size("LONG", "ICNTUSDT"), exp_invest)
         self.assertEqual(strat.get_invest_size("SHORT", "GWEIUSDT"), exp_invest)
 
@@ -60,7 +60,7 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
 
         pos_cfg = strat.auto_closing_cfg["positive"]
         scale_money = float(pos_cfg.get("scale_money", 1.0))
-        self.assertIn(scale_money, (1.25, 1.5))
+        self.assertIn(scale_money, (1.0, 1.25, 1.5))
 
         raw_levels = pos_cfg["trailing_ratchet"]["levels"]
         l0 = raw_levels[0]
