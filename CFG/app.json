@@ -15,14 +15,7 @@
         "price_stream_ready_timeout_sec": 10.0,
         "price_stream_snapshot_timeout_sec": 5.0,
         "pos_stream_connect_timeout_sec": 5.0,
-        "auto_start": false,
-        "mock_mode": false
-    },
-    "testing": {
-        "mock_mode": false,
-        "simulate_network_error": false,
-        "run_mock_tests": false,
-        "_desc": "Mock testing configuration: mock_mode runs bot in complete exchange simulation without placing real orders on Binance even if API keys are present. simulate_network_error tests circuit breaker and retry mechanisms. run_mock_tests enables pre-flight test suites."
+        "auto_start": false
     },
     "paths": {
         "shared_api_dir": "./API"
