@@ -4,7 +4,42 @@
 # ============================================================
 
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Dict, Any, Union
+
+
+@dataclass
+class GridLevel:
+    """Типизированное представление отдельного колена сетки усреднения."""
+    indent: float = 0.0
+    volume: float = 0.0
+    is_active: bool = False
+    is_armed: bool = False
+    enabled: bool = True
+    activation: Optional[float] = None
+    price: Optional[float] = None
+    activation_price: Optional[float] = None
+    zone: Optional[int] = None
+    peeled: bool = False
+    peeled_count: int = 0
+    armed_at_drawdown: Optional[float] = None
+    armed_timestamp: Optional[float] = None
+
+
+@dataclass
+class TakeProfitLevel:
+    """Типизированное представление уровня карты тейк-профитов."""
+    indent: float = 0.0
+    volume: float = 0.0
+    is_active: bool = False
+    is_armed: bool = False
+    enabled: bool = True
+    activation: Optional[float] = None
+    price: Optional[float] = None
+    activation_price: Optional[float] = None
+    armed_at_gain: Optional[float] = None
+    armed_floor: Optional[float] = None
+    armed_timestamp: Optional[float] = None
+
 
 @dataclass
 class PositionState:
@@ -171,3 +206,64 @@ class PositionState:
             v.pop("armed_at_gain", None)
             v.pop("armed_floor", None)
             v.pop("armed_timestamp", None)
+
+    def get_grid_level(self, level_key: Union[str, int]) -> Dict[str, Any]:
+        """Возвращает словарь уровня сетки усреднения."""
+        k = str(level_key)
+        if k not in self.grid:
+            raise KeyError(f"[PositionState][{self.symbol}][{self.side}] Level '{k}' not found in grid")
+        return self.grid[k]
+
+    def is_level_active(self, level_key: Union[str, int]) -> bool:
+        """Проверяет, исполнен ли уровень сетки."""
+        k = str(level_key)
+        lvl = self.grid.get(k)
+        return bool(lvl.get("is_active", False)) if isinstance(lvl, dict) else False
+
+    def mark_level_active(self, level_key: Union[str, int], price: Optional[float] = None) -> None:
+        """Помечает уровень сетки как исполненный (необратимый high-water mark)."""
+        k = str(level_key)
+        if k in self.grid and isinstance(self.grid[k], dict):
+            self.grid[k]["is_active"] = True
+            self.grid[k]["is_armed"] = False
+            if price is not None:
+                self.grid[k]["price"] = float(price)
+
+    def is_level_peeled(self, level_key: Union[str, int], limit: int = 1) -> bool:
+        """Проверяет, исчерпан ли лимит пилинга для данного уровня."""
+        k = str(level_key)
+        lvl = self.grid.get(k)
+        if not isinstance(lvl, dict):
+            return False
+        return bool(lvl.get("peeled", False)) or int(lvl.get("peeled_count", 0)) >= limit
+
+    def increment_peel_count(self, level_key: Union[str, int], limit: int = 1) -> int:
+        """Инкрементирует счетчик пилинга уровня и при достижении лимита фиксирует peeled=True."""
+        k = str(level_key)
+        lvl = self.get_grid_level(k)
+        cnt = int(lvl.get("peeled_count", 0)) + 1
+        lvl["peeled_count"] = cnt
+        if cnt >= limit:
+            lvl["peeled"] = True
+        return cnt
+
+    def get_tp_level(self, level_key: Union[str, int]) -> Dict[str, Any]:
+        """Возвращает словарь уровня карты тейк-профитов."""
+        k = str(level_key)
+        if k not in self.tp_map:
+            raise KeyError(f"[PositionState][{self.symbol}][{self.side}] TP level '{k}' not found in tp_map")
+        return self.tp_map[k]
+
+    def is_tp_active(self, level_key: Union[str, int]) -> bool:
+        """Проверяет, исполнен ли уровень карты тейк-профитов."""
+        k = str(level_key)
+        lvl = self.tp_map.get(k)
+        return bool(lvl.get("is_active", False)) if isinstance(lvl, dict) else False
+
+    def mark_tp_active(self, level_key: Union[str, int]) -> None:
+        """Помечает уровень карты тейк-профитов как исполненный."""
+        k = str(level_key)
+        if k in self.tp_map and isinstance(self.tp_map[k], dict):
+            self.tp_map[k]["is_active"] = True
+            self.tp_map[k]["is_armed"] = False
+

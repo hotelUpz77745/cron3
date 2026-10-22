@@ -30,12 +30,21 @@ class PeelingManager:
 
     def __init__(
         self,
+        peeling_cfg: Optional[Dict[str, Any]] = None,
         bot_core: Optional[Any] = None,
         runtime_manager: Optional[Any] = None,
         client: Optional[Any] = None,
         tp_manager: Optional[Any] = None,
     ):
-        """Инициализация менеджера пилинга с явным инжектированием зависимостей."""
+        """Инициализация менеджера пилинга с явным инжектированием конфигурации и зависимостей."""
+        if peeling_cfg is not None and not isinstance(peeling_cfg, dict) and hasattr(peeling_cfg, "fsm_states"):
+            bot_core = peeling_cfg
+            peeling_cfg = None
+
+        if peeling_cfg is not None and not isinstance(peeling_cfg, dict):
+            raise TypeError(f"[PeelingManager] peeling_cfg must be a dict or None, got {type(peeling_cfg)}")
+
+        self.peeling_cfg: Dict[str, Any] = peeling_cfg or {}
         self.bot_core = bot_core
         self.runtime_manager = runtime_manager
         self.client = client
