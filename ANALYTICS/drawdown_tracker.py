@@ -21,7 +21,13 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
-from ANALYTICS.circuit_breaker import is_banned, update_ban_from_error, wait_ban_lifted
+from ANALYTICS.circuit_breaker import (
+    CircuitBreaker,
+    default_circuit_breaker,
+    is_banned,
+    update_ban_from_error,
+    wait_ban_lifted,
+)
 
 logger = UnifiedLogger("DrawdownTracker")
 
@@ -29,8 +35,9 @@ logger = UnifiedLogger("DrawdownTracker")
 class DrawdownTracker:
     """Tracks floating unrealized PnL, drawdowns, capacity, margins, and account equity in realtime."""
 
-    def __init__(self, manager):
+    def __init__(self, manager, circuit_breaker: Optional[CircuitBreaker] = None):
         self.manager = manager
+        self.circuit_breaker = circuit_breaker or default_circuit_breaker
         self._is_tracker_running = False
         self._tracker_task: Optional[asyncio.Task] = None
         self._floating_synced = False
@@ -66,7 +73,7 @@ class DrawdownTracker:
             if hasattr(self.manager, "fsm") and self.manager.fsm:
                 self.manager.fsm.transition_to_awaiting_api()
 
-            await wait_ban_lifted()
+            await self.circuit_breaker.wait_ban_lifted()
 
             res = await client.fetch_account_info()
 
@@ -79,7 +86,7 @@ class DrawdownTracker:
                 if "Connector is closed" in err or not getattr(self, "_is_tracker_running", True):
                     logger.debug(f"[ANALYTICS] fetch_account_info skipped during shutdown: {err}")
                     return False
-                update_ban_from_error(err)
+                self.circuit_breaker.update_ban_from_error(err)
                 logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}. Skipping recalculation until valid API data.")
                 if hasattr(self.manager, "fsm") and self.manager.fsm:
                     self.manager.fsm.on_api_error(err)
@@ -506,7 +513,7 @@ class DrawdownTracker:
                 if getattr(self.manager, "_sync_locks", None):
                     continue
 
-                if is_banned():
+                if self.circuit_breaker.is_banned():
                     continue
 
                 await self.sync_lightweight_unrealized_pnl(client)

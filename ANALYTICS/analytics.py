@@ -29,6 +29,8 @@ from c_utils import Utils
 
 from ANALYTICS.analytics_fsm import AnalyticsFSM, AnalyticsState
 from ANALYTICS.circuit_breaker import (
+    CircuitBreaker,
+    default_circuit_breaker,
     _BAN_PATTERN,
     _ban_until_ms,
     _update_ban_from_error,
@@ -90,8 +92,9 @@ class AnalyticsManager:
         )
 
         # Sub-engines decomposition
+        self.circuit_breaker = CircuitBreaker.get_default()
         self.ledger_recorder = LedgerRecorder(self)
-        self.drawdown_tracker = DrawdownTracker(self)
+        self.drawdown_tracker = DrawdownTracker(self, circuit_breaker=self.circuit_breaker)
         self.strategy_stats = StrategyStatsEngine(self)
         self.reconstruction = ReconstructionService(self)
 
