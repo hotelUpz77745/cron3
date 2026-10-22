@@ -29,12 +29,7 @@ IMAGES_DIR = ANALYTICS_DIR / "images"
 IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
 CSV_FILE = ANALYTICS_LEDGERS_DIR / "trades_ledger.txt"
-if not CSV_FILE.exists() and (ANALYTICS_DIR / "trades_ledger.txt").exists():
-    CSV_FILE = ANALYTICS_DIR / "trades_ledger.txt"
-
 JSON_FILE = ANALYTICS_STATS_DIR / "analytics.json"
-if not JSON_FILE.exists() and (ANALYTICS_DIR / "analytics.json").exists():
-    JSON_FILE = ANALYTICS_DIR / "analytics.json"
 
 PLOT_FILE = IMAGES_DIR / "equity_curve.png"
 

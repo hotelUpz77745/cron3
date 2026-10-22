@@ -10,10 +10,9 @@ ROLE: Сервис Telegram-уведомлений по просадке и пр
 import asyncio
 import os
 import aiohttp
-from consts import DATA_DIR, ANALYTICS_DIR
+from consts import DATA_DIR, ANALYTICS_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, TG_ALLOWED_USERS
 from c_utils import Utils
 from c_log import UnifiedLogger
-from consts import TG_ALLOWED_USERS
 
 logger = UnifiedLogger("Notifier")
 
@@ -103,7 +102,7 @@ class NotifierManager:
                 sflags["pos_flag"] = False
                 sflags["last_pos_th"] = pos_threshold
 
-            strat_stats_path = ANALYTICS_DIR / "STATS" / f"analytics_{strat_id}.json"
+            strat_stats_path = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
             if not strat_stats_path.exists():
                 continue
             strat_data = Utils.read_json_file(strat_stats_path) or {}
@@ -165,7 +164,7 @@ class NotifierManager:
         self.last_neg_threshold = neg_threshold
         self.last_pos_threshold = pos_threshold
 
-        analytics_data = Utils.read_json_file(ANALYTICS_DIR / "analytics.json")
+        analytics_data = Utils.read_json_file(GLOBAL_ANALYTICS_JSON)
         if not analytics_data:
             return
         net_profit = float(analytics_data.get("net_profit_usdt", 0.0))

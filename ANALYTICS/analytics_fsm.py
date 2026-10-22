@@ -79,13 +79,6 @@ class AnalyticsFSM:
 
         # 1. Проверка наличия или создание холодного кэша analytics.json
         if not self.log_file.exists():
-            root_legacy = self.stats_dir.parent / "analytics.json"
-            if root_legacy.exists() and root_legacy != self.log_file:
-                try:
-                    self.log_file.write_text(root_legacy.read_text(encoding="utf-8"), encoding="utf-8")
-                except Exception:
-                    pass
-        if not self.log_file.exists():
             self._create_cold_start_analytics(initial_start_balance)
 
         # 2. Загрузка глобальной аналитики из JSON
@@ -157,9 +150,6 @@ class AnalyticsFSM:
         }
         self.stats_dir.mkdir(parents=True, exist_ok=True)
         Utils.atomic_write_json(self.log_file, cold_data, indent=4)
-        root_legacy = self.stats_dir.parent / "analytics.json"
-        if root_legacy != self.log_file:
-            Utils.atomic_write_json(root_legacy, cold_data, indent=4)
         logger.info(
             f"[AnalyticsFSM] 🆕 Cold start analytics created at {self.log_file} "
             f"from start balance ${init_bal}. All metrics zeroed."

@@ -12,7 +12,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 import numpy as np
 from pathlib import Path
 from c_utils import Utils
-from consts import DATA_DIR, ANALYTICS_DIR
+from consts import DATA_DIR, GLOBAL_ANALYTICS_JSON
 
 class QuantCalculator:
     def __init__(self, deposit=None, leverage=None, coins_count=None, grid_steps=None, volumes=None, invest_size=None):
@@ -22,7 +22,7 @@ class QuantCalculator:
         
         # Динамическая подгрузка из файлов, если параметры не переданы
         if deposit is None:
-            analytics_path = ANALYTICS_DIR / "analytics.json"
+            analytics_path = GLOBAL_ANALYTICS_JSON
             if analytics_path.exists():
                 data = Utils.read_json_file(analytics_path)
                 deposit = float(data.get("cur_balance_usdt", 300.0))

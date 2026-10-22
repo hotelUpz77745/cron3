@@ -12,7 +12,7 @@ import json
 import time
 from datetime import datetime, timezone
 from typing import Any, Optional, Dict
-from consts import DATA_DIR, ANALYTICS_DIR, CACHE_DIR
+from consts import DATA_DIR, ANALYTICS_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
@@ -322,7 +322,7 @@ class AutoCloser:
         app_data = Utils.read_json_file(app_json_path)
         if not app_data:
             return
-        analytics_data = Utils.read_json_file(ANALYTICS_DIR / "analytics.json")
+        analytics_data = Utils.read_json_file(GLOBAL_ANALYTICS_JSON)
         if not analytics_data:
             return
         CLOSE_COOLDOWN_SEC = 45.0
@@ -875,7 +875,7 @@ class AutoCloser:
                 analytics_data["iteration_peak_ts"] = now_ms
                 analytics_data["iteration_peak_age_hours"] = 0.0
                 analytics_data["iteration_net_velocity"] = 0.0
-                Utils.atomic_write_json(ANALYTICS_DIR / "analytics.json", analytics_data, indent=4)
+                Utils.atomic_write_json(GLOBAL_ANALYTICS_JSON, analytics_data, indent=4)
 
                 try:
                     c_file = CACHE_DIR / "iteration_state.json"

@@ -131,14 +131,6 @@ class AnalyticsManager:
         self.ledgers_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.log_file.exists():
-            root_json = ANALYTICS_DIR / "analytics.json"
-            if root_json.exists():
-                try:
-                    self.log_file.write_text(root_json.read_text(encoding="utf-8"), encoding="utf-8")
-                except Exception:
-                    pass
-
-        if not self.log_file.exists():
             current_ms = int(time.time() * 1000)
             initial_balance = float(ANALYTICS_START_BALANCE_USDT)
             default_data = {
@@ -169,7 +161,6 @@ class AnalyticsManager:
                 "per_coin": {},
             }
             self.log_file.write_text(json.dumps(default_data, indent=4), encoding="utf-8")
-            (ANALYTICS_DIR / "analytics.json").write_text(json.dumps(default_data, indent=4), encoding="utf-8")
 
         if not self.txt_file.exists():
             root_txt = ANALYTICS_DIR / "trades_ledger.txt"
@@ -330,11 +321,6 @@ class AnalyticsManager:
                     logger.error(f"Error calculating trade velocity: {ve}")
             json_str = json.dumps(data, indent=4, ensure_ascii=False)
             Utils.atomic_write_text(self.log_file, json_str)
-            # Зеркалирование в корень ANALYTICS только при работе с боевой директорией (не в тестах!)
-            if self.stats_dir == ANALYTICS_STATS_DIR:
-                root_legacy = ANALYTICS_DIR / "analytics.json"
-                if root_legacy != self.log_file:
-                    Utils.atomic_write_text(root_legacy, json_str)
 
             if mark_backup and getattr(self, 'backup_manager', None):
                 self.backup_manager.mark_changed()
@@ -510,11 +496,6 @@ class AnalyticsManager:
                     self.peels_ledger,
                     self.recycling_ledger,
                 ]
-                if self.stats_dir == ANALYTICS_STATS_DIR:
-                    targets.extend([
-                        ANALYTICS_DIR / "analytics.json",
-                        ANALYTICS_DIR / "trades_ledger.txt",
-                    ])
                 for f in targets:
                     if f.exists():
                         try:
