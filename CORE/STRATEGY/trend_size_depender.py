@@ -202,7 +202,13 @@ class TrendSizeDepender:
 
         total_invest = 2.0 * float(base_invest)
         inv_long = round(total_invest * (float(w_long_pct) / 100.0), 2)
-        inv_short = round(total_invest - inv_long, 2)
+        inv_short = round(total_invest * (float(w_short_pct) / 100.0), 2)
+
+        # Компенсация возможной погрешности округления для строгого сохранения инварианта капитала
+        residual = round(total_invest - (inv_long + inv_short), 2)
+        if residual != 0:
+            inv_short = round(inv_short + residual, 2)
+
         return inv_long, inv_short
 
     @classmethod

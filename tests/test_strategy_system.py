@@ -9,8 +9,8 @@ from pathlib import Path
 from consts import _CFG, DATA_DIR
 from CORE._utils import Utils
 from CORE.STRATEGY.momentum_engine import MomentumEngine
-from CORE.STRATEGY.strategy_registry import StrategyConfig, StrategyRegistry
-from CORE.STRATEGY.strategy_applicator import StrategyApplicator, MIN_TAKE_PROFIT_PCT
+from CORE.strategy_registry import StrategyConfig, StrategyRegistry
+from CORE.strategy_applicator import StrategyApplicator, MIN_TAKE_PROFIT_PCT
 
 
 class TestStrategySystem(unittest.TestCase):

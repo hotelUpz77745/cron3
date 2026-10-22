@@ -199,7 +199,7 @@ class AnalyticsManager:
         """Гарантирует наличие изолированных файлов аналитики и леджеров по каждой стратегии."""
         if not self.strategy_registry:
             try:
-                from CORE.STRATEGY.strategy_registry import StrategyRegistry
+                from CORE.strategy_registry import StrategyRegistry
                 self.strategy_registry = StrategyRegistry()
             except Exception:
                 return

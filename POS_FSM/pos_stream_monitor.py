@@ -140,7 +140,7 @@ class PositionMonitor:
                 # размечаем все покрытые объемом уровни как исполненные (is_active=True)
                 if state and state.in_position and abs(state.total_volume) > 1e-6:
                     try:
-                        from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                        from CORE.strategy_applicator import StrategyApplicator
                         StrategyApplicator.resolve_position_state_grid(state)
                     except Exception:
                         pass

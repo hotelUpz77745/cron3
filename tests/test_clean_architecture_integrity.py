@@ -33,6 +33,8 @@ class TestCleanArchitectureIntegrity(unittest.TestCase):
             CRON3_DIR / "CORE" / "ENTRY" / "leverage_manager.py",
             CRON3_DIR / "CORE" / "GRID" / "peeling_manager.py",
             CRON3_DIR / "CORE" / "STRATEGY" / "canonical_strategy_processor.py",
+            CRON3_DIR / "CORE" / "STRATEGY" / "strategy_registry.py",
+            CRON3_DIR / "CORE" / "STRATEGY" / "strategy_applicator.py",
         ]
         for p in forbidden_paths:
             self.assertFalse(p.exists(), f"Запрещенный устаревший путь не должен существовать: {p}")

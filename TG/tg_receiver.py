@@ -3095,7 +3095,7 @@ class TelegramReceiver:
                 self.bot_core.strategy_registry.reload(active_strategies)
 
             try:
-                from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                from CORE.strategy_applicator import StrategyApplicator
                 strat_cfg = self.bot_core.strategy_registry.get_strategy_for_symbol(symbol)
                 StrategyApplicator().build_runtime_for_symbol(symbol, strat_cfg)
             except Exception as e:

@@ -350,7 +350,7 @@ class CoinSelectionService:
 
         # Пересборка рантайм-конфигов
         try:
-            from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+            from CORE.strategy_applicator import StrategyApplicator
             applicator = StrategyApplicator()
             for sym in clean_symbols:
                 strat_cfg = None

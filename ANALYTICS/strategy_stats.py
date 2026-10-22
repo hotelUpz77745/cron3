@@ -68,7 +68,7 @@ class StrategyStatsEngine:
 
         if not getattr(self.manager, "strategy_registry", None):
             try:
-                from CORE.STRATEGY.strategy_registry import StrategyRegistry
+                from CORE.strategy_registry import StrategyRegistry
                 self.manager.strategy_registry = StrategyRegistry()
             except Exception:
                 return

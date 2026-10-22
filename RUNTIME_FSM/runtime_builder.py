@@ -13,8 +13,8 @@ from pathlib import Path
 from consts import _CFG, DATA_DIR, AVOID_CHECK_RUNTIME_CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE.STRATEGY.strategy_registry import StrategyRegistry
-from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+from CORE.strategy_registry import StrategyRegistry
+from CORE.strategy_applicator import StrategyApplicator
 
 from typing import Optional, List
 logger = UnifiedLogger("RuntimeBuilder")

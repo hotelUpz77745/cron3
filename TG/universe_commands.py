@@ -297,7 +297,7 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
             if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
                 bot_core.strategy_registry.reload(app_data["active_strategies"])
                 try:
-                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    from CORE.strategy_applicator import StrategyApplicator
                     StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
                 except Exception as ex:
                     logger.warning(f"Runtime rebuild notice on sizing change: {ex}")
@@ -328,7 +328,7 @@ def setup_universe_handlers(dp: Dispatcher, bot_core: Any) -> None:
             if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
                 bot_core.strategy_registry.reload(app_data["active_strategies"])
                 try:
-                    from CORE.STRATEGY.strategy_applicator import StrategyApplicator
+                    from CORE.strategy_applicator import StrategyApplicator
                     StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
                 except Exception as ex:
                     logger.warning(f"Runtime rebuild notice on closer mode change: {ex}")
