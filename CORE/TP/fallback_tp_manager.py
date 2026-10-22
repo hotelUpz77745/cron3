@@ -18,12 +18,17 @@ class FallbackTpManager:
         pass
 
     async def process(self, client, runtime_manager, symbol: str, side: str, state, current_price: float, spec_data: dict, opposite_state=None):
-        """Проверяет пробитие страховочной цены (Fallback TP) или срабатывание Trailing TP и бьет по рынку."""
-        if not state.in_position or state.is_finished or current_price is None or state.avg_entry_price <= 0:
+        if (
+            not state.in_position
+            or getattr(state, "is_finished", False) is True
+            or getattr(state, "is_closing", False) is True
+            or current_price is None
+            or state.avg_entry_price <= 0
+        ):
             return
 
-        # Предохранитель от гонок: если уже летит маркет-ордер фолбека
-        if state.pending_rolling_tp:
+        # Предохранитель от гонок: если уже летит маркет-ордер фолбека или лимитный TP
+        if getattr(state, "pending_rolling_tp", False) is True:
             return
 
         # 1. Трейлинг Тейк-Профит: проверяем наличие условий трейлинга в tp_map (наличие activation/trailing) или взведенный пол
@@ -61,6 +66,7 @@ class FallbackTpManager:
 
             if tp_hit:
                 state.pending_rolling_tp = True
+                state.is_closing = True
                 logger.info(f"[{symbol}] {side} Canceling all limit orders before executing Trailing TP...")
                 await client.cancel_orders_for_side(symbol, side)
 
@@ -120,6 +126,8 @@ class FallbackTpManager:
                         logger.error(f"[{symbol}] Failed to execute Trailing TP Market Order: {res.error_msg}")
 
                 state.pending_rolling_tp = False
+                if not getattr(state, "is_finished", False):
+                    state.is_closing = False
                 return
 
         # 2. Детерминация цены фолбека (кешируем только прайс для горячего пути)
@@ -166,6 +174,7 @@ class FallbackTpManager:
         if triggered:
             # Предохранитель от повторного срабатывания (чтоб 100 раз не переебнуться)
             state.pending_rolling_tp = True
+            state.is_closing = True
             
             # ОТМЕНА ВСЕХ ЛИМИТНЫХ ОРДЕРОВ ЧТОБЫ ОСВОБОДИТЬ КВОТУ ДЛЯ MARKET REDUCE-ONLY
             logger.info(f"[{symbol}] {side} Canceling all limit orders before executing Fallback Market...")
@@ -199,3 +208,5 @@ class FallbackTpManager:
                     logger.error(f"[{symbol}] Failed to execute Fallback Market Order: {res.error_msg}")
             
             state.pending_rolling_tp = False  # Снимаем блокировку
+            if not getattr(state, "is_finished", False):
+                state.is_closing = False

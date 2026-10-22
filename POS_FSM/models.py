@@ -511,14 +511,15 @@ class PositionState:
         Проверяет соблюдение инвариантов FSM для запуска усреднения:
         - Позиция открыта (in_position == True).
         - Предыдущее усреднение не находится в процессе исполнения (pending_avg == False).
+        - Тейк-профит не находится в процессе выставления/подтяжки (pending_rolling_tp == False).
         - Позиция не ликвидируется / не закрывается (is_closing == False).
         - Позиция не помечена на сброс (is_finished == False).
         """
-        return bool(self.in_position and not self.pending_avg and not self.is_closing and not self.is_finished)
+        return bool(self.in_position and not self.pending_avg and not self.pending_rolling_tp and not self.is_closing and not self.is_finished)
 
     def can_peel(self) -> bool:
         """Проверяет соблюдение инвариантов FSM для частичной разгрузки (пилинга)."""
-        return bool(self.in_position and not self.pending_peel and not self.is_closing and not self.is_finished)
+        return bool(self.in_position and not self.pending_peel and not self.pending_avg and not self.pending_rolling_tp and not self.is_closing and not self.is_finished)
 
     def can_place_tp(self) -> bool:
         """Проверяет соблюдение инвариантов FSM для выставления / подтяжки TP."""

@@ -92,9 +92,19 @@ class TakeProfitRestorer:
                     if not in_pos or abs(pos_vol) <= 1e-8:
                         continue
 
-                    # Игнорируем позиции в процессе штатного закрытия
-                    if getattr(state, "is_closing", False) or symbol in getattr(self.bot_core, "_closing_symbols", set()):
+                    # Игнорируем позиции в процессе закрытия, завершения, усреднения или если уже идет выставление TP
+                    if (
+                        getattr(state, "is_closing", False) is True
+                        or getattr(state, "is_finished", False) is True
+                        or getattr(state, "pending_avg", False) is True
+                        or getattr(state, "pending_rolling_tp", False) is True
+                        or symbol in getattr(self.bot_core, "_closing_symbols", set())
+                    ):
                         continue
+
+                    if hasattr(state, "can_place_tp") and callable(state.can_place_tp):
+                        if state.can_place_tp() is False:
+                            continue
 
                     stats["checked"] += 1
                     key = (symbol.upper(), side.upper())

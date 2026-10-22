@@ -31,7 +31,11 @@ class OpenPositionLifecycleHandler:
         opposite_state: Any,
         current_price: float,
     ) -> None:
-        if getattr(state, "is_closing", False) is True or symbol in getattr(bot, "_closing_symbols", set()):
+        if (
+            getattr(state, "is_closing", False) is True
+            or getattr(state, "is_finished", False) is True
+            or symbol in getattr(bot, "_closing_symbols", set())
+        ):
             return
 
         sym_client = bot.get_client_for_symbol(symbol)
