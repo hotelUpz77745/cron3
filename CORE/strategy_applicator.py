@@ -825,12 +825,53 @@ class StrategyApplicator:
         target_dir: Optional[Path] = None,
         force: bool = False
     ) -> Dict[str, Path]:
-        """Генерирует рантайм-файлы для всех монет из активных стратегий."""
+        """Генерирует рантайм-файлы для всех монет из активных стратегий и безопасно удаляет сиротские файлы неактивных монет без позиций."""
         results = {}
         for symbol in registry.get_all_active_symbols():
             strat = registry.get_strategy_for_symbol(symbol)
             path = self.build_runtime_for_symbol(symbol, strat, target_dir=target_dir, force=force)
             results[symbol] = path
+
+        # Очистка сиротских файлов (orphan runtime files) для неактивных монет, у которых нет позиции
+        for strat_id, strat in registry.active_strategies.items():
+            strat_dir = target_dir or (DATA_DIR / "runtime" / strat_id)
+            if not strat_dir.exists():
+                continue
+            strat_syms = {s.upper() for s in getattr(strat, "symbols", [])}
+            for rf in list(strat_dir.iterdir()):
+                if rf.suffix.lower() in (".json", ".pkl"):
+                    sym_name = rf.stem.upper()
+                    if sym_name not in strat_syms:
+                        can_delete = False
+                        try:
+                            c_data = None
+                            if rf.suffix.lower() == ".json":
+                                c_data = Utils.read_json_file(rf)
+                            elif rf.suffix.lower() == ".pkl":
+                                import pickle
+                                with open(rf, "rb") as fp:
+                                    c_data = pickle.load(fp)
+                            if isinstance(c_data, dict):
+                                has_pos = any(
+                                    isinstance(s_val, dict) and (
+                                        s_val.get("in_position")
+                                        or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 1e-6
+                                    )
+                                    for s_val in c_data.values()
+                                )
+                                if not has_pos:
+                                    can_delete = True
+                            else:
+                                can_delete = True
+                        except Exception:
+                            can_delete = False
+
+                        if can_delete:
+                            try:
+                                rf.unlink()
+                                logger.info(f"[StrategyApplicator] Pruned inactive orphan runtime file: {rf}")
+                            except Exception as e:
+                                logger.warning(f"[StrategyApplicator] Failed to prune orphan runtime file {rf}: {e}")
         return results
 
     def apply_strategy_to_symbol(

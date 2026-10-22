@@ -113,12 +113,41 @@
             "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
         }
     },
+    "_auto_closing_modes_allowed": [
+        "trailing_ratchet",
+        "toxic",
+        "fixed",
+        "off"
+    ],
     "auto_closing": {
         "positive": {
             "scale_money": 1.25,
-            "_desc_scale_money": "Канонический статический масштаб порогов AutoCloser в USDT.",
+            "_desc_scale_money": "Канонический статический масштаб 1.25 порогов AutoCloser в USDT.",
             "min_guaranteed_profit_usdt": 5.0,
             "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
+            "fixed_net": {
+                "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
+                "target_net_usdt": 60.0,
+                "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT."
+            },
+            "toxicity_adaptive": {
+                "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
+                "score_weights": {
+                    "margin_load": 0.35,
+                    "grid_depth": 0.3,
+                    "float_ratio": 0.25,
+                    "delta_recovery": 0.15
+                },
+                "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
+                "panic_toxicity_threshold": 0.7,
+                "emergency_exit_floor_usdt": 3.0,
+                "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
+                "min_panic_recovery": 0.4,
+                "relaxed_toxicity_threshold": 0.35,
+                "moderate_exit_floor_usdt": 8.0,
+                "min_moderate_recovery": 0.2,
+                "relaxed_exit_floor_usdt": 15.0
+            },
             "trailing_ratchet": {
                 "levels": [
                     {

@@ -225,8 +225,11 @@ class PositionStream:
     async def start(self):
         self._external_stop = False
 
-        # Если ключи API не заданы или активирован MOCK_EXCHANGE, работаем в режиме симулятора
-        if not self.api_key or os.getenv("MOCK_EXCHANGE") == "1":
+        # Если ключи API не заданы или активирован MOCK_MODE / MOCK_EXCHANGE, работаем в режиме симулятора
+        from consts import MOCK_MODE
+        env_mock = os.getenv("MOCK_EXCHANGE")
+        force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
+        if not self.api_key or force_mock:
             logger.info("[MASTER WS] Operating in MOCK mode. Bypassing Binance private WS connection.")
             if self.client and self.target_symbols:
                 with contextlib.suppress(Exception):

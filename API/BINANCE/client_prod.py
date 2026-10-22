@@ -38,20 +38,27 @@ class BinanceClient:
         self,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
+        mock_mode: Optional[bool] = None,
     ):
         self.api_key = api_key
         self.api_secret = api_secret
         self.validator = OrderValidator(logger)
 
-        self.is_mock_mode: bool = (
-            not self.api_key
-            or not self.api_secret
-            or os.getenv("MOCK_EXCHANGE") == "1"
-        )
+        if mock_mode is not None:
+            self.is_mock_mode = bool(mock_mode)
+        else:
+            from consts import MOCK_MODE
+            env_mock = os.getenv("MOCK_EXCHANGE")
+            force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
+            self.is_mock_mode = (
+                not self.api_key
+                or not self.api_secret
+                or force_mock
+            )
         if self.is_mock_mode:
             from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
             self._mock_provider = get_default_mock_exchange()
-            logger.info("[BINANCE_API_PROD] Running in MOCK EXCHANGE mode (credentials empty or MOCK_EXCHANGE=1).")
+            logger.info("[BINANCE_API_PROD] Running in MOCK EXCHANGE mode (credentials empty, app.json mock_mode or MOCK_EXCHANGE=1).")
         else:
             self._mock_provider = None
 

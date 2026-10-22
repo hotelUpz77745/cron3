@@ -15,7 +15,14 @@
         "price_stream_ready_timeout_sec": 10.0,
         "price_stream_snapshot_timeout_sec": 5.0,
         "pos_stream_connect_timeout_sec": 5.0,
-        "auto_start": false
+        "auto_start": false,
+        "mock_mode": false
+    },
+    "testing": {
+        "mock_mode": false,
+        "simulate_network_error": false,
+        "run_mock_tests": false,
+        "_desc": "Mock testing configuration: mock_mode runs bot in complete exchange simulation without placing real orders on Binance even if API keys are present. simulate_network_error tests circuit breaker and retry mechanisms. run_mock_tests enables pre-flight test suites."
     },
     "paths": {
         "shared_api_dir": "./API"
@@ -35,6 +42,7 @@
     },
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __trailing_ratchet (pure Fibo trailing ratchet), __fixed (flat net take), __toxic (institutional dynamic exit). Strategy configs are located in CFG/universes/*.json.",
     "active_strategies": {
+        "_comment_invest_size_rules": "ПРАВИЛА НАСТРОЙКИ СТОРОН И ИНВЕСТИЦИЙ: 1) 'enabled': true/false на уровне стороны (LONG/SHORT) полностью включает/отключает вход в новые позиции по этой стороне. 2) 'default_invest_size' — базовый размер инвестиции в USDT для всех монет корзины. 3) 'invest_size': {} — словарь индивидуальных переопределений для конкретных монет. Если монета не указана в 'invest_size' (или словарь пуст {}), автоматически применяется 'default_invest_size'.",
         "u17_stephensonE__trailing_ratchet": {
             "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [TRAILING RATCHET]",
             "template": "u17_stephensonE",
@@ -57,7 +65,7 @@
                     "AVAUSDT": 400.0,
                     "GTCUSDT": 400.0,
                     "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400
+                    "SOLVUSDT": 400.0
                 }
             },
             "SHORT": {
@@ -68,7 +76,7 @@
                     "AVAUSDT": 400.0,
                     "GTCUSDT": 400.0,
                     "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400
+                    "SOLVUSDT": 400.0
                 }
             },
             "start_balance_usdt": 434.0

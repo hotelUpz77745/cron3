@@ -123,6 +123,31 @@ PRICE_INIT_TIMEOUT_SEC: float = float(_CFG["app"]["price_init_timeout_sec"])
 PRICE_STREAM_READY_TIMEOUT_SEC: float = float(_CFG["app"]["price_stream_ready_timeout_sec"])
 PRICE_STREAM_SNAPSHOT_TIMEOUT_SEC: float = float(_CFG["app"]["price_stream_snapshot_timeout_sec"])
 POS_STREAM_CONNECT_TIMEOUT_SEC: float = float(_CFG["app"]["pos_stream_connect_timeout_sec"])
+
+# ============================================================
+# MOCK & TESTING CONFIGURATION
+# ============================================================
+_TESTING_CFG: Dict[str, Any] = _CFG.get("testing") or {}
+_APP_CFG: Dict[str, Any] = _CFG.get("app") or {}
+
+MOCK_MODE: bool = bool(
+    _TESTING_CFG.get("mock_mode", False)
+    or _TESTING_CFG.get("enabled", False)
+    or _APP_CFG.get("mock_mode", False)
+    or _CFG.get("mock_mode", False)
+    or os.getenv("MOCK_EXCHANGE") == "1"
+)
+
+MOCK_SIMULATE_NETWORK_ERROR: bool = bool(
+    _TESTING_CFG.get("simulate_network_error", False)
+    or os.getenv("MOCK_ANALYTICS_NETWORK_ERROR") == "1"
+)
+
+RUN_MOCK_TESTS: bool = bool(
+    _TESTING_CFG.get("run_mock_tests", False)
+    or _APP_CFG.get("run_mock_tests", False)
+)
+
 ACTIVE_STRATEGIES: Dict[str, Any] = _CFG["active_strategies"]
 
 def _resolve_active_symbols() -> list[str]:
