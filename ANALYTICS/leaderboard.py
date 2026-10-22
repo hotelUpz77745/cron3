@@ -24,11 +24,10 @@ class LeaderboardEngine:
     """
 
     MODE_BADGES = {
+        "trailing_ratchet": "[RATCHET]",
+        "ratchet": "[RATCHET]",
         "toxicity_adaptive": "[TOXIC]",
         "toxic": "[TOXIC]",
-        "iter_net_classic": "[CLASSIC]",
-        "classic": "[CLASSIC]",
-        "trailing_ratchet": "[CLASSIC]",
         "fixed_net": "[FIXED]",
         "fixed": "[FIXED]",
         "alpha_rotation": "[ALPHA]",
@@ -109,14 +108,14 @@ class LeaderboardEngine:
         iteration_net = round(float(data.get("iteration_net_profit_usdt", net_profit)), 2)
         iteration_realized = round(float(data.get("iteration_realized_pnl_usdt", realized_pnl)), 2)
 
-        # Определение режима автозакрытия стратегии (4 режима: classic, toxic, fixed, off)
+        # Определение режима автозакрытия стратегии (4 режима: trailing_ratchet, toxic, fixed, off)
         # Суффикс имени вселенной является высшим приоритетом
         if universe_id.endswith("__off") or "__off" in universe_id:
             mode = "off"
             mode_badge = "[OFF]"
-        elif universe_id.endswith("__classic") or "__classic" in universe_id:
-            mode = "classic"
-            mode_badge = "[CLASSIC]"
+        elif universe_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in universe_id:
+            mode = "trailing_ratchet"
+            mode_badge = "[RATCHET]"
         elif universe_id.endswith("__toxic") or "__toxic" in universe_id:
             mode = "toxic"
             mode_badge = "[TOXIC]"
@@ -137,9 +136,9 @@ class LeaderboardEngine:
                 or ((meta.get("overrides", {}).get("auto_closing") or {}).get("positive") or {}).get("mode")
             )
             raw_mode_str = str(raw_mode).lower().strip() if raw_mode else "off"
-            if raw_mode_str in ("classic", "iter_net_classic", "trailing_ratchet"):
-                mode = "classic"
-                mode_badge = "[CLASSIC]"
+            if raw_mode_str in ("trailing_ratchet", "ratchet"):
+                mode = "trailing_ratchet"
+                mode_badge = "[RATCHET]"
             elif raw_mode_str in ("toxic", "toxicity_adaptive"):
                 mode = "toxic"
                 mode_badge = "[TOXIC]"

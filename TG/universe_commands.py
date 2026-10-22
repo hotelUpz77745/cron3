@@ -51,7 +51,7 @@ def get_user_universe_id(user_id: int, bot_core: Any = None) -> str:
                     return first_uid
         except Exception:
             pass
-    return "u16_chita__classic"
+    return "u17_stephensonE__trailing_ratchet"
 
 
 def set_user_universe_id(user_id: int, universe_id: str) -> None:
