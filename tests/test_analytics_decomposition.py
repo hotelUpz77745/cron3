@@ -273,7 +273,7 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
     async def test_deep_sync_analytics(self):
         now_ts = int(time.time() * 1000)
         mock_client = MagicMock()
-        mock_client._request = AsyncMock(side_effect=[
+        income_side_effect = [
             MagicMock(
                 success=True,
                 data=[
@@ -296,7 +296,9 @@ class TestAsyncAnalyticsDecomposition(unittest.IsolatedAsyncioTestCase):
                 ]
             ),
             MagicMock(success=True, data=[])
-        ])
+        ]
+        mock_client._request = AsyncMock(side_effect=income_side_effect)
+        mock_client.fetch_income = AsyncMock(side_effect=income_side_effect)
         mock_client.fetch_account_info = AsyncMock(return_value=MagicMock(
             success=True,
             data={
