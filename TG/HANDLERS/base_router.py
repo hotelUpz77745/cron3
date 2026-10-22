@@ -27,10 +27,6 @@ from TG.keyboards import get_confirm_start_keyboard, get_main_keyboard
 
 logger = UnifiedLogger("TGBaseRouter")
 
-try:
-    from quant_calculator import QuantCalculator
-except ImportError:
-    QuantCalculator = None
 
 
 class BaseRouterHandler:
@@ -46,7 +42,6 @@ class BaseRouterHandler:
         """Регистрация всех маршрутов aiogram 3 в роутере."""
         self.router.errors()(self.global_error_handler)
         self.router.message(Command("start"))(self.start_cmd)
-        self.router.message(Command("quant"))(self.secret_quant_cmd)
         self.router.message(Command("sonnik_restore"))(self.sonnik_restore_cmd)
         self.router.message(Command("radar"))(self.radar_cmd)
         self.router.message(Command("backup"))(self.backup_cmd)
@@ -80,18 +75,6 @@ class BaseRouterHandler:
         text = f"<b>Control Panel</b>\nCurrent Status: {status}"
         await message.answer(text, reply_markup=get_main_keyboard(), parse_mode="HTML")
 
-    async def secret_quant_cmd(self, message: Message, state: FSMContext):
-        msg = await message.answer("⏳ Симуляция ликвидаций запущена...")
-        try:
-            if QuantCalculator is None:
-                await msg.edit_text("ℹ️ Калькулятор ликвидаций устарел для данной конфигурации.")
-                return
-            calc = QuantCalculator()
-            report = calc.generate_report()
-            await msg.edit_text(f"```text\n{report}\n```", parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"Quant calculator error: {e}")
-            await msg.edit_text(f"❌ Ошибка калькулятора: {e}")
 
     async def sonnik_restore_cmd(self, message: Message):
         msg = await message.answer("⏳ Запуск принудительного Deep Sync. Это займет некоторое время...")

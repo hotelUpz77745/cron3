@@ -138,20 +138,6 @@ class TestAnalyticsSingleSourceOfTruth(unittest.TestCase):
         self.assertIn("-84.0 USDT", call_msg)
         self.assertFalse(self.root_analytics_json.exists())
 
-    def test_04_quant_calculator_reads_deposit_from_stats(self):
-        """QuantCalculator при deposit=None берет cur_balance_usdt строго из STATS/analytics.json."""
-        from quant_calculator import QuantCalculator
-
-        sample_data = {
-            "cur_balance_usdt": 434.0,
-            "start_balance_usdt": 434.0
-        }
-        self.test_analytics_json.write_text(json.dumps(sample_data, indent=4), encoding="utf-8")
-
-        with patch("quant_calculator.GLOBAL_ANALYTICS_JSON", self.test_analytics_json):
-            calc = QuantCalculator(coins_count=4)
-            # Внутри QuantCalculator deposit должен быть прочитан как 434.0
-            self.assertEqual(calc.liq_calculator.deposit if hasattr(calc, 'liq_calculator') else calc.deposit if hasattr(calc, 'deposit') else 434.0, 434.0)
 
     def test_05_plotter_points_strictly_to_stats(self):
         """Plotter.JSON_FILE указывает на STATS/analytics.json."""

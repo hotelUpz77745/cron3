@@ -10,6 +10,7 @@ import asyncio
 from consts import SPEC_TTL_SEC, CACHE_DIR, _CFG
 from API.BINANCE.public import BinancePublic
 from c_log import UnifiedLogger
+
 class TradeMath:
     @staticmethod
     def calculate_order_volume(
