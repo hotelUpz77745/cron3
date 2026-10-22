@@ -327,7 +327,7 @@ class StrategyConfig:
             self.mode = "off"
         self.auto_closing_mode: str = self.mode
 
-        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго "trend_size_depender": "static" (строковый тип: "static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
+        # 6. Купол Режима Сайзинга (Sizing Mode Dome): строго "trend_size_depender": "static" (строковый тип: "static", "dyn_ema_16")
         raw_tsd = raw_meta.get("trend_size_depender")
         active_tsd = self.active_settings.get("trend_size_depender")
 
@@ -350,8 +350,8 @@ class StrategyConfig:
 
         if sizing_mode_val and isinstance(sizing_mode_val, str):
             sm = sizing_mode_val.lower().strip()
-            if sm in ("dyn_bb", "dyn_bb_inv"):
-                sm = "dyn_inv_16"
+            if sm in ("dyn_bb", "dyn_bb_inv", "dyn_inv_16", "dyn_ema_10"):
+                sm = "static"
             elif sm == "dyn_ema_trend":
                 sm = "dyn_ema_16"
             self.sizing_mode: str = sm
@@ -359,7 +359,7 @@ class StrategyConfig:
             self.sizing_mode = "static"
         self.trend_size_depender: str = self.sizing_mode
 
-        VALID_SIZING_MODES = ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10")
+        VALID_SIZING_MODES = ("static", "dyn_ema_16")
         if self.sizing_mode not in VALID_SIZING_MODES:
             raise ValueError(
                 f"[StrategyConfig][{self.strategy_id}] Неизвестный sizing_mode '{self.sizing_mode}'! "
@@ -368,26 +368,9 @@ class StrategyConfig:
 
         # Фабрика конфигурации trend_size_depender:
         # "static": enabled = false (статический сайзинг 50/50, макро-тренд выключен).
-        # "dyn_inv_16": enabled = true (Bollinger Inverted Lockout 4h, шкала 16, коридор 33.3% / 66.7% + 4h-заморозка 50/50 при пробое).
         # "dyn_ema_16": enabled = true (EMA Trend 4h, быстрая 10 / медленная 30, шкала 16, коридор 33.3% / 66.7%).
-        # "dyn_ema_10": enabled = true (EMA Trend 4h, быстрая 10 / медленная 30, мягкая шкала 10, коридор 40.0% / 60.0%).
         if self.sizing_mode == "static":
             self.trend_size_cfg = {"enabled": False, "mode": "static"}
-        elif self.sizing_mode == "dyn_inv_16":
-            self.trend_size_cfg = {
-                "enabled": True,
-                "mode": "dyn_inv_16",
-                "trend_mode": "bb_inverted_lockout",
-                "timeframe": "4h",
-                "eval_window": 20,
-                "eval_window_bars": 3360,
-                "multiplier": 2.0,
-                "lockout_duration_sec": 14400.0,
-                "confirmation_candles": 5,
-                "scale": 16,
-                "min_side_pct": 33.3333,
-                "max_side_pct": 66.6667
-            }
         elif self.sizing_mode == "dyn_ema_16":
             self.trend_size_cfg = {
                 "enabled": True,
@@ -404,23 +387,6 @@ class StrategyConfig:
                 "scale": 16,
                 "min_side_pct": 33.3333,
                 "max_side_pct": 66.6667
-            }
-        elif self.sizing_mode == "dyn_ema_10":
-            self.trend_size_cfg = {
-                "enabled": True,
-                "mode": "dyn_ema_10",
-                "trend_mode": "ema_trend_4h",
-                "timeframe": "4h",
-                "eval_window": 30,
-                "eval_window_bars": 3360,
-                "sma_fast": 10,
-                "sma_slow": 30,
-                "confirmation_candles": 5,
-                "require_rising": True,
-                "trend_positive": True,
-                "scale": 10,
-                "min_side_pct": 40.0,
-                "max_side_pct": 60.0
             }
 
         user_tsd_override = (

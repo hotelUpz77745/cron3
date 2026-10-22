@@ -161,15 +161,9 @@ class LeaderboardEngine:
             or meta.get("trend_size_mode")
         )
         sm_str = str(raw_sm).lower().strip() if raw_sm else "static"
-        if sm_str in ("dyn_inv_16", "dyn_bb", "dyn_bb_inv"):
-            sizing_mode = "dyn_inv_16"
-            sizing_badge = "[INV_16]"
-        elif sm_str in ("dyn_ema_16", "dyn_ema_trend"):
+        if sm_str in ("dyn_ema_16", "dyn_ema_trend"):
             sizing_mode = "dyn_ema_16"
             sizing_badge = "[EMA_16]"
-        elif sm_str == "dyn_ema_10":
-            sizing_mode = "dyn_ema_10"
-            sizing_badge = "[EMA_10]"
         else:
             sizing_mode = "static"
             sizing_badge = "[STATIC]"

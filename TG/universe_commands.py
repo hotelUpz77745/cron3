@@ -2,7 +2,7 @@
 # Path: TG/universe_commands.py
 # Role: Интерактивное управление вселенными и стратегиями через Telegram:
 #       пагинация списка, детальная панель купола, переключение сайзинга
-#       ("static", "dyn_inv_16", "dyn_ema_16", "dyn_ema_10") и автозакрытия.
+#       ("static", "dyn_ema_16") и автозакрытия.
 # ==============================================================================
 
 from pathlib import Path
@@ -23,9 +23,7 @@ _active_user_universe: Dict[int, str] = {}
 
 SIZING_MODE_BADGES = {
     "static": ("⚡ Static (50/50)", "Фиксированный сайзинг 50/50 (макро-тренд выключен)"),
-    "dyn_inv_16": ("🎯 Dyn Inv 16", "Bollinger Inverted Lockout 4h (шкала 16, коридор 33.3%..66.7%)"),
     "dyn_ema_16": ("📈 Dyn EMA 16", "EMA Trend 4h 10/30 (шкала 16, коридор 33.3%..66.7%)"),
-    "dyn_ema_10": ("📊 Dyn EMA 10", "EMA Trend 4h 10/30 (мягкая шкала 10, коридор 40.0%..60.0%)"),
 }
 
 CLOSER_MODE_BADGES = {
@@ -190,20 +188,12 @@ def render_strategy_control_panel(user_id: int, bot_core: Any, uid: str, page: i
     buttons = []
 
     # Ряд кнопок сайзинга
-    sz_row1 = []
-    sz_row2 = []
-    for mode_key in ("static", "dyn_inv_16"):
+    sz_row = []
+    for mode_key in ("static", "dyn_ema_16"):
         label, _ = SIZING_MODE_BADGES[mode_key]
         prefix = "✅ " if mode_key == cur_sizing else ""
-        sz_row1.append(InlineKeyboardButton(text=f"{prefix}{label}", callback_data=f"set_sizing:{uid}:{mode_key}:{page}"))
-
-    for mode_key in ("dyn_ema_16", "dyn_ema_10"):
-        label, _ = SIZING_MODE_BADGES[mode_key]
-        prefix = "✅ " if mode_key == cur_sizing else ""
-        sz_row2.append(InlineKeyboardButton(text=f"{prefix}{label}", callback_data=f"set_sizing:{uid}:{mode_key}:{page}"))
-
-    buttons.append(sz_row1)
-    buttons.append(sz_row2)
+        sz_row.append(InlineKeyboardButton(text=f"{prefix}{label}", callback_data=f"set_sizing:{uid}:{mode_key}:{page}"))
+    buttons.append(sz_row)
 
     # Ряд кнопок автозакрытия
     cl_row = []

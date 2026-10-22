@@ -15,8 +15,7 @@ ROLE: Асимметричный балансир инвестиционных �
    - k = +16 -> 66.67% LONG / 33.33% SHORT (Экстремальный аптренд)
    - k = -16 -> 33.33% LONG / 66.67% SHORT (Экстремальный даунтренд)
 3. Документированные режимы оценки тренда на 4h свечах:
-   - В активном бою строго используются: EMA ('ema_trend', 'dyn_ema_16', 'ema_spread_4h') и Kernel.
-   - BB ('bb_deviation_4h', 'bb_inverted_lockout') отключен/зарезервирован по решению Тим Лида.
+   - В активном бою строго используются: EMA ('ema_trend', 'dyn_ema_16', 'ema_spread_4h').
    - ADX ('adx_di_4h') в стадии тестирования.
 """
 
@@ -110,32 +109,18 @@ class TrendSizeDepender:
     STEP_PCT: float = (MAX_SIDE_PCT - NEUTRAL_PCT) / STEPS_HALF  # ~1.04167%
 
     SUPPORTED_MODES: List[str] = [
-        "bb_inverted_lockout",
-        "bb_breakout_flat",
         "adx_di_4h",
         "ema_spread_4h",
         "ema_drift_4h",
         "ema_trend_4h",
         "ema_trend",
-        "dyn_inv_16",
         "dyn_ema_16",
-        "dyn_ema_10",
         "dyn_ema_trend",
-        "dyn_bb_inv",
-        "bb_inverted",
     ]
-
-    # Состояние 4-часовой заморозки по символам: symbol -> timestamp_разморозки
-    _lockout_until: Dict[str, float] = {}
 
     # Кэш: (symbol, timeframe, trend_mode, scale) -> (inv_long: float, inv_short: float, cached_at: float)
     _cache: Dict[Tuple[str, str, str, int], Tuple[float, float, float]] = {}
     _lock = asyncio.Lock()
-
-    @classmethod
-    def clear_lockouts(cls) -> None:
-        """Сброс таймеров заморозки (для тестов и рестарта сессий)."""
-        cls._lockout_until.clear()
 
     @classmethod
     def clear_cache(cls) -> None:
@@ -151,17 +136,14 @@ class TrendSizeDepender:
     ) -> Tuple[float, float]:
         """
         Переводит целочисленный индекс тренда k in [-16, +16] в веса сторон в процентах.
-        Поддерживает две институциональные шкалы:
-          - scale = 10: мягкая линейка [-10% .. +10%] -> коридор [40.0% .. 60.0%]
-          - scale = 16: полная линейка [-16.67% .. +16.67%] -> коридор [33.3333% .. 66.6667%]
         """
         tm = str(trend_mode).lower().strip()
         if scale is None:
-            scale = 10 if tm in ("dyn_ema_10", "ema_trend_10") else 16
+            scale = 16
 
-        delta_pct = 10.0 if scale == 10 else (cls.MAX_SIDE_PCT - cls.NEUTRAL_PCT)
+        delta_pct = (cls.MAX_SIDE_PCT - cls.NEUTRAL_PCT)
 
-        if tm in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_10", "dyn_ema_trend", "ema_trend"):
+        if tm in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_trend", "ema_trend"):
             if grade > 0:
                 w_long = round(cls.NEUTRAL_PCT + delta_pct, 4)
                 return w_long, round(100.0 - w_long, 4)
@@ -297,94 +279,6 @@ class TrendSizeDepender:
         return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
 
     @classmethod
-    def evaluate_grade_bb_inverted_lockout(
-        cls,
-        closes: np.ndarray,
-        period: int = 20,
-        multiplier: float = 2.0,
-        symbol: str = "",
-        current_ts: float = 0.0,
-        lockout_duration_sec: float = 14400.0,
-    ) -> int:
-        """
-        Вариант 1 (Инвертированный контр-трендовый с 4h-заморозкой):
-        Контур 1 (внутри канала): при росте к верхней полосе увеличивается SHORT,
-        при падении к нижней полосе увеличивается LONG. Grade = -round(norm_dev * 16).
-        Контур 2 (пробой полосы): как только цена выходит за полосу (|norm_dev| > 1.0),
-        динамика отключается, задается жесткий сайзинг 50/50 (Grade = 0) и состояние
-        замораживается минимум на 4 часа (14400с).
-        """
-        if len(closes) < 3:
-            return 0
-
-        if current_ts > 1e11:
-            current_ts /= 1000.0
-
-        sym_key = symbol.upper().strip() if symbol else "DEFAULT"
-        if sym_key and current_ts > 0:
-            lock_until = cls._lockout_until.get(sym_key, 0.0)
-            if current_ts < lock_until:
-                return 0
-
-        actual_period = min(len(closes), period)
-        window = closes[-actual_period:]
-        middle = float(np.mean(window))
-        std_val = float(np.std(window))
-
-        if std_val < 1e-8:
-            return 0
-
-        last_close = float(closes[-1])
-        # При Close = Middle +/- mult*std_val norm_dev = +/-1.0
-        norm_dev = (last_close - middle) / (multiplier * std_val)
-
-        # Контур 2: пробой полосы -> активация 4h-заморозки 50/50
-        if abs(norm_dev) > 1.0:
-            if sym_key and current_ts > 0:
-                cls._lockout_until[sym_key] = current_ts + lockout_duration_sec
-            return 0
-
-        # Контур 1: инвертированная формула внутри канала
-        inverted_norm = -norm_dev
-        grade = int(round(inverted_norm * cls.STEPS_HALF))
-        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
-
-    @classmethod
-    def evaluate_grade_bb_breakout_flat(
-        cls,
-        closes: np.ndarray,
-        period: int = 20,
-        multiplier: float = 2.0,
-    ) -> int:
-        """
-        Вариант 2 (Пробойный импульсный с флетовой зоной 50/50):
-        1. Внутри полос (Lower <= Close <= Upper) -> жесткий сайзинг 50/50 (Grade = 0).
-        2. При пробое верхней полосы (Close > Upper) -> LONG +16% (Grade = +16, веса 66.67% / 33.33%).
-        3. При пробое нижней полосы (Close < Lower) -> SHORT +16% (Grade = -16, веса 33.33% / 66.67%).
-        """
-        if len(closes) < 3:
-            return 0
-
-        actual_period = min(len(closes), period)
-        window = closes[-actual_period:]
-        middle = float(np.mean(window))
-        std_val = float(np.std(window))
-
-        if std_val < 1e-8:
-            return 0
-
-        last_close = float(closes[-1])
-        upper = middle + multiplier * std_val
-        lower = middle - multiplier * std_val
-
-        if last_close > upper:
-            return cls.STEPS_HALF   # +16 -> Long +16.67%
-        elif last_close < lower:
-            return -cls.STEPS_HALF  # -16 -> Short +16.67%
-        else:
-            return 0                # 50/50 флет
-
-    @classmethod
     def evaluate_grade_ema_spread(
         cls,
         closes: np.ndarray,
@@ -428,8 +322,6 @@ class TrendSizeDepender:
         lows: np.ndarray,
         closes: np.ndarray,
         cfg: Optional[Dict[str, Any]] = None,
-        symbol: str = "",
-        current_ts: float = 0.0
     ) -> int:
         """
         Единый диспетчер оценки тренда.
@@ -444,31 +336,7 @@ class TrendSizeDepender:
                 f"Поддерживаемые режимы: {cls.SUPPORTED_MODES}"
             )
 
-        if mode in ("bb_inverted_lockout", "bb_inverted_lockout_4h", "dyn_inv_16", "dyn_bb_inv", "bb_inverted"):
-            period = int(cfg.get("eval_window", 20))
-            mult = float(cfg.get("multiplier", 2.0))
-            lockout_sec = float(cfg.get("lockout_duration_sec", 14400.0))
-            sym = str(symbol or cfg.get("symbol", "")).strip()
-            ts = float(current_ts or cfg.get("current_ts", 0.0))
-            return cls.evaluate_grade_bb_inverted_lockout(
-                closes=closes,
-                period=period,
-                multiplier=mult,
-                symbol=sym,
-                current_ts=ts,
-                lockout_duration_sec=lockout_sec
-            )
-
-        elif mode in ("bb_breakout_flat", "bb_breakout_flat_4h"):
-            period = int(cfg.get("eval_window", 20))
-            mult = float(cfg.get("multiplier", 2.0))
-            return cls.evaluate_grade_bb_breakout_flat(
-                closes=closes,
-                period=period,
-                multiplier=mult
-            )
-
-        elif mode in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_10", "dyn_ema_trend", "ema_trend"):
+        if mode in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_trend", "ema_trend"):
             return cls.evaluate_grade_ema_trend(closes=closes, cfg=cfg)
 
         elif mode == "adx_di_4h":
@@ -597,7 +465,7 @@ class TrendSizeDepender:
                 lows = np.array(lows_list)
                 closes = np.array(closes_list)
 
-                grade = cls.evaluate_trend_grade(trend_mode, highs, lows, closes, trend_size_cfg, symbol=symbol, current_ts=now)
+                grade = cls.evaluate_trend_grade(trend_mode, highs, lows, closes, trend_size_cfg)
                 w_long, w_short = cls.calculate_weights_from_grade(grade, trend_mode=trend_mode, scale=scale)
                 inv_l, inv_s = cls.calculate_invest_sizes(base_invest_size, w_long, w_short)
 
