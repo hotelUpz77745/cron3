@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\GRID\avg_manager.py
-# Role: avg_manager.py module
-
 # ==============================================================================
 # Path: CORE/GRID/avg_manager.py
 # Role: Менеджер усреднений (Grid Manager)
@@ -24,9 +21,31 @@ class AverageManager:
     def __init__(self, peeling_manager: Optional[Any] = None):
         self.peeling_manager = peeling_manager if peeling_manager is not None else PeelingManager()
 
-    async def process_peel(self, *args, **kwargs) -> bool:
-        """Делегирует исполнение LIFO-пилинга в PeelingManager."""
-        return await self.peeling_manager.process_peel(*args, **kwargs)
+    async def process_peel(
+        self,
+        client: Any,
+        runtime_manager: Any,
+        symbol: str,
+        side: str,
+        state: Any,
+        current_price: float,
+        spec_data: dict,
+        tp_manager: Any,
+    ) -> bool:
+        """
+        Проверяет и исполняет частичную разгрузку (LIFO-пилинг) крайнего усреднения сетки.
+        Делегирует в выделенный доменный класс PeelingManager.
+        """
+        return await self.peeling_manager.process_peel(
+            client=client,
+            runtime_manager=runtime_manager,
+            symbol=symbol,
+            side=side,
+            state=state,
+            current_price=current_price,
+            spec_data=spec_data,
+            tp_manager=tp_manager,
+        )
 
     def reset(self, symbol: str, side: str):
         pass
@@ -468,18 +487,3 @@ class AverageManager:
         state.fallback_price = None
         state.trailing_tp_state = {}
 
-    async def process_peel(self, client, runtime_manager, symbol: str, side: str, state, current_price: float, spec_data: dict, tp_manager) -> bool:
-        """
-        Проверяет и исполняет частичную разгрузку (LIFO-пилинг) крайнего усреднения сетки.
-        Делегирует в выделенный доменный класс PeelingManager.
-        """
-        return await PeelingManager.process_peel(
-            client=client,
-            runtime_manager=runtime_manager,
-            symbol=symbol,
-            side=side,
-            state=state,
-            current_price=current_price,
-            spec_data=spec_data,
-            tp_manager=tp_manager,
-        )
