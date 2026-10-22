@@ -96,14 +96,15 @@ class TakeProfitManager:
                 if strat and getattr(strat, "smart_tp_cfg", None):
                     bot = getattr(self.runtime_manager, "bot_core", None)
                     now = bot.get_current_time() if (bot and hasattr(bot, "get_current_time")) else time.time()
-                    interval = 300
-                    if hasattr(self.runtime_manager, "get_heartbeat_interval_for_symbol"):
-                        try:
-                            interval = self.runtime_manager.get_heartbeat_interval_for_symbol(symbol)
-                        except Exception:
-                            interval = 300
-                    elif hasattr(strat, "heartbeat_seconds") and strat.heartbeat_seconds:
+                    interval = None
+                    if hasattr(strat, "heartbeat_seconds") and strat.heartbeat_seconds:
                         interval = int(strat.heartbeat_seconds)
+                    elif bot and hasattr(bot, "get_strategy_heartbeat_seconds"):
+                        interval = bot.get_strategy_heartbeat_seconds(symbol=symbol)
+                    elif hasattr(self.runtime_manager, "get_heartbeat_interval_for_symbol"):
+                        interval = self.runtime_manager.get_heartbeat_interval_for_symbol(symbol)
+                    if not interval or interval <= 0:
+                        interval = TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
                     candle_id = int(now // interval)
                     candle_start = candle_id * interval
                     recent = [t for t in getattr(state, "recent_closes", []) if t >= candle_start]

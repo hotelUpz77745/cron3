@@ -162,6 +162,7 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
         """Проверка: отсутствие invest_size в конфиге вызывает явный ValueError без скрытых дефолтов."""
         bare_meta = {
             "name": "bare_test",
+            "signal_heartbeat_tfr": "5m",
             "LONG": {"grid": {"0": {"indent": 0.0, "volume": 10.0}}},
             "SHORT": {"grid": {"0": {"indent": 0.0, "volume": 10.0}}}
         }

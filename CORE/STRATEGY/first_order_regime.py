@@ -55,6 +55,8 @@ class FirstOrderRegimeManager:
             return default_vol
 
         if isinstance(regime_cfg, dict):
+            if regime_cfg.get("enabled") is False:
+                return default_vol
             mode = regime_cfg.get("mode")
             presets = regime_cfg.get("presets", {})
         else:
@@ -106,6 +108,9 @@ class FirstOrderRegimeManager:
 
         if not isinstance(regime_cfg, dict):
             return cls.resolve_static_volume(regime_cfg, side, default_vol)
+
+        if regime_cfg.get("enabled") is False:
+            return default_vol
 
         mode = regime_cfg["mode"]
         if mode is None or str(mode).lower().strip() in cls.OFF_MODES:

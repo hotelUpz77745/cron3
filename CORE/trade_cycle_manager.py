@@ -127,14 +127,17 @@ class TradeCycleManager:
 
             # Свечное окно закрытий (строго в пределах текущей свечи сердцебиения)
             now = Utils.get_current_time(getattr(self.bot, "current_sim_time", None))
-            interval = 300
-            if hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
-                try:
-                    interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
-                except Exception:
-                    interval = 300
+            interval = None
+            if strat and getattr(strat, "heartbeat_seconds", None):
+                interval = int(strat.heartbeat_seconds)
+            elif hasattr(self.bot, "get_strategy_heartbeat_seconds"):
+                interval = self.bot.get_strategy_heartbeat_seconds(symbol=symbol)
+            elif hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
+                interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
             elif hasattr(self.bot, "time_control") and getattr(self.bot.time_control, "interval_seconds", None):
                 interval = int(self.bot.time_control.interval_seconds)
+            if not interval or interval <= 0:
+                raise ValueError(f"[TradeCycleManager] Could not determine heartbeat interval for {symbol}")
 
             candle_id = int(now // interval)
             candle_start = candle_id * interval
@@ -486,14 +489,17 @@ class TradeCycleManager:
                 smart_size_cfg = strat.smart_size_cfg if strat else None
 
                 now = self.bot.get_current_time()
-                interval = 300
-                if hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
-                    try:
-                        interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
-                    except Exception:
-                        interval = 300
+                interval = None
+                if strat and getattr(strat, "heartbeat_seconds", None):
+                    interval = int(strat.heartbeat_seconds)
+                elif hasattr(self.bot, "get_strategy_heartbeat_seconds"):
+                    interval = self.bot.get_strategy_heartbeat_seconds(symbol=symbol)
+                elif hasattr(self.bot, "get_heartbeat_interval_for_symbol"):
+                    interval = self.bot.get_heartbeat_interval_for_symbol(symbol)
                 elif hasattr(self.bot, "time_control") and getattr(self.bot.time_control, "interval_seconds", None):
                     interval = int(self.bot.time_control.interval_seconds)
+                if not interval or interval <= 0:
+                    raise ValueError(f"[TradeCycleManager] Could not determine heartbeat interval for {symbol}")
 
                 candle_id = int(now // interval)
                 candle_start = candle_id * interval

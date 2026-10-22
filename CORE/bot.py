@@ -336,6 +336,10 @@ class BotCore:
 
         return TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
 
+    def get_heartbeat_interval_for_symbol(self, symbol: str) -> int:
+        """Возвращает интервал пульса стратегии для символа в секундах."""
+        return self.get_strategy_heartbeat_seconds(symbol=symbol)
+
     def get_current_time(self) -> float:
         """Возвращает текущее время: виртуальное время симуляции/бэктеста или системное time.time()."""
         return Utils.get_current_time(self.current_sim_time)

@@ -55,27 +55,31 @@ class TimeControl:
         return dt.strftime("%Y-%m-%d %H:%M:%S") + f".{int(milliseconds % 1000):03d} UTC"
 
     @staticmethod
-    def interval_to_seconds(interval: str) -> int:
+    def interval_to_seconds(interval: str, default: int = 300) -> int:
         """
-        Преобразует строковый интервал Binance в количество секунд.
+        Преобразует строковый интервал в количество секунд.
+        Поддерживает произвольные таймфреймы (1m, 5m, 7m, 10m, 1h, 1d и т.д.)
+        динамически вычисляя количество секунд из единицы измерения.
         """
-        mapping = {
-            "1m": 60,
-            "2m": 120,
-            "3m": 180,
-            "4m": 240,
-            "5m": 300,
-            "6m": 360,
-            "7m": 420,
-            "10m": 600,
-            "15m": 900,
-            "30m": 1800,
-            "1h": 3600,
-            "2h": 7200,
-            "4h": 14400,
-            "1d": 86400,
-        }
-        return mapping.get(interval, 300)
+        if not interval:
+            return default
+        s = str(interval).strip().lower()
+        try:
+            if s.endswith("s"):
+                return int(s[:-1])
+            elif s.endswith("m"):
+                return int(s[:-1]) * 60
+            elif s.endswith("h"):
+                return int(s[:-1]) * 3600
+            elif s.endswith("d"):
+                return int(s[:-1]) * 86400
+            elif s.endswith("w"):
+                return int(s[:-1]) * 604800
+            elif s.isdigit():
+                return int(s)
+        except (ValueError, TypeError):
+            pass
+        return default
 
     @staticmethod
     def match_rule(rule: str, count: int) -> bool:

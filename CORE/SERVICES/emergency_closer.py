@@ -63,7 +63,7 @@ class EmergencyCloserService:
 
             now = time.time()
             raw_hb = bot_core.get_strategy_heartbeat_seconds()
-            heartbeat_sec = int(raw_hb) if isinstance(raw_hb, (int, float)) else 300
+            heartbeat_sec = int(raw_hb) if isinstance(raw_hb, (int, float)) else TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
             if hasattr(bot_core, "calc_heartbeat_window_cooldown"):
                 try:
                     res = bot_core.calc_heartbeat_window_cooldown(now, heartbeat_sec)
@@ -439,12 +439,17 @@ class EmergencyCloserService:
 
         # 3. Кулдаун авто-закрытия и блокировка входов до открытия новой свечи хартбита
         now = time.time()
-        heartbeat_sec = 300
-        if hasattr(bot_core, "get_strategy_heartbeat_seconds") and not isinstance(getattr(bot_core, "get_strategy_heartbeat_seconds", None), MagicMock):
+        heartbeat_sec = None
+        if strat_cfg and getattr(strat_cfg, "heartbeat_seconds", None):
+            heartbeat_sec = int(strat_cfg.heartbeat_seconds)
+        elif hasattr(bot_core, "get_strategy_heartbeat_seconds") and not isinstance(getattr(bot_core, "get_strategy_heartbeat_seconds", None), MagicMock):
             try:
                 heartbeat_sec = int(bot_core.get_strategy_heartbeat_seconds(strategy_id=strategy_id))
-            except (TypeError, ValueError):
-                heartbeat_sec = 300
+            except Exception:
+                pass
+        if not heartbeat_sec or heartbeat_sec <= 0:
+            heartbeat_sec = TimeControl.interval_to_seconds(DEFAULT_HEARTBEAT_TFR)
+
         if hasattr(bot_core, "calc_heartbeat_window_cooldown"):
             try:
                 cooldown_until = bot_core.calc_heartbeat_window_cooldown(now, heartbeat_sec)

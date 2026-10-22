@@ -438,29 +438,26 @@ class StrategyConfig:
                 if req_k not in self.micro_step_filter_cfg:
                     raise KeyError(f"[StrategyConfig][{self.strategy_id}] Missing required micro_step_filter field: '{req_k}'")
 
-        # Персональный пульс/хартбит стратегии: прямое чтение 'signal_heartbeat_tfr'
-        # с поддержкой легаси-алиасов ('heartbeat_tfr', 'timeframe') по Протоколу №2 (без скрытых дефолтов)
-        tfr_val = None
-        for key in ("signal_heartbeat_tfr", "heartbeat_tfr", "timeframe"):
-            if key in raw_meta and raw_meta[key]:
-                tfr_val = str(raw_meta[key])
-                break
-            elif key in self.overrides and self.overrides[key]:
-                tfr_val = str(self.overrides[key])
-                break
-
+        # Персональный пульс/хартбит стратегии: строгое прямое чтение 'signal_heartbeat_tfr'
+        # из паспорта стратегии (CFG/universes/*.json) без скрытых дефолтов
+        tfr_val = raw_meta.get("signal_heartbeat_tfr") or self.overrides.get("signal_heartbeat_tfr")
+        if not tfr_val:
+            for alias in ("heartbeat_tfr", "timeframe"):
+                if alias in raw_meta and raw_meta[alias]:
+                    tfr_val = str(raw_meta[alias])
+                    break
         if not tfr_val:
             if DEFAULT_TIMEFRAME:
                 tfr_val = DEFAULT_TIMEFRAME
             else:
                 raise KeyError(
                     f"[StrategyConfig][{self.strategy_id}] Отсутствует обязательный параметр "
-                    f"'signal_heartbeat_tfr' (или алиасы 'heartbeat_tfr' / 'timeframe') в конфиге стратегии!"
+                    f"'signal_heartbeat_tfr' в паспорте стратегии (CFG/universes/*.json)!"
                 )
 
-        self.signal_heartbeat_tfr: str = tfr_val
-        self.heartbeat_tfr: str = tfr_val
-        self.timeframe: str = tfr_val
+        self.signal_heartbeat_tfr: str = str(tfr_val)
+        self.heartbeat_tfr: str = str(tfr_val)
+        self.timeframe: str = str(tfr_val)
         from CORE.ENTRY.signal import TimeControl
         self.heartbeat_seconds: int = TimeControl.interval_to_seconds(self.signal_heartbeat_tfr)
 
