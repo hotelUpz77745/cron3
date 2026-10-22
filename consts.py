@@ -119,6 +119,10 @@ TIME_SLACK_SEC: float = float(_CFG["app"]["time_slack_sec"])
 REQ_TIMEOUT_SEC: float = float(_CFG["app"]["req_timeout_sec"])
 AVOID_CHECK_RUNTIME_CFG: bool = bool(_CFG["app"]["avoid_check_runtime_cfg"])
 API_RATE_LIMIT_SEC: float = float(_CFG["app"]["api_rate_limit_sec"])
+PRICE_INIT_TIMEOUT_SEC: float = float(_CFG["app"]["price_init_timeout_sec"])
+PRICE_STREAM_READY_TIMEOUT_SEC: float = float(_CFG["app"]["price_stream_ready_timeout_sec"])
+PRICE_STREAM_SNAPSHOT_TIMEOUT_SEC: float = float(_CFG["app"]["price_stream_snapshot_timeout_sec"])
+POS_STREAM_CONNECT_TIMEOUT_SEC: float = float(_CFG["app"]["pos_stream_connect_timeout_sec"])
 ACTIVE_STRATEGIES: Dict[str, Any] = _CFG["active_strategies"]
 
 def _resolve_active_symbols() -> list[str]:

@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\SERVICES\bot_bootstrap.py
-# Role: bot_bootstrap.py module
-
 # ==============================================================================
 # Path: CORE/SERVICES/bot_bootstrap.py
 # Role: Сервис инициализации, прогрева стримов и корректного завершения торгового ядра (BotCore Bootstrap)
@@ -11,11 +8,18 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, List, Dict
 
-from consts import API_KEY, TG_ENABLED
+from consts import (
+    API_KEY,
+    TG_ENABLED,
+    PRICE_INIT_TIMEOUT_SEC,
+    PRICE_STREAM_READY_TIMEOUT_SEC,
+    PRICE_STREAM_SNAPSHOT_TIMEOUT_SEC,
+    POS_STREAM_CONNECT_TIMEOUT_SEC,
+)
 from c_log import UnifiedLogger
 from API.BINANCE.public import BinancePublic
 from POS_FSM.pos_stream import PositionStream
-from POS_FSM.pos_stream_monitor import PositionMonitor
+from POS_FSM.pos_stream_monitor import PositionMonitor, BinanceWsInterpreter
 from RUNTIME_FSM.runtime_builder import RuntimeBuilder, build_runtime_caches, prompt_runtime_check
 from CORE.strategy_registry import StrategyRegistry
 from CORE.strategy_applicator import StrategyApplicator
@@ -48,10 +52,9 @@ class BotBootstrapService:
             return False
 
         # Сборка и проверка рантайм кешей (создание отсутствующих JSON)
-        runtime_builder = RuntimeBuilder(registry=bot_core.strategy_registry)
-        created_new = runtime_builder.build_caches(bot_core.symbols)
+        created_new = build_runtime_caches(bot_core.symbols, registry=bot_core.strategy_registry)
         if created_new and not TG_ENABLED:
-            runtime_builder.prompt_check()
+            prompt_runtime_check()
 
         # Первый расчет волатильности
         if bot_core.volatility_manager:
@@ -98,18 +101,18 @@ class BotBootstrapService:
         logger.info("Main _game_loop started. Specifications and price streams are running.")
         logger.info("Waiting for price streams to connect and snapshot...")
         try:
-            await asyncio.wait_for(bot_core.price_stream.ready.wait(), timeout=10.0)
+            await asyncio.wait_for(bot_core.price_stream.ready.wait(), timeout=PRICE_STREAM_READY_TIMEOUT_SEC)
             if hasattr(bot_core.price_stream, "snapshot_received"):
                 with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(bot_core.price_stream.snapshot_received.wait(), timeout=5.0)
+                    await asyncio.wait_for(bot_core.price_stream.snapshot_received.wait(), timeout=PRICE_STREAM_SNAPSHOT_TIMEOUT_SEC)
             logger.info("Price streams connected and snapshot received.")
         except asyncio.TimeoutError:
             logger.warning("Timeout waiting for price streams! Waiting for prices...")
 
-        # Дожидаемся цен от стрима (до 30с) с фолбеком на bulk REST
-        logger.info(f"Waiting for price initialization for all {len(bot_core.symbols)} symbols (up to 30s)...")
+        # Дожидаемся цен от стрима с фолбеком на bulk REST
+        logger.info(f"Waiting for price initialization for all {len(bot_core.symbols)} symbols (up to {int(PRICE_INIT_TIMEOUT_SEC)}s)...")
         wait_start = time.time()
-        while time.time() - wait_start < 30.0 and bot_core.is_running:
+        while time.time() - wait_start < PRICE_INIT_TIMEOUT_SEC and bot_core.is_running:
             missing = [s for s in bot_core.symbols if not bot_core.prices.get(s) or (isinstance(bot_core.prices.get(s), tuple) and bot_core.prices[s][0] <= 0)]
             if not missing:
                 logger.info(f"All {len(bot_core.symbols)} symbol prices successfully initialized from stream in {time.time() - wait_start:.1f}s!")
@@ -119,7 +122,7 @@ class BotBootstrapService:
             missing = [s for s in bot_core.symbols if not bot_core.prices.get(s) or (isinstance(bot_core.prices.get(s), tuple) and bot_core.prices[s][0] <= 0)]
             if missing:
                 logger.warning(
-                    f"[PRICE_INIT] Price init timeout (30s): {len(missing)}/{len(bot_core.symbols)} symbols missing. "
+                    f"[PRICE_INIT] Price init timeout ({int(PRICE_INIT_TIMEOUT_SEC)}s): {len(missing)}/{len(bot_core.symbols)} symbols missing. "
                     f"Executing abnormal bulk REST fallback for all symbols..."
                 )
                 try:
@@ -132,10 +135,9 @@ class BotBootstrapService:
                     logger.warning(f"[PRICE_INIT] Bulk REST fallback failed: {e}")
 
         logger.info("Waiting for Position Stream to connect...")
-        wait_cycles = 0
-        while not bot_core.pos_stream.ready and wait_cycles < 50:
+        pos_wait_start = time.time()
+        while not bot_core.pos_stream.ready and (time.time() - pos_wait_start) < POS_STREAM_CONNECT_TIMEOUT_SEC:
             await asyncio.sleep(0.1)
-            wait_cycles += 1
 
         if not bot_core.pos_stream.ready:
             logger.warning("Position Stream failed to connect in time! Relying on REST failsafe.")

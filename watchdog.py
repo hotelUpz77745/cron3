@@ -1,70 +1,39 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\watchdog.py
-# Role: watchdog.py module
-
-# ============================================================
-# File: watchdog.py
+# ==============================================================================
+# Path: watchdog.py
 # Role: Фоновый контроллер состояния главного цикла (отслеживание зависаний и производительности)
-# ============================================================
+# ==============================================================================
+
+from __future__ import annotations
 
 import asyncio
 import os
 import time
-import datetime
 from typing import Optional, List, Dict, Any, Union
-import pytz
-import aiohttp
 
 from consts import TG_ALLOWED_USERS
 from c_log import UnifiedLogger
+from TG import TelegramAdapter
 
 logger = UnifiedLogger("Watchdog")
 
-class WatchdogTGAdapter:
+
+class WatchdogTGAdapter(TelegramAdapter):
     """
     Адаптер для отправки алертов и heartbeat в Telegram.
-    Токен берется строго из .env (TG_TOKEN).
+    Наследует институциональный TelegramAdapter из API.TELEGRAM.
     """
-    def __init__(self, token: str | None = None, chat_ids: list[int | str] | None = None):
-        # Токен строго из .env (TG_TOKEN) без фолбэков на сторонние конфиги
-        self.token = token or os.getenv("TG_TOKEN") or ""
-        self._chat_ids = chat_ids
-        self._heartbeat_msg_id = None
-        self._heartbeat_msg_time: float = 0.0
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._session_lock: Optional[asyncio.Lock] = None
-
-    async def _get_session(self) -> aiohttp.ClientSession:
-        if self._session is not None and not self._session.closed:
-            return self._session
-        if self._session_lock is None:
-            self._session_lock = asyncio.Lock()
-        async with self._session_lock:
-            if self._session is not None and not self._session.closed:
-                return self._session
-            self._session = aiohttp.ClientSession()
-            return self._session
-
-    async def aclose(self):
-        if self._session is not None and not self._session.closed:
-            try:
-                await self._session.close()
-            except Exception:
-                pass
-        self._session = None
 
     def _get_chat_ids(self) -> list[int | str]:
         if self._chat_ids:
             return self._chat_ids
 
         chat_ids = []
-        # Из consts (TG_ALLOWED_USERS)
         try:
             if TG_ALLOWED_USERS:
                 chat_ids.extend(TG_ALLOWED_USERS)
         except Exception:
             pass
 
-        # Дополнительно из переменной окружения, если есть
         if not chat_ids:
             admin_env = os.getenv("TG_ADMIN_ID")
             if admin_env:
@@ -72,92 +41,6 @@ class WatchdogTGAdapter:
 
         return chat_ids
 
-    async def send_alert(self, msg: str, logger=None):
-        token = self.token or os.getenv("TG_TOKEN")
-        if not token:
-            if logger:
-                logger.warning("[WATCHDOG] TG_TOKEN is missing in .env")
-            return
-
-        chat_ids = self._get_chat_ids()
-        if not chat_ids:
-            if logger:
-                logger.warning("[WATCHDOG] No recipient chat IDs found for alert")
-            return
-
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        try:
-            session = await self._get_session()
-            for chat_id in chat_ids:
-                try:
-                    payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                        pass
-                except Exception as e:
-                    if logger:
-                        logger.error(f"[WATCHDOG] Failed to send admin alert to {chat_id}: {e}")
-        except Exception as e:
-            if logger:
-                logger.error(f"[WATCHDOG] Session error sending alert: {e}")
-
-    async def send_or_update_heartbeat(self, server_name: str, autodelete_sec: int = 180, logger=None):
-        token = self.token or os.getenv("TG_TOKEN")
-        if not token:
-            return
-
-        chat_ids = self._get_chat_ids()
-        if not chat_ids:
-            return
-
-        chat_id = chat_ids[0]
-
-        try:
-            utc_now = datetime.datetime.now(pytz.utc)
-            utc_now = datetime.datetime.now(datetime.timezone.utc)
-            now = time.time()
-
-            date_str = utc_now.strftime("%Y-%m-%d")
-            time_utc_str = utc_now.strftime("%H:%M:%S UTC")
-
-            msg = (
-                f"🟢 <b>{date_str}</b>\n\n"
-                f"Server: <b>{server_name}</b> is running smoothly.\n\n"
-                f"🕒 {time_utc_str}"
-            )
-
-            session = await self._get_session()
-            if self._heartbeat_msg_id and (now - self._heartbeat_msg_time) >= autodelete_sec:
-                delete_url = f"https://api.telegram.org/bot{token}/deleteMessage"
-                payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id}
-                try:
-                    async with session.post(delete_url, json=payload, timeout=aiohttp.ClientTimeout(total=10)):
-                        pass
-                except Exception:
-                    pass
-
-                self._heartbeat_msg_id = None
-                self._heartbeat_msg_time = 0
-
-            if self._heartbeat_msg_id:
-                url = f"https://api.telegram.org/bot{token}/editMessageText"
-                payload = {"chat_id": chat_id, "message_id": self._heartbeat_msg_id, "text": msg, "parse_mode": "HTML"}
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    res = await resp.json()
-                    if not res.get("ok"):
-                        self._heartbeat_msg_id = None
-
-            if not self._heartbeat_msg_id:
-                url = f"https://api.telegram.org/bot{token}/sendMessage"
-                payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
-                async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                    res = await resp.json()
-                    if res.get("ok"):
-                        self._heartbeat_msg_id = res["result"]["message_id"]
-                        self._heartbeat_msg_time = now
-
-        except Exception as e:
-            if logger:
-                logger.error(f"[WATCHDOG] Failed to send heartbeat: {e}")
 
 
 class LoopWatchdog:

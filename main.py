@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\main.py
-# Role: main.py module
-
 # ==============================================================================
 # Path: main.py
 # Role: Точка входа в приложение
@@ -16,17 +13,16 @@ _CUR_DIR = Path(__file__).resolve().parent
 if str(_CUR_DIR) not in sys.path:
     sys.path.insert(0, str(_CUR_DIR))
 
-from consts import TG_ENABLED
-from TG.tg_receiver import TelegramReceiver
-import urllib.request
-import json
-from consts import TG_TOKEN, TG_ALLOWED_USERS
-from c_log import UnifiedLogger
-from CORE.bot import BotCore
-os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"
-
 import asyncio
 from typing import Optional, List, Dict, Any
+
+from consts import TG_ENABLED
+from TG.tg_receiver import TelegramReceiver
+from TG import TelegramAdapter
+from c_log import UnifiedLogger
+from CORE.bot import BotCore
+
+os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"
 
 
 async def run_app(bot, logger):
@@ -51,21 +47,10 @@ async def run_app(bot, logger):
             except Exception:
                 pass
 
+
 def send_telegram_fatal(msg: str):
-    if not TG_TOKEN or not TG_ALLOWED_USERS:
-        return
-    url = f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage"
-    for user_id in TG_ALLOWED_USERS:
-        try:
-            data = json.dumps({
-                "chat_id": user_id, 
-                "text": f"🚨 СТАРТОВАЯ ОШИБКА!\nБот упал при запуске:\n\n{msg}"
-            }).encode('utf-8')
-            req = urllib.request.Request(url, data=data, headers={'Content-Type': 'application/json'})
-            with urllib.request.urlopen(req, timeout=5):
-                pass
-        except Exception:
-            pass
+    TelegramAdapter.send_fatal_alert(msg)
+
 
 def main():
     logger = UnifiedLogger("App")
@@ -73,12 +58,12 @@ def main():
     try:
         bot = BotCore()
         logger.info("Starting BotCore...")
-        print("\n" + "="*50)
-        print("🟢 БОТ УСПЕШНО ЗАПУЩЕН!")
+        logger.info("=" * 50)
+        logger.info("🟢 БОТ УСПЕШНО ЗАПУЩЕН!")
         status = "⏸️ ПАУЗА (Ждет старта)" if bot.is_paused else "▶️ АКТИВЕН (Торгует)"
-        print(f"Текущий статус: {status}")
-        print("👉 ПЕРЕЙДИТЕ В TELEGRAM К ЭЛЕМЕНТАМ УПРАВЛЕНИЯ!")
-        print("="*50 + "\n")
+        logger.info("Текущий статус: %s", status)
+        logger.info("👉 ПЕРЕЙДИТЕ В TELEGRAM К ЭЛЕМЕНТАМ УПРАВЛЕНИЯ!")
+        logger.info("=" * 50)
         asyncio.run(run_app(bot, logger))
         
     except KeyboardInterrupt:
