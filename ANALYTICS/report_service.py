@@ -293,10 +293,14 @@ class AnalyticsReportService:
         return text, buttons
 
     def render_full_report_text(self, current_uid: str, univ_name: str) -> str:
-        """Формирует полный текстовый отчет для выгрузки в файл TXT."""
+        """Формирует полный детальный текстовый отчет для выгрузки в файл TXT со всеми глобальными и per-coin метриками."""
         analytics_path = self.stats_dir / f"analytics_{current_uid}.json"
         if not analytics_path.exists():
-            return f"No analytics found for {current_uid}"
+            matches = list(self.stats_dir.glob(f"analytics_{current_uid}*.json"))
+            if matches:
+                analytics_path = sorted(matches)[0]
+            else:
+                return f"No analytics found for {current_uid}"
 
         try:
             data = json.loads(analytics_path.read_text(encoding="utf-8"))
@@ -305,10 +309,24 @@ class AnalyticsReportService:
                 f"STRATEGY DOME ANALYTICS REPORT: {univ_name} ({current_uid})",
                 "=" * 50 + "\n",
             ]
-            start_val = data.get("start_balance_usdt", 0)
-            cur_val = data.get("cur_balance_usdt", start_val)
-            peak_val = data.get("peak_balance_usdt", cur_val)
-            min_val = data.get("min_balance_usdt", cur_val)
+
+            def _f(v, d=0.0):
+                try:
+                    return float(v) if v is not None else d
+                except (ValueError, TypeError):
+                    return d
+
+            def _i(v, d=0):
+                try:
+                    return int(v) if v is not None else d
+                except (ValueError, TypeError):
+                    return d
+
+            # 1. Balances
+            start_val = _f(data.get("start_balance_usdt", 0))
+            cur_val = _f(data.get("cur_balance_usdt", start_val))
+            peak_val = _f(data.get("peak_balance_usdt", cur_val))
+            min_val = _f(data.get("min_balance_usdt", cur_val))
 
             lines.append("Balances:")
             lines.append(f"  Start: {start_val:,.2f} USDT")
@@ -316,39 +334,140 @@ class AnalyticsReportService:
             lines.append(f"  Peak: {peak_val:,.2f} USDT")
             lines.append(f"  Min (Bottom): {min_val:,.2f} USDT\n")
 
+            # 2. Performance (Global)
             per_coin_dict = data.get("per_coin", {})
-            realized = float(data.get("realized_pnl_usdt", 0))
-            realized_net = float(data.get("realized_pnl_net_usdt", realized))
-            comm = float(data.get("total_commission_usdt", 0))
-            fund = float(data.get("total_funding_usdt", 0))
+            realized = _f(data.get("realized_pnl_usdt", 0))
+            realized_net = _f(data.get("realized_pnl_net_usdt", realized))
+            comm = _f(data.get("total_commission_usdt", 0))
+            fund = _f(data.get("total_funding_usdt", 0))
             if comm == 0.0 and per_coin_dict:
-                comm = sum(float(c.get("commission_usdt", 0.0)) for c in per_coin_dict.values())
+                comm = sum(_f(c.get("commission_usdt", 0.0)) for c in per_coin_dict.values())
             if fund == 0.0 and per_coin_dict:
-                fund = sum(float(c.get("funding_usdt", 0.0)) for c in per_coin_dict.values())
+                fund = sum(_f(c.get("funding_usdt", 0.0)) for c in per_coin_dict.values())
 
-            lines.append("PnL & Performance:")
-            lines.append(f"  Net Profit: {data.get('net_profit_usdt', 0):+,.2f} USDT")
-            lines.append(f"  Realized Net: {realized_net:+,.2f} USDT")
-            lines.append(f"  Floating (Unrealized): {data.get('unrealized_pnl_usdt', 0):+,.2f} USDT")
-            lines.append(f"  Commission: {comm:,.2f} USDT")
-            lines.append(f"  Funding: {fund:,.2f} USDT")
-            lines.append(f"  Max Drawdown: {data.get('max_drawdown_usdt', 0):,.2f} USDT")
-            lines.append(f"  Recovery Factor: {data.get('recovery_factor', 0):.2f}\n")
+            net_profit = _f(data.get("net_profit_usdt", 0))
+            unrealized = _f(data.get("unrealized_pnl_usdt", 0))
+            max_dd = _f(data.get("max_drawdown_usdt", 0))
+            rec_factor = _f(data.get("recovery_factor", 0))
+            perf_growth = _f(data.get("performance_usdt", peak_val - start_val))
+            roi = _f(data.get("roi_pct", (net_profit / start_val * 100.0) if start_val > 0 else 0.0))
 
-            lines.append("Trading Activity:")
-            lines.append(f"  Total Trades: {data.get('total_trades', 0)}")
-            lines.append(f"  Winning Trades: {data.get('winning_trades', 0)}")
-            lines.append(f"  Iteration: #{data.get('iteration_index', 1)}\n")
+            gload_pct = _f(data.get("grid_load_pct", 0))
+            curr_gload = _f(data.get("current_grid_load_usdt", 0))
+            tot_gsize = _f(data.get("total_grid_size_usdt", 0))
+            max_gload_pct = _f(data.get("max_grid_load_pct", 0))
 
+            mload_pct = _f(data.get("margin_load_pct", 0))
+            tot_mused = _f(data.get("total_margin_used_usdt", 0))
+            max_mload_pct = _f(data.get("max_margin_load_pct", 0))
+
+            free_m = _f(data.get("free_margin_usdt", cur_val - tot_mused))
+            free_m_pct = _f(data.get("free_margin_pct", (free_m / cur_val * 100.0) if cur_val > 0 else 0.0))
+            min_free_m = _f(data.get("min_free_margin_usdt", free_m))
+
+            total_trades = _i(data.get("total_trades", 0))
+            win_trades = _i(data.get("winning_trades", 0))
+            winrate = _f(data.get("winrate_pct", (win_trades / total_trades * 100.0) if total_trades > 0 else 0.0))
+
+            lines.append("Performance:")
+            lines.append(f"  Net Profit: {net_profit:+,.2f} USDT")
+            lines.append(f"  Realized PnL (Gross): {realized:+,.2f} USDT")
+            lines.append(f"  Realized PnL (Net): {realized_net:+,.2f} USDT")
+            lines.append(f"  Total Commission: {comm:,.4f} USDT")
+            lines.append(f"  Total Funding: {fund:,.4f} USDT")
+            lines.append(f"  Unrealized PnL: {unrealized:+,.2f} USDT")
+            lines.append(f"  Max Drawdown: {max_dd:,.2f} USDT")
+            lines.append(f"  Performance (Peak-Start): {perf_growth:+,.2f} USDT")
+            lines.append(f"  ROI: {roi:.2f}%")
+            lines.append(f"  Grid Load: {gload_pct:.2f}% ({curr_gload:,.2f} / {tot_gsize:,.2f} USDT | Max: {max_gload_pct:.2f}%)")
+            lines.append(f"  Margin Load: {mload_pct:.2f}% (Used: {tot_mused:,.2f} USDT | Max: {max_mload_pct:.2f}%)")
+            lines.append(f"  Free Margin: {free_m:,.2f} USDT ({free_m_pct:.2f}% | Min: {min_free_m:,.2f} USDT)")
+            lines.append(f"  Recovery Factor: {rec_factor:.2f}")
+            lines.append(f"  Trades: {total_trades} (Wins: {win_trades} | {winrate:.1f}%)\n")
+
+            # 3. Iteration info
+            it_idx = data.get("iteration_index", 1)
+            it_net = _f(data.get("iteration_net_profit_usdt", net_profit))
+            it_vel = _f(data.get("iteration_net_velocity", 0))
+            lines.append("Trading Activity & Iteration:")
+            lines.append(f"  Iteration: #{it_idx} (Net: {it_net:+,.2f} USDT | Velocity: {it_vel:.2f} $/h)\n")
+
+            # 4. Toxic Defense / Subgrid Peeling
+            td = data.get("toxic_defense", {})
+            if td:
+                peel = td.get("subgrid_peeling", {})
+                rec = td.get("cross_recycling", {})
+                p_cnt = _i(peel.get("events_count"))
+                r_cnt = _i(rec.get("events_count"))
+                if p_cnt > 0 or r_cnt > 0:
+                    lines.append("Toxic Defense & Peeling:")
+                    lines.append(
+                        f"  Subgrid Peeling: {p_cnt} events | "
+                        f"Loss: -{_f(peel.get('peel_loss_usdt')):.2f} USDT | "
+                        f"Micro-PnL: +{_f(peel.get('locked_micro_pnl_usdt')):.2f} USDT"
+                    )
+                    lines.append(
+                        f"  Cross-Recycling: {r_cnt} events | "
+                        f"Loss Absorbed: -{_f(rec.get('loss_absorbed_usdt')):.2f} USDT | "
+                        f"Profit Spent: {_f(rec.get('profit_spent_usdt')):.2f} USDT\n"
+                    )
+
+            # 5. PER-COIN METRICS
             lines.append("=" * 50)
-            lines.append("PER-COIN BREAKDOWN")
-            lines.append("=" * 50)
-            for sym, c in sorted(per_coin_dict.items(), key=lambda x: float(x[1].get("net_profit_usdt", 0)), reverse=True):
-                lines.append(f"[{sym}]")
-                lines.append(f"  Net Profit: {c.get('net_profit_usdt', 0):+,.2f} USDT")
-                lines.append(f"  Trades: {c.get('total_trades', 0)}")
-                lines.append(f"  Max DD: {c.get('max_drawdown', 0):,.2f} USDT")
-                lines.append(f"  Recovery: {c.get('recovery_factor', 0):.2f}\n")
+            lines.append("PER-COIN METRICS")
+            lines.append("=" * 50 + "\n")
+
+            for sym, c in sorted(per_coin_dict.items(), key=lambda x: _f(x[1].get("net_profit_usdt", 0)), reverse=True):
+                is_active = c.get("is_active_symbol", c.get("is_active", True))
+                status_str = "[АКТИВНА]" if is_active else "[ВЫВЕДЕНА / АРХИВ]"
+
+                c_trades = _i(c.get("total_trades", c.get("trades", 0)))
+                c_wins = _i(c.get("winning_trades", c.get("win_count", 0)))
+                c_wr = _f(c.get("winrate_pct", (c_wins / c_trades * 100.0) if c_trades > 0 else 0.0))
+
+                c_np = _f(c.get("net_profit_usdt", 0))
+                c_roi = round(c_np / start_val * 100.0, 2) if start_val > 0 else 0.0
+                c_roi_sign = "+" if c_roi > 0 else ""
+
+                c_realized_gross = _f(c.get("realized_pnl_usdt", c.get("gross_realized_usdt", 0)))
+                c_realized_net = _f(c.get("realized_pnl_net_usdt", c_realized_gross))
+                c_comm = _f(c.get("commission_usdt", 0))
+                c_fund = _f(c.get("funding_usdt", 0))
+
+                c_unrealized = _f(c.get("current_drawdown", _f(c.get("long_unrealized", 0)) + _f(c.get("short_unrealized", 0))))
+                c_max_dd = _f(c.get("max_drawdown", 0))
+                c_min_dd = _f(c.get("min_drawdown", 0))
+
+                c_avg_daily = _f(c.get("avg_daily_profit", 0))
+                c_gload_pct = _f(c.get("current_grid_load_pct", 0))
+                c_gload_usdt = _f(c.get("current_grid_load_usdt", 0))
+                c_gcap_usdt = _f(c.get("grid_capacity_usdt", 0))
+                c_max_gload_pct = _f(c.get("max_grid_load_pct", 0))
+
+                c_mused = _f(c.get("current_margin_usdt", 0))
+                c_mload_pct = _f(c.get("margin_load_pct", 0))
+                c_max_mused = _f(c.get("max_margin_usdt", 0))
+
+                c_pos_size = _f(c.get("max_position_size", c_gload_usdt))
+                c_rec = _f(c.get("recovery_factor", 0))
+                c_rrr = _f(c.get("risk_reward_ratio", 0))
+                c_abs_rec = _f(c.get("abs_recovery_factor", 0))
+
+                lines.append(f"--- {sym} {status_str} ---")
+                lines.append(f"  Trades: {c_trades} (Wins: {c_wins} | {c_wr:.1f}%)")
+                lines.append(f"  Net Profit: {c_np:+,.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI)")
+                lines.append(f"  Realized (Gross): {c_realized_gross:+,.2f} USDT")
+                lines.append(f"  Realized (Net): {c_realized_net:+,.2f} USDT")
+                lines.append(f"  Fees: Comm {c_comm:,.4f} / Fund {c_fund:,.4f}")
+                lines.append(f"  Unrealized PnL: {c_unrealized:+,.2f} USDT")
+                lines.append(f"  Hist. Drawdown: Max {c_max_dd:,.2f} / Min {c_min_dd:,.2f} USDT")
+                lines.append(f"  Avg Daily Profit (Net): {c_avg_daily:+,.2f} USDT")
+                lines.append(f"  Grid Load: {c_gload_pct:.2f}% ({c_gload_usdt:,.2f} / {c_gcap_usdt:,.2f} USDT | Max: {c_max_gload_pct:.2f}%)")
+                lines.append(f"  Margin Used: {c_mused:,.2f} USDT ({c_mload_pct:.2f}% balance | Max: {c_max_mused:,.2f} USDT)")
+                lines.append(f"  Max Position Size: {c_pos_size:,.2f} USDT")
+                lines.append(f"  Recovery Factor: {c_rec:.2f}")
+                lines.append(f"  Risk/Reward Ratio: {c_rrr:.2f}")
+                lines.append(f"  Abs Recovery Factor: {c_abs_rec:.2f}\n")
 
             return "\n".join(lines)
         except Exception as e:
@@ -513,6 +632,12 @@ class AnalyticsReportService:
             coin_roi_pct = round((net_profit / start_bal_u * 100.0), 2) if start_bal_u > 0 else 0.0
             coin_roi_sign = "+" if coin_roi_pct > 0 else ""
 
+            rec = float(cdata.get("recovery_factor", 0.0))
+            abs_rec = float(cdata.get("abs_recovery_factor", 0.0))
+            avg_daily = float(cdata.get("avg_daily_profit", 0.0))
+            rrr = float(cdata.get("risk_reward_ratio", 0.0))
+            max_pos = float(cdata.get("max_position_size", 0.0))
+
             return (
                 f"🪙 <b>ДЕТАЛИЗАЦИЯ БАЛАНСОВ: {symbol}</b> ({status_text})\n"
                 f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
@@ -527,6 +652,8 @@ class AnalyticsReportService:
                 f"  • Сделок: <b>{trades}</b> (Побед: {wins} | {wr:.1f}%)\n"
                 f"  • Grid Load: <b>{gload:.1f}%</b> | Margin Used: <b>{mused:.2f} USDT</b>\n"
                 f"  • Комиссии / Funding: Comm <b>{comm:.4f} $</b> | Fund <b>{fund:.4f} $</b>\n"
+                f"  • Recovery Factor: <b>{rec:.2f}</b> (Abs: <b>{abs_rec:.2f}</b>)\n"
+                f"  • Ср. профит/день: <b>{avg_daily:+.2f} $</b> | R/R: <b>{rrr:.2f}</b> | Max Pos: <b>{max_pos:.2f} $</b>\n"
             )
         except Exception as e:
             logger.error(f"[REPORT_SERVICE] Error reading per_coin for {symbol}: {e}")
