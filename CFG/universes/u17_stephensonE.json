@@ -61,7 +61,7 @@
             ">=4": 0
         },
         "enabled": true,
-        "eval_window_sec": 300
+        "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp."
     },
     "smart_size": {
         "trend_determ": "ema_trend",
@@ -85,10 +85,9 @@
         },
         "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
         "knife_blocker_threshold": 1,
+        "_knife_blocker_desc": "Защита от ножей: порог закрытых ордеров противоположного направления, блокирующий вход (1). При null защита отключена (отдельный флаг knife_blocker_enabled не используется).",
         "stagnation_min_step": null,
-        "enabled": true,
-        "eval_window_sec": 300,
-        "knife_blocker_enabled": true
+        "enabled": true
     },
     "smart_tp": {
         "enabled": true,
@@ -100,8 +99,7 @@
             "==3": 1.42,
             ">=4": 1.0
         },
-        "stagnation_min_step": null,
-        "eval_window_sec": 300
+        "stagnation_min_step": null
     },
     "min_tp_indent": 1.0,
     "_min_tp_indent_desc": "Минимальный гарантированный пол тейк-профита для стратегии (Правило 11 + персональный пол): никакой тейк на всей глубине сетки не опускается ниже 1.0%.",

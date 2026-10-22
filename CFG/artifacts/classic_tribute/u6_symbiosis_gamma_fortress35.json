@@ -9,7 +9,6 @@
     "smart_grace": {
         "start_period_sec": 57,
         "shift_interval_sec": 13,
-        "eval_window_sec": 300,
         "increments_card": {
             "==1": 30,
             "==2": 90,
@@ -18,14 +17,12 @@
         }
     },
     "smart_size": {
-        "eval_window_sec": 300,
         "profiting_size_weights": {
             "<2": 1.0,
             "==2": 1.15,
             "==3": 0.85,
             ">=4": 0.6
         },
-        "knife_blocker_enabled": true,
         "knife_blocker_threshold": 1
     },
     "LONG": {

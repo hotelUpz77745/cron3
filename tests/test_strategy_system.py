@@ -48,10 +48,16 @@ class TestStrategySystem(unittest.TestCase):
         cfg_disabled = {"knife_blocker_enabled": False, "knife_blocker_threshold": 2}
         self.assertFalse(MomentumEngine.is_knife_blocked(5, cfg_disabled))
 
+        cfg_null = {"knife_blocker_threshold": None}
+        self.assertFalse(MomentumEngine.is_knife_blocked(5, cfg_null))
+
         cfg_enabled = {"knife_blocker_enabled": True, "knife_blocker_threshold": 2}
         self.assertFalse(MomentumEngine.is_knife_blocked(1, cfg_enabled))
         self.assertTrue(MomentumEngine.is_knife_blocked(2, cfg_enabled))
         self.assertTrue(MomentumEngine.is_knife_blocked(3, cfg_enabled))
+
+        cfg_threshold_only = {"knife_blocker_threshold": 1}
+        self.assertTrue(MomentumEngine.is_knife_blocked(1, cfg_threshold_only))
 
     def test_smart_tp_multiplier(self):
         """Тестирование множителей динамического тейк-профита."""

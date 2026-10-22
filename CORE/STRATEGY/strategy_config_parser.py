@@ -322,18 +322,25 @@ class StrategyConfigParser:
         smart_size_cfg = base_smart_size
         smart_size_trend_determ = smart_size_cfg.get("trend_determ")
 
-        if ss_cfg and "knife_blocker_threshold" in ss_cfg and "knife_blocker_enabled" not in ss_cfg:
-            knife_blocker_enabled = ss_cfg["knife_blocker_threshold"] is not None
-            knife_blocker_threshold = int(ss_cfg["knife_blocker_threshold"])
+        knife_blocker_threshold = None
+        if ss_cfg and ss_cfg.get("knife_blocker_enabled") is False:
+            knife_blocker_threshold = None
+        elif ss_cfg and "knife_blocker_threshold" in ss_cfg:
+            raw_kbt = ss_cfg["knife_blocker_threshold"]
+            knife_blocker_threshold = int(raw_kbt) if raw_kbt is not None else None
+        elif smart_size_cfg.get("knife_blocker_enabled") is False:
+            knife_blocker_threshold = None
+        elif "knife_blocker_threshold" in smart_size_cfg:
+            raw_kbt = smart_size_cfg["knife_blocker_threshold"]
+            knife_blocker_threshold = int(raw_kbt) if raw_kbt is not None else None
         elif "knife_blocker" in smart_size_cfg and isinstance(smart_size_cfg["knife_blocker"], dict):
             kb = smart_size_cfg["knife_blocker"]
-            knife_blocker_enabled = bool(kb.get("enabled", False))
-            knife_blocker_threshold = int(kb.get("threshold", 2))
-        else:
-            knife_blocker_enabled = bool(smart_size_cfg.get("knife_blocker_enabled", False))
-            knife_blocker_threshold = int(smart_size_cfg.get("knife_blocker_threshold", 2))
-        smart_size_cfg["knife_blocker_enabled"] = knife_blocker_enabled
+            knife_blocker_threshold = int(kb.get("threshold", 2)) if kb.get("enabled", False) else None
+        elif "knife_blocker_enabled" in smart_size_cfg:
+            knife_blocker_threshold = int(smart_size_cfg.get("knife_blocker_threshold", 2) or 2) if smart_size_cfg["knife_blocker_enabled"] else None
+
         smart_size_cfg["knife_blocker_threshold"] = knife_blocker_threshold
+        smart_size_cfg["knife_blocker_enabled"] = knife_blocker_threshold is not None
 
         base_smart_tp = copy.deepcopy(DEFAULT_SMART_TP)
         st_cfg = raw_meta.get("smart_tp") or overrides.get("smart_tp")
@@ -362,7 +369,7 @@ class StrategyConfigParser:
             "brownian_noise_factor": brownian_noise_factor,
             "smart_size_cfg": smart_size_cfg,
             "smart_size_trend_determ": smart_size_trend_determ,
-            "knife_blocker_enabled": knife_blocker_enabled,
+            "knife_blocker_enabled": knife_blocker_threshold is not None,
             "knife_blocker_threshold": knife_blocker_threshold,
             "smart_tp_cfg": smart_tp_cfg,
             "smart_tp_trend_determ": smart_tp_trend_determ,

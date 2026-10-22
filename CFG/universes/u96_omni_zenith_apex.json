@@ -89,7 +89,7 @@
     "smart_grace": {
         "start_period_sec": 57,
         "shift_interval_sec": 13,
-        "eval_window_sec": 300,
+        "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
         "increments_card": {
             "==1": 30,
             "==2": 75,
@@ -102,15 +102,14 @@
         "_brownian_noise_factor_desc": "Броуновский шум отключен (null) для U96."
     },
     "smart_size": {
-        "eval_window_sec": 300,
         "profiting_size_weights": {
             "<2": 1.0,
             "==2": 1.2,
             "==3": 0.85,
             ">=4": 0.6
         },
-        "knife_blocker_enabled": true,
         "knife_blocker_threshold": 1,
+        "_knife_blocker_desc": "Защита от ножей: порог закрытых ордеров противоположного направления, блокирующий вход (1). При null защита отключена (отдельный флаг knife_blocker_enabled не используется).",
         "enabled": true,
         "trend_determ": null,
         "_trend_determ_modes": {
@@ -129,7 +128,6 @@
         "stagnation_min_step": null
     },
     "smart_tp": {
-        "eval_window_sec": 300,
         "increments_tp": {
             "<2": 1.0,
             ">=2": 1.3,

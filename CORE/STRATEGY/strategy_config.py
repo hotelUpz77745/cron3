@@ -115,8 +115,8 @@ class StrategyConfig:
         self.brownian_noise_factor: Optional[Tuple[float, float]] = smart_res["brownian_noise_factor"]
         self.smart_size_cfg: Dict[str, Any] = smart_res["smart_size_cfg"]
         self.smart_size_trend_determ: Optional[str] = smart_res["smart_size_trend_determ"]
-        self.knife_blocker_enabled: bool = smart_res["knife_blocker_enabled"]
-        self.knife_blocker_threshold: int = smart_res["knife_blocker_threshold"]
+        self.knife_blocker_threshold: Optional[int] = smart_res["knife_blocker_threshold"]
+        self.knife_blocker_enabled: bool = self.knife_blocker_threshold is not None
         self.smart_tp_cfg: Dict[str, Any] = smart_res["smart_tp_cfg"]
         self.smart_tp_trend_determ: Optional[str] = smart_res["smart_tp_trend_determ"]
         self.momentum_engine: MomentumEngine = smart_res["momentum_engine"]

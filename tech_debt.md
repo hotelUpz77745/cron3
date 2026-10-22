@@ -1027,3 +1027,32 @@ cron3/
 
 
 
+
+
+
+
+
+
+
+
+
+
+### 8.15. Упразднение сущности `knife_blocker_enabled` и ликвидация концепта плавающего окна `eval_window_sec`
+
+1. **Упразднение избыточного флага `knife_blocker_enabled`**:
+   - Реализована строгая нормализация: `knife_blocker_threshold` является единственным источником истины.
+     - `knife_blocker_threshold: 1` (любое целое число `int`) — блокиратор ножей активен с заданным порогом.
+     - `knife_blocker_threshold: null` (в Python `None`) — блокиратор ножей выключен.
+   - Избыточная сущность `knife_blocker_enabled` полностью вырезана из боевых паспортов стратегий (`CFG/universes/*.json`), шаблонов (`CFG/artifacts/classic_tribute/*.json`) и `consts.py`.
+   - В рантайме `MomentumEngine` и `StrategyConfig` атрибут/свойство `knife_blocker_enabled` вычисляется динамически (`self.knife_blocker_threshold is not None`), обеспечивая абсолютную прозрачность для проверок и обратную совместимость.
+
+2. **Ликвидация оверинжиниринга `eval_window_sec` в пользу тиков сердцебиения**:
+   - Концепт плавающего скользящего окна `eval_window_sec: 300` полностью искоренен из паспортов стратегий, артефактов и docstring-описаний движка.
+   - Закреплен фундаментальный инвариант торговой системы: окно оценки строго привязано к физической свече тика сигнала (`signal_heartbeat_tfr: "5m"`).
+   - Наступление новой пятиминутки (физическое время, кратное 5 минутам, со сдвигом `shift_interval_sec`) детерминированно сбрасывает накопленный прогресс счетчиков закрытых ордеров (`recent_closes`) синхронно для всех секций: `smart_grace`, `smart_size` и `smart_tp`. Плавающее скользящее окно сбивало бы единый ритм сердцебиения и являлось опасным оверинжинирингом.
+   - В паспортах (`u17_stephensonE.json`, `u96_omni_zenith_apex.json`) добавлена исчерпывающая документация `_window_desc` и `_knife_blocker_desc`.
+
+3. **Результаты верификации**:
+   - `python -c "from CORE.strategy_registry import StrategyRegistry; from CORE.strategy_applicator import StrategyApplicator; ..."`: рантаймы Вселенных успешно перекомпилированы.
+   - Полный тестовый сгон: **483 passed, 2 skipped, 0 failures, 0 errors** за 34.9s.
+   - Соблюдено Правило 9 Протокола Самсонова: исключительно локальный коммит, строго без `git push`.

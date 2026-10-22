@@ -45,7 +45,6 @@
             13
         ],
         "_brownian_noise_factor_desc": "Рандомизированная задержка броуновского шума в секундах между 3 и 13 включительно МЕЖДУ ордерами сильной руки: применяется только когда в пределах окна уже закрылся хотя бы 1 ордер (closed_count >= 1), чтобы не забивать стопку ордеров подряд и дать цене покачаться. Первый сигнальный вход (closed_count == 0) идет строго по рандомизированному таймингу shift_interval_sec: [5, 16] без броуновской паузы.",
-        "eval_window_sec": 300,
         "increments_card": {
             "==1": 25,
             "==2": 40,
@@ -54,7 +53,6 @@
         }
     },
     "smart_size": {
-        "eval_window_sec": 300,
         "trend_determ": "ema_trend",
         "_trend_determ_modes": {
             "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 4h Dual EMA тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
@@ -76,12 +74,10 @@
             ">=4": 1.14
         },
         "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
-        "knife_blocker_enabled": true,
         "knife_blocker_threshold": 1
     },
     "smart_tp": {
         "enabled": true,
-        "eval_window_sec": 300,
         "trend_determ": "ema_trend",
         "_trend_determ_desc": "Множители increments_tp (колокол Тюринга) применяются только при совпадении с 4h Dual EMA трендом (LONG при UP, SHORT при DOWN). В контртренде/флэте множитель строго 1.00x.",
         "increments_tp": {

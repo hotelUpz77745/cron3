@@ -238,8 +238,7 @@ DEFAULT_START_PERIOD_SEC: float = float(DEFAULT_SMART_GRACE.get("start_period_se
 _raw_shift = DEFAULT_SMART_GRACE.get("shift_interval_sec", 13)
 DEFAULT_SHIFT_INTERVAL_SEC: int = int(_raw_shift[0] if isinstance(_raw_shift, (list, tuple)) else _raw_shift)
 DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
-    "knife_blocker_enabled": False,
-    "knife_blocker_threshold": 2,
+    "knife_blocker_threshold": None,
     "profiting_size_weights": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
 DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {

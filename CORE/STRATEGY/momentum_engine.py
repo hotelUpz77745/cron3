@@ -192,8 +192,7 @@ class MomentumEngine:
         self.profiting_size_weights: Dict[str, float] = {}
         self.stagnation_min_step: Optional[int] = None
         self.smart_size_trend_determ: Optional[str] = None
-        self.knife_blocker_enabled: bool = False
-        self.knife_blocker_threshold: int = 2
+        self.knife_blocker_threshold: Optional[int] = None
 
         if smart_size_cfg is not None:
             if not isinstance(smart_size_cfg, dict):
@@ -210,14 +209,16 @@ class MomentumEngine:
             if "trend_determ" in smart_size_cfg and smart_size_cfg["trend_determ"] is not None:
                 self.smart_size_trend_determ = str(smart_size_cfg["trend_determ"]).strip()
 
-            if "knife_blocker_enabled" in smart_size_cfg:
-                self.knife_blocker_enabled = bool(smart_size_cfg["knife_blocker_enabled"])
+            if smart_size_cfg.get("knife_blocker_enabled") is False:
+                self.knife_blocker_threshold = None
+            elif "knife_blocker_threshold" in smart_size_cfg:
+                raw_th = smart_size_cfg["knife_blocker_threshold"]
+                self.knife_blocker_threshold = int(raw_th) if raw_th is not None else None
             elif "knife_blocker" in smart_size_cfg and isinstance(smart_size_cfg["knife_blocker"], dict):
-                self.knife_blocker_enabled = bool(smart_size_cfg["knife_blocker"].get("enabled", False))
-                self.knife_blocker_threshold = int(smart_size_cfg["knife_blocker"].get("threshold", 2))
-
-            if "knife_blocker_threshold" in smart_size_cfg and smart_size_cfg["knife_blocker_threshold"] is not None:
-                self.knife_blocker_threshold = int(smart_size_cfg["knife_blocker_threshold"])
+                kb = smart_size_cfg["knife_blocker"]
+                self.knife_blocker_threshold = int(kb.get("threshold", 2)) if kb.get("enabled", False) else None
+            elif "knife_blocker_enabled" in smart_size_cfg:
+                self.knife_blocker_threshold = int(smart_size_cfg.get("knife_blocker_threshold", 2) or 2) if smart_size_cfg["knife_blocker_enabled"] else None
 
         # 2. Smart TP
         self.smart_tp_enabled: bool = False
@@ -329,9 +330,14 @@ class MomentumEngine:
         engine = cls(smart_size_cfg=smart_size_cfg)
         return engine.check_knife_blocked(opposite_closed_count)
 
+    @property
+    def knife_blocker_enabled(self) -> bool:
+        """Индикатор активности Knife Blocker (True если threshold задан и не None)."""
+        return self.knife_blocker_threshold is not None
+
     def check_knife_blocked(self, opposite_closed_count: int) -> bool:
         """Проверка Knife Blocker на инстансе без словарных чтений."""
-        if not self.knife_blocker_enabled:
+        if self.knife_blocker_threshold is None:
             return False
         return opposite_closed_count >= self.knife_blocker_threshold
 
@@ -345,7 +351,7 @@ class MomentumEngine:
     ) -> float:
         """
         Рассчитывает множитель Take-Profit (и страховочного Fallback TP)
-        в зависимости от частоты закрытий в пределах eval_window_sec.
+        в зависимости от частоты закрытий в пределах текущего тика signal_heartbeat_tfr.
         """
         if not smart_tp_cfg or closed_count == 0:
             return 1.00
