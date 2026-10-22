@@ -50,6 +50,8 @@ class PositionState:
     next_grid_step: int = 0
     peel_p: float = 0.0
     peel_q: float = 0.0
+    _last_resolved_vol: Optional[float] = None
+    _last_resolved_price: Optional[float] = None
 
     @property
     def in_pos(self) -> bool:
@@ -131,6 +133,8 @@ class PositionState:
         self.tp_current_indent = None
         self.trailing_tp_state = {}
         self.trailing_grid_state = {}
+        self._last_resolved_vol = None
+        self._last_resolved_price = None
         
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():

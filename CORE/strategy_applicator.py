@@ -426,6 +426,8 @@ class StrategyApplicator:
         Возвращает True, если хотя бы один уровень был обновлен.
         """
         if not getattr(state, "in_position", False) and abs(float(getattr(state, "total_volume", 0.0) or 0.0)) <= 1e-6:
+            state._last_resolved_vol = None
+            state._last_resolved_price = None
             return False
 
         grid = getattr(state, "grid", None)
@@ -546,9 +548,9 @@ class StrategyApplicator:
                     updated = True
             else:
                 # Для неисполненных уровней: если текущая просадка МЕНЬШЕ курка активации,
-                # сбрасываем залипшие старые флаги взведения
+                # сбрасываем залипшие старые флаги взведения (только если передана реальная рыночная цена)
                 raw_act = lvl_cfg.get("activation")
-                if raw_act is not None:
+                if raw_act is not None and current_price is not None and float(current_price) > 0:
                     act_thresh = abs(float(raw_act))
                     if cur_dd_pct < act_thresh:
                         if lvl_cfg.get("is_armed") or (isinstance(armed_dict, dict) and lvl_key in armed_dict):
@@ -576,6 +578,8 @@ class StrategyApplicator:
                 f"Исполнено: {active_lvls}, В ожидании: {unexecuted_lvls}"
             )
 
+        state._last_resolved_vol = state.total_volume
+        state._last_resolved_price = state.avg_entry_price
         return updated
 
     def build_runtime_for_symbol(

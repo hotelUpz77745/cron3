@@ -151,13 +151,21 @@ class PositionMonitor:
                 self.update_from_stream(sym, side, pos_amt, entry_price)
 
                 # Универсальная синхронизация сетки с биржей: если есть позиция,
-                # размечаем все покрытые объемом уровни как исполненные (is_active=True)
+                # размечаем все покрытые объемом уровни как исполненные (is_active=True).
+                # Защита от спама на каждом тике: запускаем только при фактическом изменении объема/цены
                 if state and state.in_position and abs(state.total_volume) > 1e-6:
-                    try:
-                        from CORE.strategy_applicator import StrategyApplicator
-                        StrategyApplicator.resolve_position_state_grid(state, strategy=strat_cfg)
-                    except Exception as e:
-                        logger.error(f"[REST_SYNC] Error resolving grid for {sym} {side}: {e}", exc_info=True)
+                    last_vol = getattr(state, "_last_resolved_vol", None)
+                    last_price = getattr(state, "_last_resolved_price", None)
+                    vol_changed = (last_vol is None) or (abs(last_vol - state.total_volume) > 1e-6)
+                    price_changed = (last_price is None) or (abs(last_price - state.avg_entry_price) > 1e-6)
+                    if vol_changed or price_changed:
+                        try:
+                            from CORE.strategy_applicator import StrategyApplicator
+                            StrategyApplicator.resolve_position_state_grid(state, strategy=strat_cfg)
+                            state._last_resolved_vol = state.total_volume
+                            state._last_resolved_price = state.avg_entry_price
+                        except Exception as e:
+                            logger.error(f"[REST_SYNC] Error resolving grid for {sym} {side}: {e}", exc_info=True)
 
     def update_from_stream(self, symbol: str, side: str, pos_amt: float, entry_price: float):
         if symbol not in self.states:
@@ -193,6 +201,8 @@ class PositionMonitor:
                 # Вызов is_finished = True запустит полную очистку в _check_and_reset_finished_positions (включая state.reset())
                 state.is_finished = True
                 state.set_in_position(False)
+                state._last_resolved_vol = None
+                state._last_resolved_price = None
         else:
             if not state.in_position:
                 if IS_SHOW_SIGNAL:
