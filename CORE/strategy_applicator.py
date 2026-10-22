@@ -234,7 +234,26 @@ class StrategyApplicator:
                     if "fallback_indent" in tp_step and tp_step["fallback_indent"] is not None:
                         tp_step["fallback_indent"] = max(min_tp_floor, float(tp_step["fallback_indent"]))
 
-            # 7. Применение tp_purpose и margin_type
+            # 7. Декларация FSM-флагов состояний в структуре сетки и TP-карты
+            if "grid" in side_data and isinstance(side_data["grid"], dict):
+                for lvl_data in side_data["grid"].values():
+                    if isinstance(lvl_data, dict):
+                        lvl_data.setdefault("is_active", False)
+                        lvl_data.setdefault("is_armed", False)
+                        lvl_data.setdefault("price", None)
+                        lvl_data.setdefault("activation_price", None)
+                        lvl_data.setdefault("fill_price", None)
+                        lvl_data.setdefault("fill_qty", None)
+                        lvl_data.setdefault("peeled", False)
+                        lvl_data.setdefault("peeled_count", 0)
+
+            if "tp_map" in side_data and isinstance(side_data["tp_map"], dict):
+                for tp_step in side_data["tp_map"].values():
+                    if isinstance(tp_step, dict):
+                        tp_step.setdefault("is_active", False)
+                        tp_step.setdefault("is_armed", False)
+
+            # 8. Применение tp_purpose и margin_type
             if "tp_purpose" in side_dict:
                 side_data["tp_purpose"] = side_dict["tp_purpose"]
             elif hasattr(strategy, "raw_meta") and "tp_purpose" in strategy.raw_meta:
@@ -750,16 +769,24 @@ class StrategyApplicator:
                     "trailing_grid_state": {},
                     "eff_invest": 0.0
                 })
-                if "grid" in new_side:
+                if "grid" in new_side and isinstance(new_side["grid"], dict):
                     for grid_cfg in new_side["grid"].values():
-                        grid_cfg["is_active"] = False
-                        grid_cfg["price"] = None
-                        grid_cfg["activated_at"] = None
-                        grid_cfg["timestamp"] = None
-                        grid_cfg["activation_price"] = None
-                if "tp_map" in new_side:
+                        if isinstance(grid_cfg, dict):
+                            grid_cfg["is_active"] = False
+                            grid_cfg["is_armed"] = False
+                            grid_cfg["price"] = None
+                            grid_cfg["activated_at"] = None
+                            grid_cfg["timestamp"] = None
+                            grid_cfg["activation_price"] = None
+                            grid_cfg["fill_price"] = None
+                            grid_cfg["fill_qty"] = None
+                            grid_cfg["peeled"] = False
+                            grid_cfg["peeled_count"] = 0
+                if "tp_map" in new_side and isinstance(new_side["tp_map"], dict):
                     for tp_cfg in new_side["tp_map"].values():
-                        tp_cfg["is_active"] = False
+                        if isinstance(tp_cfg, dict):
+                            tp_cfg["is_active"] = False
+                            tp_cfg["is_armed"] = False
 
             new_data[side] = new_side
 

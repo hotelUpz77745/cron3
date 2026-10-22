@@ -6,12 +6,17 @@ import json
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import asyncio
+from unittest.mock import AsyncMock, MagicMock
+from POS_FSM.models import PositionState
+from CORE.GRID.avg_manager import AverageManager
+from RUNTIME_FSM.runtime_manager import RuntimeFsmManager
 from CORE.strategy_applicator import StrategyApplicator
 from CORE.strategy_registry import StrategyConfig
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 
 
-class TestRestartGridPreservation(unittest.TestCase):
+class TestRestartGridPreservation(unittest.IsolatedAsyncioTestCase):
     """
     Юнит-тесты на защиту FSM-состояния сетки при перезапусках:
     1. Геометрия сетки открытой позиции на диске сохраняется и не затирается шаблоном.
@@ -147,6 +152,96 @@ class TestRestartGridPreservation(unittest.TestCase):
         self.assertTrue(new_side["grid"]["1"]["is_active"])
         self.assertTrue(new_side["grid"]["2"]["is_active"])
         self.assertFalse(new_side["grid"]["3"]["is_active"])
+
+    async def test_03_averaging_flow_then_restart_prevents_duplicate_re_averaging(self):
+        """
+        ЖЕЛЕЗОБЕТОННАЯ ПРОВЕРКА:
+        1. Позиция открыта, усреднилась по L1 (L0 и L1 активны: is_active=True).
+        2. Происходит рестарт: кэш с диска загружается через build_runtime_for_symbol и load_cache_to_fsm.
+        3. Проверяем, что все флаги состояний (is_active, peeled, peeled_count) загружены в рантайм.
+        4. Повторный тик цены на уровне L1 НЕ вызывает повторного ордера усреднения.
+        """
+        applicator = StrategyApplicator()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            target_dir = Path(tmp_dir) / "u17_test"
+            target_dir.mkdir(parents=True, exist_ok=True)
+            runtime_file = target_dir / "strkusdt.json"
+
+            # Состояние после усреднения L1 на бирже:
+            # L0 ($48, 12%) + L1 ($32, 8%) = $80 total notional, entry 0.098
+            active_cache = {
+                "LONG": {
+                    "in_position": True,
+                    "total_volume": 816.3,
+                    "avg_entry_price": 0.098,
+                    "initial_entry_price": 0.100,
+                    "invest_size": 400.0,
+                    "eff_invest": 400.0,
+                    "grid": {
+                        "0": {"indent": 0.0, "volume": 12.0, "is_active": True, "fill_price": 0.100, "fill_qty": 480.0, "peeled": False, "peeled_count": 0, "enabled": True},
+                        "1": {"indent": -3.5, "volume": 8.0, "is_active": True, "fill_price": 0.0965, "fill_qty": 336.3, "peeled": False, "peeled_count": 0, "enabled": True},
+                        "2": {"indent": -7.5, "volume": 9.0, "is_active": False, "peeled": False, "peeled_count": 0, "enabled": True},
+                        "3": {"indent": -13.5, "activation": -15.0, "volume": 11.0, "is_active": False, "peeled": False, "peeled_count": 0, "enabled": True},
+                    },
+                    "tp_map": {
+                        "0": {"indent": 1.2, "fallback_indent": 1.5, "is_active": True, "is_armed": False},
+                        "1": {"indent": 1.4, "fallback_indent": 1.8, "is_active": True, "is_armed": False},
+                    },
+                    "trailing_grid_state": {"armed_levels": {}}
+                },
+                "SHORT": {"in_position": False, "total_volume": 0.0, "grid": {}, "tp_map": {}}
+            }
+            runtime_file.write_text(json.dumps(active_cache, indent=4), encoding="utf-8")
+
+            # 1. Симулируем рестарт бота и запуск аппликатора
+            applicator.build_runtime_for_symbol("STRKUSDT", self.strat, target_dir=target_dir)
+
+            # 2. Инициализируем RuntimeFsmManager и восстанавливаем FSM
+            runtime_mgr = RuntimeFsmManager()
+            runtime_mgr.caches["STRKUSDT"] = json.loads(runtime_file.read_text(encoding="utf-8"))
+
+            fresh_fsm_states = {"STRKUSDT": {"LONG": PositionState(symbol="STRKUSDT", side="LONG"), "SHORT": PositionState(symbol="STRKUSDT", side="SHORT")}}
+            runtime_mgr.populate_fsm_from_cache(fresh_fsm_states)
+
+            restored_state = fresh_fsm_states["STRKUSDT"]["LONG"]
+
+            # Проверяем подтягивание флагов состояний в рантайм:
+            self.assertTrue(restored_state.in_position)
+            self.assertEqual(restored_state.total_volume, 816.3)
+            self.assertTrue(restored_state.grid["0"]["is_active"])
+            self.assertTrue(restored_state.grid["1"]["is_active"])
+            self.assertFalse(restored_state.grid["1"]["peeled"])
+            self.assertEqual(restored_state.grid["1"]["peeled_count"], 0)
+            self.assertFalse(restored_state.grid["2"]["is_active"])
+
+            # 3. Моделируем проверку сетки на текущей цене 0.0965 (просадка -3.5%, уровень L1)
+            mock_client = MagicMock()
+            mock_client.cancel_orders_for_side = AsyncMock(return_value=True)
+            mock_client.make_order = AsyncMock(return_value=MagicMock(success=True, order_id="AVG_FAIL"))
+
+            mock_tp = MagicMock()
+            mock_tp.place_take_profit = AsyncMock(return_value=True)
+
+            avg_mgr = AverageManager()
+            await avg_mgr.process(
+                client=mock_client,
+                runtime_manager=runtime_mgr,
+                symbol="STRKUSDT",
+                side="LONG",
+                state=restored_state,
+                opposite_state=None,
+                current_price=0.0965,
+                spec_data={"stepSize": "0.1", "tickSize": "0.0001"},
+                tp_manager=mock_tp
+            )
+
+            # ЖЕЛЕЗОБЕТОННЫЙ АССЕРТ: Никаких ордеров выставлено не было!
+            mock_client.make_order.assert_not_called()
+            self.assertFalse(restored_state.pending_avg)
+            # L1 остался активным, L2 не активирован ложно
+            self.assertTrue(restored_state.grid["1"]["is_active"])
+            self.assertFalse(restored_state.grid["2"]["is_active"])
 
 
 if __name__ == "__main__":
