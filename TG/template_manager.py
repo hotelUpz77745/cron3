@@ -19,7 +19,6 @@ class TemplateManager:
     def __init__(self, bot_core: Any = None):
         self.bot_core = bot_core
         self.runtime_dir = DATA_DIR / "runtime"
-        self.base_file = DATA_DIR / "_base.json"
         
         # Поля, которые мы разрешаем редактировать через TG
         self.visible_keys = {"enable", "invest_size", "leverage"}
@@ -86,13 +85,18 @@ class TemplateManager:
                         }
                 return json.dumps(tg_template, indent=4)
 
-        base_data = Utils.read_json_file(self.base_file)
-        if not base_data:
-            return json.dumps({"error": "Base template not found"})
-
         resolved_strat = strategy_id
         if not resolved_strat and hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
             resolved_strat = self.bot_core.strategy_registry.get_strategy_id_for_symbol(symbol)
+
+        base_data = {}
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry and resolved_strat:
+            strat_obj = self.bot_core.strategy_registry.get_strategy(resolved_strat)
+            if strat_obj:
+                base_data = getattr(strat_obj, "raw_dict", getattr(strat_obj, "raw_meta", {}))
+
+        if not base_data:
+            return json.dumps({"error": f"Strategy template not found for {symbol}"})
 
         tg_template = {
             "symbol": symbol,
@@ -117,24 +121,23 @@ class TemplateManager:
             return False, "Неверный или отсутствующий символ. Должен заканчиваться на USDT."
 
         strat_id = strategy_id or user_data.get("strategy_id")
-
-        base_data = Utils.read_json_file(self.base_file)
-        if not base_data:
-            return False, "Базовый шаблон не найден."
-
         target_file = self.get_runtime_path(symbol, strat_id)
         if target_file.exists():
             final_data = Utils.read_json_file(target_file)
         else:
-            # Если рантайма еще нет, просто копируем базовый шаблон. 
-            # (Рантайм-поля добавятся при старте/ресете, но можно добавить и тут)
+            base_data = {}
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry and strat_id:
+                strat_obj = self.bot_core.strategy_registry.get_strategy(strat_id)
+                if strat_obj:
+                    base_data = getattr(strat_obj, "raw_dict", getattr(strat_obj, "raw_meta", {}))
+            if not base_data:
+                return False, f"Конфигурация для стратегии {strat_id} не найдена."
             final_data = json.loads(json.dumps(base_data))
 
         changes_applied = 0
         for side in ("LONG", "SHORT"):
             if side in user_data and side in final_data:
-                # Обновляем только те ключи, которые есть в чистом _base.json (настройки)
-                for key in base_data[side].keys():
+                for key in user_data[side].keys():
                     if key in user_data[side]:
                         if isinstance(base_data[side][key], dict):
                             # Для вложенных словарей (grid, tp_map)

@@ -17,7 +17,6 @@ from consts import (
     DEFAULT_SMART_SIZE,
     DEFAULT_SMART_TP,
     DEFAULT_AUTO_CLOSING,
-    _BASE_CFG,
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
@@ -220,7 +219,7 @@ class StrategyConfig:
         elif "start_balance_usdt" in raw_meta:
             self.start_balance_usdt: float = float(raw_meta["start_balance_usdt"])
         else:
-            self.start_balance_usdt: float = 449.0
+            self.start_balance_usdt: float = 434.0
         self.analytics_cfg: Dict[str, Any] = {"start_balance_usdt": self.start_balance_usdt}
 
         # 2. Купол Super Grid (Volatility Grid Dome)
@@ -295,7 +294,7 @@ class StrategyConfig:
                 "positive_threshold": 100.0
             }
 
-        # 4. Купол Авто-закрытия (Auto-closing Dome): базовый шаблон из raw_meta / _base.json с переопределениями стратегии
+        # 4. Купол Авто-закрытия (Auto-closing Dome): конфигурация из паспорта стратегии и app.json
         raw_ac = raw_meta.get("auto_closing") or self.active_settings.get("auto_closing") or _CFG.get("auto_closing", {})
         base_ac = copy.deepcopy(raw_ac)
         override_ac = (
@@ -463,27 +462,16 @@ class StrategyConfig:
         raw_min_tp = (
             raw_meta.get("min_tp_indent")
             or self.overrides.get("min_tp_indent")
-            or _BASE_CFG.get("min_tp_indent")
+            or _CFG.get("min_tp_indent")
         )
         self.min_tp_indent: float = float(raw_min_tp) if raw_min_tp is not None else 0.50
 
-        # 6. Механика подтяжки тейк-профита по таймауту (TP Backoff)
-        raw_backoff = (
-            self.active_settings.get("tp_backoff")
-            or raw_meta.get("tp_backoff")
-            or self.overrides.get("tp_backoff")
-            or _BASE_CFG.get("tp_backoff")
-        )
-        if raw_backoff and isinstance(raw_backoff, dict):
-            self.tp_backoff_cfg: Dict[str, Any] = copy.deepcopy(raw_backoff)
-        else:
-            self.tp_backoff_cfg = {"enabled": False}
 
         raw_atr_grid = (
             self.active_settings.get("dynamic_atr_grid")
             or raw_meta.get("dynamic_atr_grid")
             or self.overrides.get("dynamic_atr_grid")
-            or _BASE_CFG.get("dynamic_atr_grid")
+            or _CFG.get("dynamic_atr_grid")
         )
         if raw_atr_grid and isinstance(raw_atr_grid, dict):
             self.dynamic_atr_grid_cfg: Dict[str, Any] = copy.deepcopy(raw_atr_grid)
@@ -808,8 +796,17 @@ class StrategyRegistry:
                 "negative": neg_cfg
             }
         elif mode in ("trailing_ratchet", "classic", "iter_net_classic"):
-            if "trailing_ratchet" not in pos_base:
-                raise KeyError("[StrategyRegistry] В секции auto_closing.positive отсутствует обязательный блок 'trailing_ratchet'!")
+            ratchet_cfg = pos_base.get("trailing_ratchet")
+            if not ratchet_cfg or not isinstance(ratchet_cfg, dict):
+                ratchet_cfg = {
+                    "levels": [
+                        {"activation": 13.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"},
+                        {"activation": 21.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"},
+                        {"activation": 34.0, "floor": 21.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"},
+                        {"activation": 55.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"},
+                        {"activation": 89.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": True, "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"},
+                    ]
+                }
             pos_cfg = {
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
@@ -817,7 +814,7 @@ class StrategyRegistry:
                 "mode_scale": mode_scale,
                 "inverted_notional": inverted_notional,
                 "margin_relative": margin_relative,
-                "trailing_ratchet": copy.deepcopy(pos_base["trailing_ratchet"])
+                "trailing_ratchet": copy.deepcopy(ratchet_cfg)
             }
             return {
                 "positive": pos_cfg,
@@ -833,7 +830,7 @@ class StrategyRegistry:
         universes_dir = self.universes_path.parent / "universes"
         if universes_dir.exists() and universes_dir.is_dir():
             for jf in sorted(universes_dir.glob("*.json")):
-                if jf.name == "_base.json" or jf.stem.startswith("_"):
+                if jf.stem.startswith("_"):
                     continue
                 data[jf.stem] = Utils.read_json_file(jf)
 
@@ -1135,7 +1132,7 @@ class StrategyRegistry:
             else:
                 target_mode = "off"
 
-            # Слияние метаданных: _base.json -> universes/<template>.json -> strat_settings (override)
+            # Слияние метаданных: universes/<template>.json -> strat_settings (override)
             base_meta = copy.deepcopy(getattr(self, "common_defaults", {}))
             template_meta = copy.deepcopy(self.universes_db[template_id])
             raw_meta = deep_merge_dict(base_meta, template_meta)

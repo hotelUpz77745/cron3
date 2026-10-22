@@ -21,7 +21,6 @@ class PositionState:
     fallback_price: Optional[float] = None    # кешированная цена страховочного маркета
     tp_placed_at: Optional[float] = None      # Временная метка выставления последнего TP ордера (сек)
     tp_current_indent: Optional[float] = None # Текущий процентный отступ установленного TP ордера
-    tp_backoff_applied: bool = False          # Флаг: был ли применен tp_backoff для текущего ордера
     eff_invest: float = 0.0              # эффективный invest_size стороны с учетом макро-тренда 4h
     
     in_position: bool = False
@@ -130,7 +129,6 @@ class PositionState:
         self.fallback_price = None
         self.tp_placed_at = None
         self.tp_current_indent = None
-        self.tp_backoff_applied = False
         self.trailing_tp_state = {}
         self.trailing_grid_state = {}
         

@@ -5,7 +5,7 @@
 
 import time
 from typing import Any, Dict, List, Optional, Tuple
-from consts import _BASE_CFG
+from consts import _CFG
 from c_log import UnifiedLogger
 
 logger = UnifiedLogger("BaseTrailingSystem")
@@ -177,8 +177,8 @@ class BaseTrailingSystem:
                 raw_floor = resolved_lvl.get("indent")
 
             resolved_min_tp = min_tp_indent
-            if resolved_min_tp is None and "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
-                resolved_min_tp = float(_BASE_CFG["min_tp_indent"])
+            if resolved_min_tp is None and "min_tp_indent" in _CFG and _CFG["min_tp_indent"] is not None:
+                resolved_min_tp = float(_CFG["min_tp_indent"])
 
             if raw_act is not None:
                 act_val = cls.normalize_abs(raw_act)

@@ -172,39 +172,93 @@
     "tp_map": {
       "0": {
         "indent": 1.8,
-        "fallback_indent": 2.6
+        "fallback_indent": 2.6,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "1": {
         "indent": 1.35,
-        "fallback_indent": 2.0
+        "fallback_indent": 2.0,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "2": {
         "indent": 1.0,
-        "fallback_indent": 1.5
+        "fallback_indent": 1.5,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "3": {
         "indent": 0.75,
-        "fallback_indent": 1.2
+        "fallback_indent": 1.2,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "4": {
         "indent": 0.62,
-        "fallback_indent": 1.05
+        "fallback_indent": 1.05,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "5": {
         "indent": 0.62,
-        "fallback_indent": 0.95
+        "fallback_indent": 0.95,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "6": {
         "indent": 0.62,
-        "fallback_indent": 0.85
+        "fallback_indent": 0.85,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "7": {
         "indent": 0.62,
-        "fallback_indent": 0.8
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       },
       "8": {
         "indent": 0.62,
-        "fallback_indent": 0.8
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
       }
     }
   },

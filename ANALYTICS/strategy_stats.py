@@ -326,9 +326,13 @@ class StrategyStatsEngine:
             strat_data["net_velocity"] = round(float(strat_data.get("net_profit_usdt", 0.0)) / active_h_s, 2)
 
             s_net = float(strat_data.get("net_profit_usdt", 0.0))
-            fsm_i = self.manager.fsm.get_iteration_index(strat_id) if hasattr(self.manager, "fsm") and self.manager.fsm else 1
+            fsm_val = getattr(getattr(self.manager, "fsm", None), "get_iteration_index", lambda s: 1)(strat_id)
+            fsm_i = int(fsm_val) if isinstance(fsm_val, int) or (isinstance(fsm_val, str) and str(fsm_val).isdigit()) else 1
             iter_idx = max(int(strat_data.get("iteration_index", 1)), int(iter_cache.get("iteration_index", 1)), fsm_i)
-            iter_start_net = 0.0 if iter_idx == 1 else float(strat_data.get("iteration_start_net_profit_usdt", iter_cache.get("iteration_start_net_profit_usdt", 0.0)))
+            fsm_obj = getattr(self.manager, "fsm", None)
+            fsm_base = fsm_obj.get_iteration_baseline_net(strat_id, iter_idx) if hasattr(fsm_obj, "get_iteration_baseline_net") else 0.0
+            cached_start = float(strat_data.get("iteration_start_net_profit_usdt", iter_cache.get("iteration_start_net_profit_usdt", 0.0)))
+            iter_start_net = 0.0 if iter_idx == 1 else max(cached_start, fsm_base)
 
             iter_net = round(s_net - iter_start_net, 4)
             iter_start_ts = strat_data.get("iteration_start_ts") or iter_cache.get("iteration_start_ts") or first_ts_s
@@ -410,7 +414,7 @@ class StrategyStatsEngine:
 
             # Расчет Trade Velocity для конкретного купола стратегии
             try:
-                if not hasattr(self.manager, "_strat_velocity_engines"):
+                if not isinstance(getattr(self.manager, "_strat_velocity_engines", None), dict):
                     self.manager._strat_velocity_engines = {}
                 if strat_id not in self.manager._strat_velocity_engines:
                     from ANALYTICS.trade_velocity import TradeVelocityEngine
@@ -418,9 +422,11 @@ class StrategyStatsEngine:
                     self.manager._strat_velocity_engines[strat_id] = TradeVelocityEngine(
                         universe_id=strat_id, ledger_path=strat_ledger
                     )
-                strat_data["trade_velocity"] = self.manager._strat_velocity_engines[strat_id].calculate_velocity(strat_data)
+                vel_res = self.manager._strat_velocity_engines[strat_id].calculate_velocity(strat_data)
+                strat_data["trade_velocity"] = vel_res if isinstance(vel_res, (int, float, dict, list, str, bool)) or vel_res is None else 0.0
             except Exception as sve:
                 logger.warning(f"[ANALYTICS] Error calculating trade velocity for {strat_id}: {sve}")
+                strat_data["trade_velocity"] = 0.0
 
             # Toxic Defense Aggregation for Strategy (Source of Truth: Strategy Ledgers)
             strat_peel_txt = self.manager.ledgers_dir / f"peels_ledger_{strat_id}.txt"

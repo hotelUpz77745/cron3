@@ -156,8 +156,7 @@ POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounc
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
 
 def _resolve_analytics_start_balance() -> float:
-    if "analytics" in _CFG and "start_balance_usdt" in _CFG["analytics"]:
-        return float(_CFG["analytics"]["start_balance_usdt"])
+    # Канонический источник истины о депозите — секция active_strategies в app.json
     total = 0.0
     for strat_id, sdata in _CFG.get("active_strategies", {}).items():
         if isinstance(sdata, dict) and sdata.get("enabled"):
@@ -165,7 +164,11 @@ def _resolve_analytics_start_balance() -> float:
                 total += float(sdata["analytics"]["start_balance_usdt"])
             elif "start_balance_usdt" in sdata:
                 total += float(sdata["start_balance_usdt"])
-    return total if total > 0 else 449.0
+    if total > 0:
+        return total
+    if "analytics" in _CFG and "start_balance_usdt" in _CFG["analytics"]:
+        return float(_CFG["analytics"]["start_balance_usdt"])
+    return 434.0
 
 ANALYTICS_START_BALANCE_USDT: float = _resolve_analytics_start_balance()
 WATCHDOG_TIMEOUT_SEC: int = int(_CFG["watchdog"]["timeout_sec"])
@@ -212,10 +215,7 @@ DEFAULT_SMART_SIZE: Dict[str, Any] = _SIG_CFG.get("smart_size") or {
 DEFAULT_SMART_TP: Dict[str, Any] = _SIG_CFG.get("smart_tp") or {
     "increments_tp": {"<2": 1.0, ">=2": 1.0, ">4": 1.0}
 }
-_BASE_CFG: Dict[str, Any] = _read_json(DATA_DIR / "_base.json") if (DATA_DIR / "_base.json").exists() else {}
-DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or _BASE_CFG.get("auto_closing", {})
-if "auto_closing" not in _CFG and DEFAULT_AUTO_CLOSING:
-    _CFG["auto_closing"] = DEFAULT_AUTO_CLOSING
+DEFAULT_AUTO_CLOSING: Dict[str, Any] = _CFG.get("auto_closing") or {}
 
 # ============================================================
 # LOGGING

@@ -53,8 +53,7 @@
                     "AVAUSDT": 400.0,
                     "GTCUSDT": 400.0,
                     "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400,
-                    "SANDUSDT": 400
+                    "SOLVUSDT": 400
                 }
             },
             "SHORT": {
@@ -65,11 +64,10 @@
                     "AVAUSDT": 400.0,
                     "GTCUSDT": 400.0,
                     "GWEIUSDT": 400.0,
-                    "SOLVUSDT": 400,
-                    "SANDUSDT": 400
+                    "SOLVUSDT": 400
                 }
             },
-            "start_balance_usdt": 459.0
+            "start_balance_usdt": 434.0
         }
     },
     "telegram": {

@@ -445,12 +445,12 @@ class AutoCloser:
                 logger.debug(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} already closed in history. Skipping duplicate auto-close.")
                 continue
 
+            baseline_s = fsm.get_iteration_baseline_net(strat_id, iter_idx) if fsm and hasattr(fsm, "get_iteration_baseline_net") else 0.0
             iter_start_net = float(strat_analytics.get("iteration_start_net_profit_usdt", 0.0))
-            iter_net_val = strat_analytics.get("iteration_net_profit_usdt")
-            if iter_net_val is None:
-                iter_net = round(strat_net - iter_start_net, 4)
-            else:
-                iter_net = float(iter_net_val)
+            if baseline_s > iter_start_net:
+                iter_start_net = baseline_s
+
+            iter_net = round(strat_net - iter_start_net, 4)
 
             pos_cfg = strat_auto_cfg.get("positive", {}) if isinstance(strat_auto_cfg, dict) else {}
             neg_cfg = strat_auto_cfg.get("negative", {}) if isinstance(strat_auto_cfg, dict) else {}
@@ -684,9 +684,9 @@ class AutoCloser:
                             "iteration_start_ts": now_ms,
                             "iteration_peak_net_profit_usdt": 0.0,
                             "iteration_peak_ts": now_ms,
-                            "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", 9.7816),
-                            "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", 1790770078270),
-                            "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", -8.0038),
+                            "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", 0.0),
+                            "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
+                            "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
                             "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
                         }
                         Utils.atomic_write_json(c_file, c_dict, indent=4)
@@ -745,12 +745,11 @@ class AutoCloser:
             logger.debug(f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} already closed in history. Skipping duplicate auto-close.")
             return
 
+        baseline_g = fsm.get_iteration_baseline_net("__global__", iter_idx_g) if fsm and hasattr(fsm, "get_iteration_baseline_net") else 0.0
         iter_start_net_g = float(analytics_data.get("iteration_start_net_profit_usdt", 0.0))
-        iter_net_g_val = analytics_data.get("iteration_net_profit_usdt")
-        if iter_net_g_val is None:
-            iter_net_g = round(net_usdt - iter_start_net_g, 4)
-        else:
-            iter_net_g = float(iter_net_g_val)
+        if baseline_g > iter_start_net_g:
+            iter_start_net_g = baseline_g
+        iter_net_g = round(net_usdt - iter_start_net_g, 4)
 
         pos_cfg = auto_cfg.get("positive", {})
         neg_cfg = auto_cfg.get("negative", {})

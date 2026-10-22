@@ -79,6 +79,13 @@ class AnalyticsFSM:
 
         # 1. Проверка наличия или создание холодного кэша analytics.json
         if not self.log_file.exists():
+            root_legacy = self.stats_dir.parent / "analytics.json"
+            if root_legacy.exists() and root_legacy != self.log_file:
+                try:
+                    self.log_file.write_text(root_legacy.read_text(encoding="utf-8"), encoding="utf-8")
+                except Exception:
+                    pass
+        if not self.log_file.exists():
             self._create_cold_start_analytics(initial_start_balance)
 
         # 2. Загрузка глобальной аналитики из JSON
@@ -150,6 +157,9 @@ class AnalyticsFSM:
         }
         self.stats_dir.mkdir(parents=True, exist_ok=True)
         Utils.atomic_write_json(self.log_file, cold_data, indent=4)
+        root_legacy = self.stats_dir.parent / "analytics.json"
+        if root_legacy != self.log_file:
+            Utils.atomic_write_json(root_legacy, cold_data, indent=4)
         logger.info(
             f"[AnalyticsFSM] 🆕 Cold start analytics created at {self.log_file} "
             f"from start balance ${init_bal}. All metrics zeroed."
@@ -231,6 +241,37 @@ class AnalyticsFSM:
             if isinstance(entry, dict) and entry.get("iteration_index") == iter_idx:
                 return True
         return False
+
+    def get_iteration_baseline_net(self, strat_id: str, current_iter_idx: Optional[int] = None) -> float:
+        """
+        Возвращает кумулятивный базовый Нет Профит (anchor) начала текущей итерации.
+        Гарантирует, что автоклозер считает строго Нет Профит своей текущей итерации,
+        а не весь исторический профит портфеля.
+        
+        Если в истории CACHE/auto_close_history.json закрыто N итераций (например 3 раза по $10 = $30),
+        базовый профит 4-й итерации равен $30.0.
+        При текущем глобальном Нет профите $33.0, чистый профит 4-й итерации составит строго $3.0 ($33 - $30).
+        """
+        records = self._auto_close_history.get(strat_id, [])
+        baseline_from_history = 0.0
+        target_iter = current_iter_idx or self.get_iteration_index(strat_id)
+        if records:
+            prior_records = [
+                r for r in records
+                if isinstance(r, dict) and int(r.get("iteration_index", 0)) < target_iter
+            ]
+            if prior_records:
+                prior_records.sort(key=lambda r: int(r.get("iteration_index", 0)))
+                last_closed = prior_records[-1]
+                if "strat_net" in last_closed and last_closed["strat_net"] is not None:
+                    baseline_from_history = float(last_closed["strat_net"])
+                elif "iter_net" in last_closed:
+                    baseline_from_history = sum(float(r.get("iter_net", 0.0)) for r in prior_records)
+
+        state_entry = self._iteration_state.get(strat_id, {})
+        cached_start = state_entry.get("iteration_start_net_profit_usdt")
+        baseline_from_state = float(cached_start) if cached_start is not None else 0.0
+        return max(baseline_from_history, baseline_from_state)
 
     def mark_iteration_closed(self, strat_id: str, iter_idx: int, details: dict) -> None:
         """

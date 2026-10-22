@@ -538,24 +538,32 @@ class AnalyticsManager:
         """
         Корректно обновляет стартовый баланс без создания ложной просадки.
         Сдвигает пики, впадины и текущий баланс на delta.
+        Если сделок еще не было (total_trades == 0), жестко сбрасывает net_profit в 0.0
+        и устанавливает cur_balance равным new_balance.
         """
         data = self._read_data()
         old_balance = float(data.get("start_balance_usdt", 0.0))
         delta = round(new_balance - old_balance, 4)
 
         data["start_balance_usdt"] = round(new_balance, 4)
-        data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
-
-        peak_val = data.get("peak_balance_usdt")
-        data["peak_balance_usdt"] = round((float(peak_val) if peak_val is not None else old_balance) + delta, 4)
-
-        trough_val = data.get("_current_trough_usdt")
-        data["_current_trough_usdt"] = round((float(trough_val) if trough_val is not None else old_balance) + delta, 4)
-
-        min_val = data.get("min_balance_usdt")
-        data["min_balance_usdt"] = round((float(min_val) if min_val is not None else old_balance) + delta, 4)
-
         data["_rebased_start_balance_usdt"] = round(new_balance, 4)
+
+        if int(data.get("total_trades", 0)) == 0:
+            data["net_profit_usdt"] = 0.0
+            data["realized_pnl_usdt"] = 0.0
+            data["unrealized_pnl_usdt"] = 0.0
+            data["cur_balance_usdt"] = round(new_balance, 4)
+            data["peak_balance_usdt"] = round(new_balance, 4)
+            data["_current_trough_usdt"] = round(new_balance, 4)
+            data["min_balance_usdt"] = round(new_balance, 4)
+        else:
+            data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
+            peak_val = data.get("peak_balance_usdt")
+            data["peak_balance_usdt"] = round((float(peak_val) if peak_val is not None else old_balance) + delta, 4)
+            trough_val = data.get("_current_trough_usdt")
+            data["_current_trough_usdt"] = round((float(trough_val) if trough_val is not None else old_balance) + delta, 4)
+            min_val = data.get("min_balance_usdt")
+            data["min_balance_usdt"] = round((float(min_val) if min_val is not None else old_balance) + delta, 4)
 
         self._write_data(data)
         return data

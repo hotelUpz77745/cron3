@@ -7,7 +7,7 @@ import asyncio
 import time
 from typing import Optional
 
-from consts import _BASE_CFG
+from consts import _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE._utils import TradeMath, RiskCalculatingUtils
@@ -146,7 +146,7 @@ class TakeProfitManager:
             except Exception as e:
                 logger.debug(f"[{symbol}] Smart TP calculation error: {e}")
 
-        # Строгое соблюдение минимального тейка: min_tp_indent (из стратегии или _base.json)
+        # Строгое соблюдение минимального тейка: min_tp_indent (из стратегии или app.json)
         min_tp = None
         if hasattr(self.runtime_manager, "strategy_registry") and self.runtime_manager.strategy_registry:
             try:
@@ -162,8 +162,8 @@ class TakeProfitManager:
             base_cfg = getattr(self.runtime_manager, "base_cfg", None) or {}
             if "min_tp_indent" in base_cfg and base_cfg["min_tp_indent"] is not None:
                 min_tp = float(base_cfg["min_tp_indent"])
-            elif "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
-                min_tp = float(_BASE_CFG["min_tp_indent"])
+            elif "min_tp_indent" in _CFG and _CFG["min_tp_indent"] is not None:
+                min_tp = float(_CFG["min_tp_indent"])
 
         if min_tp is not None:
             tp_indent = max(min_tp, float(tp_indent))
@@ -208,13 +208,12 @@ class TakeProfitManager:
                         
                     state.tp_map[active_level_str]["is_active"] = True
 
-                    # Фиксация параметров выставленного TP ордера для tp_backoff и телеметрии
+                    # Фиксация параметров выставленного TP ордера для телеметрии
                     bot = getattr(self.runtime_manager, "bot_core", None)
                     now = bot.get_current_time() if (bot and hasattr(bot, "get_current_time")) else (getattr(client, "current_sim_time", None) or time.time())
                     state.tp_placed_at = now
                     state.tp_current_indent = tp_indent
                     state.tp_price = tp_price
-                    state.tp_backoff_applied = (override_indent is not None)
                     
                     # Не вызываем save_cache здесь, sync_with_fsm сделает это
                     return True

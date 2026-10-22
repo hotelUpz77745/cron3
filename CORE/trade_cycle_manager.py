@@ -35,9 +35,6 @@ class TradeCycleManager:
 
     def __init__(self, bot_core: Any):
         self.bot = bot_core
-        if not hasattr(self.bot, "tp_backoff_manager") or self.bot.tp_backoff_manager is None:
-            from CORE.TP.tp_backoff_manager import TakeProfitBackoffManager
-            self.bot.tp_backoff_manager = TakeProfitBackoffManager(getattr(self.bot, "runtime_manager", None))
 
     def check_entry_block(self, symbol: str, strategy_id: Optional[str] = None) -> Tuple[bool, str, float]:
         """
@@ -561,10 +558,6 @@ class TradeCycleManager:
                 await self.bot.fallback_tp_manager.process(
                     sym_client, self.bot.runtime_manager, symbol, side, state, current_price, self.bot.spec_data, opposite_state=opposite_state
                 )
-                if hasattr(self.bot, "tp_backoff_manager") and self.bot.tp_backoff_manager:
-                    await self.bot.tp_backoff_manager.check_and_apply_backoff(
-                        sym_client, self.bot.runtime_manager, symbol, side, state, current_price, self.bot.spec_data, self.bot.tp_manager, opposite_state=opposite_state
-                    )
 
         if signal_tasks:
             await asyncio.gather(*signal_tasks)

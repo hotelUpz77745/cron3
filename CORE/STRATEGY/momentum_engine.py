@@ -57,6 +57,8 @@ class MomentumEngine:
         confirmation = int(cfg.get("confirmation_candles", 5 if "4h" in timeframe else 3))
         cache_key = (symbol.upper(), timeframe, sma_fast, sma_slow, confirmation)
         sim_ts = getattr(client, "current_sim_time", 0)
+        if not isinstance(sim_ts, (int, float)):
+            sim_ts = 0
         now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
 
         # 0. Instant O(1) Precomputed Trend Lookup for Backtests

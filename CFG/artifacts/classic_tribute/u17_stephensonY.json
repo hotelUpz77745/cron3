@@ -1,13 +1,13 @@
 {
     "name": "🚂 U17: Stephenson-Y [Nadaraya-Watson 1d Nuclear Kernel | Bearish Fist 6% Long / 13% Short | Chita Flagship Successor]",
-    "description": "Ядерное поколение U17 Stephenson-Y (Quantum Kernel Chita Successor): 1) Гармонизированные курки Золотого Сечения (Golden-Cut 38.2% Trigger Lock); 2) Дневная (1d) непараметрическая ядерная регрессия Надарая-Ватсона (NWKR 1d) с ядром Rational Quadratic и демпфером MAE Envelope 1.5x; 3) «Ядерный кулак Сильной руки» kernel_forecast (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 4) Мостик Змея L3 (-13.5%), Half-Peel 50%, mark_executed сжигание объема, Дискретный кросс-ресайклинг (50%/75%), Фибо-храповик trailing_ratchet и Golden Mean Scalp 1.05%.",
+    "description": "Ядерное поколение U17 Stephenson-Y (Quantum Kernel Chita Successor): 1) Гармонизированные курки Золотого Сечения (Golden-Cut 38.2% Trigger Lock); 2) Дневная (1d) непараметрическая ядерная регрессия Надарая-Ватсона (NWKR 1d) с ядром Rational Quadratic и демпфером MAE Envelope 1.5x; 3) «Ядерный кулак Сильной руки» kernel_forecast (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 4) Мостик Змея L3 (-13.5%), Half-Peel 50%, mark_executed пропуск объема, Дискретный кросс-ресайклинг (50%/75%), Фибо-храповик trailing_ratchet и Golden Mean Scalp 1.05%.",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
     "avg_free_volume_behavior": "distribute_skip",
     "_avg_free_volume_behavior_modes": {
         "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
         "distribute_nearest": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
-        "distribute_skip": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
+        "distribute_skip": "(Пропуск объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем пропускается без переноса на другие ступени."
     },
     "super_grid": false,
     "smart_grace": {

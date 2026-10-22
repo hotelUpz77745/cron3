@@ -142,7 +142,6 @@ class RuntimeFsmManager:
                 state.eff_invest = float(side_cache.get("eff_invest", 0.0))
                 state.tp_placed_at = side_cache.get("tp_placed_at")
                 state.tp_current_indent = side_cache.get("tp_current_indent")
-                state.tp_backoff_applied = side_cache.get("tp_backoff_applied", False)
                 
                 # Копируем словари и списки
                 state.grid = copy.deepcopy(side_cache.get("grid", {}))
@@ -199,7 +198,6 @@ class RuntimeFsmManager:
                     "eff_invest": float(getattr(state, "eff_invest", 0.0)),
                     "tp_placed_at": getattr(state, "tp_placed_at", None),
                     "tp_current_indent": getattr(state, "tp_current_indent", None),
-                    "tp_backoff_applied": getattr(state, "tp_backoff_applied", False),
                 }
                 
                 changed = False

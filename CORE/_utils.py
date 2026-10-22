@@ -7,7 +7,7 @@ from typing import Dict, Any, Union, Optional, List, Tuple
 from c_utils import Utils
 
 import asyncio
-from consts import SPEC_TTL_SEC, CACHE_DIR, _BASE_CFG
+from consts import SPEC_TTL_SEC, CACHE_DIR, _CFG
 from API.BINANCE.public import BinancePublic
 from c_log import UnifiedLogger
 class TradeMath:
@@ -196,12 +196,9 @@ class TakeProfitConfigResolver:
         lvl_cfg = tp_map.get(nearest_key, {})
         resolved = cls.resolve_level(lvl_cfg)
         
-        # Разрешение минимального пола тейка: min_tp_indent (из стратегии или _base.json)
-        floor = None
+        floor = 0.50
         if min_tp_indent is not None:
-            floor = float(min_tp_indent)
-        elif "min_tp_indent" in _BASE_CFG and _BASE_CFG["min_tp_indent"] is not None:
-            floor = float(_BASE_CFG["min_tp_indent"])
+            floor = max(0.50, float(min_tp_indent))
             
         if floor is not None:
             if resolved.get("indent") is not None:

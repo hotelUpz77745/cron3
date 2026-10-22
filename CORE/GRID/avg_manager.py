@@ -48,8 +48,18 @@ class AverageManager:
             except Exception:
                 atr_grid_cfg = None
         if not atr_grid_cfg:
-            from consts import _BASE_CFG, _CFG
-            atr_grid_cfg = _CFG.get("dynamic_atr_grid") or _BASE_CFG.get("dynamic_atr_grid")
+            from consts import _CFG
+            atr_grid_cfg = _CFG.get("dynamic_atr_grid") or {
+                "enabled": True,
+                "timeframe": "1h",
+                "period": 14,
+                "cache_ttl_sec": 300,
+                "fallback_atr_pct": 2.0,
+                "ref_atr_pct": 2.0,
+                "min_multiplier": 0.75,
+                "max_multiplier": 2.25,
+                "max_scaled_level": 3
+            }
 
         atr_mult = 1.0
         if atr_grid_cfg and atr_grid_cfg.get("enabled", False):
@@ -93,7 +103,8 @@ class AverageManager:
                             except Exception:
                                 is_sg_enabled = False
                         elif "super_grid" in _CFG:
-                            is_sg_enabled = bool(_CFG["super_grid"].get("enabled", False))
+                            sg_val = _CFG["super_grid"]
+                            is_sg_enabled = bool(sg_val.get("enabled", False)) if isinstance(sg_val, dict) else bool(sg_val)
 
                         indent_pct = base_indent
                         if is_sg_enabled and level_data.get("super_indent") is not None:

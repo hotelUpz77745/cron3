@@ -20,7 +20,7 @@ MIN_TAKE_PROFIT_PCT: float = 0.5
 
 class StrategyApplicator:
     """
-    Применяет параметры и переопределения стратегии к базовой конфигурации _base.json
+    Применяет параметры и переопределения стратегии из паспортов universes/<template>.json и app.json
     и генерирует изолированные JSON рантайм-конфигурации в CFG/runtime/<strategy_id>/<symbol>.json.
     """
 

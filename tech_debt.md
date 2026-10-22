@@ -750,11 +750,46 @@ cron3/
    - Тестовый набор `TESTS/test_positive_profit_guard.py` расширен до 16 тестов (100% pass).
    - Полный регрессионный сьют `unittest discover -s tests` успешно выполняет 70 тестов (100% pass).
    - Все затронутые файлы соответствуют правилу размера (`<= 600 строк кода`):
-     - `ANALYTICS/analytics_fsm.py`: 269 строк.
-     - `ANALYTICS/analytics.py`: 566 строк.
+     - `ANALYTICS/analytics_fsm.py`: 283 строки.
+     - `ANALYTICS/analytics.py`: 574 строки.
      - `ANALYTICS/drawdown_tracker.py`: 514 строк.
-     - `ANALYTICS/strategy_stats.py`: 590 строк.
-     - `CORE/STRATEGY/trailing_system.py`: 539 строк.
+     - `ANALYTICS/strategy_stats.py`: 591 строка.
+     - `CORE/STRATEGY/trailing_system.py`: 540 строк.
      - `tests/test_positive_profit_guard.py`: 533 строки.
+     - `tests/test_prod_restart_and_resets.py`: 545 строк.
+
+---
+
+### 8.7. Ликвидация `_base`, Ребейз на 434.0 USDT и Стресс-тестирование Рестораторов и FSM (22.10.2026)
+
+1. **Полное удаление `_base` ("к ебям")**:
+   - Из всей кодовой базы вычищены любые упоминания и зависимости от `_base.json` и `_BASE_CFG`.
+   - `consts.py`: удален `_BASE_CFG`, дефолты берутся строго из `CFG/app.json`. Определение стартового баланса (`_resolve_analytics_start_balance`) обращается к `active_strategies` в `app.json`.
+   - `CORE/_utils.py`, `CORE/TP/tp_backoff_manager.py`, `CORE/TP/tp_manager.py`, `CORE/GRID/avg_manager.py`, `CORE/STRATEGY/trailing_system.py`: отвязаны от `_BASE_CFG`, используют `_CFG` и паспортные параметры.
+   - `CORE/strategy_registry.py`: удален импорт `_BASE_CFG`. В метод `_build_mode_auto_closing` встроен институциональный дефолтный ладдер уровней Фибоначчи для безопасной генерации автоклозера стратегий без явного блока `trailing_ratchet`.
+   - `TG/template_manager.py`, `TG/tg_receiver.py`: удалены обработчики редактирования `_base.json`, меню перенаправлено на `CFG/app.json`.
+
+2. **Ликвидация фантомного профита и Ребейз Баланса на 434.0 USDT**:
+   - Рассинхронизация между `ANALYTICS/analytics.json` (где висели фантомные `474.0` и `+15.0 USDT`) и `ANALYTICS/STATS/analytics.json` устранена.
+   - `ANALYTICS/analytics.py` (`rebase_start_balance`) и `ANALYTICS/analytics_fsm.py` (`restore_on_boot`, `_create_cold_start_analytics`): при отсутствии сделок (`total_trades == 0`) реализованный и чистый профит принудительно обнуляются, `cur_balance_usdt` устанавливается равным новому стартовому балансу.
+   - Данные в `ANALYTICS/analytics.json`, `ANALYTICS/STATS/analytics.json`, `ANALYTICS/STATS/analytics_u17_stephensonE__trailing_ratchet.json`, `ANALYTICS/STATS/analytics_all.json` синхронизированы и выставлены в `434.0 USDT`, профит строго `0.0`.
+   - В `CFG/app.json` стартовый баланс активной стратегии `u17_stephensonE__trailing_ratchet` зафиксирован на `434.0 USDT`.
+
+3. **Стресс-тестирование Перезапусков, Рестораторов и FSM (`tests/test_prod_restart_and_resets.py`)**:
+   - Создан комплексный набор из 12 глубоких стресс-тестов:
+     - `test_cold_start_deleted_cache_defaults_to_app_balance`: холодный старт при удаленном кэше восстанавливает баланс из `app.json` (434.0) без фантомного профита.
+     - `test_persisted_restart_loads_cached_values_and_locks_metrics`: теплый рестарт блокирует метрики до первой биржевой синхронизации (`_floating_synced = False`).
+     - `test_autocloser_iterator_persisted_across_restarts`: сохранение индекса итерации автоклозера исключает ложный сброс на 1.
+     - `test_autocloser_idempotency_prevents_duplicate_close_on_restart`: предотвращение повторного автозакрытия уже зафиксированной итерации.
+     - `test_position_stats_restored_from_runtime_cache`: валидация восстановления статистики позиций из кэша.
+     - `test_fsm_full_lifecycle_and_disarm_on_api_error`: полный цикл FSM (1 -> 2 -> 3 -> 4) и разоружение (4 -> 2) при сетевых сбоях/ошибках биржи.
+     - `test_reset_strategy_iteration_advances_and_anchors`: инкремент итерации, якорение профита, сброс состояния курков трейлинга и сохранение пиков.
+     - `test_reset_global_iteration_advances_and_anchors`: сброс портфельной итерации.
+     - `test_rebase_start_balance_zero_trades_clears_net_profit`: обнуление фантомного профита при нуле сделок.
+     - `test_rebase_start_balance_with_trades_shifts_peaks`: корректный сдвиг пиков баланса при наличии истории сделок.
+     - `test_autocloser_blocked_in_non_armed_states`: запрет работы автоклозера в состояниях 1, 2, 3 FSM.
+     - `test_reset_analytics_state_full_wipe`: проверка жесткого сброса аналитики.
+   - 100% тестов проходят успешно. Строго соблюдено правило размера файлов (все <= 600 строк).
+
 
 

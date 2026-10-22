@@ -1,13 +1,13 @@
 {
     "name": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6% Long / 13% Short | Flagship]",
-    "description": "Флагманское поколение U17 Stephenson-E: 1) Разряженная асимметричная Фибо-сетка L3 (-13.5%); 2) Panic Damper TP (min_tp_indent: 1.0%); 3) Half-Peel 50% пилинг; 4) distribute_skip сжигание объема; 5) Дискретный кросс-ресайклинг (50%/75%); 6) «Правило кулака Сильной руки» auto_ema по 1d свечам (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 7) Трендовый smart_size (1.14x-1.42x) с knife_blocker; 8) Smart Grace 150s с броуновским шумом; 9) trailing_ratchet с Фибо-лестницей трейлинг-храповика.",
+    "description": "Флагманское поколение U17 Stephenson-E: 1) Разряженная асимметричная Фибо-сетка L3 (-13.5%); 2) Panic Damper TP (min_tp_indent: 1.0%); 3) Half-Peel 50% пилинг; 4) distribute_skip пропуск объема; 5) Дискретный кросс-ресайклинг (50%/75%); 6) «Правило кулака Сильной руки» auto_ema по 1d свечам (Bullish 12/7, Neutral 9/9, Bearish 6/13 B613); 7) Трендовый smart_size (1.14x-1.42x) с knife_blocker; 8) Smart Grace 150s с броуновским шумом; 9) trailing_ratchet с Фибо-лестницей трейлинг-храповика.",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
     "avg_free_volume_behavior": "distribute_skip",
     "_avg_free_volume_behavior_modes": {
         "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
         "distribute_nearest": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
-        "distribute_skip": "(Сжигание объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем сгорает и никуда не переносится."
+        "distribute_skip": "(Пропуск объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем пропускается без переноса на другие ступени."
     },
     "super_grid": false,
     "dynamic_atr_grid": {

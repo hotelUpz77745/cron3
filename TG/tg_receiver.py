@@ -269,7 +269,7 @@ class TelegramReceiver:
             else:
                 tp_summary = f"{', '.join(indents[:3])}%..."
         else:
-            tp_summary = "Базовый 0.6%..2.5% (из _base.json)"
+            tp_summary = "Базовый 0.6%..2.5%"
             
         return {
             "strategy_id": strat_id,
@@ -1492,10 +1492,11 @@ class TelegramReceiver:
                 roi_sign = "+" if roi_val > 0 else ""
 
                 peel_cnt = int(item.get("peel_events", 0))
-                peel_vol = float(item.get("peel_vol_usdt", 0.0))
+                peel_pnl = float(item.get("peel_pnl_usdt", 0.0))
                 rec_cnt = int(item.get("rec_events", 0))
-                rec_vol = float(item.get("rec_burn_usdt", 0.0))
-                def_line = f"├ Дефенс: 🍊 {peel_cnt} пилинг ({peel_vol:.1f}$) | ♻️ {rec_cnt} рециклер ({rec_vol:.1f}$)\n"
+                rec_loss = float(item.get("rec_loss_usdt", 0.0))
+                rec_spent = float(item.get("rec_spent_usdt", 0.0))
+                def_line = f"├ Дефенс: 🍊 {peel_cnt} пилинг ({peel_pnl:+.2f}$ кэш) | ♻️ {rec_cnt} рециклер (Сожжено кэша: {rec_loss:.2f}$)\n"
 
                 card = (
                     f"{medal} <b>{uid}</b>\n"
@@ -2270,12 +2271,11 @@ class TelegramReceiver:
                 toxic_def = data.get("toxic_defense", {})
                 peel_def = toxic_def.get("subgrid_peeling", {})
                 rec_def = toxic_def.get("cross_recycling", {})
-                p_loss = peel_def.get('loss_absorbed_usdt', 0.0)
-                p_metric = f"Absorbed: {p_loss:,.2f} USDT" if p_loss > 1.0 else f"Locked: {peel_def.get('locked_micro_pnl_usdt', 0.0):+,.2f} USDT"
-                r_pnl = rec_def.get('locked_micro_pnl_usdt', 0.0)
-                r_metric = f"Locked: {r_pnl:+,.2f} USDT" if r_pnl > 0.0 else f"Absorbed: {rec_def.get('loss_absorbed_usdt', 0.0):+,.2f} USDT"
-                lines.append(f"  Defense (Subgrid Peels): {peel_def.get('events_count', 0)} events | Vol: {peel_def.get('total_peeled_usdt', 0.0):,.2f} USDT | {p_metric}")
-                lines.append(f"  Defense (Cross-Recycling): {rec_def.get('events_count', 0)} events | Vol: {rec_def.get('burned_volume_usdt', 0.0):,.2f} USDT | {r_metric}\n")
+                p_pnl = float(peel_def.get('locked_micro_pnl_usdt', 0.0))
+                r_spent = float(rec_def.get('profit_spent_usdt', 0.0))
+                r_loss = float(rec_def.get('loss_absorbed_usdt', 0.0))
+                lines.append(f"  Defense (Subgrid Peels): {peel_def.get('events_count', 0)} events | Cash PnL: {p_pnl:+,.2f} USDT")
+                lines.append(f"  Defense (Cross-Recycling): {rec_def.get('events_count', 0)} events | Cash Burned: {r_loss:,.2f} USDT | Spent Profit: {r_spent:,.2f} USDT\n")
                 
                 if "per_coin" in data:
                     lines.append("="*50)
@@ -3538,53 +3538,6 @@ class TelegramReceiver:
                 await message.answer(f"❌ Ошибка: Введите число (например 0.6).")
 
         # =========================================================
-        # EDIT _BASE TEMPLATE
-        # =========================================================
-        @self.dp.message(F.text == "📄 _base")
-        async def on_base_btn(message: Message, state: FSMContext):
-            base_data = Utils.read_json_file(self.template_manager.base_file)
-            base_str = json.dumps(base_data, indent=4)
-            
-            dump_path = os.path.join("logs", "_base_edit.json")
-            os.makedirs("logs", exist_ok=True)
-            with open(dump_path, "w", encoding="utf-8") as f:
-                f.write(base_str)
-                
-            await message.answer("<b>Текущий базовый шаблон _base.json:</b>\nОтредактируйте файл и отправьте обратно документом (или текстом).", reply_markup=self._get_back_keyboard(), parse_mode="HTML")
-            await message.answer_document(FSInputFile(dump_path))
-            await state.set_state(TGStates.waiting_for_base_json)
-
-        @self.dp.message(TGStates.waiting_for_base_json)
-        async def process_base_json(message: Message, state: FSMContext):
-            if message.text and message.text == "🔙 Back":
-                return await on_set_coins(message, state)
-                
-            json_str = ""
-            if message.document:
-                file = await self.bot.get_file(message.document.file_id)
-                out = io.BytesIO()
-                await self.bot.download_file(file.file_path, out)
-                json_str = out.getvalue().decode('utf-8')
-            elif message.text:
-                json_str = message.text.strip()
-            else:
-                await message.answer("❌ Пожалуйста, отправьте текстовое сообщение или .json файл.")
-                return
-                
-            try:
-                new_base = json.loads(json_str)
-                
-                # Валидация шаблона
-                Utils.write_json_file(self.template_manager.base_file, new_base)
-                await message.answer("✅ Базовый шаблон успешно обновлен!", reply_markup=self._get_set_coins_keyboard())
-                await state.clear()
-            except Exception as e:
-                await message.answer(f"❌ Ошибка JSON: {e}\nИсправьте и отправьте снова.")
-
-        # =========================================================
-        # EDIT Super Grid
-        # =========================================================
-        # =========================================================
         # EDIT Super Grid (Per Strategy & Global)
         # =========================================================
         @self.dp.message(F.text == "🔧 Super Grid")
@@ -3607,7 +3560,7 @@ class TelegramReceiver:
                     callback_data=f"sg_view_{sid}"
                 )])
 
-            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (_base)", callback_data="sg_global_edit")])
+            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (app.json)", callback_data="sg_global_edit")])
             buttons.append([InlineKeyboardButton(text="🔙 Закрыть", callback_data="edit_side_cancel")])
 
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -3699,7 +3652,7 @@ class TelegramReceiver:
                     callback_data=f"sg_view_{sid}"
                 )])
 
-            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (_base)", callback_data="sg_global_edit")])
+            buttons.append([InlineKeyboardButton(text="🌐 Глобальный Super Grid (app.json)", callback_data="sg_global_edit")])
             buttons.append([InlineKeyboardButton(text="🔙 Закрыть", callback_data="edit_side_cancel")])
             keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
             await callback.message.edit_text(

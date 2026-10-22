@@ -37,7 +37,7 @@ def build_runtime_caches(
         try:
             registry = StrategyRegistry()
         except Exception as e:
-            logger.warning(f"Could not load StrategyRegistry: {e}. Falling back to _base.json.")
+            logger.warning(f"Could not load StrategyRegistry: {e}.")
             registry = None
 
     if symbols is None:

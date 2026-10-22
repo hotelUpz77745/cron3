@@ -101,7 +101,8 @@ class PeelingManager:
         elif "peel_once" in level_data and level_data["peel_once"] is None:
             return False
 
-        if level_data.get("peeled"):
+        # Уровень не должен быть ранее отпилен (СТРОГО 1 раз на колене)
+        if level_data.get("peeled") or int(level_data.get("peeled_count", 0)) >= 1:
             return False
 
         # Проверяем наличие настройки пилинга на этом уровне
@@ -195,16 +196,15 @@ class PeelingManager:
                 peeled_count = int(level_data.get("peeled_count", 0)) + 1
                 level_data["peeled_count"] = peeled_count
 
+                # Пилинг СТРОГО 1 раз на колене (Правило: p_limit = 1)
                 raw_peel_num = level_data.get("peel_num")
                 if raw_peel_num is not None:
                     try:
-                        p_limit = int(raw_peel_num)
+                        p_limit = max(1, min(1, int(raw_peel_num)))
                     except (ValueError, TypeError):
                         p_limit = 1
-                elif "peel_once" in level_data:
-                    p_limit = 1 if level_data["peel_once"] else 999
                 else:
-                    p_limit = 1 if (peel_ratio < 1.0) else 999
+                    p_limit = 1
 
                 curr_fill_qty = float(level_data.get("fill_qty") or 0.0)
                 rem_level_qty = max(0.0, round(curr_fill_qty - peel_qty, 8))
