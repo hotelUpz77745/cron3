@@ -87,12 +87,15 @@ def get_universe_router(bot_core: Any) -> Router:
             return an.report_service
         return AnalyticsReportService()
 
-    def _get_active_strategies() -> Dict[str, Any]:
-        if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-            return bot_core.strategy_registry.get_active_strategies()
+    def _get_configured_strategies() -> Dict[str, Any]:
+        """Возвращает все сконфигурированные стратегии куполов из app.json (включая отключенные)."""
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) or {}
-        return app_data.get("active_strategies", {})
+        active_raw = app_data.get("active_strategies", {})
+        return {
+            k: v for k, v in active_raw.items()
+            if not k.startswith("_") and isinstance(v, dict)
+        }
 
     @router.message(Command("universes"))
     @router.message(F.text == "🌌 Set Universes")
@@ -102,10 +105,10 @@ def get_universe_router(bot_core: Any) -> Router:
         await state.clear()
         page = 1
         current_uid = universe_session_manager.get_user_universe_id(message.from_user.id, bot_core)
-        active_strats = _get_active_strategies()
+        configured_strats = _get_configured_strategies()
         text, btn_data = _get_report_service().render_universes_list(
             current_uid=current_uid,
-            active_strats=active_strats,
+            active_strats=configured_strats,
             page=page,
         )
         kb = _build_inline_keyboard(btn_data)
@@ -120,10 +123,10 @@ def get_universe_router(bot_core: Any) -> Router:
         try:
             page = int(target)
             current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            active_strats = _get_active_strategies()
+            configured_strats = _get_configured_strategies()
             text, btn_data = _get_report_service().render_universes_list(
                 current_uid=current_uid,
-                active_strats=active_strats,
+                active_strats=configured_strats,
                 page=page,
             )
             kb = _build_inline_keyboard(btn_data)
@@ -133,55 +136,74 @@ def get_universe_router(bot_core: Any) -> Router:
                 logger.error(f"Error in cb_universe_page: {e}")
         await callback.answer()
 
-    @router.callback_query(F.data.startswith("manage_univ:"))
-    async def cb_manage_universe(callback: CallbackQuery):
+    @router.callback_query(F.data.startswith("toggle_univ:"))
+    async def cb_toggle_universe(callback: CallbackQuery):
+        """Прямой тумблер включения/отключения стратегии купола [ВКЛ / ВЫКЛ]."""
+        parts = callback.data.split(":")
+        uid = parts[1]
+        page = int(parts[2]) if len(parts) > 2 else 1
+
+        app_json_path = DATA_DIR / "app.json"
+        app_data = Utils.read_json_file(app_json_path) or {}
+        active_strats = app_data.get("active_strategies", {})
+
+        if uid in active_strats and isinstance(active_strats[uid], dict):
+            current_state = bool(active_strats[uid].get("enabled", True))
+            new_state = not current_state
+            active_strats[uid]["enabled"] = new_state
+            Utils.atomic_write_json(app_json_path, app_data)
+
+            # Перезагружаем реестр стратегий и пересобираем рантаймы
+            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
+                try:
+                    bot_core.strategy_registry.reload(active_strats)
+                    from CORE.strategy_applicator import StrategyApplicator
+                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
+                except Exception as ex:
+                    logger.warning(f"Runtime rebuild notice on universe toggle: {ex}")
+
+            logger.info(f"[TG] 🌌 Стратегия [{uid}] переключена: enabled={new_state}")
+
+            configured_strats = _get_configured_strategies()
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
+            text, btn_data = _get_report_service().render_universes_list(
+                current_uid=current_uid,
+                active_strats=configured_strats,
+                page=page,
+            )
+            kb = _build_inline_keyboard(btn_data)
+            try:
+                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            except Exception as e:
+                if "message is not modified" not in str(e).lower():
+                    logger.error(f"Error editing message on universe toggle: {e}")
+
+            status_toast = f"🟢 Стратегия [{uid}] ВКЛЮЧЕНА!" if new_state else f"⚪ Стратегия [{uid}] ВЫКЛЮЧЕНА!"
+            await callback.answer(status_toast, show_alert=False)
+        else:
+            await callback.answer(f"❌ Стратегия {uid} не найдена в app.json", show_alert=True)
+
+    @router.callback_query(F.data.startswith("manage_univ:") | F.data.startswith("use_univ:"))
+    async def cb_legacy_manage_universe(callback: CallbackQuery):
+        """Безопасный перехват устаревших инлайн-кнопок управления."""
         parts = callback.data.split(":")
         uid = parts[1]
         page = int(parts[2]) if len(parts) > 2 else 1
         universe_session_manager.set_user_universe_id(callback.from_user.id, uid)
 
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path) or {}
-        active_strats = app_data.get("active_strategies", {})
-        s_cfg = active_strats.get(uid, {})
-
+        configured_strats = _get_configured_strategies()
+        current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
+        text, btn_data = _get_report_service().render_universes_list(
+            current_uid=current_uid,
+            active_strats=configured_strats,
+            page=page,
+        )
+        kb = _build_inline_keyboard(btn_data)
         try:
-            text, btn_data = _get_report_service().render_universe_control_panel(
-                uid=uid,
-                s_cfg=s_cfg,
-                page=page,
-            )
-            kb = _build_inline_keyboard(btn_data)
             await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception as e:
-            if "message is not modified" not in str(e).lower():
-                logger.error(f"Error opening strategy control panel: {e}")
-        await callback.answer()
-
-    @router.callback_query(F.data.startswith("use_univ:"))
-    async def cb_select_universe(callback: CallbackQuery):
-        parts = callback.data.split(":")
-        uid = parts[1]
-        page = int(parts[2]) if len(parts) > 2 else 1
-        universe_session_manager.set_user_universe_id(callback.from_user.id, uid)
-
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path) or {}
-        active_strats = app_data.get("active_strategies", {})
-        s_cfg = active_strats.get(uid, {})
-
-        try:
-            text, btn_data = _get_report_service().render_universe_control_panel(
-                uid=uid,
-                s_cfg=s_cfg,
-                page=page,
-            )
-            kb = _build_inline_keyboard(btn_data)
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception as e:
-            if "message is not modified" not in str(e).lower():
-                logger.error(f"Error in use_univ: {e}")
-        await callback.answer()
+        except Exception:
+            pass
+        await callback.answer("Управление куполами переведено на тумблер [ВКЛ / ВЫКЛ]", show_alert=False)
 
     @router.callback_query(F.data.startswith("back_to_univ_list:"))
     async def cb_back_to_univ_list(callback: CallbackQuery):
@@ -189,10 +211,10 @@ def get_universe_router(bot_core: Any) -> Router:
         page = int(parts[1]) if len(parts) > 1 else 1
         try:
             current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
-            active_strats = _get_active_strategies()
+            configured_strats = _get_configured_strategies()
             text, btn_data = _get_report_service().render_universes_list(
                 current_uid=current_uid,
-                active_strats=active_strats,
+                active_strats=configured_strats,
                 page=page,
             )
             kb = _build_inline_keyboard(btn_data)
@@ -202,80 +224,24 @@ def get_universe_router(bot_core: Any) -> Router:
                 logger.error(f"Error returning to universes list: {e}")
         await callback.answer()
 
-    @router.callback_query(F.data.startswith("set_sizing:"))
-    async def cb_set_sizing(callback: CallbackQuery):
-        parts = callback.data.split(":")
-        uid = parts[1]
-        new_mode = parts[2]
-        page = int(parts[3]) if len(parts) > 3 else 1
-
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path) or {}
-        if "active_strategies" in app_data and uid in app_data["active_strategies"]:
-            app_data["active_strategies"][uid]["trend_size_depender"] = new_mode
-            app_data["active_strategies"][uid]["sizing_mode"] = new_mode
-            Utils.atomic_write_json(app_json_path, app_data)
-
-            # Перезагружаем реестр и обновляем рантаймы
-            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-                bot_core.strategy_registry.reload(app_data["active_strategies"])
-                try:
-                    from CORE.strategy_applicator import StrategyApplicator
-                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
-                except Exception as ex:
-                    logger.warning(f"Runtime rebuild notice on sizing change: {ex}")
-
-            logger.info(f"[{uid}] Сайзинг переключен на '{new_mode}' через Telegram.")
-            s_cfg = app_data["active_strategies"][uid]
-            text, btn_data = _get_report_service().render_universe_control_panel(
-                uid=uid,
-                s_cfg=s_cfg,
-                page=page,
+    @router.callback_query(F.data.startswith("set_sizing:") | F.data.startswith("set_closer:"))
+    async def cb_legacy_sizing_closer(callback: CallbackQuery):
+        """Информационный ответ при нажатии устаревших кнопок сайзинга из старых сообщений."""
+        await callback.answer(
+            "⚠️ Интерактивный сайзинг упразднен.\nДинамика объемов управляется строго паспортом стратегии (first_order_weight_regime / smart_size).",
+            show_alert=True,
+        )
+        try:
+            configured_strats = _get_configured_strategies()
+            current_uid = universe_session_manager.get_user_universe_id(callback.from_user.id, bot_core)
+            text, btn_data = _get_report_service().render_universes_list(
+                current_uid=current_uid,
+                active_strats=configured_strats,
+                page=1,
             )
             kb = _build_inline_keyboard(btn_data)
-            try:
-                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-            except Exception:
-                pass
-            await callback.answer(f"✅ Сайзинг переключен на [{new_mode}]!", show_alert=True)
-        else:
-            await callback.answer(f"❌ Стратегия {uid} не найдена в active_strategies", show_alert=True)
-
-    @router.callback_query(F.data.startswith("set_closer:"))
-    async def cb_set_closer(callback: CallbackQuery):
-        parts = callback.data.split(":")
-        uid = parts[1]
-        new_closer = parts[2]
-        page = int(parts[3]) if len(parts) > 3 else 1
-
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path) or {}
-        if "active_strategies" in app_data and uid in app_data["active_strategies"]:
-            app_data["active_strategies"][uid]["mode"] = new_closer
-            Utils.atomic_write_json(app_json_path, app_data)
-
-            if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-                bot_core.strategy_registry.reload(app_data["active_strategies"])
-                try:
-                    from CORE.strategy_applicator import StrategyApplicator
-                    StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
-                except Exception as ex:
-                    logger.warning(f"Runtime rebuild notice on closer mode change: {ex}")
-
-            logger.info(f"[{uid}] Режим автозакрытия переключен на '{new_closer}' через Telegram.")
-            s_cfg = app_data["active_strategies"][uid]
-            text, btn_data = _get_report_service().render_universe_control_panel(
-                uid=uid,
-                s_cfg=s_cfg,
-                page=page,
-            )
-            kb = _build_inline_keyboard(btn_data)
-            try:
-                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-            except Exception:
-                pass
-            await callback.answer(f"✅ Автозакрытие переключено на [{new_closer}]!", show_alert=True)
-        else:
-            await callback.answer(f"❌ Стратегия {uid} не найдена в active_strategies", show_alert=True)
+            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+        except Exception:
+            pass
 
     return router

@@ -588,91 +588,121 @@ class AnalyticsReportService:
         current_uid: str,
         active_strats: Dict[str, Any],
         page: int = 1,
-        page_size: int = 6,
+        page_size: int = 5,
     ) -> Tuple[str, List[List[Dict[str, str]]]]:
         """
-        Формирует презентационный текст и структуру кнопок для страницы списка вселенных.
+        Формирует презентационный текст и чистую структуру кнопок-тумблеров [ВКЛ / ВЫКЛ] для куполов стратегий.
+        В HRON-3 динамика сайзинга управляется строго паспортом стратегии (first_order_weight_regime / smart_size).
+        Сеттер стратегий является прямым бинарным переключателем.
         """
-        engine = getattr(self.analytics_manager, "leaderboard_engine", None)
-        if not engine:
-            from ANALYTICS.leaderboard import LeaderboardEngine
-            engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=self.stats_dir)
+        # Фильтруем служебные поля
+        strats_items = [
+            (sid, scfg)
+            for sid, scfg in active_strats.items()
+            if not sid.startswith("_") and (isinstance(scfg, dict) or hasattr(scfg, "raw_meta"))
+        ]
 
-        universes_meta = {}
-        for sid, scfg in active_strats.items():
-            raw_meta = getattr(scfg, "raw_meta", {}) if not isinstance(scfg, dict) else scfg
-            name = getattr(scfg, "name", sid) if not isinstance(scfg, dict) else scfg.get("name", sid)
-            universes_meta[sid] = {**raw_meta, "name": name, "enabled": True}
-
-        entries = engine.generate_leaderboard(universes_meta) if engine else []
-        if not entries:
-            entries = [
-                {
-                    "universe_id": sid,
-                    "name": getattr(scfg, "name", sid) if not isinstance(scfg, dict) else scfg.get("name", sid),
-                    "net_profit_usdt": 0.0,
-                    "realized_pnl_usdt": 0.0,
-                    "unrealized_pnl_usdt": 0.0,
-                    "max_drawdown_usdt": 0.0,
-                    "total_trades": 0,
-                }
-                for sid, scfg in active_strats.items()
-            ]
-
-        total_entries = len(entries)
+        total_entries = len(strats_items)
         total_pages = max(1, (total_entries + page_size - 1) // page_size)
         page = max(1, min(page, total_pages))
 
         start_i = (page - 1) * page_size
         end_i = min(start_i + page_size, total_entries)
-        page_entries = entries[start_i:end_i]
+        page_entries = strats_items[start_i:end_i]
 
         text_lines = [
-            f"🌌 <b>СПИСОК ВСЕЛЕННЫХ (Стр. {page}/{total_pages})</b>",
-            f"Нажмите на купол для настройки сайзинга и автозакрытия.\n",
+            f"🌌 <b>СПИСОК ВСЕЛЕННЫХ / УПРАВЛЕНИЕ КУПОЛАМИ (Стр. {page}/{total_pages})</b>",
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            "💡 <i>Сайзинг и входы управляются строго паспортом (first_order_weight_regime / smart_size).</i>",
+            "<i>Для включения/отключения купола нажмите на тумблер ниже:</i>\n",
         ]
 
-        buttons = []
-        row_buttons = []
-        for item in page_entries:
-            uid = item["universe_id"]
-            scfg = active_strats.get(uid)
-            sz_mode = (
-                getattr(scfg, "sizing_mode", "static")
-                if not isinstance(scfg, dict)
-                else scfg.get("sizing_mode", "static")
-            )
-            cl_mode = (
-                getattr(scfg, "mode", "classic")
-                if not isinstance(scfg, dict)
-                else scfg.get("mode", "classic")
-            )
-            badge = f"[{str(sz_mode).upper()}]"
+        buttons: List[List[Dict[str, str]]] = []
 
-            mark = "👉 " if uid == current_uid else ""
-            net_str = f"{item.get('net_profit_usdt', 0.0):+.2f}$"
+        for sid, scfg in page_entries:
+            is_enabled = (
+                bool(scfg.get("enabled", True))
+                if isinstance(scfg, dict)
+                else bool(getattr(scfg, "enabled", True))
+            )
+
+            # Получаем отображаемое имя
+            raw_alias = ""
+            if isinstance(scfg, dict):
+                raw_alias = scfg.get("_comment_alias") or scfg.get("name") or sid
+            else:
+                raw_alias = getattr(scfg, "name", sid)
+
+            short_name = raw_alias.split("[")[0].strip() if "[" in raw_alias else raw_alias
+            if not short_name:
+                short_name = sid
+
+            # Монеты
+            symbols = []
+            if isinstance(scfg, dict):
+                symbols = scfg.get("symbols") or []
+                if not symbols:
+                    for inv_src in [
+                        (scfg.get("LONG") or {}).get("invest_size"),
+                        (scfg.get("SHORT") or {}).get("invest_size"),
+                        scfg.get("invest_size"),
+                    ]:
+                        if isinstance(inv_src, dict):
+                            for k in inv_src.keys():
+                                k_clean = str(k).upper().strip()
+                                if k_clean and k_clean not in symbols and k_clean not in ("DEFAULT", "LONG", "SHORT"):
+                                    symbols.append(k_clean)
+            else:
+                symbols = getattr(scfg, "symbols", []) or []
+
+            sym_count = len(symbols)
+            sym_str = ", ".join(symbols[:5]) + (f" (+{sym_count - 5})" if sym_count > 5 else "") if symbols else "нет"
+
+            # Параметры автоклозера и баланса
+            ac_mode = (
+                scfg.get("auto_closing_mode") or scfg.get("mode") or "trailing_ratchet"
+                if isinstance(scfg, dict)
+                else getattr(scfg, "auto_closing_mode", getattr(scfg, "mode", "trailing_ratchet"))
+            )
+            start_bal = (
+                scfg.get("start_balance_usdt", 0.0)
+                if isinstance(scfg, dict)
+                else getattr(scfg, "start_balance_usdt", 0.0)
+            )
+
+            status_icon = "🟢" if is_enabled else "⚪"
+            status_text = "ВКЛЮЧЕНА В ТОРГОВЛЮ" if is_enabled else "ОТКЛЮЧЕНА (OFF)"
+            mark = "👉 " if sid == current_uid else ""
+
             text_lines.append(
-                f"{mark}<code>{uid}</code>: <b>Net: {net_str}</b> | Sizing: <code>{sz_mode}</code> | Mode: <code>{cl_mode}</code>"
+                f"{mark}<b>{short_name}</b>\n"
+                f"• ID: <code>{sid}</code>\n"
+                f"• Статус: <b>{status_icon} {status_text}</b>\n"
+                f"• Автоклозер: <code>{ac_mode}</code> | Баланс: <code>{start_bal:.1f} USDT</code>\n"
+                f"• Монеты ({sym_count}): <code>{sym_str}</code>\n"
             )
-            btn_label = f"⚙️ {str(uid)[:18]} {badge}"
-            row_buttons.append({"text": btn_label, "callback_data": f"use_univ:{uid}:{page}"})
-            if len(row_buttons) == 2:
-                buttons.append(row_buttons)
-                row_buttons = []
 
-        if row_buttons:
-            buttons.append(row_buttons)
+            btn_label = f"🟢 [ВКЛ] {short_name}" if is_enabled else f"⚪ [ВЫКЛ] {short_name}"
+            if len(btn_label) > 38:
+                btn_label = btn_label[:36] + "…"
+            buttons.append([{"text": btn_label, "callback_data": f"toggle_univ:{sid}:{page}"}])
+
+        text_lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
         # Строка навигации пагинации
-        nav_row = []
-        if page > 1:
-            nav_row.append({"text": "⬅️ Назад", "callback_data": f"univ_page:{page - 1}"})
-        nav_row.append({"text": f"📄 {page}/{total_pages}", "callback_data": "univ_page:noop"})
-        if page < total_pages:
-            nav_row.append({"text": "Вперед ➡️", "callback_data": f"univ_page:{page + 1}"})
+        if total_pages > 1:
+            nav_row = []
+            if page > 1:
+                nav_row.append({"text": "⬅️ Назад", "callback_data": f"univ_page:{page - 1}"})
+            nav_row.append({"text": f"📄 {page}/{total_pages}", "callback_data": "univ_page:noop"})
+            if page < total_pages:
+                nav_row.append({"text": "Вперед ➡️", "callback_data": f"univ_page:{page + 1}"})
+            buttons.append(nav_row)
 
-        buttons.append(nav_row)
-        buttons.append([{"text": "🔙 Назад к аналитике", "callback_data": "analytics_back_to_univ"}])
+        buttons.append([
+            {"text": "🔄 Обновить", "callback_data": f"univ_page:{page}"},
+            {"text": "🔙 В меню аналитики", "callback_data": "analytics_back_to_univ"},
+        ])
         return "\n".join(text_lines), buttons
 
     @classmethod
@@ -683,77 +713,11 @@ class AnalyticsReportService:
         page: int = 1,
     ) -> Tuple[str, List[List[Dict[str, str]]]]:
         """
-        Формирует презентационный текст и кнопки детальной панели купола.
+        УСТАРЕЛО (Legacy): Интерактивный сайзинг и выбор режимов через TG демонтированы.
+        Вся динамика управляется паспортом стратегии (first_order_weight_regime / smart_size).
+        Перенаправляет пользователя на тумблерный список стратегий.
         """
-        cur_sizing = str(s_cfg.get("trend_size_depender") or s_cfg.get("sizing_mode", "static")).lower().strip()
-        cur_closer = str(s_cfg.get("mode", "classic")).lower().strip()
-        raw_inv = (
-            (s_cfg.get("LONG") or {}).get("invest_size")
-            or (s_cfg.get("SHORT") or {}).get("invest_size")
-            or s_cfg.get("invest_size")
-        )
-        def_inv = (
-            (s_cfg.get("LONG") or {}).get("default_invest_size")
-            or (s_cfg.get("SHORT") or {}).get("default_invest_size")
-            or s_cfg.get("default_invest_size")
-        )
-        symbols = s_cfg.get("symbols")
-        if not symbols:
-            if isinstance(raw_inv, dict):
-                symbols = list(raw_inv.keys())
-            else:
-                symbols = []
-        sym_str = ", ".join(symbols) if symbols else "нет"
-
-        if isinstance(raw_inv, dict):
-            inv_display = ", ".join(f"{k}: {float(v):.0f}$" for k, v in raw_inv.items())
-            if def_inv is not None:
-                inv_display += f" (дефолт: {float(def_inv):.0f}$)"
-        elif raw_inv is not None:
-            inv_display = f"{float(raw_inv):.1f} USDT"
-        elif def_inv is not None:
-            inv_display = f"{float(def_inv):.1f} USDT (дефолт)"
-        else:
-            inv_display = "Не задан (ошибка)"
-
-        sz_badge, sz_desc = cls.SIZING_MODE_BADGES.get(cur_sizing, (cur_sizing, ""))
-        cl_badge, cl_desc = cls.CLOSER_MODE_BADGES.get(cur_closer, (cur_closer, ""))
-
-        text = (
-            f"🐆 <b>УПРАВЛЕНИЕ КУПОЛОМ:</b> <code>{uid}</code>\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💰 <b>Инвест-сайз:</b> <code>{inv_display}</code>\n"
-            f"🎯 <b>Пул монет ({len(symbols)}):</b> <code>{sym_str}</code>\n\n"
-            f"⚖️ <b>Сайзинг (trend_size_depender):</b>\n"
-            f"• Текущий режим: <b>{sz_badge}</b>\n"
-            f"• Описание: <i>{sz_desc}</i>\n\n"
-            f"⚙️ <b>Режим автозакрытия (auto-closer):</b>\n"
-            f"• Текущий режим: <b>{cl_badge}</b>\n"
-            f"• Описание: <i>{cl_desc}</i>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"Выберите кнопку ниже для мгновенного переключения:"
-        )
-
-        buttons = []
-        sz_row = []
-        for mode_key in ("static", "dyn_ema_16"):
-            label, _ = cls.SIZING_MODE_BADGES[mode_key]
-            prefix = "✅ " if mode_key == cur_sizing else ""
-            sz_row.append({"text": f"{prefix}{label}", "callback_data": f"set_sizing:{uid}:{mode_key}:{page}"})
-        buttons.append(sz_row)
-
-        cl_row = []
-        for cl_key in ("classic", "fixed", "toxic", "off"):
-            label, _ = cls.CLOSER_MODE_BADGES[cl_key]
-            prefix = "✅ " if cl_key == cur_closer else ""
-            cl_row.append({"text": f"{prefix}{label[:9]}", "callback_data": f"set_closer:{uid}:{cl_key}:{page}"})
-        buttons.append(cl_row)
-
-        buttons.append([
-            {"text": "🔄 Обновить", "callback_data": f"manage_univ:{uid}:{page}"},
-            {"text": "🔙 К списку вселенных", "callback_data": f"back_to_univ_list:{page}"}
-        ])
-        return text, buttons
+        return cls().render_universes_list(current_uid=uid, active_strats={uid: s_cfg}, page=page)
 
     @staticmethod
     def render_cheat_sheet() -> str:

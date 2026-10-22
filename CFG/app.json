@@ -72,6 +72,32 @@
                 }
             },
             "start_balance_usdt": 434.0
+        },
+        "u96_omni_zenith_apex__trailing_ratchet": {
+            "_comment_alias": "🥉 U96: Omni Zenith Apex [Knife Blocker 1 | Trailing Ratchet]",
+            "template": "u96_omni_zenith_apex",
+            "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
+            "auto_closing_mode": "trailing_ratchet",
+            "leverage": 20,
+            "margin_type": "CROSSED",
+            "notifications": {
+                "enabled": true,
+                "negative_threshold": -50.0,
+                "positive_threshold": 100.0
+            },
+            "LONG": {
+                "enabled": true,
+                "default_invest_size": 400.0,
+                "invest_size": {}
+            },
+            "SHORT": {
+                "enabled": true,
+                "default_invest_size": 400.0,
+                "invest_size": {}
+            },
+            "start_balance_usdt": 400.0
         }
     },
     "telegram": {

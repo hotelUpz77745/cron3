@@ -93,6 +93,7 @@ class PositionMonitor:
         """
         self.states = states_cache
         self.strategy_registry = strategy_registry
+        self.target_symbols: list = list(target_symbols) if target_symbols else []
         if target_symbols:
             for symbol in target_symbols:
                 if symbol not in self.states:

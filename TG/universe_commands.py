@@ -42,13 +42,12 @@ def render_universes_page(user_id: int, bot_core: Any, page: int = 1) -> Tuple[s
     """Рендерит страницу со списком вселенных и инлайн-кнопками перехода в панель управления."""
     current_uid = get_user_universe_id(user_id, bot_core)
 
-    active_strats = {}
-    if hasattr(bot_core, "strategy_registry") and bot_core.strategy_registry:
-        active_strats = bot_core.strategy_registry.get_active_strategies()
-    else:
-        app_json_path = DATA_DIR / "app.json"
-        app_data = Utils.read_json_file(app_json_path) or {}
-        active_strats = app_data.get("active_strategies", {})
+    app_json_path = DATA_DIR / "app.json"
+    app_data = Utils.read_json_file(app_json_path) or {}
+    active_strats = {
+        k: v for k, v in (app_data.get("active_strategies") or {}).items()
+        if not k.startswith("_") and isinstance(v, dict)
+    }
 
     an = getattr(bot_core, "analytics", None)
     if an and hasattr(an, "report_service") and isinstance(an.report_service, AnalyticsReportService):

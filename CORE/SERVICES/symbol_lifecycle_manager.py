@@ -168,9 +168,10 @@ class SymbolLifecycleManager:
             self.bot.pos_stream.target_symbols.add(symbol)
         if getattr(self.bot, "ws_interpreter", None) and self.bot.ws_interpreter.target_symbols is not None:
             self.bot.ws_interpreter.target_symbols.add(symbol)
-        if getattr(self.bot, "pos_monitor", None) and self.bot.pos_monitor.target_symbols is not None:
-            if symbol not in self.bot.pos_monitor.target_symbols:
-                self.bot.pos_monitor.target_symbols.append(symbol)
+        pos_mon = getattr(self.bot, "pos_monitor", None)
+        if pos_mon and getattr(pos_mon, "target_symbols", None) is not None:
+            if symbol not in pos_mon.target_symbols:
+                pos_mon.target_symbols.append(symbol)
 
         # 4. Immediate REST price prefetch
         try:
@@ -286,8 +287,9 @@ class SymbolLifecycleManager:
             self.bot.pos_stream.target_symbols.remove(symbol)
         if getattr(self.bot, "ws_interpreter", None) and self.bot.ws_interpreter.target_symbols is not None:
             self.bot.ws_interpreter.target_symbols.discard(symbol)
-        if getattr(self.bot, "pos_monitor", None) and self.bot.pos_monitor.target_symbols is not None:
-            self.bot.pos_monitor.target_symbols = [s for s in self.bot.pos_monitor.target_symbols if s != symbol]
+        pos_mon = getattr(self.bot, "pos_monitor", None)
+        if pos_mon and getattr(pos_mon, "target_symbols", None) is not None:
+            pos_mon.target_symbols = [s for s in pos_mon.target_symbols if s != symbol]
 
         # 4. Delete runtime JSON/PKL cache files across all strategy folders
         sym_lower = symbol.lower()
