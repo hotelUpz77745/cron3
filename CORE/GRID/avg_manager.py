@@ -318,7 +318,10 @@ class AverageManager:
         elif cfg_invest > 0:
             invest_size = cfg_invest
         else:
-            invest_size = 100.0
+            raise ValueError(
+                f"[{symbol}] {side} [Fail-Fast] Cannot reconcile averaging: invest_size is not configured or <= 0 "
+                f"(state.eff_invest={eff_invest}, side_cfg.eff_invest={cfg_eff}, side_cfg.invest_size={cfg_invest})."
+            )
 
         if invest_size > 0:
             cand_idx = int(candidate_level) if candidate_level.isdigit() else 999
@@ -379,7 +382,10 @@ class AverageManager:
         elif cfg_invest > 0:
             invest_size = cfg_invest
         else:
-            invest_size = 100.0
+            raise ValueError(
+                f"[{symbol}] {side} [Fail-Fast] Cannot execute averaging order: invest_size is not configured or <= 0 "
+                f"(state.eff_invest={eff_invest}, side_cfg.eff_invest={cfg_eff}, side_cfg.invest_size={cfg_invest})."
+            )
         volume_pct = float(level_data.get("volume") or 0.0)
         
         # 1. ОТМЕНА СТАРЫХ ЛИМИТНЫХ ОРДЕРОВ (ВКЛЮЧАЯ ТЕЙК ПРОФИТ) ДО УСРЕДНЕНИЯ

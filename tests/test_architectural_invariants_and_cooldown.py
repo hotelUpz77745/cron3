@@ -24,7 +24,7 @@ from aiogram.types import CallbackQuery, Chat, Message, User
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
-from API.BINANCE.client import BinanceClient
+from API.BINANCE.client_prod import BinanceClient
 from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
 from CORE._utils import Utils
 from CORE.bot import BotCore

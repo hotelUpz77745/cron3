@@ -7,8 +7,7 @@ ROLE: Чистый экспорт сущностей паспорта страт
 ==============================================================================
 """
 
-from CORE.strategy_registry import StrategyConfig, StrategyRegistry
-from CORE.strategy_applicator import StrategyApplicator
+from CORE.STRATEGY.strategy_config import StrategyConfig, deep_merge_dict
 from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 from CORE.STRATEGY.peeling_manager import PeelingManager
 from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
@@ -21,6 +20,7 @@ __all__ = [
     "StrategyConfig",
     "StrategyRegistry",
     "StrategyApplicator",
+    "deep_merge_dict",
     "FirstOrderRegimeManager",
     "PeelingManager",
     "CrossSideProfitRecycler",
@@ -30,3 +30,14 @@ __all__ = [
     "TrendSizeDepender",
     "TrendCalculator",
 ]
+
+
+def __getattr__(name: str):
+    if name == "StrategyRegistry":
+        from CORE.strategy_registry import StrategyRegistry
+        return StrategyRegistry
+    elif name == "StrategyApplicator":
+        from CORE.strategy_applicator import StrategyApplicator
+        return StrategyApplicator
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
