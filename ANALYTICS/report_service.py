@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -47,6 +48,10 @@ class AnalyticsReportService:
             logger.error(f"[REPORT_SERVICE] Error generating equity chart: {e}")
         return None
 
+    async def get_equity_chart_path_async(self, universe_id: Optional[str] = None) -> Optional[Path]:
+        """Неблокирующий вызов генератора графика эквити через asyncio.to_thread (Протокол Самсонова)."""
+        return await asyncio.to_thread(self.get_equity_chart_path, universe_id=universe_id)
+
     def get_coin_chart_path(self, symbol: str, universe_id: Optional[str] = None) -> Optional[Path]:
         """Генерирует график баланса по конкретной монете и возвращает путь к файлу."""
         try:
@@ -56,6 +61,10 @@ class AnalyticsReportService:
         except Exception as e:
             logger.error(f"[REPORT_SERVICE] Error generating coin chart for {symbol}: {e}")
         return None
+
+    async def get_coin_chart_path_async(self, symbol: str, universe_id: Optional[str] = None) -> Optional[Path]:
+        """Неблокирующий вызов генератора графика баланса монеты через asyncio.to_thread (Протокол Самсонова)."""
+        return await asyncio.to_thread(self.get_coin_chart_path, symbol=symbol, universe_id=universe_id)
 
     def get_ledger_file_path(self, universe_id: Optional[str] = None) -> Optional[Path]:
         """Возвращает путь к текстовому леджеру сделок, если он существует и не пуст."""

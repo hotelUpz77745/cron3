@@ -3,6 +3,7 @@
 # ROLE: Position state data models for FSM
 # ============================================================
 
+import copy
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Union
 
@@ -241,6 +242,102 @@ class PositionState:
         self.in_position_papper = False
         if not status:
             self.is_closing = False
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Сериализует состояние позиции в словарь (канонический дамп FSM рантайма)."""
+        return {
+            "total_volume": self.total_volume,
+            "avg_entry_price": self.avg_entry_price,
+            "pre_avg_price": self.pre_avg_price,
+            "initial_entry_price": self.initial_entry_price,
+            "open_time": self.open_time,
+            "next_avg_price": self.next_avg_price,
+            "fallback_price": self.fallback_price,
+            "in_position": self.in_position,
+            "in_position_papper": self.in_position_papper,
+            "is_finished": self.is_finished,
+            "pending_avg": self.pending_avg,
+            "pending_rolling_tp": self.pending_rolling_tp,
+            "pending_peel": self.pending_peel,
+            "grid": copy.deepcopy(self.grid),
+            "tp_map": copy.deepcopy(self.tp_map),
+            "tp_purpose": self.tp_purpose,
+            "avg_free_volume_behavior": getattr(self, "avg_free_volume_behavior", "distribute_remaining"),
+            "trailing_tp_state": copy.deepcopy(getattr(self, "trailing_tp_state", {})),
+            "trailing_grid_state": copy.deepcopy(getattr(self, "trailing_grid_state", {})),
+            "recent_closes": list(getattr(self, "recent_closes", [])),
+            "eff_invest": float(getattr(self, "eff_invest", 0.0)),
+            "tp_placed_at": getattr(self, "tp_placed_at", None),
+            "tp_current_indent": getattr(self, "tp_current_indent", None),
+            "tp_price": getattr(self, "tp_price", None),
+            "is_closing": getattr(self, "is_closing", False),
+            "fees": float(getattr(self, "fees", 0.0)),
+            "cur_step": int(getattr(self, "cur_step", 0)),
+            "last_grace_period": float(getattr(self, "last_grace_period", 0.0)),
+            "last_closed_volume": float(getattr(self, "last_closed_volume", 0.0)),
+            "last_closed_avg_price": float(getattr(self, "last_closed_avg_price", 0.0)),
+            "last_closed_timestamp": float(getattr(self, "last_closed_timestamp", 0.0)),
+        }
+
+    def update_from_dict(self, data: Dict[str, Any]) -> "PositionState":
+        """Загружает поля состояния позиции из словаря с безопасным deepcopy."""
+        if not isinstance(data, dict):
+            return self
+        self.total_volume = float(data.get("total_volume", 0.0))
+        self.avg_entry_price = float(data.get("avg_entry_price", 0.0))
+        self.pre_avg_price = float(data.get("pre_avg_price", 0.0))
+        self.initial_entry_price = float(data.get("initial_entry_price", 0.0))
+        self.open_time = int(data.get("open_time", 0))
+        self.next_avg_price = float(data["next_avg_price"]) if data.get("next_avg_price") is not None else None
+        self.fallback_price = float(data["fallback_price"]) if data.get("fallback_price") is not None else None
+        self.in_position = bool(data.get("in_position", False))
+        self.in_position_papper = bool(data.get("in_position_papper", False))
+        self.is_finished = bool(data.get("is_finished", False))
+        self.pending_avg = bool(data.get("pending_avg", False))
+        self.pending_rolling_tp = bool(data.get("pending_rolling_tp", False))
+        self.pending_peel = bool(data.get("pending_peel", False))
+        self.eff_invest = float(data.get("eff_invest", 0.0))
+        self.tp_placed_at = float(data["tp_placed_at"]) if data.get("tp_placed_at") is not None else None
+        self.tp_current_indent = float(data["tp_current_indent"]) if data.get("tp_current_indent") is not None else None
+        self.tp_price = float(data["tp_price"]) if data.get("tp_price") is not None else None
+        self.is_closing = bool(data.get("is_closing", False))
+
+        if "grid" in data and isinstance(data["grid"], dict):
+            self.grid = copy.deepcopy(data["grid"])
+        if "tp_map" in data and isinstance(data["tp_map"], dict):
+            self.tp_map = copy.deepcopy(data["tp_map"])
+        self.tp_purpose = data.get("tp_purpose", "self")
+        self.avg_free_volume_behavior = data.get("avg_free_volume_behavior", "distribute_remaining")
+        if "trailing_tp_state" in data and isinstance(data["trailing_tp_state"], dict):
+            self.trailing_tp_state = copy.deepcopy(data["trailing_tp_state"])
+        if "trailing_grid_state" in data and isinstance(data["trailing_grid_state"], dict):
+            self.trailing_grid_state = copy.deepcopy(data["trailing_grid_state"])
+        if "recent_closes" in data and isinstance(data["recent_closes"], list):
+            self.recent_closes = copy.deepcopy(data["recent_closes"])
+
+        if "fees" in data:
+            self.fees = float(data["fees"])
+        if "cur_step" in data:
+            self.cur_step = int(data["cur_step"])
+        if "last_grace_period" in data:
+            self.last_grace_period = float(data["last_grace_period"])
+        if "last_closed_volume" in data:
+            self.last_closed_volume = float(data["last_closed_volume"])
+        if "last_closed_avg_price" in data:
+            self.last_closed_avg_price = float(data["last_closed_avg_price"])
+        if "last_closed_timestamp" in data:
+            self.last_closed_timestamp = float(data["last_closed_timestamp"])
+        return self
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any], symbol: str = "", side: str = "") -> "PositionState":
+        """Создает новый инстанс PositionState из словаря."""
+        sym = data.get("symbol", symbol)
+        s_side = data.get("side", side)
+        inst = cls(symbol=sym, side=s_side)
+        inst.update_from_dict(data)
+        return inst
+
             
     def reset(self, ts_ms: float = 0.0):
         """Сброс до дефолта: обнуление всех метрик и флагов."""

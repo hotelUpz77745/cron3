@@ -113,7 +113,7 @@ class RuntimeFsmManager:
     def populate_fsm_from_cache(self, fsm_states: dict):
         """
         Инициализируем PositionState из рантайм-кеша при старте (до REST-синхронизации).
-        Копируем все переменные стейта из JSON.
+        Использует нативный метод десериализации PositionState.update_from_dict.
         """
         for symbol, states in fsm_states.items():
             cache = self.caches.get(symbol, {})
@@ -121,37 +121,10 @@ class RuntimeFsmManager:
                 state = states.get(side)
                 if not state:
                     continue
-                side_cache = cache.get(side, {})
-                if not side_cache:
-                    continue
-                    
-                # Загружаем простые переменные
-                state.total_volume = side_cache.get("total_volume", 0.0)
-                state.avg_entry_price = side_cache.get("avg_entry_price", 0.0)
-                state.pre_avg_price = side_cache.get("pre_avg_price", 0.0)
-                state.initial_entry_price = side_cache.get("initial_entry_price", 0.0)
-                state.open_time = side_cache.get("open_time", 0)
-                state.next_avg_price = side_cache.get("next_avg_price")
-                state.fallback_price = side_cache.get("fallback_price")
-                
-                state.in_position = side_cache.get("in_position", False)
-                state.in_position_papper = side_cache.get("in_position_papper", False)
-                state.is_finished = side_cache.get("is_finished", False)
-                state.pending_avg = side_cache.get("pending_avg", False)
-                state.pending_rolling_tp = side_cache.get("pending_rolling_tp", False)
-                state.eff_invest = float(side_cache.get("eff_invest", 0.0))
-                state.tp_placed_at = side_cache.get("tp_placed_at")
-                state.tp_current_indent = side_cache.get("tp_current_indent")
-                
-                # Копируем словари и списки
-                state.grid = copy.deepcopy(side_cache.get("grid", {}))
-                state.tp_map = copy.deepcopy(side_cache.get("tp_map", {}))
-                state.tp_purpose = side_cache.get("tp_purpose", "self")
-                state.avg_free_volume_behavior = side_cache.get("avg_free_volume_behavior", "distribute_remaining")
-                state.trailing_tp_state = copy.deepcopy(side_cache.get("trailing_tp_state", {}))
-                state.trailing_grid_state = copy.deepcopy(side_cache.get("trailing_grid_state", {}))
-                state.recent_closes = copy.deepcopy(side_cache.get("recent_closes", []))
-                
+                side_cache = cache.get(side)
+                if side_cache and isinstance(side_cache, dict):
+                    state.update_from_dict(side_cache)
+
     # =========================================================================
     # СИНХРОНИЗАЦИЯ ПОСЛЕ ЗАПУСКА СТРИМА И СНЕПШОТОВ
     # =========================================================================
@@ -159,7 +132,7 @@ class RuntimeFsmManager:
     async def sync_with_fsm(self, fsm_states: dict, force_save: bool = False):
         """
         Метод-синхронизатор. Сериализует актуальный PositionState обратно в json-кеш.
-        Работает как "дамп" оперативной памяти на HDD.
+        Работает как "дамп" оперативной памяти на HDD, используя канонический state.to_dict().
         """
         for symbol, cache in self.caches.items():
             sym_states = fsm_states.get(symbol, {})
@@ -174,32 +147,7 @@ class RuntimeFsmManager:
                     cache[side] = {}
                 side_cache = cache[side]
                 
-                # Формируем слепок текущего стейта
-                new_state_snapshot = {
-                    "total_volume": state.total_volume,
-                    "avg_entry_price": state.avg_entry_price,
-                    "pre_avg_price": state.pre_avg_price,
-                    "initial_entry_price": state.initial_entry_price,
-                    "open_time": state.open_time,
-                    "next_avg_price": state.next_avg_price,
-                    "fallback_price": state.fallback_price,
-                    "in_position": state.in_position,
-                    "in_position_papper": state.in_position_papper,
-                    "is_finished": state.is_finished,
-                    "pending_avg": state.pending_avg,
-                    "pending_rolling_tp": state.pending_rolling_tp,
-                    "grid": copy.deepcopy(state.grid),
-                    "tp_map": copy.deepcopy(state.tp_map),
-                    "tp_purpose": state.tp_purpose,
-                    "avg_free_volume_behavior": getattr(state, "avg_free_volume_behavior", "distribute_remaining"),
-                    "trailing_tp_state": copy.deepcopy(getattr(state, "trailing_tp_state", {})),
-                    "trailing_grid_state": copy.deepcopy(getattr(state, "trailing_grid_state", {})),
-                    "recent_closes": state.recent_closes,
-                    "eff_invest": float(getattr(state, "eff_invest", 0.0)),
-                    "tp_placed_at": getattr(state, "tp_placed_at", None),
-                    "tp_current_indent": getattr(state, "tp_current_indent", None),
-                }
-                
+                new_state_snapshot = state.to_dict()
                 changed = False
                 for k, v in new_state_snapshot.items():
                     if side_cache.get(k) != v:

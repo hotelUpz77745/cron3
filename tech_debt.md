@@ -947,5 +947,52 @@ cron3/
    - Полный прогон тестового набора репозитория (`python -m unittest discover tests`):
      **479 тестов пройдено успешно (479 passed, 2 skipped, 0 failures, 0 errors)**!
 
+---
+
+### 8.13. Генеральный Архитектурный План Вылизки Кода Версия 2.0 (22.10.2026)
+
+Реализован полный пакет архитектурных улучшений по итогам ревизии и 9 фундаментальным замечаниям:
+
+1. **Терминологическая Чистота и Семантика (Замечание 1)**:
+   - Ликвидированы архаичные отсылки к HFT: проект строго позиционируется и документируется как **Systematic Trading Bot** (высокоточный системный торговый бот на сетках DCA и адаптивных трейлингах).
+
+2. **Тотальная Чистка Импортов и Ликвидация Скрытых Импортов (Замечание 2)**:
+   - Все скрытые динамические `import` внутри методов и функций подняты в заголовки модулей (`CORE/GRID/fsm_grid_resolver.py`, `CORE/APPLICATOR/side_config_builder.py`, `CORE/trade_cycle_manager.py`, `ANALYTICS/strategy_stats.py`, `CORE/STRATEGY/trailing_system.py`).
+   - Исключены скрытые накладные расходы на вызовы парсера импортов в горячих циклах исполнения.
+
+3. **Domain-Driven OOP и Декомпозиция Красных Монолитов (Замечание 3)**:
+   - `CORE/SERVICES/VOLATILITY/volatility_scanner.py`: чистая математика вынесена в специализированный класс `ScannerIndicators` (`CORE/SERVICES/VOLATILITY/scanner_indicators.py`), размер снижен до 448 строк.
+   - `CORE/STRATEGY/trailing_system.py`: логика оценки токсичности и расчетов отката/задержки вынесена в `ToxicityEngine` (`CORE/STRATEGY/toxicity_engine.py`), размер снижен до 569 строк.
+   - `ANALYTICS/strategy_stats.py`: обработка токсичной обороны выделена в `StrategyToxicDefenseAggregator` (`ANALYTICS/strategy_toxic_defense.py`), а управление итерационными циклами — в `StrategyIterationManager` (`ANALYTICS/iteration_manager.py`), размер снижен до 525 строк.
+
+4. **Асинхронный I/O по Протоколу Самсонова (Замечание 4)**:
+   - Тяжелые блокирующие операции рендеринга графиков Matplotlib PNG вынесены из главного event loop в фоновые потоки `asyncio.to_thread` (`ANALYTICS/report_service.py`: `get_equity_chart_path_async`, `get_coin_chart_path_async`).
+   - `TG/HANDLERS/analytics_router.py` полностью переведен на `await` асинхронных методов генерации графиков, предотвращая заморозку Telegram-бота при интенсивных запросах пользователей.
+
+5. **Очистка Устаревшего Динамического Сайзинга (Замечание 5)**:
+   - Упразднен избыточный флаг `"enabled"` в `CORE/STRATEGY/first_order_regime.py`: режим первого ордера теперь активируется строго на основе настройки `mode != "off"` (`OFF_MODES = {"off", "disabled", "none", "false"}`).
+   - Снят избыточный двойной контроль в конфигурации сайзинга: в системе сохранены только легитимные механизмы `smart_size` и `first_order_weight_regime`.
+
+6. **Инкапсуляция 45 Полей FSM в `PositionState` (Замечание 6)**:
+   - В `POS_FSM/models.py` добавлены канонические методы `to_dict()`, `update_from_dict()`, `from_dict()`.
+   - В `RUNTIME_FSM/runtime_manager.py` ликвидирована ручная пошаговая итерация по 45 полям состояния: синхронизация и сериализация кэша теперь полностью инкапсулированы внутри доменного объекта `PositionState`.
+
+7. **Пайплайн-Декомпозиция `TradeCycleManager.process_signal` (Замечание 7)**:
+   - Монолитный метод разделен на специализированные шаги конвейера:
+     * `SignalValidator` (`CORE/CYCLE/signal_validator.py`): валидация сигналов, проверка статусов монеты, черных списков и идемпотентного барьера `in_position_papper`.
+     * `EntrySizeResolver` (`CORE/CYCLE/entry_size_resolver.py`): расчет начального объема с учетом баланса, риск-менеджмента и `FirstOrderRegimeManager`.
+     * `OrderSubmitter` (`CORE/CYCLE/order_submitter.py`): безопасное размещение первого ордера на бирже с гарантией синхронизации FSM.
+
+8. **Декомпозиция Жизненного Цикла Позиций (Замечание 8)**:
+   - Монолитный цикл `process_symbol_loop` разделен на независимые доменные сущности:
+     * `OpenPositionLifecycleHandler` (`CORE/CYCLE/open_position_lifecycle.py`): сопровождение открытой позиции (усреднения, трейлинги, безубытки, частичные фиксации, трекинг плавающей просадки).
+     * `FinishedPositionHandler` (`CORE/CYCLE/finished_position_handler.py`): обработка закрытия позиций, высвобождение слотов, сброс флагов и утилизация кросс-купольного профита (`CrossSideProfitRecycler`).
+   - `CORE/trade_cycle_manager.py` сокращен до компактного координатора на 534 строки.
+
+9. **Ликвидация Мертвого Кода ADX/DMI и Легковесный TrendCalculator (Замечание 9)**:
+   - Вырезано свыше 330 строк мертвого кода и закомментированных артефактов Wilder smoothing ADX/DMI в `CORE/STRATEGY/trend_size_depender.py` и `CORE/STRATEGY/momentum_engine.py`.
+   - Оставлен компактный, высокоточный математический расчет в `TrendCalculator`.
+
+
 
 

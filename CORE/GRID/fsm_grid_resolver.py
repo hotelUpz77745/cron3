@@ -5,9 +5,10 @@
 
 from typing import Any, Dict, Optional
 
-from consts import FLOAT_ZERO_EPSILON, DEFAULT_GRID_VOLUME_TOLERANCE_PCT
+from consts import FLOAT_ZERO_EPSILON, DEFAULT_GRID_VOLUME_TOLERANCE_PCT, _CFG
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 
 logger = UnifiedLogger("FSMGridResolver")
 
@@ -36,11 +37,7 @@ class FSMGridResolver:
         raw_meta = getattr(strategy, "raw_meta", {}) if hasattr(strategy, "raw_meta") and strategy else {}
         cfg = raw_meta.get("fsm_level_resolution")
         if not cfg or not isinstance(cfg, dict):
-            try:
-                from consts import _CFG
-                cfg = _CFG.get("fsm_level_resolution")
-            except Exception:
-                cfg = None
+            cfg = _CFG.get("fsm_level_resolution") if isinstance(_CFG, dict) else None
         if not cfg or not isinstance(cfg, dict):
             cfg = {
                 "enabled": True,
@@ -55,7 +52,6 @@ class FSMGridResolver:
         Делегат к каноническому менеджеру FirstOrderRegimeManager (Single Source of Truth).
         Исключает дублирование пресетов и скрытые дефолты (Правило 2, 3 Протокола).
         """
-        from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
         return FirstOrderRegimeManager.resolve_static_volume(regime_cfg, side, default_vol)
 
     @classmethod
@@ -109,7 +105,6 @@ class FSMGridResolver:
                     or (getattr(strategy, "overrides", {}) or {}).get("first_order_weight_regime")
                     or (getattr(strategy, "raw_meta", {}) or {}).get("first_order_weight_regime")
                 )
-                from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
                 vol_pct = FirstOrderRegimeManager.resolve_static_volume(
                     regime_cfg=regime_cfg,
                     side=side,
@@ -249,7 +244,6 @@ class FSMGridResolver:
                     getattr(strategy, "active_settings", {}).get("first_order_weight_regime")
                     or getattr(strategy, "raw_meta", {}).get("first_order_weight_regime")
                 ) if strategy else None
-                from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
                 vol_pct = FirstOrderRegimeManager.resolve_static_volume(
                     regime_cfg=regime_cfg,
                     side=getattr(state, "side", "LONG"),

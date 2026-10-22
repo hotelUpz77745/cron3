@@ -206,127 +206,6 @@ class TrendSizeDepender:
         return inv_long, inv_short
 
     @classmethod
-    def evaluate_grade_adx(
-        cls,
-        highs: np.ndarray,
-        lows: np.ndarray,
-        closes: np.ndarray,
-        period: int = 14,
-        threshold_clamp: float = 50.0
-    ) -> int:
-        """
-        Вычисляет силу и направление тренда через ADX/DMI Уайлдера.
-        Направленный импульс: RawScore = ((+DI - -DI) / (+DI + -DI)) * ADX.
-        Нормализуется по threshold_clamp (50.0) и квантуется в целое k in [-16, 16].
-        """
-        n = len(closes)
-        if n < period + 2:
-            return 0
-
-        # 1. True Range и Directional Movement
-        tr = np.zeros(n)
-        plus_dm = np.zeros(n)
-        minus_dm = np.zeros(n)
-
-        for i in range(1, n):
-            h_diff = highs[i] - highs[i - 1]
-            l_diff = lows[i - 1] - lows[i]
-
-            plus_dm[i] = h_diff if (h_diff > 0 and h_diff > l_diff) else 0.0
-            minus_dm[i] = l_diff if (l_diff > 0 and l_diff > h_diff) else 0.0
-
-            tr1 = highs[i] - lows[i]
-            tr2 = abs(highs[i] - closes[i - 1])
-            tr3 = abs(lows[i] - closes[i - 1])
-            tr[i] = max(tr1, tr2, tr3)
-
-        # 2. Сглаживание Уайлдера
-        smooth_tr = np.zeros(n)
-        smooth_pdm = np.zeros(n)
-        smooth_mdm = np.zeros(n)
-
-        smooth_tr[period] = np.sum(tr[1:period + 1])
-        smooth_pdm[period] = np.sum(plus_dm[1:period + 1])
-        smooth_mdm[period] = np.sum(minus_dm[1:period + 1])
-
-        for i in range(period + 1, n):
-            smooth_tr[i] = smooth_tr[i - 1] - (smooth_tr[i - 1] / period) + tr[i]
-            smooth_pdm[i] = smooth_pdm[i - 1] - (smooth_pdm[i - 1] / period) + plus_dm[i]
-            smooth_mdm[i] = smooth_mdm[i - 1] - (smooth_mdm[i - 1] / period) + minus_dm[i]
-
-        # 3. +DI, -DI и DX
-        dx = np.zeros(n)
-        for i in range(period, n):
-            tr_val = smooth_tr[i]
-            if tr_val > 1e-8:
-                p_di = 100.0 * (smooth_pdm[i] / tr_val)
-                m_di = 100.0 * (smooth_mdm[i] / tr_val)
-                di_sum = p_di + m_di
-                if di_sum > 1e-8:
-                    dx[i] = 100.0 * abs(p_di - m_di) / di_sum
-
-        # 4. ADX (сглаживание DX)
-        adx_start = period * 2
-        if n <= adx_start:
-            last_p_di = 100.0 * (smooth_pdm[-1] / max(smooth_tr[-1], 1e-8))
-            last_m_di = 100.0 * (smooth_mdm[-1] / max(smooth_tr[-1], 1e-8))
-            di_diff = last_p_di - last_m_di
-            di_sum = last_p_di + last_m_di
-            raw_score = (di_diff / max(di_sum, 1e-8)) * dx[-1]
-        else:
-            adx = np.zeros(n)
-            adx[adx_start - 1] = np.mean(dx[period:adx_start])
-            for i in range(adx_start, n):
-                adx[i] = (adx[i - 1] * (period - 1) + dx[i]) / period
-
-            last_p_di = 100.0 * (smooth_pdm[-1] / max(smooth_tr[-1], 1e-8))
-            last_m_di = 100.0 * (smooth_mdm[-1] / max(smooth_tr[-1], 1e-8))
-            di_diff = last_p_di - last_m_di
-            di_sum = last_p_di + last_m_di
-            current_adx = adx[-1]
-            raw_score = (di_diff / max(di_sum, 1e-8)) * current_adx
-
-        clamped_score = max(-threshold_clamp, min(threshold_clamp, raw_score))
-        grade = int(round((clamped_score / threshold_clamp) * cls.STEPS_HALF))
-        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
-
-    @classmethod
-    def evaluate_grade_ema_spread(
-        cls,
-        closes: np.ndarray,
-        fast_period: int = 50,
-        slow_period: int = 200,
-        spread_clamp_pct: float = 6.0
-    ) -> int:
-        """
-        Вычисляет процентный спред между быстрой и медленной EMA (Dual EMA Spread).
-        SpreadPct = ((EMA50 - EMA200) / EMA200) * 100.
-        Нормализуется по spread_clamp_pct (6.0%) и квантуется в k in [-16, 16].
-        """
-        n = len(closes)
-        if n < slow_period:
-            fast_period = max(5, int(n * 0.25))
-            slow_period = max(10, int(n * 0.8))
-
-        def calc_ema(arr: np.ndarray, p: int) -> float:
-            alpha = 2.0 / (p + 1.0)
-            ema = float(arr[0])
-            for val in arr[1:]:
-                ema = alpha * float(val) + (1.0 - alpha) * ema
-            return ema
-
-        ema_fast = calc_ema(closes, fast_period)
-        ema_slow = calc_ema(closes, slow_period)
-
-        if ema_slow < 1e-8:
-            return 0
-
-        spread_pct = (ema_fast - ema_slow) / ema_slow * 100.0
-        clamped_spread = max(-spread_clamp_pct, min(spread_clamp_pct, spread_pct))
-        grade = int(round((clamped_spread / spread_clamp_pct) * cls.STEPS_HALF))
-        return max(-cls.STEPS_HALF, min(cls.STEPS_HALF, grade))
-
-    @classmethod
     def evaluate_trend_grade(
         cls,
         trend_mode: str,
@@ -336,44 +215,19 @@ class TrendSizeDepender:
         cfg: Optional[Dict[str, Any]] = None,
     ) -> int:
         """
-        Единый диспетчер оценки тренда.
-        Бросает громкий KeyError при неподдерживаемом режиме (Правило 2).
+        Единый диспетчер оценки тренда (EMA Trend).
+        Бросает KeyError при неподдерживаемом или устаревшем режиме (Правило 2 Протокола).
         """
         cfg = cfg or {}
         mode = trend_mode.lower().strip()
 
-        if mode not in cls.SUPPORTED_MODES:
-            raise KeyError(
-                f"[TrendSizeDepender] Неизвестный trend_mode: '{trend_mode}'. "
-                f"Поддерживаемые режимы: {cls.SUPPORTED_MODES}"
-            )
-
         if mode in ("ema_trend_4h", "dyn_ema_16", "dyn_ema_trend", "ema_trend"):
             return cls.evaluate_grade_ema_trend(closes=closes, cfg=cfg)
 
-        elif mode == "adx_di_4h":
-            period = int(cfg.get("eval_window", 14))
-            threshold_clamp = float(cfg.get("trend_threshold_clamp", 50.0))
-            return cls.evaluate_grade_adx(
-                highs=highs,
-                lows=lows,
-                closes=closes,
-                period=period,
-                threshold_clamp=threshold_clamp
-            )
-
-        elif mode in ("ema_spread_4h", "ema_drift_4h"):
-            fast = int(cfg.get("fast_period", 50))
-            slow = int(cfg.get("slow_period", 200))
-            clamp_pct = float(cfg.get("spread_clamp_pct", 6.0))
-            return cls.evaluate_grade_ema_spread(
-                closes=closes,
-                fast_period=fast,
-                slow_period=slow,
-                spread_clamp_pct=clamp_pct
-            )
-
-        raise KeyError(f"[TrendSizeDepender] Необработанный режим: '{trend_mode}'")
+        raise KeyError(
+            f"[TrendSizeDepender] Неизвестный или устаревший trend_mode: '{trend_mode}'. "
+            f"Разрешены строго: {cls.SUPPORTED_MODES}"
+        )
 
     @classmethod
     def evaluate_grade_ema_trend(

@@ -62,9 +62,9 @@ class FirstOrderRegimeManager:
         """
         Инициализирует менеджер режима первого ордера («Правило кулака Сильной руки»).
         Прямое чтение конфигураций поднято в __init__ по правилу «Работай или упади сразу» (Fail-Fast).
+        Управление активностью осуществляется строго через mode: при mode='off' режим отключен.
         """
         self.regime_cfg: Optional[Dict[str, Any]] = regime_cfg
-        self.enabled: bool = True
         self.mode: Optional[str] = None
         self.presets: Dict[str, Any] = {}
         self.auto_ema_cfg: Optional[Dict[str, Any]] = None
@@ -72,9 +72,9 @@ class FirstOrderRegimeManager:
         if regime_cfg is not None:
             if not isinstance(regime_cfg, dict):
                 raise TypeError(f"[FirstOrderRegimeManager] regime_cfg must be a dict, got {type(regime_cfg)}")
-            if "enabled" in regime_cfg:
-                self.enabled = bool(regime_cfg["enabled"])
-            if "mode" in regime_cfg:
+            if regime_cfg.get("enabled") is False:
+                self.mode = "off"
+            elif "mode" in regime_cfg:
                 raw_mode = regime_cfg["mode"]
                 if raw_mode is not None and str(raw_mode).lower().strip() not in self.OFF_MODES:
                     self.mode = str(raw_mode).lower().strip()
@@ -98,6 +98,8 @@ class FirstOrderRegimeManager:
                 if "timeframe" not in self.auto_ema_cfg:
                     raise ValueError("[FirstOrderRegimeManager] 'timeframe' is required in auto_ema config")
 
+        self.enabled: bool = bool(self.mode and self.mode not in self.OFF_MODES)
+
     @classmethod
     def resolve_static_volume(
         cls,
@@ -108,6 +110,7 @@ class FirstOrderRegimeManager:
         """
         Разрешает базовый объем первого ордера для стороны side (LONG/SHORT)
         на основе статического режима или пресетов стратегии.
+        Управляется значением mode (при mode in OFF_MODES или enabled=False возвращается default_vol).
         """
         if regime_cfg is None:
             return default_vol
@@ -169,10 +172,7 @@ class FirstOrderRegimeManager:
         if not isinstance(regime_cfg, dict):
             return cls.resolve_static_volume(regime_cfg, side, default_vol)
 
-        if regime_cfg.get("enabled") is False:
-            return default_vol
-
-        mode = regime_cfg["mode"]
+        mode = regime_cfg.get("mode")
         if mode is None or str(mode).lower().strip() in cls.OFF_MODES:
             return default_vol
 

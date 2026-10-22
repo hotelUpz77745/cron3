@@ -12,6 +12,7 @@ from typing import Dict, Any, Optional
 
 from c_utils import Utils
 from CORE.GRID.fsm_grid_resolver import FSMGridResolver
+from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
 
 
 class SideConfigBuilder:
@@ -182,7 +183,6 @@ class SideConfigBuilder:
                     )
                     side_data["grid"]["0"]["volume"] = resolved_vol
                 elif side_data["grid"]["0"].get("volume") is None:
-                    from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
                     side_data["grid"]["0"]["volume"] = FirstOrderRegimeManager.resolve_static_volume(
                         regime_cfg=regime_cfg,
                         side=side,

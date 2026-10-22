@@ -20,6 +20,10 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.strategy_registry import StrategyRegistry
+from ANALYTICS.trade_velocity import TradeVelocityEngine
+from ANALYTICS.strategy_toxic_defense import StrategyToxicDefenseAggregator
+from ANALYTICS.iteration_manager import StrategyIterationManager
 
 logger = UnifiedLogger("StrategyStats")
 
@@ -36,29 +40,11 @@ class StrategyStatsEngine:
 
     def get_iteration_cache(self, strat_id: str) -> dict:
         """Retrieves iteration telemetry cache for a specific strategy."""
-        try:
-            cache_file = self.cache_dir / "iteration_state.json"
-            if cache_file.exists():
-                data = json.loads(cache_file.read_text(encoding="utf-8"))
-                return data.get(strat_id, {})
-        except Exception:
-            pass
-        return {}
+        return StrategyIterationManager.get_iteration_cache(self.cache_dir, strat_id)
 
     def save_iteration_cache(self, strat_id: str, state: dict) -> None:
         """Saves iteration telemetry state to persistent cache."""
-        try:
-            cache_file = self.cache_dir / "iteration_state.json"
-            data = {}
-            if cache_file.exists():
-                try:
-                    data = json.loads(cache_file.read_text(encoding="utf-8"))
-                except Exception:
-                    data = {}
-            data[strat_id] = state
-            Utils.atomic_write_json(cache_file, data, indent=4)
-        except Exception as e:
-            logger.error(f"[ANALYTICS] Error saving iteration cache for {strat_id}: {e}")
+        StrategyIterationManager.save_iteration_cache(self.cache_dir, strat_id, state)
 
     def update_strategies_stats(self, global_data: dict) -> None:
         """Рассчитывает и сохраняет изолированную аналитику по стратегиям и лидерборд."""
@@ -69,7 +55,6 @@ class StrategyStatsEngine:
 
         if not getattr(self.manager, "strategy_registry", None):
             try:
-                from CORE.strategy_registry import StrategyRegistry
                 self.manager.strategy_registry = StrategyRegistry()
             except Exception:
                 return
@@ -78,39 +63,9 @@ class StrategyStatsEngine:
         per_coin_global = global_data.get("per_coin", {})
 
         # Aggregation of Global Toxic Defense from Source of Truth Ledgers
-        g_peel_cnt, g_peel_vol, g_peel_pnl = 0, 0.0, 0.0
-        if self.manager.peels_ledger.exists():
-            try:
-                with open(self.manager.peels_ledger, "r", encoding="utf-8") as pf:
-                    r = csv.reader(pf, delimiter=';')
-                    next(r, None)
-                    for row in r:
-                        if len(row) >= 12:
-                            g_peel_cnt += 1
-                            g_peel_vol += float(row[10])
-                            g_peel_pnl += float(row[11])
-            except Exception:
-                pass
-
-        g_rec_cnt, g_rec_vol, g_rec_spent, g_rec_absorbed = 0, 0.0, 0.0, 0.0
-        if self.manager.recycling_ledger.exists():
-            try:
-                with open(self.manager.recycling_ledger, "r", encoding="utf-8") as rf:
-                    r = csv.reader(rf, delimiter=';')
-                    next(r, None)
-                    for row in r:
-                        if len(row) >= 13:
-                            g_rec_cnt += 1
-                            g_rec_vol += float(row[10])
-                            g_rec_absorbed += float(row[11])
-                            g_rec_spent += float(row[12])
-            except Exception:
-                pass
-
-        global_data["toxic_defense"] = {
-            "subgrid_peeling": {"events_count": g_peel_cnt, "total_peeled_usdt": round(g_peel_vol, 4), "locked_micro_pnl_usdt": round(g_peel_pnl, 4)},
-            "cross_recycling": {"events_count": g_rec_cnt, "burned_volume_usdt": round(g_rec_vol, 4), "profit_spent_usdt": round(g_rec_spent, 4), "loss_absorbed_usdt": round(g_rec_absorbed, 4)},
-        }
+        global_data["toxic_defense"] = StrategyToxicDefenseAggregator.aggregate_global_defense(
+            self.manager.peels_ledger, self.manager.recycling_ledger
+        )
 
         for strat_id, strat_cfg in self.manager.strategy_registry.active_strategies.items():
             strat_file = self.manager.stats_dir / f"analytics_{strat_id}.json"
@@ -399,7 +354,6 @@ class StrategyStatsEngine:
                 if not isinstance(getattr(self.manager, "_strat_velocity_engines", None), dict):
                     self.manager._strat_velocity_engines = {}
                 if strat_id not in self.manager._strat_velocity_engines:
-                    from ANALYTICS.trade_velocity import TradeVelocityEngine
                     strat_ledger = self.manager.ledgers_dir / f"trades_ledger_{strat_id}.txt"
                     self.manager._strat_velocity_engines[strat_id] = TradeVelocityEngine(
                         universe_id=strat_id, ledger_path=strat_ledger
@@ -411,69 +365,9 @@ class StrategyStatsEngine:
                 strat_data["trade_velocity"] = 0.0
 
             # Toxic Defense Aggregation for Strategy (Source of Truth: Strategy Ledgers)
-            strat_peel_txt = self.manager.ledgers_dir / f"peels_ledger_{strat_id}.txt"
-            strat_rec_txt = self.manager.ledgers_dir / f"recycling_ledger_{strat_id}.txt"
-
-            # Toxic Defense Aggregation for Strategy (Source of Truth: Strategy Ledgers)
-            strat_peel_txt = self.manager.ledgers_dir / f"peels_ledger_{strat_id}.txt"
-            strat_rec_txt = self.manager.ledgers_dir / f"recycling_ledger_{strat_id}.txt"
-
-            strat_peel_cnt, strat_peel_vol, strat_peel_pnl, strat_peel_loss = 0, 0.0, 0.0, 0.0
-            c_peels, c_recs = {}, {}
-            if strat_peel_txt.exists():
-                try:
-                    with open(strat_peel_txt, "r", encoding="utf-8") as pf:
-                        r = csv.reader(pf, delimiter=';')
-                        next(r, None)
-                        for row in r:
-                            if len(row) >= 12:
-                                s, v, m = row[3], float(row[10]), float(row[11])
-                                l = float(row[13]) if len(row) >= 14 else m
-                                strat_peel_cnt += 1; strat_peel_vol += v; strat_peel_pnl += m; strat_peel_loss += l
-                                cp = c_peels.setdefault(s, {"events_count": 0, "total_peeled_usdt": 0.0, "locked_micro_pnl_usdt": 0.0, "peel_loss_usdt": 0.0})
-                                cp["events_count"] += 1; cp["total_peeled_usdt"] = round(cp["total_peeled_usdt"] + v, 4)
-                                cp["locked_micro_pnl_usdt"] = round(cp["locked_micro_pnl_usdt"] + m, 4); cp["peel_loss_usdt"] = round(cp["peel_loss_usdt"] + l, 4)
-                except Exception:
-                    pass
-            if strat_peel_cnt == 0:
-                strat_peel_cnt = sum(c.get("peeling", {}).get("events_count", 0) for c in strat_per_coin.values())
-                strat_peel_vol = sum(c.get("peeling", {}).get("total_peeled_usdt", 0.0) for c in strat_per_coin.values())
-                strat_peel_pnl = sum(c.get("peeling", {}).get("locked_micro_pnl_usdt", 0.0) for c in strat_per_coin.values())
-                strat_peel_loss = sum(c.get("peeling", {}).get("peel_loss_usdt", 0.0) for c in strat_per_coin.values())
-
-            strat_rec_cnt, strat_rec_vol, strat_rec_spent, strat_rec_absorbed = 0, 0.0, 0.0, 0.0
-            if strat_rec_txt.exists():
-                try:
-                    with open(strat_rec_txt, "r", encoding="utf-8") as rf:
-                        r = csv.reader(rf, delimiter=';')
-                        next(r, None)
-                        for row in r:
-                            if len(row) >= 13:
-                                s, v, l, sp = row[3], float(row[10]), float(row[11]), float(row[12])
-                                strat_rec_cnt += 1; strat_rec_vol += v; strat_rec_absorbed += l; strat_rec_spent += sp
-                                cr = c_recs.setdefault(s, {"events_count": 0, "burned_volume_usdt": 0.0, "profit_spent_usdt": 0.0, "loss_absorbed_usdt": 0.0})
-                                cr["events_count"] += 1; cr["burned_volume_usdt"] = round(cr["burned_volume_usdt"] + v, 4)
-                                cr["loss_absorbed_usdt"] = round(cr["loss_absorbed_usdt"] + l, 4); cr["profit_spent_usdt"] = round(cr["profit_spent_usdt"] + sp, 4)
-                except Exception:
-                    pass
-            if strat_rec_cnt == 0:
-                strat_rec_cnt = sum(c.get("cross_recycling", {}).get("events_count", 0) for c in strat_per_coin.values())
-                strat_rec_vol = sum(c.get("cross_recycling", {}).get("burned_volume_usdt", 0.0) for c in strat_per_coin.values())
-                strat_rec_spent = sum(c.get("cross_recycling", {}).get("profit_spent_usdt", 0.0) for c in strat_per_coin.values())
-                strat_rec_absorbed = sum(c.get("cross_recycling", {}).get("loss_absorbed_usdt", 0.0) for c in strat_per_coin.values())
-
-            for sym, cd in strat_per_coin.items():
-                if sym in c_peels: cd["peeling"] = c_peels[sym]
-                if sym in c_recs: cd["cross_recycling"] = c_recs[sym]
-                pl = abs(min(0.0, float(cd.get("peeling", {}).get("peel_loss_usdt", 0.0))))
-                rl = abs(float(cd.get("cross_recycling", {}).get("loss_absorbed_usdt", cd.get("cross_recycling", {}).get("profit_spent_usdt", 0.0))))
-                r_net = float(cd.get("realized_pnl_net_usdt", cd.get("realized_pnl_usdt", 0.0)))
-                cd["gross_realized_usdt"] = round(r_net + pl + rl + abs(float(cd.get("commission_usdt", 0.0))) - float(cd.get("funding_usdt", 0.0)), 4)
-
-            strat_data["toxic_defense"] = {
-                "subgrid_peeling": {"events_count": strat_peel_cnt, "total_peeled_usdt": round(strat_peel_vol, 4), "peel_loss_usdt": round(strat_peel_loss, 4), "locked_micro_pnl_usdt": round(strat_peel_pnl, 4)},
-                "cross_recycling": {"events_count": strat_rec_cnt, "burned_volume_usdt": round(strat_rec_vol, 4), "profit_spent_usdt": round(strat_rec_spent, 4), "loss_absorbed_usdt": round(strat_rec_absorbed, 4)},
-            }
+            strat_data["toxic_defense"] = StrategyToxicDefenseAggregator.aggregate_strategy_defense(
+                self.manager.ledgers_dir, strat_id, strat_per_coin
+            )
 
             Utils.atomic_write_json(strat_file, strat_data, indent=4)
 
@@ -494,103 +388,8 @@ class StrategyStatsEngine:
         Принудительный сброс итерации стратегии и переход на новый цикл.
         Синхронизирует stats, cache и возвращает метаданные сброса.
         """
-        now_ms = int(time.time() * 1000)
-        strat_stats_path = self.manager.stats_dir / f"analytics_{strategy_id}.json"
-        strat_analytics = {}
-        if strat_stats_path.exists():
-            strat_analytics = Utils.read_json_file(strat_stats_path) or {}
-        else:
-            strat_analytics = self.manager._read_data() or {}
-
-        strat_net = float(strat_analytics.get("net_profit_usdt", 0.0))
-        cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
-        next_iter_idx = cur_iter_idx + 1
-        new_iter_start_net = round(strat_net, 4)
-        new_iter_start_real = round(float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))), 4)
-
-        strat_analytics.update({
-            "iteration_index": next_iter_idx, "iteration_start_net_profit_usdt": new_iter_start_net,
-            "iteration_net_profit_usdt": 0.0, "iteration_start_realized_pnl_usdt": new_iter_start_real,
-            "iteration_realized_pnl_usdt": 0.0, "iteration_start_ts": now_ms,
-            "iteration_peak_net_profit_usdt": 0.0, "iteration_peak_ts": now_ms,
-            "iteration_peak_age_hours": 0.0, "iteration_net_velocity": 0.0,
-        })
-
-        if strat_stats_path.exists():
-            Utils.atomic_write_json(strat_stats_path, strat_analytics, indent=4)
-
-        # Синхронизация CACHE/iteration_state.json
-        try:
-            c_file = self.cache_dir / "iteration_state.json"
-            c_dict = {}
-            if c_file.exists():
-                try:
-                    c_dict = json.loads(c_file.read_text(encoding="utf-8"))
-                except Exception:
-                    c_dict = {}
-            prev_entry = c_dict.get(strategy_id, {})
-            c_dict[strategy_id] = {
-                "iteration_index": next_iter_idx,
-                "iteration_start_net_profit_usdt": new_iter_start_net,
-                "iteration_start_realized_pnl_usdt": new_iter_start_real,
-                "iteration_realized_pnl_usdt": 0.0,
-                "iteration_start_ts": now_ms,
-                "iteration_peak_net_profit_usdt": 0.0,
-                "iteration_peak_ts": now_ms,
-                "historical_peak_net_profit_usdt": prev_entry.get("historical_peak_net_profit_usdt", strat_net),
-                "historical_peak_net_ts": prev_entry.get("historical_peak_net_ts", now_ms),
-                "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
-                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            }
-            Utils.atomic_write_json(c_file, c_dict, indent=4)
-        except Exception as ce:
-            logger.error(f"[{strategy_id}] Error saving iteration cache on manual reset: {ce}")
-
-        return {
-            "strategy_id": strategy_id,
-            "prev_iteration": cur_iter_idx,
-            "new_iteration": next_iter_idx,
-            "base_net": new_iter_start_net,
-            "base_realized": new_iter_start_real,
-        }
+        return StrategyIterationManager.reset_strategy_iteration(self.manager, self.cache_dir, strategy_id)
 
     def reset_global_iteration(self) -> dict:
         """Сброс глобальной итерации портфеля в analytics.json и CACHE/iteration_state.json."""
-        try:
-            g_path = self.manager.log_file
-            g_data = Utils.read_json_file(g_path) or {}
-            g_net = float(g_data.get("net_profit_usdt", 0.0))
-            g_idx = int(g_data.get("iteration_index", 1))
-            next_g_idx = g_idx + 1
-            now_ms = int(time.time() * 1000)
-
-            g_data["iteration_index"] = next_g_idx
-            g_data["iteration_start_net_profit_usdt"] = round(g_net, 4)
-            g_data["iteration_net_profit_usdt"] = 0.0
-            g_data["iteration_start_ts"] = now_ms
-            g_data["iteration_peak_net_profit_usdt"] = 0.0
-            g_data["iteration_peak_ts"] = now_ms
-            g_data["iteration_peak_age_hours"] = 0.0
-            g_data["iteration_net_velocity"] = 0.0
-            Utils.atomic_write_json(g_path, g_data, indent=4)
-
-            c_file = self.cache_dir / "iteration_state.json"
-            c_dict = {}
-            if c_file.exists():
-                try:
-                    c_dict = json.loads(c_file.read_text(encoding="utf-8"))
-                except Exception:
-                    c_dict = {}
-            c_dict["__global__"] = {
-                "iteration_index": next_g_idx,
-                "iteration_start_net_profit_usdt": round(g_net, 4),
-                "iteration_start_ts": now_ms,
-                "iteration_peak_net_profit_usdt": 0.0,
-                "iteration_peak_ts": now_ms,
-                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            }
-            Utils.atomic_write_json(c_file, c_dict, indent=4)
-            return {"iteration_index": next_g_idx, "base_net": round(g_net, 4)}
-        except Exception as ge:
-            logger.error(f"Error resetting global portfolio iteration: {ge}")
-            return {}
+        return StrategyIterationManager.reset_global_iteration(self.manager, self.cache_dir)

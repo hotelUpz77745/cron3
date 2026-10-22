@@ -133,7 +133,7 @@ class AnalyticsRouterHandler:
 
         msg = await callback.message.answer(f"⏳ Генерация графика Net Profit для <code>{current_uid}</code>...", parse_mode="HTML")
         report_svc = self._get_report_service()
-        chart_path = report_svc.get_equity_chart_path(universe_id=current_uid)
+        chart_path = await report_svc.get_equity_chart_path_async(universe_id=current_uid)
         if chart_path and chart_path.exists():
             await msg.delete()
             await callback.message.answer_photo(
@@ -290,7 +290,7 @@ class AnalyticsRouterHandler:
         is_active = symbol in getattr(self.bot_core, "symbols", [])
         detail_msg = report_svc.render_coin_detail_report(current_uid, univ_name, symbol, is_active)
         if detail_msg:
-            chart_path = report_svc.get_coin_chart_path(symbol=symbol, universe_id=current_uid)
+            chart_path = await report_svc.get_coin_chart_path_async(symbol=symbol, universe_id=current_uid)
             if chart_path and chart_path.exists():
                 await callback.message.answer_photo(FSInputFile(str(chart_path)), caption=detail_msg, parse_mode="HTML")
             else:
