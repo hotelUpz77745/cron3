@@ -35,7 +35,8 @@ from TG.keyboards import (
 from TG.states import TGStates
 from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 from TG.template_manager import TemplateManager
-from TG.universe_commands import get_user_universe_id, setup_universe_handlers
+from TG.universe_commands import get_user_universe_id
+from TG.HANDLERS.universe_router import get_universe_router
 
 logger = UnifiedLogger("TGReceiver")
 
@@ -85,7 +86,7 @@ class TelegramReceiver:
 
     def _setup_routes(self):
         """Подключает подсистемы вселенных и все модульные aiogram 3 роутеры."""
-        setup_universe_handlers(self.dp, self.bot_core)
+        self.dp.include_router(get_universe_router(self.bot_core))
 
         self.dp.include_router(get_base_router(self.bot_core))
         self.dp.include_router(get_positions_router(self.bot_core))

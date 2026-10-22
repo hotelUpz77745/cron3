@@ -571,6 +571,190 @@ class AnalyticsReportService:
         )
         return text, buttons
 
+    SIZING_MODE_BADGES = {
+        "static": ("⚡ Static (50/50)", "Фиксированный сайзинг 50/50 (макро-тренд выключен)"),
+        "dyn_ema_16": ("📈 Dyn EMA 16", "EMA Trend 4h 10/30 (шкала 16, коридор 33.3%..66.7%)"),
+    }
+
+    CLOSER_MODE_BADGES = {
+        "classic": ("🎯 Classic", "Фибоначчи кумулятивный трейлинг-тейк"),
+        "fixed": ("📌 Fixed", "Плоский тейк-профит по корзине"),
+        "toxic": ("☣️ Toxic", "Институциональный динамический токсик-выход"),
+        "off": ("⏹ Off", "Авто-закрытие отключено"),
+    }
+
+    def render_universes_list(
+        self,
+        current_uid: str,
+        active_strats: Dict[str, Any],
+        page: int = 1,
+        page_size: int = 6,
+    ) -> Tuple[str, List[List[Dict[str, str]]]]:
+        """
+        Формирует презентационный текст и структуру кнопок для страницы списка вселенных.
+        """
+        engine = getattr(self.analytics_manager, "leaderboard_engine", None)
+        if not engine:
+            from ANALYTICS.leaderboard import LeaderboardEngine
+            engine = LeaderboardEngine(analytics_dir=ANALYTICS_DIR, stats_dir=self.stats_dir)
+
+        universes_meta = {}
+        for sid, scfg in active_strats.items():
+            raw_meta = getattr(scfg, "raw_meta", {}) if not isinstance(scfg, dict) else scfg
+            name = getattr(scfg, "name", sid) if not isinstance(scfg, dict) else scfg.get("name", sid)
+            universes_meta[sid] = {**raw_meta, "name": name, "enabled": True}
+
+        entries = engine.generate_leaderboard(universes_meta) if engine else []
+        if not entries:
+            entries = [
+                {
+                    "universe_id": sid,
+                    "name": getattr(scfg, "name", sid) if not isinstance(scfg, dict) else scfg.get("name", sid),
+                    "net_profit_usdt": 0.0,
+                    "realized_pnl_usdt": 0.0,
+                    "unrealized_pnl_usdt": 0.0,
+                    "max_drawdown_usdt": 0.0,
+                    "total_trades": 0,
+                }
+                for sid, scfg in active_strats.items()
+            ]
+
+        total_entries = len(entries)
+        total_pages = max(1, (total_entries + page_size - 1) // page_size)
+        page = max(1, min(page, total_pages))
+
+        start_i = (page - 1) * page_size
+        end_i = min(start_i + page_size, total_entries)
+        page_entries = entries[start_i:end_i]
+
+        text_lines = [
+            f"🌌 <b>СПИСОК ВСЕЛЕННЫХ (Стр. {page}/{total_pages})</b>",
+            f"Нажмите на купол для настройки сайзинга и автозакрытия.\n",
+        ]
+
+        buttons = []
+        row_buttons = []
+        for item in page_entries:
+            uid = item["universe_id"]
+            scfg = active_strats.get(uid)
+            sz_mode = (
+                getattr(scfg, "sizing_mode", "static")
+                if not isinstance(scfg, dict)
+                else scfg.get("sizing_mode", "static")
+            )
+            cl_mode = (
+                getattr(scfg, "mode", "classic")
+                if not isinstance(scfg, dict)
+                else scfg.get("mode", "classic")
+            )
+            badge = f"[{str(sz_mode).upper()}]"
+
+            mark = "👉 " if uid == current_uid else ""
+            net_str = f"{item.get('net_profit_usdt', 0.0):+.2f}$"
+            text_lines.append(
+                f"{mark}<code>{uid}</code>: <b>Net: {net_str}</b> | Sizing: <code>{sz_mode}</code> | Mode: <code>{cl_mode}</code>"
+            )
+            btn_label = f"⚙️ {str(uid)[:18]} {badge}"
+            row_buttons.append({"text": btn_label, "callback_data": f"use_univ:{uid}:{page}"})
+            if len(row_buttons) == 2:
+                buttons.append(row_buttons)
+                row_buttons = []
+
+        if row_buttons:
+            buttons.append(row_buttons)
+
+        # Строка навигации пагинации
+        nav_row = []
+        if page > 1:
+            nav_row.append({"text": "⬅️ Назад", "callback_data": f"univ_page:{page - 1}"})
+        nav_row.append({"text": f"📄 {page}/{total_pages}", "callback_data": "univ_page:noop"})
+        if page < total_pages:
+            nav_row.append({"text": "Вперед ➡️", "callback_data": f"univ_page:{page + 1}"})
+
+        buttons.append(nav_row)
+        buttons.append([{"text": "🔙 Назад к аналитике", "callback_data": "analytics_back_to_univ"}])
+        return "\n".join(text_lines), buttons
+
+    @classmethod
+    def render_universe_control_panel(
+        cls,
+        uid: str,
+        s_cfg: Dict[str, Any],
+        page: int = 1,
+    ) -> Tuple[str, List[List[Dict[str, str]]]]:
+        """
+        Формирует презентационный текст и кнопки детальной панели купола.
+        """
+        cur_sizing = str(s_cfg.get("trend_size_depender") or s_cfg.get("sizing_mode", "static")).lower().strip()
+        cur_closer = str(s_cfg.get("mode", "classic")).lower().strip()
+        raw_inv = (
+            (s_cfg.get("LONG") or {}).get("invest_size")
+            or (s_cfg.get("SHORT") or {}).get("invest_size")
+            or s_cfg.get("invest_size")
+        )
+        def_inv = (
+            (s_cfg.get("LONG") or {}).get("default_invest_size")
+            or (s_cfg.get("SHORT") or {}).get("default_invest_size")
+            or s_cfg.get("default_invest_size")
+        )
+        symbols = s_cfg.get("symbols")
+        if not symbols:
+            if isinstance(raw_inv, dict):
+                symbols = list(raw_inv.keys())
+            else:
+                symbols = []
+        sym_str = ", ".join(symbols) if symbols else "нет"
+
+        if isinstance(raw_inv, dict):
+            inv_display = ", ".join(f"{k}: {float(v):.0f}$" for k, v in raw_inv.items())
+            if def_inv is not None:
+                inv_display += f" (дефолт: {float(def_inv):.0f}$)"
+        elif raw_inv is not None:
+            inv_display = f"{float(raw_inv):.1f} USDT"
+        elif def_inv is not None:
+            inv_display = f"{float(def_inv):.1f} USDT (дефолт)"
+        else:
+            inv_display = "Не задан (ошибка)"
+
+        sz_badge, sz_desc = cls.SIZING_MODE_BADGES.get(cur_sizing, (cur_sizing, ""))
+        cl_badge, cl_desc = cls.CLOSER_MODE_BADGES.get(cur_closer, (cur_closer, ""))
+
+        text = (
+            f"🐆 <b>УПРАВЛЕНИЕ КУПОЛОМ:</b> <code>{uid}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💰 <b>Инвест-сайз:</b> <code>{inv_display}</code>\n"
+            f"🎯 <b>Пул монет ({len(symbols)}):</b> <code>{sym_str}</code>\n\n"
+            f"⚖️ <b>Сайзинг (trend_size_depender):</b>\n"
+            f"• Текущий режим: <b>{sz_badge}</b>\n"
+            f"• Описание: <i>{sz_desc}</i>\n\n"
+            f"⚙️ <b>Режим автозакрытия (auto-closer):</b>\n"
+            f"• Текущий режим: <b>{cl_badge}</b>\n"
+            f"• Описание: <i>{cl_desc}</i>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"Выберите кнопку ниже для мгновенного переключения:"
+        )
+
+        buttons = []
+        sz_row = []
+        for mode_key in ("static", "dyn_ema_16"):
+            label, _ = cls.SIZING_MODE_BADGES[mode_key]
+            prefix = "✅ " if mode_key == cur_sizing else ""
+            sz_row.append({"text": f"{prefix}{label}", "callback_data": f"set_sizing:{uid}:{mode_key}:{page}"})
+        buttons.append(sz_row)
+
+        cl_row = []
+        for cl_key in ("classic", "fixed", "toxic", "off"):
+            label, _ = cls.CLOSER_MODE_BADGES[cl_key]
+            prefix = "✅ " if cl_key == cur_closer else ""
+            cl_row.append({"text": f"{prefix}{label[:9]}", "callback_data": f"set_closer:{uid}:{cl_key}:{page}"})
+        buttons.append(cl_row)
+
+        buttons.append([
+            {"text": "🔄 Обновить", "callback_data": f"manage_univ:{uid}:{page}"},
+            {"text": "🔙 К списку вселенных", "callback_data": f"back_to_univ_list:{page}"}
+        ])
+        return text, buttons
+
     @staticmethod
     def render_cheat_sheet() -> str:
         """Возвращает шпаргалку (Cheat Sheet) по метрикам аналитики."""
