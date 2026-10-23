@@ -30,3 +30,7 @@ class TGStates(StatesGroup):
     waiting_for_autoclose_pos_inc = State()
     waiting_for_autoclose_neg_th = State()
     waiting_for_autoclose_neg_inc = State()
+    waiting_for_size_side_choice = State()
+    waiting_for_size_coin_choice = State()
+    waiting_for_size_value_input = State()
+    waiting_for_default_size_value_input = State()
