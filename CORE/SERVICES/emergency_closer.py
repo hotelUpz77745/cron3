@@ -440,7 +440,7 @@ class EmergencyCloserService:
                 strat_cfg = bot_core.strategy_registry.active_strategies.get(strategy_id)
             if not strat_cfg and hasattr(bot_core.strategy_registry, "get_strategy"):
                 getter = getattr(bot_core.strategy_registry, "get_strategy")
-                if callable(getter) and type(getter).__name__ not in ("MagicMock", "Mock", "AsyncMock"):
+                if callable(getter):
                     try:
                         res = getter(strategy_id)
                         if res and not inspect.iscoroutine(res):

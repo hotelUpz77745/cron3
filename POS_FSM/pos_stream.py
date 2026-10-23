@@ -14,9 +14,8 @@ import aiohttp
 import json
 from typing import Optional, Callable, Set
 from POS_FSM.pos_stream_monitor import PositionMonitor
-from c_utils import Utils
 from c_log import UnifiedLogger
-from consts import MOCK_MODE
+
 
 logger = UnifiedLogger("FSM_Stream")
 IS_SHOW_SIGNAL = False
@@ -226,22 +225,8 @@ class PositionStream:
     async def start(self):
         self._external_stop = False
 
-        # Если ключи API не заданы или активирован MOCK_MODE / MOCK_EXCHANGE, работаем в режиме симулятора
-        env_mock = os.getenv("MOCK_EXCHANGE")
-        force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
-        if not self.api_key or force_mock:
-            logger.info("[MASTER WS] Operating in MOCK mode. Bypassing Binance private WS connection.")
-            if self.client and self.target_symbols:
-                with contextlib.suppress(Exception):
-                    await self.monitor.sync_from_rest(self.client, list(self.target_symbols))
-            self.ready = True
-            self.is_connected = True
-            try:
-                while not self._external_stop and not self.stop_flag():
-                    await asyncio.sleep(1.0)
-            finally:
-                self.ready = False
-                self.is_connected = False
+        if not self.api_key:
+            logger.error("[MASTER WS] Cannot connect to Binance Position Stream: API_KEY is missing.")
             return
 
         try:

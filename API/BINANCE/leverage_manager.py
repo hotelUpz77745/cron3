@@ -19,9 +19,6 @@ class LeverageManager:
 
     @staticmethod
     async def set_leverage(client: Any, symbol: str, leverage: int) -> APIResponse:
-        if client.is_mock_mode and client._mock_provider:
-            return await client._mock_provider.set_leverage(symbol, leverage)
-
         return await client._request(
             "POST",
             client.set_leverage_url,
@@ -35,9 +32,6 @@ class LeverageManager:
 
     @staticmethod
     async def set_margin_type(client: Any, symbol: str, margin_type: str) -> APIResponse:
-        if client.is_mock_mode and client._mock_provider:
-            return await client._mock_provider.set_margin_type(symbol, margin_type)
-
         return await client._request(
             "POST",
             client.set_margin_url,
@@ -52,9 +46,6 @@ class LeverageManager:
     @staticmethod
     async def get_leverage_bracket(client: Any, symbol: Optional[str] = None) -> APIResponse:
         """GET /fapi/v1/leverageBracket - возвращает спецификацию брекетов плеч."""
-        if client.is_mock_mode and client._mock_provider:
-            return await client._mock_provider.get_leverage_bracket(symbol)
-
         params = {"recvWindow": 20000}
         if symbol:
             params["symbol"] = symbol.upper()

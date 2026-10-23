@@ -29,27 +29,6 @@ class IncomeCollector:
         start_time: Optional[int] = None,
         end_time: Optional[int] = None,
     ) -> Optional[Dict[str, float]]:
-        if client.is_mock_mode and client._mock_provider:
-            if client._mock_provider.simulate_analytics_network_error or os.getenv("MOCK_ANALYTICS_NETWORK_ERROR") == "1":
-                return None
-            inc_res = await client._mock_provider.fetch_income(
-                symbol=symbol,
-                start_time=start_time,
-                end_time=end_time,
-            )
-            if not inc_res.success:
-                return None
-            records = inc_res.data or []
-            gross = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "REALIZED_PNL")
-            comm = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "COMMISSION")
-            fund = sum(float(r.get("income", 0.0)) for r in records if r.get("incomeType") == "FUNDING_FEE")
-            return {
-                "gross_pnl": gross,
-                "commission": comm,
-                "funding_fee": fund,
-                "net_pnl": gross + comm + fund,
-            }
-
         trade_params = {
             "symbol": symbol,
             "recvWindow": 20000,

@@ -141,7 +141,7 @@
     ],
     "auto_closing": {
         "positive": {
-            "scale_money": 1.25,
+            "scale_money": 1.0,
             "_desc_scale_money": "Канонический статический масштаб 1.25 порогов AutoCloser в USDT.",
             "min_guaranteed_profit_usdt": 5.0,
             "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",

@@ -154,15 +154,11 @@ class TelegramReceiver:
 
     def _render_analytics_big_board(self, user_id: int):
         current_uid, univ_name, _, _ = self._get_universe_analytics(user_id)
-        report_svc = None
-        if hasattr(self.bot_core, "analytics") and not hasattr(self.bot_core.analytics, "_mock_return_value"):
-            report_svc = getattr(self.bot_core.analytics, "report_service", None)
-            if hasattr(report_svc, "_mock_return_value"):
-                report_svc = None
+        report_svc = getattr(self.bot_core.analytics, "report_service", None) if hasattr(self.bot_core, "analytics") else None
         if not report_svc:
             report_svc = AnalyticsReportService()
         active_strats = {}
-        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry and not hasattr(self.bot_core.strategy_registry, "_mock_return_value"):
+        if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
             active_strats = self.bot_core.strategy_registry.get_active_strategies()
         text, buttons = report_svc.render_portfolio_big_board(current_uid, univ_name, active_strats=active_strats)
         kb = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=b["text"], callback_data=b["callback_data"]) for b in r] for r in buttons])
@@ -170,11 +166,7 @@ class TelegramReceiver:
 
     def _render_universe_analytics(self, user_id: int, target_uid: Optional[str] = None):
         current_uid, univ_name, _, _ = self._get_universe_analytics(user_id, target_uid=target_uid)
-        report_svc = None
-        if hasattr(self.bot_core, "analytics") and not hasattr(self.bot_core.analytics, "_mock_return_value"):
-            report_svc = getattr(self.bot_core.analytics, "report_service", None)
-            if hasattr(report_svc, "_mock_return_value"):
-                report_svc = None
+        report_svc = getattr(self.bot_core.analytics, "report_service", None) if hasattr(self.bot_core, "analytics") else None
         if not report_svc:
             report_svc = AnalyticsReportService()
         text, buttons = report_svc.render_universe_analytics_card(current_uid, univ_name)
@@ -182,11 +174,7 @@ class TelegramReceiver:
         return text, kb
 
     def _get_portfolio_all_analytics_data(self):
-        agg = None
-        if hasattr(self.bot_core, "analytics") and not hasattr(self.bot_core.analytics, "_mock_return_value"):
-            agg = getattr(self.bot_core.analytics, "portfolio_aggregator", None)
-            if hasattr(agg, "_mock_return_value"):
-                agg = None
+        agg = getattr(self.bot_core.analytics, "portfolio_aggregator", None) if hasattr(self.bot_core, "analytics") else None
         if not agg:
             agg = PortfolioAggregator(analytics_manager=getattr(self.bot_core, "analytics", None))
         return agg.get_portfolio_all_data()

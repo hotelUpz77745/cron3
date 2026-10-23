@@ -195,7 +195,7 @@ class StrategyConfigParser:
         elif "start_balance_usdt" in raw_meta:
             start_balance_usdt = float(raw_meta["start_balance_usdt"])
         else:
-            start_balance_usdt = 434.0
+            start_balance_usdt = 0.0
         analytics_cfg = {"start_balance_usdt": start_balance_usdt}
 
         sg_override = (

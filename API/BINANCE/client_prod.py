@@ -23,8 +23,6 @@ except ImportError:
     API_CONCURRENT_RATE_LIMIT_SEC = 0.02
 from c_log import UnifiedLogger
 from API.BINANCE.validator import OrderValidator, APIResponse
-from consts import MOCK_MODE
-from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
 from API.BINANCE.leverage_manager import LeverageManager
 from API.BINANCE.income_collector import IncomeCollector, KlineFetcher
 
@@ -35,34 +33,19 @@ class BinanceClient:
     """
     Асинхронный клиент Binance Futures для боевой торговли (Production).
     Все операции подписываются HMAC SHA256 и отправляются на боевой endpoint Binance.
-    При пустых ключах или MOCK_EXCHANGE=1 автоматически подключается MockExchangeProvider.
     """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         api_secret: Optional[str] = None,
-        mock_mode: Optional[bool] = None,
+        mock_provider: Optional[Any] = None,
     ):
         self.api_key = api_key
         self.api_secret = api_secret
         self.validator = OrderValidator(logger)
-
-        if mock_mode is not None:
-            self.is_mock_mode = bool(mock_mode)
-        else:
-            env_mock = os.getenv("MOCK_EXCHANGE")
-            force_mock = False if env_mock == "0" else (True if env_mock == "1" else MOCK_MODE)
-            self.is_mock_mode = (
-                not self.api_key
-                or not self.api_secret
-                or force_mock
-            )
-        if self.is_mock_mode:
-            self._mock_provider = get_default_mock_exchange()
-            logger.info("[BINANCE_API_PROD] Running in MOCK EXCHANGE mode (credentials empty, app.json mock_mode or MOCK_EXCHANGE=1).")
-        else:
-            self._mock_provider = None
+        self._mock_provider = mock_provider
+        self.is_mock_mode = bool(mock_provider)
 
         self.create_order_url = "https://fapi.binance.com/fapi/v1/order"
         self.cancel_order_url = self.create_order_url
