@@ -137,6 +137,7 @@ class CoinsRouterHandler:
             f"<i>Выберите действие в меню:</i>\n"
             f"➕ <b>Добавить монету</b> — ввод тикера (старт на 1-м сигнале)\n"
             f"🗑️ <b>Удалить монету</b> — удаление тикера из купола\n"
+            f"💰 <b>Сайзы (Invest Size)</b> — управление размерами позиций\n"
             f"🔙 <b>Назад</b> — возврат в главное меню"
         )
         await callback.message.answer(text, reply_markup=get_set_coins_keyboard(), parse_mode="HTML")
