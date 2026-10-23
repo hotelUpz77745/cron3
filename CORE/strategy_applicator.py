@@ -158,25 +158,6 @@ class StrategyApplicator:
                                 elif any_cand is None:
                                     any_cand = c_data
 
-                if not active_cand:
-                    # Fallback к бэкапу рантайма, если в куполах пусто
-                    backup_latest = BASE_DIR / "CACHE" / "backups" / "runtime_backup_latest.json"
-                    if backup_latest.exists():
-                        try:
-                            b_raw = Utils.read_json_file(backup_latest) or {}
-                            strategies_pool = b_raw.get("strategies", b_raw) if isinstance(b_raw, dict) else {}
-                            for d_name, d_syms in strategies_pool.items():
-                                if isinstance(d_syms, dict) and symbol.lower() in d_syms:
-                                    cand_b = d_syms[symbol.lower()]
-                                    if isinstance(cand_b, dict) and any(
-                                        isinstance(s_val, dict) and (s_val.get("in_position") or abs(Utils.safe_float(s_val.get("total_volume"), 0.0)) > 0.0)
-                                        for s_val in cand_b.values()
-                                    ):
-                                        active_cand = cand_b
-                                        logger.info(f"[{symbol}] Found active position state in backup '{backup_latest.name}'. Migrating FSM state!")
-                                        break
-                        except Exception:
-                            pass
 
                 if active_cand:
                     existing = active_cand
