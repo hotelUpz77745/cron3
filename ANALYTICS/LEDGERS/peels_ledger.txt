@@ -1,1 +1,0 @@
-Id;Symbol;Side;Time;Volume;Price;Realized PnL;Balance

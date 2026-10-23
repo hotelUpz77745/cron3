@@ -4,10 +4,15 @@
 # ============================================================
 
 import json
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
 
 from consts import CACHE_DIR
 from c_log import UnifiedLogger

@@ -8,8 +8,15 @@ ROLE: Проверка условий и оркестрация глобальн
 """
 
 import copy
+import sys
 import time
+from pathlib import Path
 from typing import Any
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 from consts import GLOBAL_ANALYTICS_JSON
 from c_log import UnifiedLogger
 from CORE.STRATEGY.trailing_system import ToxicityEngine

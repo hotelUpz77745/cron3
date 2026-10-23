@@ -10,9 +10,16 @@ ROLE: Сервис автоматического закрытия позици�
 import asyncio
 import copy
 import json
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional, Dict
+
+_ROOT = Path(__file__).resolve().parent.parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
