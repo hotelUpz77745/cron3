@@ -57,20 +57,27 @@ class ReconstructionService:
                     self.manager._write_data(data)
 
             try:
-                try:
-                    with open("CFG/app.json", "r", encoding="utf-8") as f:
-                        app_cfg = json.load(f)
-                        active_strategies = app_cfg.get("active_strategies", {})
-                        if active_strategies:
-                            active_symbols = []
-                            for sdata in active_strategies.values():
-                                if sdata.get("enabled", False):
-                                    active_symbols.extend(Utils.extract_strategy_symbols(sdata))
-                        else:
-                            syms = app_cfg.get("symbols", [])
-                            active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
-                except Exception:
-                    active_symbols = []
+                active_symbols = []
+                if self.manager.strategy_registry and hasattr(self.manager.strategy_registry, "get_all_active_symbols"):
+                    try:
+                        active_symbols = list(self.manager.strategy_registry.get_all_active_symbols())
+                    except Exception:
+                        active_symbols = []
+
+                if not active_symbols:
+                    try:
+                        with open("CFG/app.json", "r", encoding="utf-8") as f:
+                            app_cfg = json.load(f)
+                            active_strategies = app_cfg.get("active_strategies", {})
+                            if isinstance(active_strategies, dict):
+                                for sdata in active_strategies.values():
+                                    if isinstance(sdata, dict) and sdata.get("enabled", False):
+                                        active_symbols.extend(Utils.extract_strategy_symbols(sdata))
+                            else:
+                                syms = app_cfg.get("symbols", [])
+                                active_symbols = list(syms.keys()) if isinstance(syms, dict) else list(syms)
+                    except Exception as ce:
+                        logger.error(f"[ANALYTICS] Error reading active_symbols from app.json: {ce}")
 
                 ledger_symbols = []
                 try:
@@ -85,7 +92,7 @@ class ReconstructionService:
                 except Exception:
                     pass
 
-                tracked_symbols = set(active_symbols + ledger_symbols)
+                tracked_symbols = set(active_symbols + ledger_symbols + list(data.get("per_coin", {}).keys()))
 
                 # Fetch income starting strictly from first_trade_ts
                 income_records = []
@@ -186,6 +193,10 @@ class ReconstructionService:
                 current_margins = {}
                 for sym in tracked_symbols:
                     rt_path = DATA_DIR / "runtime" / f"{sym.lower()}.json"
+                    if not rt_path.exists():
+                        sub_matches = list((DATA_DIR / "runtime").glob(f"*/{sym.lower()}.json"))
+                        if sub_matches:
+                            rt_path = sub_matches[0]
                     vol = 0.0
                     if rt_path.exists():
                         try:

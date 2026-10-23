@@ -135,8 +135,7 @@ cron3/
 │   │   ├── income_collector.py      # Сборщик комиссий и реализованного PnL
 │   │   ├── historical_trades.py     # Выгрузка архивных сделок
 │   │   ├── validator.py             # Валидация точности лотов и минимальной нотиональной стоимости
-│   │   ├── public.py                # Публичные REST-эндпоинты биржи (klines, exchangeInfo)
-│   │   └── mock_exchange_provider.py# Имитатор биржевого шлюза
+│   │   └── public.py                # Публичные REST-эндпоинты биржи (klines, exchangeInfo)
 │   │
 │   └── IPC/
 │       └── streamer_hub.py          # IPCStreamerHub: межпроцессный обмен котировками через сокеты/память

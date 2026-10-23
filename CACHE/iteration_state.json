@@ -1,0 +1,23 @@
+{
+    "u17_stephensonE__trailing_ratchet": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_start_ts": 1792715030419,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1792715030419,
+        "historical_peak_net_profit_usdt": 0.0,
+        "historical_peak_net_ts": null,
+        "historical_max_drawdown_usdt": 0.0,
+        "updated_at": "2026-10-23 00:46:03 UTC"
+    },
+    "__global__": {
+        "iteration_index": 1,
+        "iteration_start_net_profit_usdt": 0.0,
+        "iteration_start_ts": 1792715030419,
+        "iteration_peak_net_profit_usdt": 0.0,
+        "iteration_peak_ts": 1792715030419,
+        "updated_at": "2026-10-23 00:45:53 UTC"
+    }
+}

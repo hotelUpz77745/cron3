@@ -25,7 +25,8 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from API.BINANCE.client_prod import BinanceClient
-from API.BINANCE.mock_exchange_provider import get_default_mock_exchange
+import shutil
+import tempfile
 from CORE._utils import Utils
 from CORE.bot import BotCore
 from CORE.strategy_registry import StrategyRegistry, StrategyConfig
@@ -48,8 +49,9 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
     """Глубокий верификационный аудит архитектурных инвариантов и протокола Самсонова Н."""
 
     async def asyncSetUp(self):
-        self.mock_provider = get_default_mock_exchange()
-        self.mock_provider.reset_to_default_state()
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="test_invariants_"))
+        self.tmp_runtime_dir = self.temp_dir / "runtime"
+        self.tmp_runtime_dir.mkdir(parents=True, exist_ok=True)
         self.registry = StrategyRegistry()
 
         from consts import TG_ALLOWED_USERS
@@ -58,7 +60,8 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         self.test_chat = Chat(id=user_id, type="private")
 
     async def asyncTearDown(self):
-        self.mock_provider.reset_to_default_state()
+        if hasattr(self, "temp_dir") and self.temp_dir.exists():
+            shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     # =========================================================================
     # 1. ТЕСТИРОВАНИЕ ВСЕХ ТГ-КНОПОК ЧЕРЕЗ ООП-РОУТЕРЫ
@@ -213,6 +216,11 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         mock_bot.is_paused = False
         mock_bot.strategy_registry = self.registry
         mock_bot.runtime_manager = MagicMock()
+        mock_bot.analytics = MagicMock()
+        mock_bot.client = MagicMock()
+        mock_bot.client.cancel_all_orders = AsyncMock()
+        mock_bot.client.fetch_positions = AsyncMock(return_value=[])
+        mock_bot.reset_strategy_iteration = AsyncMock(return_value={"strategy_id": "u17_stephensonE__trailing_ratchet", "new_iteration": 2})
 
         now = 1000.0
         mock_bot.current_sim_time = now
@@ -263,9 +271,9 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
     # 5. РЕСТОРАЦИЯ РАНТАЙМОВ И СИНХРОНИЗАЦИЯ КЭША С FSM
     # =========================================================================
     async def test_runtime_cache_fsm_synchronization_and_restoration(self):
-        """Проверка: состояние FSM точно сериализуется в кэш и восстанавливается обратно."""
         rm = RuntimeFsmManager(strategy_registry=self.registry)
-        symbol = "MOCK_SYNC_USDT"
+        rm.runtime_dir = self.tmp_runtime_dir
+        symbol = "TEST_SYNC_USDT"
         rm.caches[symbol] = {}
 
         st = PositionState(symbol=symbol, side="LONG")
@@ -408,6 +416,11 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         mock_bot = BotCore()
         mock_bot.strategy_registry = self.registry
         mock_bot.runtime_manager = MagicMock()
+        mock_bot.analytics = MagicMock()
+        mock_bot.client = MagicMock()
+        mock_bot.client.cancel_all_orders = AsyncMock()
+        mock_bot.client.fetch_positions = AsyncMock(return_value=[])
+        mock_bot.reset_strategy_iteration = AsyncMock(return_value={"strategy_id": "u17_stephensonE__trailing_ratchet", "new_iteration": 2})
         symbols = ["ICNTUSDT", "AVAUSDT"]
         mock_bot.symbols = symbols
 

@@ -201,25 +201,31 @@ class CoinCardFormatter:
             cfg_start = float(strat_cfg.get("start_balance_usdt", ANALYTICS_START_BALANCE_USDT)) if isinstance(strat_cfg, dict) else float(ANALYTICS_START_BALANCE_USDT)
             st_bal = _sf(data.get("start_balance_usdt", cfg_start))
 
-            lines = [f"<b>🏆 Рейтинг монет [Купол: {clean_name}] ({title})</b>\n"]
+            lines = [
+                f"<b>🏆 Рейтинг монет • {clean_name}</b>",
+                f"<i>Сортировка: {title}</i>",
+                f"<i>💡 Realized: чистый итог (Тейки − Пилинг − Ресайкл)</i>",
+                "",
+            ]
             for i, (sym, cdata) in enumerate(sorted_coins, 1):
+                realized_net = round(_sf(cdata.get("realized_pnl_net_usdt", 0)), 2)
+                tr = cdata.get("total_trades", cdata.get("trades", 0))
+
                 if criterion == "rec":
                     rec = _sf(cdata.get("recovery_factor", 0.0))
                     net = _sf(cdata.get("net_profit_usdt", 0.0))
                     dd = abs(_sf(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
-                    val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i>"
+                    val_str = f"Rec: <b>{rec:.2f}</b> <i>(Net: {net:+.2f} / |DD|: {dd:.2f})</i> • {tr} сд. | Realized: <b>{realized_net:+.2f}$</b>"
                 elif criterion == "abs_rec":
                     abs_rec = _sf(cdata.get("abs_recovery_factor", 0.0))
                     peak = _sf(cdata.get("peak_net_profit_usdt", max(0.0, _sf(cdata.get("net_profit_usdt", 0.0)))))
                     dd = abs(_sf(cdata.get("max_drawdown_net_usdt", cdata.get("max_drawdown", 0.0))))
-                    val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик Net: {peak:+.2f} / |DD|: {dd:.2f})</i>"
+                    val_str = f"Abs Rec: <b>{abs_rec:.2f}</b> <i>(Пик Net: {peak:+.2f} / |DD|: {dd:.2f})</i> • {tr} сд. | Realized: <b>{realized_net:+.2f}$</b>"
                 else:
                     net_profit = round(_sf(cdata.get("net_profit_usdt", 0)), 2)
-                    realized_net = round(_sf(cdata.get("realized_pnl_net_usdt", 0)), 2)
-                    tr = cdata.get("total_trades", cdata.get("trades", 0))
                     c_roi = round(net_profit / st_bal * 100.0, 2) if st_bal > 0 else 0.0
                     c_roi_sign = "+" if c_roi > 0 else ""
-                    val_str = f"{net_profit:+.2f} USDT ({c_roi_sign}{c_roi:.2f}% ROI) <i>({tr} сд., Realized: {realized_net:+.2f})</i>"
+                    val_str = f"Net: <b>{net_profit:+.2f} USDT</b> ({c_roi_sign}{c_roi:.2f}% ROI) • {tr} сд. | Realized: <b>{realized_net:+.2f}$</b>"
 
                 is_act = cdata.get("is_active_symbol", cdata.get("is_active", True))
                 active_badge = "" if is_act else " ⏸<i>[неактивна]</i>"
@@ -229,14 +235,22 @@ class CoinCardFormatter:
                 coin_rec = cdata.get("cross_recycling", {})
                 p_loss = abs(_sf(coin_peel.get("peel_loss_usdt", 0.0)))
                 r_loss = abs(_sf(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
-                realized_net = round(_sf(cdata.get("realized_pnl_net_usdt", 0)), 2)
                 gross_tp = _sf(cdata.get("gross_realized_usdt", 0.0))
                 if gross_tp <= 0.0:
                     gross_tp = realized_net + p_loss + r_loss
                 gross_tp = max(0.0, round(gross_tp, 2))
 
-                lines.append(f"{medal} <b>{sym}</b>{active_badge}: {val_str}")
-                lines.append(f"   └ 🛡️ TP: <b>+{gross_tp:.2f}$</b> | Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b>")
+                has_defense = (p_loss > 0.0 or r_loss > 0.0)
+                branch = "├" if has_defense else "└"
+
+                lines.append(f"{medal} <b>{sym}</b>{active_badge}")
+                lines.append(f"   {branch} {val_str}")
+                if has_defense:
+                    lines.append(f"   └ 🛡️ Защита: Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b> <i>(Тейки: +{gross_tp:.2f}$)</i>")
+                lines.append("")
+
+            if lines and lines[-1] == "":
+                lines.pop()
 
             switch_buttons = [
                 [
