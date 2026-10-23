@@ -38,9 +38,39 @@ def get_set_coins_keyboard() -> ReplyKeyboardMarkup:
             KeyboardButton(text="🗑️ Удалить монету"),
         ],
         [
+            KeyboardButton(text="💰 Сайзы (Invest Size)"),
             KeyboardButton(text="🔙 Назад"),
         ],
     ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_coins_sizes_menu_keyboard() -> ReplyKeyboardMarkup:
+    """Возвращает клавиатуру меню управления размерами инвестиций (Invest Size)."""
+    keyboard = [
+        [
+            KeyboardButton(text="🟢 Настроить LONG"),
+            KeyboardButton(text="🔴 Настроить SHORT"),
+        ],
+        [
+            KeyboardButton(text="⚖️ Обе стороны (BOTH)"),
+            KeyboardButton(text="🌐 Базовый дефолт"),
+        ],
+        [
+            KeyboardButton(text="🔙 Назад в Set Coins"),
+        ],
+    ]
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def get_dynamic_coins_keyboard(symbols: List[str], back_text: str = "🔙 Назад к сайзам") -> ReplyKeyboardMarkup:
+    """Динамически формирует Reply-клавиатуру со списком монет купола (по 2 монеты в ряд)."""
+    keyboard = []
+    sorted_symbols = sorted(list(set(symbols)))
+    for i in range(0, len(sorted_symbols), 2):
+        row = [KeyboardButton(text=s) for s in sorted_symbols[i:i + 2]]
+        keyboard.append(row)
+    keyboard.append([KeyboardButton(text=back_text)])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
