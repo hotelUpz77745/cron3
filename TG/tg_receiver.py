@@ -24,6 +24,7 @@ from c_log import UnifiedLogger
 from TG.HANDLERS.analytics_router import get_analytics_router
 from TG.HANDLERS.base_router import get_base_router
 from TG.HANDLERS.coins_router import get_coins_router
+from TG.HANDLERS.coins_size_router import get_coins_size_router
 from TG.HANDLERS.positions_router import get_positions_router
 from TG.HANDLERS.screeners_router import get_screeners_router
 from TG.keyboards import (
@@ -93,6 +94,7 @@ class TelegramReceiver:
         self.dp.include_router(get_positions_router(self.bot_core))
         self.dp.include_router(get_analytics_router(self.bot_core))
         self.dp.include_router(get_coins_router(self.bot_core, self.template_manager))
+        self.dp.include_router(get_coins_size_router(self.bot_core))
         self.dp.include_router(get_screeners_router(self.bot_core))
 
     # =========================================================
