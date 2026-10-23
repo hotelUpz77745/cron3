@@ -18,7 +18,7 @@
         "price_stream_ready_timeout_sec": 10.0,
         "price_stream_snapshot_timeout_sec": 5.0,
         "pos_stream_connect_timeout_sec": 5.0,
-        "auto_start": false
+        "auto_start": true
     },
     "paths": {
         "shared_api_dir": "./API"
