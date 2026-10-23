@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from ANALYTICS.equity_trajectory import EquityTrajectoryBuilder
+
 try:
     import numpy as np
     import matplotlib
@@ -191,114 +193,30 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
             pass
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    times = []
-    net_profits = []
 
-    if not raw_trades:
-        first_t = start_dt if start_dt else (now - timedelta(hours=3))
-        times = [first_t, now]
-        net_profits = [0.0, net_profit_final]
-    else:
-        n = len(raw_trades)
-        peak_bal = float(data.get("peak_balance_usdt", start_balance)) if data else start_balance
-        min_bal = float(data.get("min_balance_usdt", start_balance)) if data else start_balance
-        peak_np = float(data.get("peak_net_profit_usdt", max(0.0, peak_bal - start_balance)))
-        trough_np = min(0.0, min_bal - start_balance)
+    peak_bal = float(data.get("peak_balance_usdt", start_balance)) if data else start_balance
+    min_bal = float(data.get("min_balance_usdt", start_balance)) if data else start_balance
+    peak_np = float(data.get("peak_net_profit_usdt", max(0.0, peak_bal - start_balance)))
+    trough_np = min(0.0, min_bal - start_balance)
 
-        # 1. Поиск индекса пика
-        peak_ts_ms = data.get("peak_net_ts", data.get("iteration_peak_ts")) if data else None
-        if peak_ts_ms:
-            peak_idx = min(range(n), key=lambda i: abs(raw_trades[i][0].timestamp() * 1000 - peak_ts_ms))
-        else:
-            peak_idx = 0
+    peak_ts_ms = data.get("peak_net_ts", data.get("iteration_peak_ts")) if data else None
+    peak_dt = datetime.fromtimestamp(peak_ts_ms / 1000.0, tz=timezone.utc).replace(tzinfo=None) if peak_ts_ms else None
 
-        # 2. Поиск индекса дна просадки
-        min_bal_ts_ms = data.get("min_balance_ts") if data else None
-        if min_bal_ts_ms:
-            trough_idx = min(range(n), key=lambda i: abs(raw_trades[i][0].timestamp() * 1000 - min_bal_ts_ms))
-        else:
-            min_pnl = min(p for _, p in raw_trades)
-            worst_pnl_idx = [i for i, (_, p) in enumerate(raw_trades) if p == min_pnl][0]
-            trough_idx = worst_pnl_idx
+    min_bal_ts_ms = data.get("min_balance_ts") if data else None
+    trough_dt = datetime.fromtimestamp(min_bal_ts_ms / 1000.0, tz=timezone.utc).replace(tzinfo=None) if min_bal_ts_ms else None
 
-        # Формирование хронологических опорных точек (anchors)
-        anchors = [(0, 0.0)]
-        has_peak = (peak_np > 0.0001)
-        has_trough = (trough_np < -0.0001)
-
-        if has_peak and has_trough:
-            if peak_idx < trough_idx:
-                anchors.append((peak_idx, peak_np))
-                anchors.append((trough_idx, trough_np))
-            elif trough_idx < peak_idx:
-                anchors.append((trough_idx, trough_np))
-                anchors.append((peak_idx, peak_np))
-            else:
-                anchors.append((peak_idx, peak_np if abs(peak_np) > abs(trough_np) else trough_np))
-        elif has_peak:
-            anchors.append((peak_idx, peak_np))
-        elif has_trough:
-            anchors.append((trough_idx, trough_np))
-
-        last_trade_idx = n - 1
-        if anchors[-1][0] < last_trade_idx:
-            anchors.append((last_trade_idx, net_profit_final))
-        else:
-            anchors[-1] = (anchors[-1][0], net_profit_final)
-
-        cleaned_anchors = [anchors[0]]
-        for idx, val in anchors[1:]:
-            if idx > cleaned_anchors[-1][0]:
-                cleaned_anchors.append((idx, val))
-
-        times.append(raw_trades[0][0] - timedelta(minutes=30))
-        net_profits.append(0.0)
-
-        if len(cleaned_anchors) < 2:
-            times.append(raw_trades[-1][0])
-            net_profits.append(round(net_profit_final, 4))
-        else:
-            for a_idx in range(len(cleaned_anchors) - 1):
-                i_start, v_start = cleaned_anchors[a_idx]
-                i_end, v_end = cleaned_anchors[a_idx + 1]
-                seg_trades = raw_trades[i_start : i_end + 1]
-
-                t_start = seg_trades[0][0].timestamp()
-                t_end = seg_trades[-1][0].timestamp()
-                t_span = max(1.0, t_end - t_start)
-
-                cum_w = 0.0
-                weights = []
-                is_downward = (v_end < v_start)
-
-                for _, pnl in seg_trades:
-                    if is_downward:
-                        w = abs(pnl) if pnl < 0 else 0.0
-                    else:
-                        w = max(0.0, pnl)
-                    cum_w += w
-                    weights.append(cum_w)
-
-                tot_w = cum_w if cum_w > 0 else 1.0
-
-                for sub_i in range(1, len(seg_trades)):
-                    dt, _ = seg_trades[sub_i]
-                    t_ratio = (dt.timestamp() - t_start) / t_span
-                    w_ratio = weights[sub_i] / tot_w
-                    if is_downward:
-                        blend = min(1.0, max(0.0, 0.45 * t_ratio + 0.55 * w_ratio))
-                    else:
-                        blend = min(1.0, max(0.0, 0.40 * t_ratio + 0.60 * w_ratio))
-                    val = v_start + blend * (v_end - v_start)
-                    times.append(dt)
-                    net_profits.append(round(val, 4))
-
-                net_profits[-1] = round(v_end, 4)
-
-        times.append(now)
-        net_profits.append(round(net_profit_final, 4))
-
-    balances = [round(start_balance + np_val, 4) for np_val in net_profits]
+    trajectory_builder = EquityTrajectoryBuilder(
+        start_balance=start_balance,
+        net_profit_final=net_profit_final,
+        raw_trades=raw_trades,
+        start_dt=start_dt,
+        peak_np=peak_np,
+        peak_dt=peak_dt,
+        trough_np=trough_np,
+        trough_dt=trough_dt,
+        now_dt=now,
+    )
+    times, net_profits, balances = trajectory_builder.build_trajectory()
 
     # Построение графика в темной теме
     plt.style.use("dark_background")
