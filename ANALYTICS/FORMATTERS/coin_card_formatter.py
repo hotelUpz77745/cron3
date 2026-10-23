@@ -237,16 +237,14 @@ class CoinCardFormatter:
                 r_loss = abs(_sf(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
                 gross_tp = _sf(cdata.get("gross_realized_usdt", 0.0))
                 if gross_tp <= 0.0:
+                    gross_tp = _sf(cdata.get("realized_pnl_usdt", 0.0))
+                if gross_tp <= 0.0:
                     gross_tp = realized_net + p_loss + r_loss
                 gross_tp = max(0.0, round(gross_tp, 2))
 
-                has_defense = (p_loss > 0.0 or r_loss > 0.0)
-                branch = "├" if has_defense else "└"
-
                 lines.append(f"{medal} <b>{sym}</b>{active_badge}")
-                lines.append(f"   {branch} {val_str}")
-                if has_defense:
-                    lines.append(f"   └ 🛡️ Защита: Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b> <i>(Тейки: +{gross_tp:.2f}$)</i>")
+                lines.append(f"   ├ {val_str}")
+                lines.append(f"   └ 🛡️ Защита: Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b> <i>(Тейки: +{gross_tp:.2f}$)</i>")
                 lines.append("")
 
             if lines and lines[-1] == "":
