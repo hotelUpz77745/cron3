@@ -119,8 +119,3 @@ if __name__ == "__main__":
 # # export ANTHROPIC_API_KEY=...
 # taskkill /F /IM python.exe
 
-
-                    # "BILLUSDT": 200.0,
-                    # "XNYUSDT": 200.0,
-                    # "GTCUSDT": 200,
-                    # "SOLVUSDT": 400
