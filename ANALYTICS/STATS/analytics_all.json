@@ -1,0 +1,37 @@
+{
+    "updated_at_utc": "2026-10-23 00:24:56 UTC",
+    "total_universes_active": 1,
+    "evaluated_coins_count": 5,
+    "aggregate_start_balance_usdt": 434.0,
+    "aggregate_cur_balance_usdt": 434.0,
+    "aggregate_peak_balance_usdt": 434.0,
+    "aggregate_min_balance_usdt": 434.0,
+    "aggregate_net_profit_usdt": 0.0,
+    "aggregate_realized_pnl_usdt": 0.0,
+    "aggregate_unrealized_pnl_usdt": 0.0,
+    "aggregate_total_trades": 0,
+    "leaderboard": [
+        {
+            "universe_id": "u17_stephensonE__trailing_ratchet",
+            "name": "\ud83d\ude82 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6% Long / 13% Short | Flagship]",
+            "status": "RUNNING",
+            "start_balance_usdt": 434.0,
+            "cur_balance_usdt": 434.0,
+            "peak_balance_usdt": 434.0,
+            "min_balance_usdt": 434.0,
+            "net_profit_usdt": 0.0,
+            "realized_pnl_usdt": 0.0,
+            "unrealized_pnl_usdt": 0.0,
+            "max_drawdown_usdt": 0.0,
+            "max_drawdown_pct": 0.0,
+            "recovery_factor": 0.0,
+            "total_trades": 0,
+            "winning_trades": 0,
+            "winrate_pct": 0.0,
+            "roi_pct": 0.0,
+            "mode": "trailing_ratchet",
+            "mode_badge": "[RATCHET]",
+            "iteration_index": 1
+        }
+    ]
+}
