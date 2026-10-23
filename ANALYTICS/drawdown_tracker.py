@@ -392,6 +392,9 @@ class DrawdownTracker:
                 trough = bot_cur_balance
             if bot_cur_balance < min_bal:
                 min_bal = bot_cur_balance
+                data["min_balance_ts"] = now_ms
+            elif "min_balance_ts" not in data:
+                data["min_balance_ts"] = data.get("first_trade_ts", now_ms)
 
             data["peak_balance_usdt"] = round(peak, 4)
             data["_current_trough_usdt"] = round(trough, 4)
