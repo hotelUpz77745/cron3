@@ -540,6 +540,9 @@ class AnalyticsManager:
             data["peak_balance_usdt"] = round(new_balance, 4)
             data["_current_trough_usdt"] = round(new_balance, 4)
             data["min_balance_usdt"] = round(new_balance, 4)
+            now_ms = int(time.time() * 1000)
+            data["peak_net_ts"] = now_ms
+            data["min_balance_ts"] = now_ms
         else:
             data["cur_balance_usdt"] = round(float(data.get("cur_balance_usdt", old_balance)) + delta, 4)
             peak_val = data.get("peak_balance_usdt")
