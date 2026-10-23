@@ -122,5 +122,5 @@ if __name__ == "__main__":
 
                     # "BILLUSDT": 200.0,
                     # "XNYUSDT": 200.0,
+                    # "GTCUSDT": 200,
                     # "SOLVUSDT": 400
-

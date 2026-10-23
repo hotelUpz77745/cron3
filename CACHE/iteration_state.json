@@ -3,14 +3,14 @@
         "iteration_index": 1,
         "iteration_start_net_profit_usdt": 0.0,
         "iteration_start_realized_pnl_usdt": 0.0,
-        "iteration_realized_pnl_usdt": 0.0,
+        "iteration_realized_pnl_usdt": -0.0395,
         "iteration_start_ts": 1792715030419,
-        "iteration_peak_net_profit_usdt": 0.0,
-        "iteration_peak_ts": 1792715030419,
-        "historical_peak_net_profit_usdt": 0.0,
-        "historical_peak_net_ts": null,
-        "historical_max_drawdown_usdt": 0.0,
-        "updated_at": "2026-10-23 00:46:03 UTC"
+        "iteration_peak_net_profit_usdt": 0.0265,
+        "iteration_peak_ts": 1792717316354,
+        "historical_peak_net_profit_usdt": 0.0265,
+        "historical_peak_net_ts": 1792717316354,
+        "historical_max_drawdown_usdt": -0.0395,
+        "updated_at": "2026-10-23 01:26:59 UTC"
     },
     "__global__": {
         "iteration_index": 1,

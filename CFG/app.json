@@ -57,22 +57,14 @@
                 "enabled": true,
                 "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 200.0,
-                    "AVAUSDT": 200.0,
-                    "GTCUSDT": 200.0,
-                    "GWEIUSDT": 200.0,
-                    "SOLVUSDT": 200.0
+                    "IOTXUSDT": 200.0
                 }
             },
             "SHORT": {
                 "enabled": true,
                 "default_invest_size": 200.0,
                 "invest_size": {
-                    "ICNTUSDT": 200.0,
-                    "AVAUSDT": 200.0,
-                    "GTCUSDT": 200.0,
-                    "GWEIUSDT": 200.0,
-                    "SOLVUSDT": 200.0
+                    "IOTXUSDT": 200.0
                 }
             },
             "start_balance_usdt": 434.0
