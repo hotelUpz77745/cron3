@@ -117,4 +117,10 @@ if __name__ == "__main__":
 # # npm install -g @anthropic-ai/claude-code
 
 # # export ANTHROPIC_API_KEY=...
-# taskkill /F /IM python.exe
+# taskkill /F /IM python.exe
+
+
+                    # "BILLUSDT": 200.0,
+                    # "XNYUSDT": 200.0,
+                    # "SOLVUSDT": 400
+
