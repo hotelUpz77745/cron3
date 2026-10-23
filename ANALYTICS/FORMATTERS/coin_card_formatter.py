@@ -235,16 +235,15 @@ class CoinCardFormatter:
                 coin_rec = cdata.get("cross_recycling", {})
                 p_loss = abs(_sf(coin_peel.get("peel_loss_usdt", 0.0)))
                 r_loss = abs(_sf(coin_rec.get("loss_absorbed_usdt", coin_rec.get("profit_spent_usdt", 0.0))))
-                gross_tp = _sf(cdata.get("gross_realized_usdt", 0.0))
-                if gross_tp <= 0.0:
-                    gross_tp = _sf(cdata.get("realized_pnl_usdt", 0.0))
-                if gross_tp <= 0.0:
-                    gross_tp = realized_net + p_loss + r_loss
-                gross_tp = max(0.0, round(gross_tp, 2))
+                # Тейки строго чистыми с учетом комиссий и фандинга (Net):
+                # Realized_Net = Net_Takes - Peel_Loss - Recycle_Loss
+                # => Net_Takes = Realized_Net + Peel_Loss + Recycle_Loss
+                net_tp = round(realized_net + p_loss + r_loss, 2)
+                tp_sign = "+" if net_tp >= 0 else ""
 
                 lines.append(f"{medal} <b>{sym}</b>{active_badge}")
                 lines.append(f"   ├ {val_str}")
-                lines.append(f"   └ 🛡️ Защита: Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b> <i>(Тейки: +{gross_tp:.2f}$)</i>")
+                lines.append(f"   └ 🛡️ Защита: Пилинг: <b>-{p_loss:.2f}$</b> | Ресайкл: <b>-{r_loss:.2f}$</b> <i>(Тейки: {tp_sign}{net_tp:.2f}$)</i>")
                 lines.append("")
 
             if lines and lines[-1] == "":
