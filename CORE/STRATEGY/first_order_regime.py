@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\CORE\STRATEGY\first_order_regime.py
-# Role: first_order_regime.py module
-
 # ==============================================================================
 # Path: CORE/STRATEGY/first_order_regime.py
 # Role: Доменная сущность паспорта стратегии: «Правило кулака Сильной руки» (First Order Weight Regime)
@@ -66,6 +63,8 @@ class FirstOrderRegimeManager:
         """
         self.regime_cfg: Optional[Dict[str, Any]] = regime_cfg
         self.mode: Optional[str] = None
+        self.default_mode: Optional[str] = None
+        self.stagnation_min_step: Optional[int] = None
         self.presets: Dict[str, Any] = {}
         self.auto_ema_cfg: Optional[Dict[str, Any]] = None
 
@@ -87,6 +86,13 @@ class FirstOrderRegimeManager:
                             f"[FirstOrderRegimeManager] Недопустимый режим first_order_weight_regime: '{self.mode}'. "
                             f"Разрешены строго: {self.SUPPORTED_DYNAMIC_MODES} или {self.SUPPORTED_STATIC_MODES}."
                         )
+
+            if "default_mode" in regime_cfg and regime_cfg["default_mode"] is not None:
+                self.default_mode = str(regime_cfg["default_mode"]).lower().strip()
+
+            if "stagnation_min_step" in regime_cfg and regime_cfg["stagnation_min_step"] is not None:
+                self.stagnation_min_step = int(regime_cfg["stagnation_min_step"])
+
             if "presets" in regime_cfg:
                 if not isinstance(regime_cfg["presets"], dict):
                     raise TypeError(f"[FirstOrderRegimeManager] presets must be a dict, got {type(regime_cfg['presets'])}")
@@ -129,8 +135,11 @@ class FirstOrderRegimeManager:
 
         mode_str = str(mode).lower().strip()
         if mode_str in cls.SUPPORTED_DYNAMIC_MODES:
-            # Для динамических режимов при статической инициализации берем fallback (bullish)
-            mode_str = "bullish"
+            # Для динамических режимов при статической инициализации берем default_mode (если задан) или fallback (bullish)
+            if isinstance(regime_cfg, dict) and regime_cfg.get("default_mode"):
+                mode_str = str(regime_cfg["default_mode"]).lower().strip()
+            else:
+                mode_str = "bullish"
 
         side_key = side.upper()
 
@@ -159,6 +168,8 @@ class FirstOrderRegimeManager:
         default_vol: float,
         client: Any,
         strategy_id: str = "",
+        opp_in_pos: bool = False,
+        opp_step: int = 0,
     ) -> float:
         """
         Динамически оценивает состояние рынка по старшему таймфрейму (auto_ema)
@@ -177,6 +188,26 @@ class FirstOrderRegimeManager:
             return default_vol
 
         mode_str = str(mode).lower().strip()
+
+        # Проверка триггера стагнации противоположной стороны (stagnation_min_step)
+        if "stagnation_min_step" in regime_cfg and regime_cfg["stagnation_min_step"] is not None:
+            stag_threshold = int(regime_cfg["stagnation_min_step"])
+            if not opp_in_pos or int(opp_step) < stag_threshold:
+                # Стагнации нет: режим auto_ema не активируется, работаем в default_mode
+                fallback_mode = regime_cfg.get("default_mode")
+                if not fallback_mode:
+                    fallback_mode = "neutral"
+                return cls.resolve_static_volume(
+                    regime_cfg={"mode": fallback_mode, "presets": regime_cfg.get("presets", {})},
+                    side=side,
+                    default_vol=default_vol,
+                )
+            else:
+                logger.info(
+                    f"[{symbol}][{strategy_id}] [КУЛАК СИЛЬНОЙ РУКИ / СТАГНАЦИЯ]: "
+                    f"Триггер стагнации активирован! Противоположная сторона в позиции (step={opp_step} >= {stag_threshold}). "
+                    f"Активирован динамический режим '{mode_str}'."
+                )
 
         # 1. Динамический режим: Auto-EMA
         if mode_str == "auto_ema":

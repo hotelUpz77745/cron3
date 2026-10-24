@@ -51,6 +51,14 @@ class EntrySizeResolver:
         base_invest = float(side_cfg["invest_size"])
         state.eff_invest = base_invest
 
+        # Определение состояния противоположной стороны (для Smart Size и триггера стагнации Кулака)
+        opp_side = "SHORT" if side == "LONG" else "LONG"
+        opp_state = None
+        if hasattr(bot, "fsm_states") and bot.fsm_states:
+            opp_state = bot.fsm_states.get(symbol, {}).get(opp_side)
+        opp_in_pos = bool(opp_state and (getattr(opp_state, "in_position", False) or getattr(opp_state, "in_position_papper", False)))
+        opp_step = int(getattr(opp_state, "cur_step", 0)) if opp_state else 0
+
         # 3. Smart Size
         smart_size_mult = 1.0
         if strat and getattr(strat, "smart_size_cfg", None):
@@ -64,13 +72,6 @@ class EntrySizeResolver:
                         ema_cfg=ema_cfg,
                         client=sym_client,
                     )
-
-            opp_side = "SHORT" if side == "LONG" else "LONG"
-            opp_state = None
-            if hasattr(bot, "fsm_states") and bot.fsm_states:
-                opp_state = bot.fsm_states.get(symbol, {}).get(opp_side)
-            opp_in_pos = bool(opp_state and (getattr(opp_state, "in_position", False) or getattr(opp_state, "in_position_papper", False)))
-            opp_step = int(getattr(opp_state, "cur_step", 0)) if opp_state else 0
 
             size_mult = MomentumEngine.calculate_smart_size_multiplier(
                 closed_count=closed_count,
@@ -107,6 +108,8 @@ class EntrySizeResolver:
                 default_vol=volume_pct,
                 client=sym_client,
                 strategy_id=strat.strategy_id if strat else "",
+                opp_in_pos=opp_in_pos,
+                opp_step=opp_step,
             )
 
         # 5. Динамический фильтр микро-ступени (Micro-Step Filter)
