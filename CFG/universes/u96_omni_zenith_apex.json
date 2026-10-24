@@ -58,6 +58,7 @@
     },
     "first_order_weight_regime": {
         "mode": "off",
+        "stagnation_min_step": null,
         "_concept": "«Правило кулака Сильной руки» (Strong Hand Fist Rule)",
         "_desc_mode": "«Правило кулака Сильной руки» (grid_0): регулирует силу стартового входа первого ордера. Варианты: 'bullish', 'neutral', 'bearish', 'auto_ema', или 'off' / null (отключение фичи).",
         "presets": {
