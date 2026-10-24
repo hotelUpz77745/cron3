@@ -26,7 +26,14 @@ class TestTGDomeButtons(unittest.TestCase):
     def test_active_strategies_loaded(self):
         active = self.registry.active_strategies
         self.assertTrue(len(active) > 0)
-        self.assertTrue(any(sid in active for sid in ("u16_chita__classic", "u96_omni_zenith_apex__classic", "u17_stephensonE__classic", "u17_stephensonE__trailing_ratchet")))
+        self.assertTrue(any(sid in active for sid in (
+            "u16_chita__classic",
+            "u96_omni_zenith_apex__classic",
+            "u17_stephensonE__classic",
+            "u17_stephensonE__trailing_ratchet",
+            "u17_stephensonJ__trailing_ratchet",
+            "u17_stephensonJS__trailing_ratchet",
+        )))
 
     def test_close_all_dome_buttons(self):
         """Проверяет генерацию кнопок закрытия под каждым куполом."""

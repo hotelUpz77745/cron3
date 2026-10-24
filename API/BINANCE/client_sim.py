@@ -269,10 +269,10 @@ class SimulatedBinanceClient:
         backtest_data = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA"
         for name, target in [
             ("warmup_klines_1h.json", "_warmup_1h"),
-            ("warmup_klines_4h.json", "_warmup_4h"),
             ("warmup_4h.json", "_warmup_4h"),
-            ("warmup_klines_1d.json", "_warmup_1d"),
+            ("warmup_klines_4h.json", "_warmup_4h"),
             ("warmup_1d.json", "_warmup_1d"),
+            ("warmup_klines_1d.json", "_warmup_1d"),
             ("sim_klines_1h.json", "_sim_1h"),
             ("precomputed_ema_trends.json", "_precomputed_trends"),
             ("precomputed_atr.json", "_precomputed_atr"),
@@ -281,7 +281,13 @@ class SimulatedBinanceClient:
             if p.exists():
                 try:
                     with open(p, "r", encoding="utf-8") as f:
-                        setattr(cls, target, json.load(f))
+                        data = json.load(f)
+                        curr = getattr(cls, target, {})
+                        if isinstance(curr, dict) and isinstance(data, dict) and curr:
+                            for k, v in data.items():
+                                curr[k] = v
+                        else:
+                            setattr(cls, target, data)
                 except Exception as e:
                     logger.warning(f"[SimulatedBinanceClient] Error loading {name}: {e}")
 
