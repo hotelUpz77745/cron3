@@ -77,6 +77,44 @@
             },
             "start_balance_usdt": 434.0
         },
+        "u17_stephensonJS__trailing_ratchet": {
+            "_comment_alias": "🚀 U17: Stephenson-JS [Neutral 9/9% -> Stagnation S3 Auto-EMA Fist | L3+ Recycler | AutoCloser 1.0] [TRAILING RATCHET]",
+            "template": "u17_stephensonJS",
+            "enabled": false,
+            "api_key_name": "API_KEY",
+            "api_secret_name": "API_SECRET",
+            "auto_closing_mode": "trailing_ratchet",
+            "leverage": 20,
+            "margin_type": "CROSSED",
+            "notifications": {
+                "enabled": true,
+                "negative_threshold": -50.0,
+                "positive_threshold": 100.0
+            },
+            "LONG": {
+                "enabled": true,
+                "default_invest_size": 200.0,
+                "invest_size": {
+                    "IOTXUSDT": 200.0,
+                    "BILLUSDT": 200.0,
+                    "XNYUSDT": 200.0,
+                    "GTCUSDT": 200,
+                    "SOLVUSDT": 400
+                }
+            },
+            "SHORT": {
+                "enabled": true,
+                "default_invest_size": 200.0,
+                "invest_size": {
+                    "IOTXUSDT": 200.0,
+                    "BILLUSDT": 200.0,
+                    "XNYUSDT": 200.0,
+                    "GTCUSDT": 200,
+                    "SOLVUSDT": 400
+                }
+            },
+            "start_balance_usdt": 434.0
+        },
         "u17_stephensonE__trailing_ratchet": {
             "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [TRAILING RATCHET]",
             "template": "u17_stephensonE",
