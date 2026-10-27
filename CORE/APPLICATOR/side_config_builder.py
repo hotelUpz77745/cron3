@@ -191,7 +191,8 @@ class SideConfigBuilder:
 
             # 5. Если Super Grid отключен, гарантируем сброс super_indent в None (Инвариант 3)
             if not getattr(strategy, "super_grid_enabled", False) and "grid" in side_data:
-                for lvl_data in side_data["grid"].values():
+                grid_items = side_data["grid"].values() if isinstance(side_data["grid"], dict) else side_data["grid"]
+                for lvl_data in grid_items:
                     lvl_data["super_indent"] = None
 
             # 6. Применение TP-карты: строго из стороны side_dict["tp_map"], либо общей

@@ -276,6 +276,56 @@ class NotionalCapacityValidator:
         return errors
 
     @classmethod
+    def format_compact_report(cls, errors: List[str], threshold: float) -> str:
+        """
+        Группирует длинный список нарушений по стратегиям и символам,
+        формируя компактный, лаконичный и понятный отчет (по 1 строке на символ).
+        """
+        import re
+        grouped = {}
+        for err in errors:
+            m = re.search(r'\[(.*?)\]\s+([A-Z0-9]+).*?Требуется.*?invest_size >= <b>([\d\.]+) USDT</b> \(текущий: ([\d\.]+) USDT\)', err)
+            if m:
+                strat_id, sym, req_str, curr_str = m.groups()
+                req_val = float(req_str)
+                curr_val = float(curr_str)
+                key = (strat_id, sym)
+                bottleneck = "Ордер сетки"
+                if "LIFO-пилинг" in err:
+                    bottleneck = "LIFO-пилинг"
+                elif "Cross-Recycling" in err:
+                    bottleneck = "Cross-Recycling срезка"
+                elif " L" in err:
+                    lvl_m = re.search(r'(LONG|SHORT)\s+L(\d+)', err)
+                    if lvl_m:
+                        bottleneck = f"{lvl_m.group(1)} L{lvl_m.group(2)}"
+
+                if key not in grouped or req_val > grouped[key]["req"]:
+                    grouped[key] = {
+                        "curr": curr_val,
+                        "req": req_val,
+                        "bottleneck": bottleneck
+                    }
+
+        if not grouped:
+            err_lines = "\n".join(errors[:10])
+            overflow_note = f"\n...и еще {len(errors) - 10} нарушений." if len(errors) > 10 else ""
+            return err_lines + overflow_note
+
+        lines = []
+        overall_max_req = 0.0
+        for (strat_id, sym), data in sorted(grouped.items()):
+            if data["req"] > overall_max_req:
+                overall_max_req = data["req"]
+            lines.append(
+                f"• <b>[{strat_id}] {sym}</b>: текущий invest_size = <b>{data['curr']:.2f} USDT</b> ➔ "
+                f"требуется минимум <b>{data['req']:.2f} USDT</b> (узкое место: {data['bottleneck']})"
+            )
+
+        remedy = f"\n💡 <b>Решение:</b> Установите <code>default_invest_size</code> >= <b>{overall_max_req:.2f} USDT</b> в <code>CFG/app.json</code> (или выставите <code>\"check_min_notional\": false</code>)."
+        return "\n".join(lines) + "\n" + remedy
+
+    @classmethod
     def validate_or_abort(
         cls,
         registry: Any,
@@ -304,33 +354,27 @@ class NotionalCapacityValidator:
             logger.info(f"[NOTIONAL_VALIDATOR] ✅ Все активные стратегии и символы соответствуют минимальному номиналу {threshold:.2f} USDT!")
             return
 
-        # Формирование детального отчета
+        # Формирование компактного структурированного отчета
         err_count = len(errors)
-        err_lines = "\n".join(errors[:15])
-        overflow_note = f"\n...и еще {err_count - 15} нарушений." if err_count > 15 else ""
+        compact_summary = cls.format_compact_report(errors, threshold=threshold)
 
         fatal_msg = (
             f"🚨 <b>FATAL CONFIG ERROR: INSUFFICIENT CAPITAL FOR MIN NOTIONAL</b>\n\n"
             f"Капитал (<code>invest_size</code>) не обеспечивает минимальный биржевой номинал ордеров Binance Futures (<b>{threshold:.2f} USDT</b>):\n\n"
-            f"{err_lines}{overflow_note}\n\n"
+            f"{compact_summary}\n\n"
             f"🛑 <b>Запуск бота заблокирован! Торговля остановлена до исправления конфигурации.</b>"
         )
 
         logger.critical(f"[NOTIONAL_VALIDATOR] 🛑 ФАТАЛЬНАЯ ОШИБКА КОНФИГУРАЦИИ:\n{fatal_msg}")
 
-        # Отправка в Telegram
-        try:
-            from TG.tg_adapter import TelegramAdapter
-            TelegramAdapter.send_fatal_alert(fatal_msg)
-        except Exception as e:
-            logger.error(f"[NOTIONAL_VALIDATOR] Не удалось отправить Telegram-алерт: {e}")
-
-        # Если доступен bot_core.notifier
+        # Отправка в Telegram только если передан работающий bot_core и мы не в тестах
         if bot_core and hasattr(bot_core, "notifier") and bot_core.notifier:
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(bot_core.notifier.send_alert(fatal_msg))
+                from TG.tg_adapter import TelegramAdapter
+                if not TelegramAdapter._is_testing_or_backtest():
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(bot_core.notifier.send_alert(fatal_msg))
             except Exception:
                 pass
 

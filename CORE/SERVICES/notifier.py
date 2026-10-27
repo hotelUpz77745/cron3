@@ -188,6 +188,8 @@ class NotifierManager:
             await self.send_alert(msg)
 
     async def send_alert(self, text: str):
+        if os.getenv("CRON3_BACKTEST") == "1":
+            return
         token = os.getenv("TG_TOKEN")
         if not token:
             return
@@ -210,6 +212,8 @@ class NotifierManager:
                     logger.error(f"[NOTIFIER] Error sending TG alert to {uid}: {e}")
 
     async def send_alert_with_keyboard(self, text: str, reply_markup: dict):
+        if os.getenv("CRON3_BACKTEST") == "1":
+            return
         token = os.getenv("TG_TOKEN")
         if not token:
             return

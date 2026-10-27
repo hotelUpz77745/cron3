@@ -9,6 +9,7 @@ import asyncio
 import datetime
 import json
 import os
+import sys
 import urllib.request
 from typing import Optional, List, Dict, Any, Union
 import aiohttp
@@ -25,6 +26,10 @@ class TelegramAdapter:
     Инкапсулирует эндпоинты, форматирование payload, управление сессиями aiohttp
     и аварийную синхронную отправку фатальных ошибок запуска.
     """
+
+    @staticmethod
+    def _is_testing_or_backtest() -> bool:
+        return os.getenv("CRON3_BACKTEST") == "1" or os.getenv("CRON3_TEST") == "1"
 
     def __init__(
         self,
@@ -103,6 +108,8 @@ class TelegramAdapter:
         reply_markup: Optional[Dict[str, Any]] = None,
         timeout_sec: int = 10,
     ) -> bool:
+        if self._is_testing_or_backtest():
+            return False
         if not self.token:
             return False
         payload: Dict[str, Any] = {
@@ -131,6 +138,8 @@ class TelegramAdapter:
 
     async def send_alert(self, msg: str, logger: Optional[Any] = None) -> None:
         """Отправляет алерт всем зарегистрированным получателям."""
+        if self._is_testing_or_backtest():
+            return
         log = logger or globals().get("logger")
         token = self.token or os.getenv("TG_TOKEN")
         if not token:
@@ -280,6 +289,8 @@ class TelegramAdapter:
         parse_mode: str = "HTML",
         timeout_sec: int = 30,
     ) -> bool:
+        if self._is_testing_or_backtest():
+            return False
         if not self.token:
             return False
 
@@ -317,6 +328,8 @@ class TelegramAdapter:
         Синхронный метод отправки критической стартовой ошибки.
         Используется в main.py при падении бота до/вне asyncio цикла.
         """
+        if self._is_testing_or_backtest() or "unittest" in sys.modules or "pytest" in sys.modules:
+            return
         token = self.token or os.getenv("TG_TOKEN")
         chat_ids = self._get_chat_ids()
         if not token or not chat_ids:
@@ -347,5 +360,7 @@ class TelegramAdapter:
         """
         Фасадный вызов для мгновенной синхронной отправки стартовой ошибки.
         """
+        if cls._is_testing_or_backtest():
+            return
         adapter = cls(token=token, chat_ids=chat_ids)
         adapter.send_fatal_error(msg)

@@ -166,6 +166,23 @@ class BotBootstrapService:
                     cur_p = bot_core.prices.get(sym, (0.0, 0))[0] if sym in bot_core.prices else None
                     StrategyApplicator.resolve_position_state_grid(st, strategy=strat, current_price=cur_p)
 
+                    # Pre-flight Macro-Trend check: детерминируем тренд перед запуском торговой логики
+                    gate_cfg = getattr(strat, "directional_trend_gate", None) if strat else None
+                    if gate_cfg and isinstance(gate_cfg, dict) and gate_cfg.get("enabled"):
+                        if gate_cfg.get("freeze_averaging_on_disposition", True):
+                            from CORE.STRATEGY.directional_trend_gate import DirectionalTrendGate
+                            client_obj = bot_core.get_client_for_symbol(sym) if hasattr(bot_core, "get_client_for_symbol") else getattr(bot_core, "client", None)
+                            strat_id = getattr(strat, "strategy_id", None)
+                            is_allowed, reason = await DirectionalTrendGate.is_side_allowed(
+                                symbol=sym, side=s_side, gate_cfg=gate_cfg, client=client_obj, strategy_id=strat_id
+                            )
+                            st.is_passive_mode = not is_allowed
+                            if st.is_passive_mode:
+                                logger.info(
+                                    f"[{sym}] {s_side} ⏸️ [BOOT DISPOSITION] Trend is unfavorable ({reason}). "
+                                    f"Averaging PRE-FROZEN on startup before trade loop execution."
+                                )
+
         logger.info("Streams and REST synced! Running initial RuntimeFSM Sync...")
         await bot_core.runtime_manager.sync_with_fsm(bot_core.fsm_states)
 

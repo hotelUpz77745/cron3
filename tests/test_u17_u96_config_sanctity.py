@@ -25,24 +25,37 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
 
     def test_u17_stephenson_scale_money_and_invest_size(self):
         """Проверка: U17 Stephenson-E имеет scale_money=1.5 и invest_size=600.0."""
-        # 1. Проверяем шаблон вселенной
+        # 1. Проверяем шаблон вселенной (в universers или artifacts/classic_tribute)
         u17_path = UNIVERSES_DIR / "u17_stephensonE.json"
+        if not u17_path.exists():
+            u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
         self.assertTrue(u17_path.exists())
         u17_data = Utils.read_json_file(u17_path)
         self.assertEqual(u17_data["signal_heartbeat_tfr"], "5m")
         self.assertIn(u17_data["auto_closing"]["positive"]["scale_money"], (1.0, 1.25, 1.5))
 
-        # 2. Проверяем клиентскую конфигурацию в app.json
+        # 2. Проверяем клиентскую конфигурацию в app.json (если активна)
         app_data = Utils.read_json_file(CFG_DIR / "app.json")
-        client_u17 = app_data["active_strategies"]["u17_stephensonE__trailing_ratchet"]
-        exp_invest = client_u17["LONG"]["default_invest_size"]
-        self.assertEqual(client_u17["SHORT"]["default_invest_size"], exp_invest)
-        for sym in client_u17["LONG"]["invest_size"]:
-            self.assertEqual(client_u17["LONG"]["invest_size"][sym], exp_invest)
-            self.assertEqual(client_u17["SHORT"]["invest_size"][sym], exp_invest)
+        client_u17 = app_data.get("active_strategies", {}).get("u17_stephensonE__trailing_ratchet")
+        exp_invest = client_u17["LONG"]["default_invest_size"] if client_u17 else 600.0
+        if client_u17:
+            self.assertEqual(client_u17["SHORT"]["default_invest_size"], exp_invest)
+            for sym in client_u17["LONG"].get("invest_size", {}):
+                self.assertEqual(client_u17["LONG"]["invest_size"][sym], exp_invest)
+                self.assertEqual(client_u17["SHORT"]["invest_size"][sym], exp_invest)
 
-        # 3. Проверяем загрузку в StrategyRegistry
-        registry = StrategyRegistry()
+        # 3. Проверяем загрузку в StrategyRegistry (изолированно с активным конфигом)
+        mock_active = {
+            "u17_stephensonE__trailing_ratchet": {
+                "template": "u17_stephensonE",
+                "enabled": True,
+                "symbols": ["ICNTUSDT", "GWEIUSDT"],
+                "auto_closing_mode": "trailing_ratchet",
+                "LONG": {"default_invest_size": exp_invest, "invest_size": {"ICNTUSDT": exp_invest}},
+                "SHORT": {"default_invest_size": exp_invest, "invest_size": {"GWEIUSDT": exp_invest}},
+            }
+        }
+        registry = StrategyRegistry(active_strategies_cfg=mock_active)
         strat = registry.get_strategy("u17_stephensonE__trailing_ratchet")
         self.assertIsNotNone(strat)
         self.assertIn(strat.auto_closing_cfg["positive"]["scale_money"], (1.0, 1.25, 1.5))
@@ -53,7 +66,17 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
         """Проверка: AutoCloser масштабирует пороги трейлинг-храповика на scale_money."""
         from unittest.mock import MagicMock
         import copy
-        registry = StrategyRegistry()
+        mock_active = {
+            "u17_stephensonE__trailing_ratchet": {
+                "template": "u17_stephensonE",
+                "enabled": True,
+                "symbols": ["ICNTUSDT"],
+                "auto_closing_mode": "trailing_ratchet",
+                "LONG": {"default_invest_size": 600.0, "invest_size": {}},
+                "SHORT": {"default_invest_size": 600.0, "invest_size": {}},
+            }
+        }
+        registry = StrategyRegistry(active_strategies_cfg=mock_active)
         strat = registry.get_strategy("u17_stephensonE__trailing_ratchet")
         mock_bot = MagicMock()
         closer = AutoCloser(bot_core=mock_bot)
@@ -179,7 +202,10 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
             applicator.build_side_configs(strat, symbol="UNKNOWNUSDT")
     def test_u17_u96_schema_full_symmetry(self):
         """Проверка: U17 Stephenson-E и U96 Omni Zenith Apex имеют 100% зеркальную симметрию полей."""
-        u17_data = Utils.read_json_file(UNIVERSES_DIR / "u17_stephensonE.json")
+        u17_path = UNIVERSES_DIR / "u17_stephensonE.json"
+        if not u17_path.exists():
+            u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
+        u17_data = Utils.read_json_file(u17_path)
         u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
 
         diff_u17_u96 = set(u17_data.keys()) - set(u96_data.keys())
@@ -190,7 +216,10 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
 
     def test_super_grid_canonical_dict_in_both_universes(self):
         """Проверка: super_grid в обоих куполах представлен словарем с enabled: false и параметрами."""
-        u17_data = Utils.read_json_file(UNIVERSES_DIR / "u17_stephensonE.json")
+        u17_path = UNIVERSES_DIR / "u17_stephensonE.json"
+        if not u17_path.exists():
+            u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
+        u17_data = Utils.read_json_file(u17_path)
         u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
 
         for name, data in [("U17", u17_data), ("U96", u96_data)]:
@@ -202,6 +231,46 @@ class TestConfigSanctityAndStartup(unittest.TestCase):
             self.assertEqual(sg["window"], 12)
             self.assertEqual(sg["multiplier"], 1.5)
             self.assertEqual(sg["min_volatility_pct"], 15.0)
+
+    def test_u96_omni_zenith_trend_volumes_and_gate(self):
+        """Проверка: u96_omni_zenith_trend имеет Directional Gate и геометрическую сетку 100%."""
+        trend_path = UNIVERSES_DIR / "u96_omni_zenith_trend.json"
+        self.assertTrue(trend_path.exists())
+        trend_data = Utils.read_json_file(trend_path)
+
+        # 1. Trend Gate enabled
+        self.assertIn("directional_trend_gate", trend_data)
+        self.assertTrue(trend_data["directional_trend_gate"]["enabled"])
+        self.assertTrue(trend_data["directional_trend_gate"]["freeze_averaging_on_disposition"])
+
+        # 2. Recycler enabled
+        self.assertTrue(trend_data["cross_side_recycler"]["enabled"])
+
+        # 3. Grid volumes sum to exactly 100%
+        for side in ["LONG", "SHORT"]:
+            grid = trend_data[side]["grid"]
+            active_vols = [v["volume"] for k, v in grid.items() if v.get("enabled", True)]
+            self.assertAlmostEqual(sum(active_vols), 100.0, places=2)
+            self.assertEqual(grid["0"]["volume"], 7.0)
+            self.assertEqual(grid["1"]["volume"], 8.29)
+            self.assertEqual(grid["2"]["volume"], 9.81)
+            self.assertEqual(grid["3"]["volume"], 11.61)
+            self.assertEqual(grid["4"]["volume"], 13.74)
+            self.assertEqual(grid["5"]["volume"], 16.27)
+            self.assertEqual(grid["6"]["volume"], 19.26)
+            self.assertEqual(grid["7"]["volume"], 14.02)
+            self.assertFalse(grid["8"]["enabled"])
+
+    def test_u96_omni_zenith_tp13_config(self):
+        """Проверка: u96_omni_zenith_tp13 имеет min_tp_indent=1.0% и расширенные TP."""
+        tp13_path = UNIVERSES_DIR / "u96_omni_zenith_tp13.json"
+        self.assertTrue(tp13_path.exists())
+        tp13_data = Utils.read_json_file(tp13_path)
+
+        self.assertTrue(tp13_data["cross_side_recycler"]["enabled"])
+        self.assertAlmostEqual(tp13_data["LONG"]["min_tp_indent"], 1.0)
+        self.assertAlmostEqual(tp13_data["SHORT"]["min_tp_indent"], 1.0)
+        self.assertAlmostEqual(tp13_data["LONG"]["tp_map"]["0"]["indent"], 2.34)
 
 
 if __name__ == "__main__":

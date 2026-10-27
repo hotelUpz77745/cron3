@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import aiohttp
 
+import os
 import re
 from typing import Optional, Dict, List, Any
 
@@ -32,6 +33,8 @@ class BinancePublic:
         params: Optional[Dict[str, Any]] = None,
     ) -> Optional[Any]:
         """Внутренний GET для публичных запросов."""
+        if os.environ.get("CRON3_BACKTEST") == "1":
+            return None
 
         url = BinancePublic.BASE_URL + path
 

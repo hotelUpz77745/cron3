@@ -245,6 +245,8 @@ class SymbolLifecycleManager:
         changed = False
         if active_strategies:
             for sdata in active_strategies.values():
+                if not isinstance(sdata, dict):
+                    continue
                 if "symbols" in sdata and isinstance(sdata["symbols"], list) and symbol in sdata["symbols"]:
                     sdata["symbols"].remove(symbol)
                     changed = True

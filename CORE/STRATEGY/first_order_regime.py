@@ -135,11 +135,11 @@ class FirstOrderRegimeManager:
 
         mode_str = str(mode).lower().strip()
         if mode_str in cls.SUPPORTED_DYNAMIC_MODES:
-            # Для динамических режимов при статической инициализации берем default_mode (если задан) или fallback (bullish)
+            # Для динамических режимов при статической инициализации берем default_mode (если задан) или fallback (neutral)
             if isinstance(regime_cfg, dict) and regime_cfg.get("default_mode"):
                 mode_str = str(regime_cfg["default_mode"]).lower().strip()
             else:
-                mode_str = "bullish"
+                mode_str = "neutral"
 
         side_key = side.upper()
 

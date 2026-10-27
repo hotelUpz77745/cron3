@@ -20,6 +20,7 @@ from consts import (
     TIME_SLACK_SEC,
 )
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from CORE.STRATEGY.directional_trend_gate import DirectionalTrendGate
 from CORE.STRATEGY.cross_recycler import CrossSideProfitRecycler
 from CORE.STRATEGY.brownian_noise import BrownianNoiseController
 from CORE.CYCLE.signal_validator import SignalValidator
@@ -253,6 +254,20 @@ class TradeCycleManager:
 
                 if MomentumEngine.is_knife_blocked(opposite_closed_count, smart_size_cfg):
                     continue
+
+                # Directional Trend-Gate (Вектор 1: Однонаправленный макро-шлюз по 1d EMA)
+                gate_cfg = getattr(strat, "directional_trend_gate", None) if strat else None
+                if gate_cfg and gate_cfg.get("enabled"):
+                    client_obj = self.bot.get_client_for_symbol(symbol) if hasattr(self.bot, "get_client_for_symbol") else getattr(self.bot, "client", None)
+                    is_allowed, gate_reason = await DirectionalTrendGate.is_side_allowed(
+                        symbol=symbol,
+                        side=side,
+                        gate_cfg=gate_cfg,
+                        client=client_obj,
+                        strategy_id=strat.strategy_id if strat else None,
+                    )
+                    if not is_allowed:
+                        continue
 
                 failed_ts = getattr(state, "last_failed_entry_ts", 0.0)
                 if now - failed_ts < 60.0:

@@ -271,6 +271,90 @@ class TestFirstOrderWeightRegime(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(vol_compat, 12.0)
 
+    @patch("CORE.STRATEGY.momentum_engine.MomentumEngine.get_ema_trend_state")
+    async def test_default_mode_backward_compatibility(self, mock_trend):
+        """Проверка явного default_mode: null, отсутствия ключа, и кастомных fallback режимов."""
+        from CORE.STRATEGY.first_order_regime import FirstOrderRegimeManager
+
+        base_cfg = {
+            "mode": "auto_ema",
+            "stagnation_min_step": 3,
+            "presets": {
+                "bullish": {"LONG": 12.0, "SHORT": 7.0},
+                "neutral": {"LONG": 9.0, "SHORT": 9.0},
+                "bearish": {"LONG": 6.0, "SHORT": 13.0}
+            },
+            "auto_ema": {
+                "timeframe": "1d",
+                "sma_fast": 10,
+                "sma_slow": 30,
+                "confirmation_candles": 3,
+                "require_rising": True,
+                "trend_positive": True
+            },
+            "enabled": True
+        }
+
+        # 1. default_mode: null explicitly set -> falls back safely to neutral (9.0 / 9.0)
+        cfg_explicit_null = copy.deepcopy(base_cfg)
+        cfg_explicit_null["default_mode"] = None
+        mock_trend.return_value = "UP"
+        vol_long_null = await FirstOrderRegimeManager.evaluate_and_resolve_volume(
+            symbol="TESTUSDT",
+            side="LONG",
+            regime_cfg=cfg_explicit_null,
+            default_vol=10.0,
+            client=None,
+            opp_in_pos=False,
+            opp_step=0
+        )
+        self.assertEqual(vol_long_null, 9.0)
+
+        # 2. default_mode omitted completely -> falls back safely to neutral (9.0 / 9.0)
+        cfg_omitted = copy.deepcopy(base_cfg)
+        if "default_mode" in cfg_omitted:
+            del cfg_omitted["default_mode"]
+        vol_short_omitted = await FirstOrderRegimeManager.evaluate_and_resolve_volume(
+            symbol="TESTUSDT",
+            side="SHORT",
+            regime_cfg=cfg_omitted,
+            default_vol=10.0,
+            client=None,
+            opp_in_pos=False,
+            opp_step=0
+        )
+        self.assertEqual(vol_short_omitted, 9.0)
+
+        # 3. default_mode explicitly set to bearish -> resolves to bearish (6.0 LONG / 13.0 SHORT)
+        cfg_bear_fallback = copy.deepcopy(base_cfg)
+        cfg_bear_fallback["default_mode"] = "bearish"
+        vol_long_bear = await FirstOrderRegimeManager.evaluate_and_resolve_volume(
+            symbol="TESTUSDT",
+            side="LONG",
+            regime_cfg=cfg_bear_fallback,
+            default_vol=10.0,
+            client=None,
+            opp_in_pos=False,
+            opp_step=0
+        )
+        vol_short_bear = await FirstOrderRegimeManager.evaluate_and_resolve_volume(
+            symbol="TESTUSDT",
+            side="SHORT",
+            regime_cfg=cfg_bear_fallback,
+            default_vol=10.0,
+            client=None,
+            opp_in_pos=False,
+            opp_step=0
+        )
+        self.assertEqual(vol_long_bear, 6.0)
+        self.assertEqual(vol_short_bear, 13.0)
+
+        # 4. resolve_static_volume with default_mode: null on dynamic mode -> returns neutral
+        static_vol_l = FirstOrderRegimeManager.resolve_static_volume(cfg_explicit_null, "LONG", 10.0)
+        static_vol_s = FirstOrderRegimeManager.resolve_static_volume(cfg_explicit_null, "SHORT", 10.0)
+        self.assertEqual(static_vol_l, 9.0)
+        self.assertEqual(static_vol_s, 9.0)
+
 
 if __name__ == "__main__":
     unittest.main()

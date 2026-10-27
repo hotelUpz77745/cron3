@@ -5,7 +5,7 @@
         "spec_ttl_sec": 900,
         "time_slack_sec": 0.15,
         "req_timeout_sec": 10.0,
-        "check_min_notional": true,
+        "check_min_notional": false,
         "_desc_check_min_notional": "Строгая пре-трейд валидация достаточности капитала (invest_size) на соответствие минимальному биржевому номиналу ордеров Binance Futures (min_order_notional_usdt=7.0 USDT). Валидирует ордера сетки, пилинг и рециркуляцию прямо в паспорте стратегии до старта торгов.",
         "min_order_notional_usdt": 7.0,
         "_desc_min_order_notional_usdt": "Минимальный допустимый номинал ордера в USDT на Binance Futures (7.0 USDT с запасом от лимита 5-6 USDT).",
@@ -39,9 +39,9 @@
     "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __trailing_ratchet (pure Fibo trailing ratchet), __fixed (flat net take), __toxic (institutional dynamic exit). Strategy configs are located in CFG/universes/*.json.",
     "active_strategies": {
         "_comment_invest_size_rules": "ПРАВИЛА НАСТРОЙКИ СТОРОН И ИНВЕСТИЦИЙ: 1) 'enabled': true/false на уровне стороны (LONG/SHORT) полностью включает/отключает вход в новые позиции по этой стороне. 2) 'default_invest_size' — базовый размер инвестиции в USDT для всех монет корзины. 3) 'invest_size': {} — словарь индивидуальных переопределений для конкретных монет. Если монета не указана в 'invest_size' (или словарь пуст {}), автоматически применяется 'default_invest_size'.",
-        "u17_stephensonJ__trailing_ratchet": {
-            "_comment_alias": "👑 U17: Stephenson-J [Omni-Balanced Flagship | Neutral 9/9% | L3+ Recycler | No Peeling | AutoCloser 1.0] [TRAILING RATCHET]",
-            "template": "u17_stephensonJ",
+        "u96_omni_zenith13__trailing_ratchet": {
+            "_comment_alias": "🥉 U96: Omni Zenith 13 [Min TP 1.0% | Multiplied TPs x1.3 | L3+ 50% Recycler | Trailing Ratchet]",
+            "template": "u96_omni_zenith13",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -55,127 +55,27 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 200.0,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
+                    "ERAUSDT": 350.0,
+                    "BILLUSDT": 350.0,
+                    "KMNOUSDT": 300.0,
+                    "GRASSUSDT": 350,
+                    "SOLVUSDT": 400,
+                    "LAUSDT": 300
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 200.0,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
+                    "ERAUSDT": 350.0,
+                    "BILLUSDT": 350.0,
+                    "KMNOUSDT": 300.0,
+                    "GRASSUSDT": 350,
+                    "SOLVUSDT": 400,
+                    "LAUSDT": 300
                 }
-            },
-            "start_balance_usdt": 434.0
-        },
-        "u17_stephensonJS__trailing_ratchet": {
-            "_comment_alias": "🚀 U17: Stephenson-JS [Neutral 9/9% -> Stagnation S3 Auto-EMA Fist | L3+ Recycler | AutoCloser 1.0] [TRAILING RATCHET]",
-            "template": "u17_stephensonJS",
-            "enabled": false,
-            "api_key_name": "API_KEY",
-            "api_secret_name": "API_SECRET",
-            "auto_closing_mode": "trailing_ratchet",
-            "leverage": 20,
-            "margin_type": "CROSSED",
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -50.0,
-                "positive_threshold": 100.0
-            },
-            "LONG": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
-                }
-            },
-            "SHORT": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
-                }
-            },
-            "start_balance_usdt": 434.0
-        },
-        "u17_stephensonE__trailing_ratchet": {
-            "_comment_alias": "🚂 U17: Stephenson-E [Dual EMA 1d Macro-Trend | Bearish Fist 6/13 | Half-Peel 50% | Cross-Side Recycling 50-75%] [TRAILING RATCHET]",
-            "template": "u17_stephensonE",
-            "enabled": false,
-            "api_key_name": "API_KEY",
-            "api_secret_name": "API_SECRET",
-            "auto_closing_mode": "trailing_ratchet",
-            "leverage": 20,
-            "margin_type": "CROSSED",
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -50.0,
-                "positive_threshold": 100.0
-            },
-            "LONG": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
-                }
-            },
-            "SHORT": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {
-                    "IOTXUSDT": 200.0,
-                    "BILLUSDT": 200.0,
-                    "XNYUSDT": 200.0,
-                    "GTCUSDT": 200,
-                    "SOLVUSDT": 400
-                }
-            },
-            "start_balance_usdt": 434.0
-        },
-        "u96_omni_zenith_apex__trailing_ratchet": {
-            "_comment_alias": "🥉 U96: Omni Zenith Apex [Knife Blocker 1 | Trailing Ratchet]",
-            "template": "u96_omni_zenith_apex",
-            "enabled": false,
-            "api_key_name": "API_KEY",
-            "api_secret_name": "API_SECRET",
-            "auto_closing_mode": "trailing_ratchet",
-            "leverage": 20,
-            "margin_type": "CROSSED",
-            "notifications": {
-                "enabled": true,
-                "negative_threshold": -50.0,
-                "positive_threshold": 100.0
-            },
-            "LONG": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {}
-            },
-            "SHORT": {
-                "enabled": true,
-                "default_invest_size": 200.0,
-                "invest_size": {}
             },
             "start_balance_usdt": 434.0
         }
@@ -262,7 +162,30 @@
         "max_parabolic_pump_pct": 60.0,
         "_desc_max_parabolic_pump_pct": "Anti-pump ceiling: reject parabolic surges above this %.",
         "max_death_spiral_dump_pct": -45.0,
-        "_desc_max_death_spiral_dump_pct": "Anti-dump floor: reject death spiral collapses below this %."
+        "_desc_max_death_spiral_dump_pct": "Anti-dump floor: reject death spiral collapses below this %.",
+        "_legacy_baseline_profile": {
+            "enabled": true,
+            "target_count": 15,
+            "timeframe": "15m",
+            "candles_limit": 96,
+            "use_volatility_scanner_pool": true,
+            "min_natr_threshold": 0.25,
+            "max_parabolic_pump_pct": 60.0,
+            "max_death_spiral_dump_pct": -45.0,
+            "enable_hurst_filter": false,
+            "_desc": "Канонический базовый профиль альфа-фильтра до внедрения Херста и Volume Climax."
+        },
+        "enable_hurst_filter": true,
+        "_desc_enable_hurst_filter": "Фильтр показателя Херста: H <= max_hurst_threshold отбирает Mean-Reverting монеты и отсекает трендовые ракеты (H > 0.50).",
+        "max_hurst_threshold": 0.5,
+        "_desc_max_hurst_threshold": "Порог экспоненты Херста (0.50 - граница случайного блуждания; <=0.50 возврат к среднему).",
+        "enable_volume_climax_filter": false,
+        "_desc_enable_volume_climax_filter": "Детектор кульминации объема: отсекает мем-пампы, где 24h объем в volume_climax_multiplier раз выше 7d медианы при росте >20%.",
+        "volume_climax_multiplier": 4.5,
+        "enable_multi_hurst_filter": false,
+        "_desc_enable_multi_hurst_filter": "Двухфакторный фильтр моментума: отсекает монеты, начавшие импульсный разгон на коротком окне (short_hurst_candles).",
+        "short_hurst_candles": 48,
+        "max_short_hurst_threshold": 0.53
     },
     "watchdog": {
         "timeout_sec": 60,

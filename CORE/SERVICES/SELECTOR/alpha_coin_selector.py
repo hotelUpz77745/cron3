@@ -40,14 +40,48 @@ class AlphaCoinSelector:
     """
 
     @staticmethod
+    def compute_hurst_exponent(prices: np.ndarray) -> float:
+        """
+        Вычисляет показатель Херста (Hurst Exponent) через масштабирование дисперсии лагов цен:
+        Var(P_{t+tau} - P_t) ~ tau^(2H)
+        H < 0.45 -> Выраженный возврат к среднему (Mean-Reverting, идеален для сеточника).
+        0.45 <= H <= 0.55 -> Случайное блуждание (Random Walk).
+        H > 0.55 -> Устойчивый тренд / памп-дамп (Trending / Persistent, опасен для сетки).
+        """
+        if len(prices) < 30:
+            return 0.5
+        log_p = np.log(np.maximum(prices, 1e-8))
+        tau_list = [2, 4, 8, 16, 24, 32]
+        tau_list = [t for t in tau_list if t < len(log_p) // 2]
+        if len(tau_list) < 2:
+            return 0.5
+
+        variances = []
+        for tau in tau_list:
+            diffs = log_p[tau:] - log_p[:-tau]
+            variances.append(float(np.var(diffs)))
+
+        poly = np.polyfit(np.log(tau_list), np.log(variances), 1)
+        hurst = float(poly[0]) / 2.0
+        return max(0.0, min(1.0, hurst))
+
+    @staticmethod
     def evaluate_coin_metrics(
         open_arr: np.ndarray,
         high_arr: np.ndarray,
         low_arr: np.ndarray,
         close_arr: np.ndarray,
+        volume_arr: Optional[np.ndarray] = None,
         min_natr_threshold: float = 0.25,
         max_parabolic_pump_pct: float = 60.0,
         max_death_spiral_dump_pct: float = -45.0,
+        enable_hurst_filter: bool = False,
+        max_hurst_threshold: float = 0.50,
+        enable_volume_climax_filter: bool = False,
+        volume_climax_mult: float = 4.5,
+        enable_multi_hurst_filter: bool = False,
+        short_hurst_candles: int = 48,
+        max_short_hurst_threshold: float = 0.53,
     ) -> Dict[str, Any]:
         """Анализирует свечной ряд и возвращает метрики пригодности."""
         if len(close_arr) < 20:
@@ -99,17 +133,74 @@ class AlphaCoinSelector:
                 "reason": f"dead_volatility_zombie (NATR {natr:.2f}% < {min_natr_threshold}%)",
             }
 
-        # 6. Composite Alpha Score
-        score = (natr * math.log10(wiggle_ratio + 10.0)) / (1.0 + abs_drift / 50.0)
+        # 6. Фильтр кульминации объема (Volume Climax / Meme Pump Detector)
+        vol_climax_val = None
+        if enable_volume_climax_filter and volume_arr is not None and len(volume_arr) >= 30:
+            base_window = volume_arr[:-12]
+            recent_window = volume_arr[-12:]
+            med_base = float(np.median(base_window))
+            if med_base > 0:
+                vol_climax_val = float(np.mean(recent_window) / med_base)
+                if vol_climax_val > volume_climax_mult and net_move_pct > 20.0:
+                    return {
+                        "eligible": False,
+                        "score": 0.0,
+                        "natr": round(natr, 3),
+                        "move_pct": round(net_move_pct, 1),
+                        "wiggle": round(wiggle_ratio, 1),
+                        "vol_climax": round(vol_climax_val, 2),
+                        "reason": f"volume_climax_pump (vol {vol_climax_val:.1f}x > {volume_climax_mult}x & +{net_move_pct:.1f}%)",
+                    }
 
-        return {
+        # 7. Фильтр показателя Херста (Mean-Reversion Suitability Filter)
+        hurst = AlphaCoinSelector.compute_hurst_exponent(close_arr)
+        if enable_hurst_filter and hurst > max_hurst_threshold:
+            return {
+                "eligible": False,
+                "score": 0.0,
+                "natr": round(natr, 3),
+                "move_pct": round(net_move_pct, 1),
+                "wiggle": round(wiggle_ratio, 1),
+                "hurst": round(hurst, 3),
+                "reason": f"persistent_trend_hurst ({hurst:.3f} > {max_hurst_threshold})",
+            }
+
+        # 8. Двухфакторный фильтр моментум-пробоя (Multi-Horizon Hurst Guard)
+        short_hurst = None
+        if enable_multi_hurst_filter and len(close_arr) >= (short_hurst_candles + 15):
+            short_hurst = AlphaCoinSelector.compute_hurst_exponent(close_arr[-short_hurst_candles:])
+            if short_hurst > max_short_hurst_threshold:
+                return {
+                    "eligible": False,
+                    "score": 0.0,
+                    "natr": round(natr, 3),
+                    "move_pct": round(net_move_pct, 1),
+                    "wiggle": round(wiggle_ratio, 1),
+                    "hurst": round(hurst, 3),
+                    "short_hurst": round(short_hurst, 3),
+                    "reason": f"short_term_momentum_breakout (H_short {short_hurst:.3f} > {max_short_hurst_threshold})",
+                }
+
+        # 9. Composite Alpha Score (с учетом mean-reverting бонуса при низком H)
+        score = (natr * math.log10(wiggle_ratio + 10.0)) / (1.0 + abs_drift / 50.0)
+        if enable_hurst_filter and hurst < 0.45:
+            # Бонус 10% за выраженную антиперсистентность
+            score *= 1.10
+
+        res_dict = {
             "eligible": True,
             "score": round(score, 4),
             "natr": round(natr, 3),
             "move_pct": round(net_move_pct, 1),
             "wiggle": round(wiggle_ratio, 1),
+            "hurst": round(hurst, 3),
             "reason": "optimal_high_beta_swing",
         }
+        if vol_climax_val is not None:
+            res_dict["vol_climax"] = round(vol_climax_val, 2)
+        if short_hurst is not None:
+            res_dict["short_hurst"] = round(short_hurst, 3)
+        return res_dict
 
     @classmethod
     def _get_config(cls) -> Dict[str, Any]:
@@ -132,6 +223,13 @@ class AlphaCoinSelector:
             "min_natr_threshold": float(raw_cfg.get("min_natr_threshold", 0.25)),
             "max_parabolic_pump_pct": float(raw_cfg.get("max_parabolic_pump_pct", 60.0)),
             "max_death_spiral_dump_pct": float(raw_cfg.get("max_death_spiral_dump_pct", -45.0)),
+            "enable_hurst_filter": bool(raw_cfg.get("enable_hurst_filter", False)),
+            "max_hurst_threshold": float(raw_cfg.get("max_hurst_threshold", 0.50)),
+            "enable_volume_climax_filter": bool(raw_cfg.get("enable_volume_climax_filter", False)),
+            "volume_climax_multiplier": float(raw_cfg.get("volume_climax_multiplier", 4.5)),
+            "enable_multi_hurst_filter": bool(raw_cfg.get("enable_multi_hurst_filter", False)),
+            "short_hurst_candles": int(raw_cfg.get("short_hurst_candles", 48)),
+            "max_short_hurst_threshold": float(raw_cfg.get("max_short_hurst_threshold", 0.53)),
             "klines_cache_ttl_sec": 300.0,
         }
         if "volatility_scanner" in data and "klines_cache_ttl_sec" in data["volatility_scanner"]:
@@ -147,6 +245,13 @@ class AlphaCoinSelector:
         min_natr_threshold: float = 0.25,
         max_parabolic_pump_pct: float = 60.0,
         max_death_spiral_dump_pct: float = -45.0,
+        enable_hurst_filter: bool = False,
+        max_hurst_threshold: float = 0.50,
+        enable_volume_climax_filter: bool = False,
+        volume_climax_mult: float = 4.5,
+        enable_multi_hurst_filter: bool = False,
+        short_hurst_candles: int = 48,
+        max_short_hurst_threshold: float = 0.53,
     ) -> List[Dict[str, Any]]:
         """Ранжирует словарь свечей и возвращает Top-K лидеров."""
         results = []
@@ -159,9 +264,17 @@ class AlphaCoinSelector:
                 high_arr=c_data["high"],
                 low_arr=c_data["low"],
                 close_arr=c_data["close"],
+                volume_arr=c_data.get("volume"),
                 min_natr_threshold=min_natr_threshold,
                 max_parabolic_pump_pct=max_parabolic_pump_pct,
                 max_death_spiral_dump_pct=max_death_spiral_dump_pct,
+                enable_hurst_filter=enable_hurst_filter,
+                max_hurst_threshold=max_hurst_threshold,
+                enable_volume_climax_filter=enable_volume_climax_filter,
+                volume_climax_mult=volume_climax_mult,
+                enable_multi_hurst_filter=enable_multi_hurst_filter,
+                short_hurst_candles=short_hurst_candles,
+                max_short_hurst_threshold=max_short_hurst_threshold,
             )
             metrics["symbol"] = sym
             results.append(metrics)
@@ -288,6 +401,7 @@ class AlphaCoinSelector:
                         "high": np.array([x["high"] for x in raw], dtype=np.float64),
                         "low": np.array([x["low"] for x in raw], dtype=np.float64),
                         "close": np.array([x["close"] for x in raw], dtype=np.float64),
+                        "volume": np.array([float(x.get("volume", x.get("vol", 0.0))) for x in raw], dtype=np.float64),
                     }
                 except Exception:
                     return None
@@ -314,6 +428,13 @@ class AlphaCoinSelector:
             min_natr_threshold=float(cfg.get("min_natr_threshold", 0.25)),
             max_parabolic_pump_pct=float(cfg.get("max_parabolic_pump_pct", 60.0)),
             max_death_spiral_dump_pct=float(cfg.get("max_death_spiral_dump_pct", -45.0)),
+            enable_hurst_filter=bool(cfg.get("enable_hurst_filter", False)),
+            max_hurst_threshold=float(cfg.get("max_hurst_threshold", 0.50)),
+            enable_volume_climax_filter=bool(cfg.get("enable_volume_climax_filter", False)),
+            volume_climax_mult=float(cfg.get("volume_climax_multiplier", 4.5)),
+            enable_multi_hurst_filter=bool(cfg.get("enable_multi_hurst_filter", False)),
+            short_hurst_candles=int(cfg.get("short_hurst_candles", 48)),
+            max_short_hurst_threshold=float(cfg.get("max_short_hurst_threshold", 0.53)),
         )
         logger.info(
             f"[AlphaCoinSelector] Top-{effective_count} selected: "

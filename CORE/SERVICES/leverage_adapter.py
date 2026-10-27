@@ -37,6 +37,9 @@ class LeverageAdapter:
         return {}
 
     def _save_cache(self):
+        import os
+        if os.getenv("CRON3_BACKTEST") == "1" or os.getenv("CRON3_TEST") == "1":
+            return
         Utils.write_json_file(CACHE_FILE, self._cache)
 
     def is_configured(self, symbol: str, *args, **kwargs) -> bool:

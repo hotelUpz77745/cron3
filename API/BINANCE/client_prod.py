@@ -123,6 +123,8 @@ class BinanceClient:
         safe_params = dict(params) if params else {}
 
         if signed:
+            if not self.api_key or not self.api_secret:
+                return APIResponse(success=False, error_msg="API keys not configured (empty API_KEY or API_SECRET)")
             ts = int((time.time() - TIME_SLACK_SEC) * 1000)
             safe_params["timestamp"] = ts
             query = urllib.parse.urlencode(safe_params, safe=',')

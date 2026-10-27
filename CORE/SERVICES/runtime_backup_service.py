@@ -133,6 +133,8 @@ class RuntimeBackupService:
     @classmethod
     async def send_to_telegram(cls, json_path: Path, chat_ids: Optional[List[int]] = None) -> bool:
         """Отправляет сгенерированный JSON-файл в Telegram как документ."""
+        if os.getenv("CRON3_BACKTEST") == "1":
+            return False
         token = os.getenv("TG_TOKEN")
         if not token:
             logger.warning("TG_TOKEN not configured in environment. Skipping Telegram send.")

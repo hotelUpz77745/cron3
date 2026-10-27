@@ -1,6 +1,6 @@
 {
-    "name": "Stephenson-J (Neutral 7/7%)",
-    "description": "Новейшее сбалансированное поколение U17 Stephenson-J: 1) Agile AutoCloser 1.0x для непрерывной фиксации прибыли и сброса плавающего минуса; 2) Интеллектуальный L3+ рециркулятор (L1-L2 не сжигаются, L3-L4 25%, L5+ 37.5%); 3) «Правило кулака Сильной руки» auto_ema по 1d свечам; 4) Half-Peel 50% пилинг; 5) Panic Damper TP (min_tp_indent: 1.0%); 6) Smart Grace 57s с анти-HFT рандомизацией [5, 16]s.",
+    "name": "🚂 U17: Stephenson-JSE [Neutral 9/9% S3 Fist | Dynamic ATR Grid | Half-Peel 50% LIFO | L3+ Recycler | AutoCloser 1.0]",
+    "description": "Симбиоз Stephenson-JS и Stephenson-E: 1) Режим первого ордера stagnation_min_step: 3 (в спокойном рынке нейтральный 9/9%, при застревании противоположной стороны >= 3 - удар кулаком по 1d EMA); 2) Динамическое масштабирование L1-L3 через 1h ATR (dynamic_atr_grid); 3) Мягкий пилинг Half-Peel 50% (peel_ratio: 0.5, peel_num: 1) для L3..L6 ступеней; 4) Cross-Side Recycler L3+ (50% прибыли со ступени L3 при просадке >= 3%); 5) AutoCloser scale_money: 1.0; 6) Panic Damper TP (min_tp_indent: 1.0%).",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
     "_tp_purpose_modes": {
@@ -101,8 +101,7 @@
     "min_tp_indent": 1.0,
     "_min_tp_indent_desc": "Минимальный гарантированный пол тейк-профита для стратегии (Правило 11 + персональный пол): никакой тейк на всей глубине сетки не опускается ниже 1.0%.",
     "first_order_weight_regime": {
-        "mode": "off",
-        "stagnation_min_step": null,
+        "mode": "auto_ema",
         "_concept": "«Правило кулака Сильной руки» (Strong Hand Fist Rule)",
         "_desc_mode": "«Правило кулака Сильной руки» (grid_0): регулирует силу стартового входа первого ордера. Варианты: 'bullish' (12% Long / 7% Short — кулак бьет вверх), 'neutral' (9% Long / 9% Short — равновесие во флэте), 'bearish' (7% Long / 12% Short — кулак бьет вниз), 'auto_ema' (динамический выбор по дневной 1d EMA), или 'off' / null (отключение фичи — используются фиксированные базовые объемы из сетки стратегии). Допустимы также числовые эквиваленты: 1 (bullish), 0 (neutral), -1 (bearish).",
         "presets": {
@@ -129,7 +128,9 @@
             "trend_positive": true,
             "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
         },
-        "enabled": false
+        "enabled": true,
+        "default_mode": "neutral",
+        "stagnation_min_step": 3
     },
     "_auto_closing_modes_allowed": [
         "trailing_ratchet",
@@ -225,7 +226,7 @@
                 "enabled": true,
                 "indent": 0.0,
                 "activation": null,
-                "volume": 7.0,
+                "volume": null,
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
@@ -271,9 +272,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.2,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 2
             },
             "4": {
@@ -285,9 +286,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.4,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 2
             },
             "5": {
@@ -299,9 +300,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.5,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 3
             },
             "6": {
@@ -400,7 +401,7 @@
                 "enabled": true,
                 "indent": 0.0,
                 "activation": null,
-                "volume": 7.0,
+                "volume": null,
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
@@ -446,9 +447,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.2,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 2
             },
             "4": {
@@ -460,9 +461,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.4,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 2
             },
             "5": {
@@ -474,9 +475,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.5,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 3
             },
             "6": {
@@ -488,9 +489,9 @@
                 "super_indent": null,
                 "activated_at": null,
                 "timestamp": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
+                "peel_tp_pct": 1.6,
+                "peel_ratio": 0.5,
+                "peel_num": 1,
                 "zone": 3
             },
             "7": {

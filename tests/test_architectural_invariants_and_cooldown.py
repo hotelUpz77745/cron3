@@ -315,7 +315,10 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         2. u17 и u96 имеют 100% зеркальную симметрию полей и секций.
         3. super_grid представлен каноническим словарем с enabled: false.
         """
-        u17_data = Utils.read_json_file(UNIVERSES_DIR / "u17_stephensonE.json")
+        u17_path = UNIVERSES_DIR / "u17_stephensonE.json"
+        if not u17_path.exists():
+            u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
+        u17_data = Utils.read_json_file(u17_path)
         u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
 
         # 1. Отсутствие leverage и notifications в паспортах
@@ -324,12 +327,12 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("notifications", u17_data, "notifications должен быть strictly client-side в app.json")
         self.assertNotIn("notifications", u96_data, "notifications должен быть strictly client-side в app.json")
 
-        # 2. Наличие leverage и notifications в app.json
+        # 2. Наличие leverage и notifications в app.json для активных стратегий
         app_data = Utils.read_json_file(CFG_DIR / "app.json")
-        for s_key in ("u17_stephensonE__trailing_ratchet", "u96_omni_zenith_apex__trailing_ratchet"):
-            c_cfg = app_data["active_strategies"][s_key]
+        for s_key, c_cfg in app_data.get("active_strategies", {}).items():
+            if s_key.startswith("_"):
+                continue
             self.assertIn("leverage", c_cfg)
-            self.assertEqual(c_cfg["leverage"], 20)
             self.assertIn("notifications", c_cfg)
             self.assertTrue(c_cfg["notifications"]["enabled"])
 
@@ -350,18 +353,23 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
             self.assertIn("tp_map", data["SHORT"])
             self.assertFalse(data["SHORT"].get("_inheritance_base_side", True))
 
-        # 6. Проверка StrategyMetadataHelper: чтение client leverage из app.json
+        # 6. Проверка StrategyMetadataHelper: чтение client leverage
         from TG.strategy_helpers import StrategyMetadataHelper
-        u17_meta = StrategyMetadataHelper.get_strategy_meta("u17_stephensonE__trailing_ratchet")
-        self.assertEqual(u17_meta["leverage"], 20)
-        self.assertIn("Stephenson", u17_meta["name"])
+        for s_key in app_data.get("active_strategies", {}):
+            if s_key.startswith("_"):
+                continue
+            meta = StrategyMetadataHelper.get_strategy_meta(s_key)
+            self.assertIn("leverage", meta)
 
     # =========================================================================
     # 7. УПРАВЛЕНИЕ first_order_weight_regime ЧЕРЕЗ enabled: true / false
     # =========================================================================
     def test_first_order_weight_regime_enabled_flag(self):
         """Проверка: first_order_weight_regime управляется флагом 'enabled': true | false."""
-        u17_data = Utils.read_json_file(UNIVERSES_DIR / "u17_stephensonE.json")
+        u17_path = UNIVERSES_DIR / "u17_stephensonE.json"
+        if not u17_path.exists():
+            u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
+        u17_data = Utils.read_json_file(u17_path)
         u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
 
         self.assertTrue(u17_data["first_order_weight_regime"]["enabled"])

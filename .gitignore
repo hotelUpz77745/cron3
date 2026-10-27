@@ -18,4 +18,6 @@ combat_replay_klines.json
 *.tmp*
 *.tmp_*
 CACHE/backups/
+CACHE/iteration_state.json
 pyrefly.toml
+

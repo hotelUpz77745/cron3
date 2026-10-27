@@ -86,6 +86,11 @@ class DrawdownTracker:
                 if "Connector is closed" in err or not getattr(self, "_is_tracker_running", True):
                     logger.debug(f"[ANALYTICS] fetch_account_info skipped during shutdown: {err}")
                     return False
+                if "API keys not configured" in err:
+                    if not getattr(self, "_api_missing_warned", False):
+                        logger.info("[ANALYTICS] ℹ️ API keys not configured in .env. Real-time REST account polling paused until keys are set.")
+                        self._api_missing_warned = True
+                    return False
                 self.circuit_breaker.update_ban_from_error(err)
                 logger.warning(f"[ANALYTICS] fetch_account_info failed: {err}. Skipping recalculation until valid API data.")
                 if hasattr(self.manager, "fsm") and self.manager.fsm:

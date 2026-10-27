@@ -194,6 +194,10 @@ class StrategyConfig:
         return self.raw_meta.get("first_order_weight_regime") or self.overrides.get("first_order_weight_regime") or {}
 
     @property
+    def directional_trend_gate(self) -> Dict[str, Any]:
+        return self.raw_meta.get("directional_trend_gate") or self.overrides.get("directional_trend_gate") or {}
+
+    @property
     def tp_map(self) -> Dict[str, Any]:
         return (self.raw_meta.get("LONG") or {}).get("tp_map") or (self.raw_meta.get("SHORT") or {}).get("tp_map") or self.overrides.get("tp_map", {})
 

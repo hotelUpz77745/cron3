@@ -66,11 +66,13 @@ class SimulatedBinanceClient:
         self,
         start_balance_usdt: float = 449.0,
         fee_rate: float = 0.0005,  # 0.05% Taker по регламенту лаборатории
-        leverage: int = 20
+        leverage: int = 20,
+        maker_fee_rate: float = 0.0002,  # 0.02% Maker для лимитных ордеров (Take-Profit)
     ):
         self.initial_balance = float(start_balance_usdt)
         self.balance = float(start_balance_usdt)
         self.fee_rate = float(fee_rate)
+        self.maker_fee_rate = float(maker_fee_rate)
         self.default_leverage = int(leverage)
 
         self._next_order_id = 100000
@@ -86,6 +88,10 @@ class SimulatedBinanceClient:
         self.max_drawdown_usdt: float = 0.0
         self.trade_fills_count: int = 0
         self.on_fill_callback: Optional[Any] = None
+
+    @property
+    def wallet_balance(self) -> float:
+        return self.balance
 
     def _get_position(self, symbol: str, position_side: str) -> SimPosition:
         key = (symbol.upper(), position_side.upper())
@@ -439,9 +445,17 @@ class SimulatedBinanceClient:
     def _execute_fill(self, order: SimOrder, fill_price: float, fill_ts: int) -> Tuple[bool, Optional[str]]:
         pos = self._get_position(order.symbol, order.position_side)
         notional = order.qty * fill_price
-        fee = notional * self.fee_rate
 
         is_opening = (pos.position_side == "LONG" and order.side == "BUY") or (pos.position_side == "SHORT" and order.side == "SELL")
+
+        # Лимитные ордера закрытия позиции (Take-Profit / ReduceOnly) рассчитываются по ставке Maker (0.02%),
+        # рыночные ордера (Market входы, аварийный AutoCloser, срез ротации) — по ставке Taker (0.05%).
+        if order.order_type == "LIMIT" and (order.reduce_only or not is_opening):
+            effective_fee_rate = getattr(self, "maker_fee_rate", 0.0002)
+        else:
+            effective_fee_rate = self.fee_rate
+
+        fee = notional * effective_fee_rate
 
         if is_opening:
             req_margin = notional / pos.leverage
@@ -541,4 +555,44 @@ class SimulatedBinanceClient:
             "total_fees_paid": round(self.total_fees_paid, 2),
             "trade_fills_count": self.trade_fills_count,
         }
+
+    _precomputed_trends_db: Optional[Dict[str, str]] = None
+
+    def get_precomputed_trend(
+        self,
+        symbol: str,
+        timeframe: str = "4h",
+        sma_fast: int = 10,
+        sma_slow: int = 30
+    ) -> Optional[str]:
+        """Мгновенный O(1) доступ к предрасчитанным EMA трендам для сверхбыстрого макро-шлюза в бэктестере."""
+        if SimulatedBinanceClient._precomputed_trends_db is None:
+            trends_path = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA" / "precomputed_ema_trends.json"
+            if trends_path.exists():
+                try:
+                    with open(trends_path, "r", encoding="utf-8") as f:
+                        SimulatedBinanceClient._precomputed_trends_db = json.load(f)
+                except Exception:
+                    SimulatedBinanceClient._precomputed_trends_db = {}
+            else:
+                SimulatedBinanceClient._precomputed_trends_db = {}
+
+        sym_u = symbol.upper().strip()
+        ts_ms = int(self.current_sim_time * 1000) if self.current_sim_time > 0 else 0
+        if ts_ms <= 0:
+            return None
+
+        tf = timeframe.lower()
+        if "1d" in tf:
+            bin_ms = 86400000
+        elif "4h" in tf:
+            bin_ms = 14400000
+        else:
+            bin_ms = 3600000
+
+        bin_ts = ts_ms // bin_ms * bin_ms
+        suffix = "_7_25" if (sma_fast == 7 and sma_slow == 25) else ""
+        key = f"{sym_u}|{timeframe}{suffix}|{bin_ts}"
+        return SimulatedBinanceClient._precomputed_trends_db.get(key)
+
 

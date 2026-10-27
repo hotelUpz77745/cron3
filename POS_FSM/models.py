@@ -168,6 +168,7 @@ class PositionState:
     pending_avg: bool = False
     pending_rolling_tp: bool = False
     pending_peel: bool = False
+    is_passive_mode: bool = False
     
     grid: dict = field(default_factory=dict)
     tp_map: dict = field(default_factory=dict)
@@ -272,6 +273,7 @@ class PositionState:
             "tp_price": getattr(self, "tp_price", None),
             "is_closing": getattr(self, "is_closing", False),
             "fees": float(getattr(self, "fees", 0.0)),
+            "is_passive_mode": bool(getattr(self, "is_passive_mode", False)),
             "cur_step": int(getattr(self, "cur_step", 0)),
             "last_grace_period": float(getattr(self, "last_grace_period", 0.0)),
             "last_closed_volume": float(getattr(self, "last_closed_volume", 0.0)),
@@ -296,6 +298,7 @@ class PositionState:
         self.pending_avg = bool(data.get("pending_avg", False))
         self.pending_rolling_tp = bool(data.get("pending_rolling_tp", False))
         self.pending_peel = bool(data.get("pending_peel", False))
+        self.is_passive_mode = bool(data.get("is_passive_mode", False))
         self.eff_invest = float(data.get("eff_invest", 0.0))
         self.tp_placed_at = float(data["tp_placed_at"]) if data.get("tp_placed_at") is not None else None
         self.tp_current_indent = float(data["tp_current_indent"]) if data.get("tp_current_indent") is not None else None
@@ -360,6 +363,7 @@ class PositionState:
         self.pending_avg = False
         self.pending_rolling_tp = False
         self.pending_peel = False
+        self.is_passive_mode = False
         self.next_avg_price = None
         self.tp_price = None
         self.fallback_price = None

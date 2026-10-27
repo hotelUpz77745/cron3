@@ -91,7 +91,7 @@ class MomentumEngine:
                 klines = None
                 if client and hasattr(client, "get_klines"):
                     klines = await client.get_klines(symbol, timeframe, limit)
-                if not klines:
+                if not klines and os.environ.get("CRON3_BACKTEST") != "1":
                     klines = await BinancePublic.get_klines(symbol, timeframe, limit)
 
                 if not klines or len(klines) < 15:
