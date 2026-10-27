@@ -1,0 +1,71 @@
+{
+    "updated_at_utc": "2026-10-27 03:59:43 UTC",
+    "total_universes_active": 0,
+    "evaluated_coins_count": 0,
+    "aggregate_start_balance_usdt": 0,
+    "aggregate_cur_balance_usdt": 0,
+    "aggregate_peak_balance_usdt": 0,
+    "aggregate_min_balance_usdt": 0,
+    "aggregate_net_profit_usdt": 0,
+    "aggregate_realized_pnl_usdt": 0,
+    "aggregate_unrealized_pnl_usdt": 0,
+    "aggregate_total_trades": 0,
+    "trade_velocity": {
+        "universe_id": "default",
+        "timeframe_hours": 6.0,
+        "min_accumulation_hours": 1.0,
+        "accumulation_hours": 0.0,
+        "is_ready_for_alerts": false,
+        "is_interpolated": false,
+        "interpolation_factor": 1.0,
+        "benchmark_speed": 10.0,
+        "slice_description": "Все монеты (6 шт.)",
+        "slice_coins_count": 6,
+        "slice_trades_count": 0,
+        "avg_actual_speed": null,
+        "avg_effective_speed": null,
+        "speed_ratio": null,
+        "deviation_pct": null,
+        "status": "ACCUMULATING",
+        "status_desc": "Накопление (0.0ч / 1.0ч)",
+        "per_coin": {
+            "ERAUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "BILLUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "KMNOUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "GRASSUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "SOLVUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            },
+            "LAUSDT": {
+                "trades": 0,
+                "effective_speed": 0.0,
+                "speed_ratio": 0.0,
+                "status_desc": "НЕДОГРЕВ"
+            }
+        }
+    },
+    "leaderboard": []
+}

@@ -1,7 +1,7 @@
 {
     "start_balance_usdt": 434.0,
     "_rebased_start_balance_usdt": 434.0,
-    "first_trade_ts": 1793071696532,
+    "first_trade_ts": 1793073525263,
     "cur_balance_usdt": 434.0,
     "peak_balance_usdt": 434.0,
     "min_balance_usdt": 434.0,
@@ -18,9 +18,9 @@
     "iteration_index": 1,
     "iteration_start_net_profit_usdt": 0.0,
     "iteration_net_profit_usdt": 0.0,
-    "iteration_start_ts": 1793071696532,
+    "iteration_start_ts": 1793073525263,
     "iteration_peak_net_profit_usdt": 0.0,
-    "iteration_peak_ts": 1793071696532,
+    "iteration_peak_ts": 1793073525263,
     "iteration_peak_age_hours": 0.0,
     "iteration_net_velocity": 0.0,
     "per_coin": {}

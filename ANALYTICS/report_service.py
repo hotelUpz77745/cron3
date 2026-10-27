@@ -151,7 +151,7 @@ class AnalyticsReportService:
 
     def render_universes_list(
         self,
-        current_uid: str,
+        current_uid: Optional[str],
         active_strats: Dict[str, Any],
         page: int = 1,
         page_size: int = 5,

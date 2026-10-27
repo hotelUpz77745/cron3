@@ -7,9 +7,10 @@ import asyncio
 import time
 from typing import Optional
 
-from consts import _CFG
+from consts import _CFG, DEFAULT_HEARTBEAT_TFR
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.ENTRY.signal import TimeControl
 from CORE._utils import TradeMath, RiskCalculatingUtils, TakeProfitConfigResolver
 from CORE.STRATEGY.momentum_engine import MomentumEngine
 from CORE.TP.dynamic_atr_tp_manager import DynamicATRTakeProfitManager

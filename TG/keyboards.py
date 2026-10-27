@@ -3,7 +3,14 @@
 # Role: Reply клавиатуры главного меню, управления монетами и навигации
 # ==============================================================================
 
-from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
+from typing import Any, Dict, List
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+)
+from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 
 
 def get_main_keyboard() -> ReplyKeyboardMarkup:
@@ -98,9 +105,6 @@ def get_back_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from typing import Any, List, Dict
-from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 
 
 def get_strategy_selection_inline_keyboard(active_strategies: Dict[str, Any], symbol: str, bot_core: Any) -> InlineKeyboardMarkup:

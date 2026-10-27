@@ -1,681 +1,682 @@
 {
-    "name": "🥉 U96: Omni Zenith Apex + Knife Blocker 1",
-    "description": "Симбиоз Омен-9 (Omni Zenith Apex) с порогом ножа от Медного Змея (Knife Blocker >= 1): жесткая мгновенная блокировка входа на первом же импульсе противоположной стороны, защита от ножей.",
-    "signal_heartbeat_tfr": "5m",
-    "tp_purpose": "self",
-    "_tp_purpose_modes": {
-        "self": "Классический тейк-профит: уровень TP рассчитывается строго по шагу сетки собственной стороны позиции (level_self).",
-        "opposite": "Хедж/арбитражный тейк-профит: уровень TP берется по текущей ступени сетки противоположной стороны (level_opp).",
-        "both": "Синхронный парный тейк-профит: уровень TP рассчитывается по максимальному уровню из собственной и противоположной сторон (max(level_self, level_opp)).",
-        "neutral": "Автономная лестница TP: Фибо/трейлинг лестница без жесткой привязки к ступеням усреднения сетки (отвязка от active_grid_level)."
+  "name": "🥉 U96: Omni Zenith Apex + Knife Blocker 1",
+  "description": "Симбиоз Омен-9 (Omni Zenith Apex) с порогом ножа от Медного Змея (Knife Blocker >= 1): жесткая мгновенная блокировка входа на первом же импульсе противоположной стороны, защита от ножей.",
+  "signal_heartbeat_tfr": "5m",
+  "tp_purpose": "self",
+  "_tp_purpose_modes": {
+    "self": "Классический тейк-профит: уровень TP рассчитывается строго по шагу сетки собственной стороны позиции (level_self).",
+    "opposite": "Хедж/арбитражный тейк-профит: уровень TP берется по текущей ступени сетки противоположной стороны (level_opp).",
+    "both": "Синхронный парный тейк-профит: уровень TP рассчитывается по максимальному уровню из собственной и противоположной сторон (max(level_self, level_opp)).",
+    "neutral": "Автономная лестница TP: Фибо/трейлинг лестница без жесткой привязки к ступеням усреднения сетки (отвязка от active_grid_level)."
+  },
+  "super_grid": {
+    "enabled": false,
+    "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
+    "timeframe": "1w",
+    "window": 12,
+    "multiplier": 1.5,
+    "min_volatility_pct": 15.0,
+    "max_volatility_pct": null,
+    "update_interval_hours": 24
+  },
+  "avg_free_volume_behavior": "distribute_remaining",
+  "_avg_free_volume_behavior_modes": {
+    "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
+    "distribute_nearest": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
+    "distribute_skip": "(Пропуск объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем пропускается без переноса на другие ступени."
+  },
+  "base_order_type": "LIMIT",
+  "fallback_order_type": "MARKET",
+  "min_tp_indent": 0.62,
+  "_min_tp_indent_desc": "Минимальный порог отступа тейк-профита в %.",
+  "dynamic_atr_grid": {
+    "enabled": false,
+    "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента",
+    "timeframe": "1h",
+    "period": 14,
+    "cache_ttl_sec": 300,
+    "fallback_atr_pct": 2.0,
+    "ref_atr_pct": 2.0,
+    "min_multiplier": 0.75,
+    "max_multiplier": 2.25,
+    "max_scaled_level": 3,
+    "_desc_max_scaled_level": "Конкретный номер предельного уровня сетки (L1..LN) для ATR-масштабирования.",
+    "max_indent_cap_pct": 21.0,
+    "_desc_max_indent_cap_pct": "Защитный потолок отступа: никакой масштабируемый уровень не может отодвинуться глубже 21.0%.",
+    "min_indent_floor_pct": 1.5,
+    "_desc_min_indent_floor_pct": "Минимальный пол шага ступени (1.5%)."
+  },
+  "cross_side_recycling": {
+    "enabled": true,
+    "recycle_ratio_tiers": {
+      ">=3": 0.5
     },
-    "super_grid": {
-        "enabled": false,
-        "_comment_timeframe": "Valid values: 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M",
-        "timeframe": "1w",
-        "window": 12,
-        "multiplier": 1.5,
-        "min_volatility_pct": 15.0,
-        "max_volatility_pct": null,
-        "update_interval_hours": 24
+    "min_burn_level": 3,
+    "min_drawdown_pct": 3.0,
+    "max_slice_pct": 20.0,
+    "_desc_recycle_ratio_tiers": "Сжигание строго со ступени L3+ (50% прибыли) при просадке >= 3.0%, уровни L0..L2 не сжигаются."
+  },
+  "first_order_weight_regime": {
+    "mode": "off",
+    "stagnation_min_step": null,
+    "_concept": "«Правило кулака Сильной руки» (Strong Hand Fist Rule)",
+    "_desc_mode": "«Правило кулака Сильной руки» (grid_0): регулирует силу стартового входа первого ордера. Варианты: 'bullish', 'neutral', 'bearish', 'auto_ema', или 'off' / null (отключение фичи).",
+    "presets": {
+      "bullish": {
+        "LONG": 12.0,
+        "SHORT": 7.0
+      },
+      "neutral": {
+        "LONG": 9.0,
+        "SHORT": 9.0
+      },
+      "bearish": {
+        "LONG": 6.0,
+        "SHORT": 13.0
+      }
     },
-    "avg_free_volume_behavior": "distribute_remaining",
-    "_avg_free_volume_behavior_modes": {
-        "distribute_remaining": "(Распределение) Равномерно делим пропущенный объем между всеми оставшимися неисполненными ступенями сетки.",
-        "distribute_nearest": "(Слияние с ближайшим) Объем пропущенных уровней суммируется и переносится в сработавшее колено, а пропущенные помечаются исполненными.",
-        "distribute_skip": "(Пропуск объема) Пропущенные уровни помечаются исполненными при отработке ближайшего колена, их объем пропускается без переноса на другие ступени."
+    "auto_ema": {
+      "timeframe": "1d",
+      "sma_fast": 10,
+      "sma_slow": 30,
+      "confirmation_candles": 3,
+      "require_rising": true,
+      "trend_positive": true,
+      "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
     },
-    "base_order_type": "LIMIT",
-    "fallback_order_type": "MARKET",
-    "min_tp_indent": 0.62,
-    "_min_tp_indent_desc": "Минимальный порог отступа тейк-профита в %.",
-    "dynamic_atr_grid": {
-        "enabled": false,
-        "_desc": "Динамическое масштабирование шагов сетки и курков активации через 1h ATR инструмента",
-        "timeframe": "1h",
-        "period": 14,
-        "cache_ttl_sec": 300,
-        "fallback_atr_pct": 2.0,
-        "ref_atr_pct": 2.0,
-        "min_multiplier": 0.75,
-        "max_multiplier": 2.25,
-        "max_scaled_level": 3,
-        "_desc_max_scaled_level": "Конкретный номер предельного уровня сетки (L1..LN) для ATR-масштабирования.",
-        "max_indent_cap_pct": 21.0,
-        "_desc_max_indent_cap_pct": "Защитный потолок отступа: никакой масштабируемый уровень не может отодвинуться глубже 21.0%.",
-        "min_indent_floor_pct": 1.5,
-        "_desc_min_indent_floor_pct": "Минимальный пол шага ступени (1.5%)."
+    "enabled": false,
+    "_desc_presets": "Веса капитала стартового удара (grid_0 в % от invest_size). ВНИМАНИЕ: «Правило кулака» управляет ИСКЛЮЧИТЕЛЬНО первым ордером (grid_0). Все последующие усредняющие уровни сетки (L1..L6) и их шаги остаются строго неизменными по утвержденной сетке стратегии."
+  },
+  "smart_grace": {
+    "start_period_sec": 57,
+    "shift_interval_sec": 13,
+    "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
+    "increments_card": {
+      "==1": 30,
+      "==2": 75,
+      "==3": 120,
+      ">=4": 160
     },
-    "cross_side_recycling": {
-        "enabled": true,
-        "recycle_ratio_tiers": {
-            ">=3": 0.5
+    "enabled": true,
+    "_shift_interval_sec_desc": "Интервал сдвига тайминга первого входа в секундах.",
+    "brownian_noise_factor": null,
+    "_brownian_noise_factor_desc": "Броуновский шум отключен (null) для U96."
+  },
+  "smart_size": {
+    "profiting_size_weights": {
+      "<2": 1.0,
+      "==2": 1.2,
+      "==3": 0.85,
+      ">=4": 0.6
+    },
+    "knife_blocker_threshold": 1,
+    "_knife_blocker_desc": "Защита от ножей: порог закрытых ордеров противоположного направления, блокирующий вход (1). При null защита отключена (отдельный флаг knife_blocker_enabled не используется).",
+    "enabled": true,
+    "trend_determ": null,
+    "_trend_determ_modes": {
+      "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 1d Dual EMA 7/25 тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
+      "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
+    },
+    "ema_trend": {
+      "timeframe": "1d",
+      "sma_fast": 7,
+      "sma_slow": 25,
+      "confirmation_candles": 3,
+      "require_rising": true,
+      "trend_positive": true
+    },
+    "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
+    "stagnation_min_step": null
+  },
+  "smart_tp": {
+    "increments_tp": {
+      "<2": 1.0,
+      ">=2": 1.3,
+      ">4": 1.6
+    },
+    "enabled": true,
+    "trend_determ": null,
+    "_trend_determ_desc": "Множители increments_tp (колокол Тюринга) применяются только при совпадении с 4h Dual EMA трендом (LONG при UP, SHORT при DOWN). В контртренде/флэте множитель строго 1.00x.",
+    "stagnation_min_step": null
+  },
+  "_auto_closing_modes_allowed": [
+    "trailing_ratchet",
+    "toxic",
+    "fixed",
+    "off"
+  ],
+  "auto_closing": {
+    "positive": {
+      "scale_money": 1.0,
+      "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
+      "min_guaranteed_profit_usdt": 5.0,
+      "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
+      "fixed_net": {
+        "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
+        "target_net_usdt": 60.0,
+        "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT."
+      },
+      "toxicity_adaptive": {
+        "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
+        "score_weights": {
+          "margin_load": 0.35,
+          "grid_depth": 0.3,
+          "float_ratio": 0.25,
+          "delta_recovery": 0.15
         },
-        "min_burn_level": 3,
-        "min_drawdown_pct": 3.0,
-        "max_slice_pct": 20.0,
-        "_desc_recycle_ratio_tiers": "Сжигание строго со ступени L3+ (50% прибыли) при просадке >= 3.0%, уровни L0..L2 не сжигаются."
+        "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
+        "panic_toxicity_threshold": 0.7,
+        "emergency_exit_floor_usdt": 3.0,
+        "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
+        "min_panic_recovery": 0.4,
+        "relaxed_toxicity_threshold": 0.35,
+        "moderate_exit_floor_usdt": 8.0,
+        "min_moderate_recovery": 0.2,
+        "relaxed_exit_floor_usdt": 15.0
+      },
+      "trailing_ratchet": {
+        "levels": [
+          {
+            "activation": 13.0,
+            "floor": 8.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 21.0,
+            "floor": 13.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 34.0,
+            "floor": 21.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 55.0,
+            "floor": 34.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 89.0,
+            "floor": 55.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"
+          },
+          {
+            "activation": 144.0,
+            "floor": 144.0,
+            "min_age_hours": 0.0,
+            "enabled": true,
+            "_desc": "L5: F12 ($144 instant Mega rally)"
+          }
+        ]
+      }
     },
-    "first_order_weight_regime": {
-        "mode": "off",
-        "stagnation_min_step": null,
-        "_concept": "«Правило кулака Сильной руки» (Strong Hand Fist Rule)",
-        "_desc_mode": "«Правило кулака Сильной руки» (grid_0): регулирует силу стартового входа первого ордера. Варианты: 'bullish', 'neutral', 'bearish', 'auto_ema', или 'off' / null (отключение фичи).",
-        "presets": {
-            "bullish": {
-                "LONG": 12.0,
-                "SHORT": 7.0
-            },
-            "neutral": {
-                "LONG": 9.0,
-                "SHORT": 9.0
-            },
-            "bearish": {
-                "LONG": 6.0,
-                "SHORT": 13.0
-            }
-        },
-        "auto_ema": {
-            "timeframe": "1d",
-            "sma_fast": 10,
-            "sma_slow": 30,
-            "confirmation_candles": 3,
-            "require_rising": true,
-            "trend_positive": true,
-            "_desc": "Глобальный макро-фильтр по дневным свечам (1d): 10d EMA vs 30d EMA. Быстрая выше медленной (и растет 3 свечи) -> Bullish (12/7), ниже (и падает 3 свечи) -> Bearish (7/12), консолидация/откат -> Neutral (9/9)."
-        },
-        "enabled": false,
-        "_desc_presets": "Веса капитала стартового удара (grid_0 в % от invest_size). ВНИМАНИЕ: «Правило кулака» управляет ИСКЛЮЧИТЕЛЬНО первым ордером (grid_0). Все последующие усредняющие уровни сетки (L1..L6) и их шаги остаются строго неизменными по утвержденной сетке стратегии."
-    },
-    "smart_grace": {
-        "start_period_sec": 57,
-        "shift_interval_sec": 13,
-        "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
-        "increments_card": {
-            "==1": 30,
-            "==2": 75,
-            "==3": 120,
-            ">=4": 160
-        },
-        "enabled": true,
-        "_shift_interval_sec_desc": "Интервал сдвига тайминга первого входа в секундах.",
-        "brownian_noise_factor": null,
-        "_brownian_noise_factor_desc": "Броуновский шум отключен (null) для U96."
-    },
-    "smart_size": {
-        "profiting_size_weights": {
-            "<2": 1.0,
-            "==2": 1.2,
-            "==3": 0.85,
-            ">=4": 0.6
-        },
-        "knife_blocker_threshold": 1,
-        "_knife_blocker_desc": "Защита от ножей: порог закрытых ордеров противоположного направления, блокирующий вход (1). При null защита отключена (отдельный флаг knife_blocker_enabled не используется).",
-        "enabled": true,
-        "trend_determ": null,
-        "_trend_determ_modes": {
-            "ema_trend": "(Трендовый) Множители profiting_size_weights применяются только при подтверждении 1d Dual EMA 7/25 тренда (LONG при UP, SHORT при DOWN). В контртренде/флэте объем нейтральный 1.00x.",
-            "null": "(Классический бестрендовый) Обратная совместимость: если trend_determ не задан (null), множители применяются строго по числу закрытий без оглядки на тренд."
-        },
-        "ema_trend": {
-            "timeframe": "1d",
-            "sma_fast": 7,
-            "sma_slow": 25,
-            "confirmation_candles": 3,
-            "require_rising": true,
-            "trend_positive": true
-        },
-        "_scope_note": "Множители profiting_size_weights масштабируют исключительно начальный ордер входа (ступень grid_0). Колена усреднения сетки (L1..L7) рассчитываются строго по базовому капиталу без перегрузки депозита.",
-        "stagnation_min_step": null
-    },
-    "smart_tp": {
-        "increments_tp": {
-            "<2": 1.0,
-            ">=2": 1.3,
-            ">4": 1.6
-        },
-        "enabled": true,
-        "trend_determ": null,
-        "_trend_determ_desc": "Множители increments_tp (колокол Тюринга) применяются только при совпадении с 4h Dual EMA трендом (LONG при UP, SHORT при DOWN). В контртренде/флэте множитель строго 1.00x.",
-        "stagnation_min_step": null
-    },
-    "_auto_closing_modes_allowed": [
-        "trailing_ratchet",
-        "toxic",
-        "fixed",
-        "off"
-    ],
-    "auto_closing": {
-        "positive": {
-            "scale_money": 1.0,
-            "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
-            "min_guaranteed_profit_usdt": 5.0,
-            "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
-            "fixed_net": {
-                "_desc": "Mode 3: Direct flat basket take without trailing pullback. All positions liquidate to 100% cash when iter_net >= target_net_usdt.",
-                "target_net_usdt": 60.0,
-                "_desc_target_net_usdt": "Fixed target net profit of iteration in USDT."
-            },
-            "toxicity_adaptive": {
-                "_desc": "Mode 2: Dynamic adaptive take based on inventory toxicity score. Liquidates basket on bounce to clean net profit.",
-                "score_weights": {
-                    "margin_load": 0.35,
-                    "grid_depth": 0.3,
-                    "float_ratio": 0.25,
-                    "delta_recovery": 0.15
-                },
-                "_desc_score_weights": "Score method weights: margin load 35%, grid depth 30%, float loss ratio 25%, delta recovery 15%. Sum = 1.0.",
-                "panic_toxicity_threshold": 0.7,
-                "emergency_exit_floor_usdt": 3.0,
-                "_desc_emergency_exit_floor_usdt": "Minimum guaranteed profit on panic inventory (S >= 0.70). Loss close is prohibited.",
-                "min_panic_recovery": 0.4,
-                "relaxed_toxicity_threshold": 0.35,
-                "moderate_exit_floor_usdt": 8.0,
-                "min_moderate_recovery": 0.2,
-                "relaxed_exit_floor_usdt": 15.0
-            },
-            "trailing_ratchet": {
-                "levels": [
-                    {
-                        "activation": 13.0,
-                        "floor": 8.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L0: F7->F6 ($13 -> $8, Golden Pocket 61.8%)"
-                    },
-                    {
-                        "activation": 21.0,
-                        "floor": 13.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L1: F8->F7 ($21 -> $13, Golden Pocket 61.8%)"
-                    },
-                    {
-                        "activation": 34.0,
-                        "floor": 21.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L2: F9->F8 ($34 -> $21, Golden Pocket 61.8%)"
-                    },
-                    {
-                        "activation": 55.0,
-                        "floor": 34.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L3: F10->F9 ($55 -> $34, Golden Pocket 61.8%)"
-                    },
-                    {
-                        "activation": 89.0,
-                        "floor": 55.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L4: F11->F10 ($89 -> $55, Golden Pocket 61.8%)"
-                    },
-                    {
-                        "activation": 144.0,
-                        "floor": 144.0,
-                        "min_age_hours": 0.0,
-                        "enabled": true,
-                        "_desc": "L5: F12 ($144 instant Mega rally)"
-                    }
-                ]
-            }
-        },
-        "negative": {
-            "threshold": null,
-            "threshold_increment": null
-        }
-    },
-    "LONG": {
-        "grid": {
-            "0": {
-                "indent": 0.0,
-                "volume": 7.0,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L0: Стартовый импульс / Скальп-ядро (Зона 1: отступ 0.0%, объем 7.0%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "1": {
-                "indent": -3.0,
-                "volume": 7.7,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L1: Первое усреднение (Зона 1: отступ -3.0%, объем 7.7%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "2": {
-                "indent": -5.5,
-                "volume": 8.47,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L2: Второе усреднение (Зона 1: отступ -5.5%, объем 8.47%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "3": {
-                "indent": -9.0,
-                "volume": 9.32,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L3: Третье усреднение (Зона 2: отступ -9.0%, объем 9.32%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "4": {
-                "indent": -15.0,
-                "volume": 10.25,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L4: Четвертое усреднение (Зона 2: отступ -15.0%, объем 10.25%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "5": {
-                "indent": -24.0,
-                "volume": 11.27,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L5: Пятое усреднение (Зона 2: отступ -24.0%, объем 11.27%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "6": {
-                "indent": -38.0,
-                "volume": 12.4,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L6: Глубинная броня (Зона 3: отступ -38.0%, объем 12.4%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            },
-            "7": {
-                "indent": -58.0,
-                "volume": 13.64,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L7: Глубинная броня (Зона 3: отступ -58.0%, объем 13.64%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            },
-            "8": {
-                "indent": -89.0,
-                "volume": 19.95,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L8: Предельная броня (Зона 3: отступ -89.0%, объем 19.95%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            }
-        },
-        "tp_map": {
-            "0": {
-                "indent": 1.8,
-                "fallback_indent": 2.6,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "1": {
-                "indent": 1.35,
-                "fallback_indent": 2.0,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "2": {
-                "indent": 1.0,
-                "fallback_indent": 1.5,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "3": {
-                "indent": 0.75,
-                "fallback_indent": 1.2,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "4": {
-                "indent": 0.62,
-                "fallback_indent": 1.05,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "5": {
-                "indent": 0.62,
-                "fallback_indent": 0.95,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "6": {
-                "indent": 0.62,
-                "fallback_indent": 0.85,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "7": {
-                "indent": 0.62,
-                "fallback_indent": 0.8,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "8": {
-                "indent": 0.62,
-                "fallback_indent": 0.8,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            }
-        }
-    },
-    "SHORT": {
-        "_inheritance_base_side": false,
-        "grid": {
-            "0": {
-                "indent": 0.0,
-                "volume": 7.0,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L0: Стартовый импульс / Скальп-ядро SHORT (Зона 1: отступ 0.0%, объем 7.0%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "1": {
-                "indent": -3.0,
-                "volume": 7.7,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L1: Первое усреднение SHORT (Зона 1: отступ +3.0%, объем 7.7%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "2": {
-                "indent": -5.5,
-                "volume": 8.47,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L2: Второе усреднение SHORT (Зона 1: отступ +5.5%, объем 8.47%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 1
-            },
-            "3": {
-                "indent": -9.0,
-                "volume": 9.32,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L3: Третье усреднение SHORT (Зона 2: отступ +9.0%, объем 9.32%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "4": {
-                "indent": -15.0,
-                "volume": 10.25,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L4: Четвертое усреднение SHORT (Зона 2: отступ +15.0%, объем 10.25%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "5": {
-                "indent": -24.0,
-                "volume": 11.27,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L5: Пятое усреднение SHORT (Зона 2: отступ +24.0%, объем 11.27%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 2
-            },
-            "6": {
-                "indent": -38.0,
-                "volume": 12.4,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L6: Глубинная броня SHORT (Зона 3: отступ +38.0%, объем 12.4%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            },
-            "7": {
-                "indent": -58.0,
-                "volume": 13.64,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L7: Глубинная броня SHORT (Зона 3: отступ +58.0%, объем 13.64%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            },
-            "8": {
-                "indent": -89.0,
-                "volume": 19.95,
-                "super_indent": null,
-                "activated_at": null,
-                "timestamp": null,
-                "role": "L8: Предельная броня SHORT (Зона 3: отступ +89.0%, объем 19.95%)",
-                "enabled": true,
-                "activation": null,
-                "peel_tp_pct": null,
-                "peel_ratio": null,
-                "peel_num": null,
-                "zone": 3
-            }
-        },
-        "tp_map": {
-            "0": {
-                "indent": 1.8,
-                "fallback_indent": 2.6,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "1": {
-                "indent": 1.35,
-                "fallback_indent": 2.0,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "2": {
-                "indent": 1.0,
-                "fallback_indent": 1.5,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "3": {
-                "indent": 0.75,
-                "fallback_indent": 1.2,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "4": {
-                "indent": 0.62,
-                "fallback_indent": 1.05,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "5": {
-                "indent": 0.62,
-                "fallback_indent": 0.95,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "6": {
-                "indent": 0.62,
-                "fallback_indent": 0.85,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "7": {
-                "indent": 0.62,
-                "fallback_indent": 0.8,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            },
-            "8": {
-                "indent": 0.62,
-                "fallback_indent": 0.8,
-                "activation": null,
-                "is_atr": null,
-                "atr_mult": null,
-                "min_floor": null,
-                "max_ceil": null,
-                "fallback_atr_pct": null
-            }
-        }
-    },
-    "directional_trend_gate": {
-        "enabled": false,
-        "enforce_macro_gate": false,
-        "allow_counter_trend": true,
-        "freeze_averaging_on_disposition": false,
-        "_desc": "Однонаправленный макро-шлюз (1d Dual EMA 10/30). В этой стратегии отключен для обратной совместимости."
+    "negative": {
+      "threshold": null,
+      "threshold_increment": null
     }
+  },
+  "LONG": {
+    "grid": {
+      "0": {
+        "indent": 0.0,
+        "volume": 7.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L0: Стартовый импульс / Скальп-ядро (Зона 1: отступ 0.0%, объем 7.0%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "1": {
+        "indent": -3.0,
+        "volume": 7.7,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L1: Первое усреднение (Зона 1: отступ -3.0%, объем 7.7%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "2": {
+        "indent": -5.5,
+        "volume": 8.47,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L2: Второе усреднение (Зона 1: отступ -5.5%, объем 8.47%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "3": {
+        "indent": -9.0,
+        "volume": 9.32,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L3: Третье усреднение (Зона 2: отступ -9.0%, объем 9.32%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "4": {
+        "indent": -15.0,
+        "volume": 10.25,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L4: Четвертое усреднение (Зона 2: отступ -15.0%, объем 10.25%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "5": {
+        "indent": -24.0,
+        "volume": 11.27,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L5: Пятое усреднение (Зона 2: отступ -24.0%, объем 11.27%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "6": {
+        "indent": -38.0,
+        "volume": 12.4,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L6: Глубинная броня (Зона 3: отступ -38.0%, объем 12.4%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      },
+      "7": {
+        "indent": -58.0,
+        "volume": 13.64,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L7: Глубинная броня (Зона 3: отступ -58.0%, объем 13.64%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      },
+      "8": {
+        "indent": -89.0,
+        "volume": 19.95,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L8: Предельная броня (Зона 3: отступ -89.0%, объем 19.95%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      }
+    },
+    "tp_map": {
+      "0": {
+        "indent": 1.8,
+        "fallback_indent": 2.6,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "1": {
+        "indent": 1.35,
+        "fallback_indent": 2.0,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "2": {
+        "indent": 1.0,
+        "fallback_indent": 1.5,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "3": {
+        "indent": 0.75,
+        "fallback_indent": 1.2,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "4": {
+        "indent": 0.62,
+        "fallback_indent": 1.05,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "5": {
+        "indent": 0.62,
+        "fallback_indent": 0.95,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "6": {
+        "indent": 0.62,
+        "fallback_indent": 0.85,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "7": {
+        "indent": 0.62,
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "8": {
+        "indent": 0.62,
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      }
+    }
+  },
+  "SHORT": {
+    "_inheritance_base_side": false,
+    "grid": {
+      "0": {
+        "indent": 0.0,
+        "volume": 7.0,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L0: Стартовый импульс / Скальп-ядро SHORT (Зона 1: отступ 0.0%, объем 7.0%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "1": {
+        "indent": -3.0,
+        "volume": 7.7,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L1: Первое усреднение SHORT (Зона 1: отступ +3.0%, объем 7.7%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "2": {
+        "indent": -5.5,
+        "volume": 8.47,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L2: Второе усреднение SHORT (Зона 1: отступ +5.5%, объем 8.47%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 1
+      },
+      "3": {
+        "indent": -9.0,
+        "volume": 9.32,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L3: Третье усреднение SHORT (Зона 2: отступ +9.0%, объем 9.32%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "4": {
+        "indent": -15.0,
+        "volume": 10.25,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L4: Четвертое усреднение SHORT (Зона 2: отступ +15.0%, объем 10.25%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "5": {
+        "indent": -24.0,
+        "volume": 11.27,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L5: Пятое усреднение SHORT (Зона 2: отступ +24.0%, объем 11.27%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 2
+      },
+      "6": {
+        "indent": -38.0,
+        "volume": 12.4,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L6: Глубинная броня SHORT (Зона 3: отступ +38.0%, объем 12.4%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      },
+      "7": {
+        "indent": -58.0,
+        "volume": 13.64,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L7: Глубинная броня SHORT (Зона 3: отступ +58.0%, объем 13.64%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      },
+      "8": {
+        "indent": -89.0,
+        "volume": 19.95,
+        "super_indent": null,
+        "activated_at": null,
+        "timestamp": null,
+        "role": "L8: Предельная броня SHORT (Зона 3: отступ +89.0%, объем 19.95%)",
+        "enabled": true,
+        "activation": null,
+        "peel_tp_pct": null,
+        "peel_ratio": null,
+        "peel_num": null,
+        "zone": 3
+      }
+    },
+    "tp_map": {
+      "0": {
+        "indent": 1.8,
+        "fallback_indent": 2.6,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "1": {
+        "indent": 1.35,
+        "fallback_indent": 2.0,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "2": {
+        "indent": 1.0,
+        "fallback_indent": 1.5,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "3": {
+        "indent": 0.75,
+        "fallback_indent": 1.2,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "4": {
+        "indent": 0.62,
+        "fallback_indent": 1.05,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "5": {
+        "indent": 0.62,
+        "fallback_indent": 0.95,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "6": {
+        "indent": 0.62,
+        "fallback_indent": 0.85,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "7": {
+        "indent": 0.62,
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      },
+      "8": {
+        "indent": 0.62,
+        "fallback_indent": 0.8,
+        "activation": null,
+        "is_atr": null,
+        "atr_mult": null,
+        "min_floor": null,
+        "max_ceil": null,
+        "fallback_atr_pct": null
+      }
+    }
+  },
+  "directional_trend_gate": {
+    "enabled": false,
+    "enforce_macro_gate": false,
+    "allow_counter_trend": true,
+    "freeze_averaging_on_disposition": false,
+    "_desc": "Однонаправленный макро-шлюз (1d Dual EMA 10/30). В этой стратегии отключен для обратной совместимости."
+  },
+  "start_balance_usdt": 449.0
 }

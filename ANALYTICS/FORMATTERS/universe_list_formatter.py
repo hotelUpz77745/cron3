@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class UniverseListFormatter:
@@ -13,7 +13,7 @@ class UniverseListFormatter:
 
     @staticmethod
     def render_universes_list(
-        current_uid: str,
+        current_uid: Optional[str],
         active_strats: Dict[str, Any],
         page: int = 1,
         page_size: int = 5,
@@ -60,11 +60,22 @@ class UniverseListFormatter:
             if not short_name:
                 short_name = sid
 
+            is_current = bool(
+                current_uid and (
+                    sid == current_uid
+                    or current_uid.startswith(sid)
+                    or sid.startswith(current_uid)
+                )
+            )
+            mark = "👉 " if is_current else ""
+            current_tag = " <i>(Выбрана)</i>" if is_current else ""
+
             status_icon = "🟢" if is_enabled else "⚪"
             status_text = "ВКЛЮЧЕНА" if is_enabled else "ОТКЛЮЧЕНА"
-            text_lines.append(f"{status_icon} <b>{short_name}</b> — <b>{status_text}</b>")
+            text_lines.append(f"{mark}{status_icon} <b>{short_name}</b> — <b>{status_text}</b>{current_tag}")
 
-            btn_label = f"🟢 ВКЛ | {short_name}" if is_enabled else f"⚪ ВЫКЛ | {short_name}"
+            btn_prefix = "👉 " if is_current else ""
+            btn_label = f"{btn_prefix}🟢 ВКЛ | {short_name}" if is_enabled else f"{btn_prefix}⚪ ВЫКЛ | {short_name}"
             if len(btn_label) > 38:
                 btn_label = btn_label[:36] + "…"
             buttons.append([{"text": btn_label, "callback_data": f"toggle_univ:{sid}:{page}"}])

@@ -57,24 +57,24 @@
                 "enabled": true,
                 "default_invest_size": 400.0,
                 "invest_size": {
-                    "ERAUSDT": 350.0,
-                    "BILLUSDT": 350.0,
-                    "KMNOUSDT": 300.0,
-                    "GRASSUSDT": 350,
+                    "ERAUSDT": 400.0,
+                    "BILLUSDT": 400.0,
+                    "KMNOUSDT": 400.0,
+                    "GRASSUSDT": 400,
                     "SOLVUSDT": 400,
-                    "LAUSDT": 300
+                    "LAUSDT": 400
                 }
             },
             "SHORT": {
                 "enabled": true,
                 "default_invest_size": 400.0,
                 "invest_size": {
-                    "ERAUSDT": 350.0,
-                    "BILLUSDT": 350.0,
-                    "KMNOUSDT": 300.0,
-                    "GRASSUSDT": 350,
+                    "ERAUSDT": 400.0,
+                    "BILLUSDT": 400.0,
+                    "KMNOUSDT": 400.0,
+                    "GRASSUSDT": 400,
                     "SOLVUSDT": 400,
-                    "LAUSDT": 300
+                    "LAUSDT": 400
                 }
             },
             "start_balance_usdt": 434.0
