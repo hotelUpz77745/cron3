@@ -89,7 +89,10 @@
   },
   "smart_grace": {
     "start_period_sec": 57,
-    "shift_interval_sec": 13,
+    "shift_interval_sec": [
+      10,
+      16
+    ],
     "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
     "increments_card": {
       "==1": 30,
