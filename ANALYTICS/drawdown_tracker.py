@@ -29,10 +29,7 @@ from ANALYTICS.circuit_breaker import (
     update_ban_from_error,
     wait_ban_lifted,
 )
-from ANALYTICS.equity_trajectory import (
-    append_equity_sample,
-    update_local_extrema,
-)
+from ANALYTICS.equity_trajectory import EquitySnapshotStore
 
 logger = UnifiedLogger("DrawdownTracker")
 
@@ -412,25 +409,11 @@ class DrawdownTracker:
             data["max_drawdown_usdt"] = round(max_drawdown, 4)
 
             if getattr(self, "_floating_synced", False):
-                sealed = update_local_extrema(
+                EquitySnapshotStore.record_snapshot(
                     data=data,
+                    current_equity=bot_cur_balance,
                     now_ms=now_ms,
-                    net_profit=float(data.get("net_profit_usdt", 0.0)),
-                    start_balance=initial,
                 )
-                ledgers_dir = getattr(self.manager, "ledgers_dir", None)
-                if ledgers_dir:
-                    append_equity_sample(
-                        ledgers_dir=ledgers_dir,
-                        universe_id=None,
-                        now_ms=now_ms,
-                        realized_net=bot_realized_net,
-                        unrealized=bot_unrealized,
-                        net_profit=float(data.get("net_profit_usdt", 0.0)),
-                        balance=bot_cur_balance,
-                        force=sealed,
-                        event="EXTREMUM" if sealed else "SAMPLE",
-                    )
 
             max_perf = peak - initial
             data["performance_usdt"] = round(max(data.get("performance_usdt", 0.0), max_perf), 4)

@@ -9,10 +9,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ANALYTICS.equity_trajectory import (
-    EquityTrajectoryBuilder,
-    read_equity_samples,
-)
+from ANALYTICS.equity_trajectory import EquitySnapshotStore
 
 try:
     import numpy as np
@@ -196,35 +193,13 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
             pass
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-
-    peak_bal = float(data.get("peak_balance_usdt", start_balance)) if data else start_balance
-    min_bal = float(data.get("min_balance_usdt", start_balance)) if data else start_balance
-    peak_np = float(data.get("peak_net_profit_usdt", max(0.0, peak_bal - start_balance)))
-    trough_np = min(0.0, min_bal - start_balance)
-
-    peak_ts_ms = data.get("peak_net_ts", data.get("iteration_peak_ts")) if data else None
-    peak_dt = datetime.fromtimestamp(peak_ts_ms / 1000.0, tz=timezone.utc).replace(tzinfo=None) if peak_ts_ms else None
-
-    min_bal_ts_ms = data.get("min_balance_ts") if data else None
-    trough_dt = datetime.fromtimestamp(min_bal_ts_ms / 1000.0, tz=timezone.utc).replace(tzinfo=None) if min_bal_ts_ms else None
-
-    local_extrema = data.get("local_extrema", []) if isinstance(data, dict) else []
-    equity_samples = read_equity_samples(csv_path.parent, universe_id=universe_id, start_dt=start_dt)
-
-    trajectory_builder = EquityTrajectoryBuilder(
+    times, net_profits, balances = EquitySnapshotStore.extract_series(
+        data=data if isinstance(data, dict) else None,
         start_balance=start_balance,
-        net_profit_final=net_profit_final,
-        raw_trades=raw_trades,
+        current_equity=cur_balance,
         start_dt=start_dt,
-        peak_np=peak_np,
-        peak_dt=peak_dt,
-        trough_np=trough_np,
-        trough_dt=trough_dt,
         now_dt=now,
-        local_extrema=local_extrema,
-        equity_samples=equity_samples,
     )
-    times, net_profits, balances = trajectory_builder.build_trajectory()
 
     # Построение графика в темной теме
     plt.style.use("dark_background")
