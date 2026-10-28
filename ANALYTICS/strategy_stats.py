@@ -24,6 +24,7 @@ from CORE.strategy_registry import StrategyRegistry
 from ANALYTICS.trade_velocity import TradeVelocityEngine
 from ANALYTICS.strategy_toxic_defense import StrategyToxicDefenseAggregator
 from ANALYTICS.iteration_manager import StrategyIterationManager
+from ANALYTICS.equity_trajectory import append_equity_sample, update_local_extrema
 
 logger = UnifiedLogger("StrategyStats")
 
@@ -240,6 +241,24 @@ class StrategyStatsEngine:
             strat_data["peak_net_profit_usdt"] = round(s_peak - s_init, 4)
             strat_data["_current_trough_usdt"] = round(s_trough, 4)
             strat_data["min_balance_usdt"] = round(s_min, 4)
+            if can_update_strat_peak or not has_active_positions:
+                sealed_s = update_local_extrema(
+                    data=strat_data,
+                    now_ms=now_ms,
+                    net_profit=float(strat_data.get("net_profit_usdt", 0.0)),
+                    start_balance=s_init,
+                )
+                append_equity_sample(
+                    ledgers_dir=self.manager.ledgers_dir,
+                    universe_id=strat_id,
+                    now_ms=now_ms,
+                    realized_net=s_real,
+                    unrealized=s_unreal,
+                    net_profit=float(strat_data.get("net_profit_usdt", 0.0)),
+                    balance=s_cur,
+                    force=sealed_s,
+                    event="EXTREMUM" if sealed_s else "SAMPLE",
+                )
 
             # Strategy Iteration Telemetry & Historical Records
             iter_cache = self.get_iteration_cache(strat_id)

@@ -9,7 +9,10 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ANALYTICS.equity_trajectory import EquityTrajectoryBuilder
+from ANALYTICS.equity_trajectory import (
+    EquityTrajectoryBuilder,
+    read_equity_samples,
+)
 
 try:
     import numpy as np
@@ -205,6 +208,9 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     min_bal_ts_ms = data.get("min_balance_ts") if data else None
     trough_dt = datetime.fromtimestamp(min_bal_ts_ms / 1000.0, tz=timezone.utc).replace(tzinfo=None) if min_bal_ts_ms else None
 
+    local_extrema = data.get("local_extrema", []) if isinstance(data, dict) else []
+    equity_samples = read_equity_samples(csv_path.parent, universe_id=universe_id, start_dt=start_dt)
+
     trajectory_builder = EquityTrajectoryBuilder(
         start_balance=start_balance,
         net_profit_final=net_profit_final,
@@ -215,6 +221,8 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         trough_np=trough_np,
         trough_dt=trough_dt,
         now_dt=now,
+        local_extrema=local_extrema,
+        equity_samples=equity_samples,
     )
     times, net_profits, balances = trajectory_builder.build_trajectory()
 
@@ -316,8 +324,9 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
     start_balance = default_start_bal
     cdata = {}
     is_active = True
+    realized_coin_net = 0.0
+    unrealized_coin = 0.0
     final_pnl = 0.0
-    peak_pnl = 0.0
     iter_start_ts = None
 
     if json_path.exists():
@@ -329,8 +338,9 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
                 cdata = data.get("per_coin", {}).get(clean_sym, {})
                 if cdata:
                     is_active = bool(cdata.get("is_active_symbol", cdata.get("is_active", True)))
-                    final_pnl = float(cdata.get("realized_pnl_net_usdt", cdata.get("net_profit_usdt", 0.0)))
-                    peak_pnl = float(cdata.get("max_net_profit", cdata.get("peak_net_profit_usdt", final_pnl)))
+                    realized_coin_net = float(cdata.get("realized_pnl_net_usdt", cdata.get("realized_pnl_usdt", cdata.get("net_profit_usdt", 0.0))))
+                    unrealized_coin = float(cdata.get("current_drawdown", 0.0))
+                    final_pnl = float(cdata.get("net_profit_usdt", realized_coin_net + unrealized_coin))
         except Exception:
             pass
 
@@ -403,40 +413,34 @@ def generate_balance_curve(symbol: str, universe_id: Optional[str] = None) -> st
             cum += p
             cum_series.append(cum)
 
-        raw_max = max(cum_series)
         raw_final = cum_series[-1]
-        peak_idx = cum_series.index(raw_max)
-
-        target_peak = max(peak_pnl, 0.0) if peak_pnl is not None else raw_max
-        target_final = final_pnl if final_pnl is not None else raw_final
-
-        if target_peak <= target_final:
-            target_peak = target_final + max(0.5, abs(target_final) * 0.1)
+        target_realized = realized_coin_net if cdata else raw_final
+        fee_drift = target_realized - raw_final
+        n_trades = len(cum_series)
 
         balances = []
         for i, c in enumerate(cum_series):
-            if i <= peak_idx:
-                scaled_c = c * (target_peak / raw_max) if raw_max > 0 else c
-            else:
-                if abs(raw_max - raw_final) > FLOAT_ZERO_EPSILON:
-                    scaled_c = target_peak + (c - raw_max) * ((target_peak - target_final) / (raw_max - raw_final))
-                else:
-                    scaled_c = target_final
-            balances.append(round(start_balance + scaled_c, 4))
+            adj_c = c + fee_drift * ((i + 1) / n_trades)
+            balances.append(round(start_balance + adj_c, 4))
 
         # Префикс стартовой точки за 1 час до первой сделки
         times.insert(0, times[0] - timedelta(hours=1))
         balances.insert(0, start_balance)
 
-        # Фиксируем конечную точку относительно стартового баланса стратегии
-        final_balance = round(start_balance + target_final, 4)
-        balances[-1] = final_balance
-        current_balance = final_balance
+        # Конечная точка закрытых сделок строго равна реализованному Net монеты
+        realized_balance = round(start_balance + target_realized, 4)
+        balances[-1] = realized_balance
+        current_balance = realized_balance
 
-        # Для активной монеты продлеваем линию до текущего момента
+        # Для активной монеты продлеваем линию до текущего момента с учетом открытого плавающего PnL
         if is_active:
+            live_target = final_pnl if cdata else target_realized
+            live_balance = round(start_balance + live_target, 4)
+            if now <= times[-1]:
+                now = times[-1] + timedelta(seconds=1)
             times.append(now)
-            balances.append(final_balance)
+            balances.append(live_balance)
+            current_balance = live_balance
         # Для выбывшей монеты: график завершается строго в последней точке закрытия (без падения в ноль)
 
     plt.figure(figsize=(10, 5))
