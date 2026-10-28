@@ -9,7 +9,7 @@ from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ANALYTICS.equity_trajectory import EquitySnapshotStore
+from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
 
 try:
     import numpy as np
@@ -193,8 +193,8 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
             pass
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
-    times, net_profits, balances = EquitySnapshotStore.extract_series(
-        data=data if isinstance(data, dict) else None,
+    times, net_profits, balances = DEFAULT_SNAPSHOT_STORE.extract_series(
+        scope_id=universe_id if universe_id else "ALL",
         start_balance=start_balance,
         current_equity=cur_balance,
         start_dt=start_dt,

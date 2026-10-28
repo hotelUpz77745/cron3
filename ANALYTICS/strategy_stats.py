@@ -24,7 +24,7 @@ from CORE.strategy_registry import StrategyRegistry
 from ANALYTICS.trade_velocity import TradeVelocityEngine
 from ANALYTICS.strategy_toxic_defense import StrategyToxicDefenseAggregator
 from ANALYTICS.iteration_manager import StrategyIterationManager
-from ANALYTICS.equity_trajectory import EquitySnapshotStore
+from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
 
 logger = UnifiedLogger("StrategyStats")
 
@@ -242,8 +242,8 @@ class StrategyStatsEngine:
             strat_data["_current_trough_usdt"] = round(s_trough, 4)
             strat_data["min_balance_usdt"] = round(s_min, 4)
             if can_update_strat_peak or not has_active_positions:
-                EquitySnapshotStore.record_snapshot(
-                    data=strat_data,
+                DEFAULT_SNAPSHOT_STORE.record_snapshot(
+                    scope_id=strat_id,
                     current_equity=s_cur,
                     now_ms=now_ms,
                 )

@@ -29,7 +29,7 @@ from ANALYTICS.circuit_breaker import (
     update_ban_from_error,
     wait_ban_lifted,
 )
-from ANALYTICS.equity_trajectory import EquitySnapshotStore
+from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
 
 logger = UnifiedLogger("DrawdownTracker")
 
@@ -409,8 +409,8 @@ class DrawdownTracker:
             data["max_drawdown_usdt"] = round(max_drawdown, 4)
 
             if getattr(self, "_floating_synced", False):
-                EquitySnapshotStore.record_snapshot(
-                    data=data,
+                DEFAULT_SNAPSHOT_STORE.record_snapshot(
+                    scope_id="ALL",
                     current_equity=bot_cur_balance,
                     now_ms=now_ms,
                 )

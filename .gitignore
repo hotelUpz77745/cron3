@@ -19,5 +19,6 @@ combat_replay_klines.json
 *.tmp_*
 CACHE/backups/
 CACHE/iteration_state.json
+CACHE/equity_snapshots_cache.json
 pyrefly.toml
 

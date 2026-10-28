@@ -163,6 +163,7 @@ POST_CLOSE_SYNC_DEBOUNCE_SEC: float = float(_CFG["app"]["post_close_sync_debounc
 BG_UNREALIZED_POLL_FREQ_SEC: float = float(_CFG["app"]["bg_unrealized_poll_freq_sec"])
 EQUITY_SNAPSHOT_INTERVAL_SEC: int = int(_CFG["app"]["equity_snapshot_interval_sec"])
 EQUITY_SNAPSHOT_RETENTION_DAYS: float = float(_CFG["app"]["equity_snapshot_retention_days"])
+EQUITY_SNAPSHOTS_CACHE_FILE: Path = CACHE_DIR / "equity_snapshots_cache.json"
 
 def _resolve_analytics_start_balance() -> float:
     # Канонический источник истины о депозите — секция active_strategies в app.json

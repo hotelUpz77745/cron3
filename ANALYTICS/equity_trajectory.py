@@ -1,106 +1,159 @@
 # ==============================================================================
 # Path: ANALYTICS/equity_trajectory.py
-# Role: Хранилище периодических слепков текущего баланса (каждые 5 минут, хвост 10 дней)
+# Role: Персистентный кэш 5-минутных слепков эквити (CACHE/equity_snapshots_cache.json, хвост 10 дней)
 # ==============================================================================
 
 from __future__ import annotations
 
+import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from c_utils import Utils
 
 try:
     from consts import (
+        CACHE_DIR,
         EQUITY_SNAPSHOT_INTERVAL_SEC,
         EQUITY_SNAPSHOT_RETENTION_DAYS,
+        EQUITY_SNAPSHOTS_CACHE_FILE,
     )
 except ImportError:
+    CACHE_DIR = Path(__file__).resolve().parent.parent / "CACHE"
     EQUITY_SNAPSHOT_INTERVAL_SEC = 300
     EQUITY_SNAPSHOT_RETENTION_DAYS = 10.0
+    EQUITY_SNAPSHOTS_CACHE_FILE = CACHE_DIR / "equity_snapshots_cache.json"
 
 
 class EquitySnapshotStore:
     """
-    Хранит периодические слепки текущего эквити `[ts_ms, round(balance, 4)]`
-    в списке `data["equity_snapshots"]`:
-      - Запись нового слепка строго раз в `interval_sec` (300с = 5 минут).
-      - Автоматическая подрезка старого хвоста старше `retention_days` (10 суток).
-      - Прямая выдача точек `(times, net_profits, balances)` для отрисовки графика
-        без синтетического сглаживания и без потери прошлых пиков и просадок.
+    Персистентный RAM + дисковый кэш периодических слепков баланса (`CACHE/equity_snapshots_cache.json`).
+      - При любом перезапуске сразу подтягивает с диска последний накопленный прогресс слепков
+        по каждому куполу (`strat_id`) и глобальному портфелю (`ALL`).
+      - На частых тиках (< 5 минут) проверяет таймер за O(1) в RAM без обращения к диску.
+      - Каждые `interval_sec` (300с = 5 минут) дописывает `[ts_ms, current_equity]`,
+        обрезает хвост старше `retention_days` (10 суток) и атомарно пишет кэш на диск.
     """
 
-    @staticmethod
-    def record_snapshot(
-        data: Dict[str, Any],
-        current_equity: float,
-        now_ms: Optional[int] = None,
+    def __init__(
+        self,
+        cache_file: Path = EQUITY_SNAPSHOTS_CACHE_FILE,
         interval_sec: int = EQUITY_SNAPSHOT_INTERVAL_SEC,
         retention_days: float = EQUITY_SNAPSHOT_RETENTION_DAYS,
+    ):
+        self.cache_file: Path = Path(cache_file)
+        self.interval_sec: int = max(1, int(interval_sec))
+        self.retention_days: float = max(0.01, float(retention_days))
+        self._cache: Dict[str, List[List[float]]] = {}
+        self._disk_mtime: float = -1.0
+        self._load_from_disk(force=True)
+
+    def _load_from_disk(self, force: bool = False) -> None:
+        if not self.cache_file.exists():
+            if force:
+                self._cache = {}
+                self._disk_mtime = -1.0
+            return
+        try:
+            stat_mtime = self.cache_file.stat().st_mtime
+            if not force and stat_mtime == self._disk_mtime:
+                return
+            with open(self.cache_file, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            if isinstance(raw, dict):
+                parsed: Dict[str, List[List[float]]] = {}
+                for k, v in raw.items():
+                    if not isinstance(v, list) or not v:
+                        continue
+                    ref_ts = max(
+                        (int(it[0]) for it in v if isinstance(it, (list, tuple)) and len(it) >= 2),
+                        default=int(time.time() * 1000),
+                    )
+                    parsed[str(k)] = self._normalize_and_trim(v, ref_now_ms=ref_ts)
+                self._cache = parsed
+                self._disk_mtime = stat_mtime
+        except Exception:
+            pass
+
+    def _save_to_disk(self) -> None:
+        try:
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            Utils.atomic_write_json(self.cache_file, self._cache)
+            if self.cache_file.exists():
+                self._disk_mtime = self.cache_file.stat().st_mtime
+        except Exception:
+            pass
+
+    def _normalize_and_trim(self, raw_items: List[Any], ref_now_ms: int) -> List[List[Any]]:
+        step_ms = self.interval_sec * 1000
+        retention_ms = max(step_ms * 2, int(self.retention_days * 86_400_000.0))
+        max_len = max(4, int((self.retention_days * 86_400.0) / self.interval_sec) + 2)
+        cutoff_ms = int(ref_now_ms) - retention_ms
+
+        valid: List[List[Any]] = []
+        for item in raw_items:
+            if isinstance(item, (list, tuple)) and len(item) >= 2:
+                try:
+                    p_ts = int(item[0])
+                    p_eq = round(float(item[1]), 4)
+                    if p_ts >= cutoff_ms:
+                        valid.append([p_ts, p_eq])
+                except (ValueError, TypeError):
+                    continue
+        valid.sort(key=lambda x: x[0])
+        if len(valid) > max_len:
+            valid = valid[-max_len:]
+        return valid
+
+    def record_snapshot(
+        self,
+        scope_id: str,
+        current_equity: float,
+        now_ms: Optional[int] = None,
         force: bool = False,
     ) -> bool:
-        """Пишет слепок баланса раз в 5 минут и подрезает хвост старше 10 дней."""
+        key = (scope_id or "ALL").strip()
         ts = int(now_ms if now_ms is not None else time.time() * 1000)
         eq_val = round(float(current_equity), 4)
-        step_ms = max(1_000, int(interval_sec) * 1000)
-        retention_ms = max(step_ms * 2, int(float(retention_days) * 86_400_000.0))
-        max_len = max(4, int((float(retention_days) * 86_400.0) / max(1, int(interval_sec))) + 2)
+        step_ms = self.interval_sec * 1000
 
-        raw_list = data.get("equity_snapshots")
-        if not isinstance(raw_list, list):
-            raw_list = []
+        bucket = list(self._cache.get(key, []))
+        if bucket and not force:
+            if (ts - int(bucket[-1][0])) < step_ms:
+                return False
 
-        if raw_list and not force:
-            last_item = raw_list[-1]
-            if isinstance(last_item, (list, tuple)) and len(last_item) >= 2:
-                if (ts - int(last_item[0])) < step_ms:
-                    return False
-
-        if raw_list and isinstance(raw_list[-1], (list, tuple)) and len(raw_list[-1]) >= 2 and int(raw_list[-1][0]) == ts:
-            raw_list[-1] = [ts, eq_val]
+        if bucket and int(bucket[-1][0]) == ts:
+            bucket[-1] = [ts, eq_val]
         else:
-            raw_list.append([ts, eq_val])
+            bucket.append([ts, eq_val])
 
-        cutoff_ms = ts - retention_ms
-        trimmed: List[List[Any]] = [
-            [int(item[0]), round(float(item[1]), 4)]
-            for item in raw_list
-            if isinstance(item, (list, tuple)) and len(item) >= 2 and int(item[0]) >= cutoff_ms
-        ]
-        if len(trimmed) > max_len:
-            trimmed = trimmed[-max_len:]
-
-        data["equity_snapshots"] = trimmed
+        self._cache[key] = self._normalize_and_trim(bucket, ref_now_ms=ts)
+        self._save_to_disk()
         return True
 
-    @staticmethod
+    def get_snapshots(self, scope_id: str) -> List[List[Any]]:
+        self._load_from_disk(force=False)
+        key = (scope_id or "ALL").strip()
+        return [list(pt) for pt in self._cache.get(key, [])]
+
     def extract_series(
-        data: Optional[Dict[str, Any]],
+        self,
+        scope_id: str,
         start_balance: float,
         current_equity: float,
         start_dt: Optional[datetime] = None,
         now_dt: Optional[datetime] = None,
-        retention_days: float = EQUITY_SNAPSHOT_RETENTION_DAYS,
     ) -> Tuple[List[datetime], List[float], List[float]]:
-        """Возвращает `(times_naive_utc, net_profits, balances)` напрямую по списку слепков."""
         now_u = now_dt if now_dt is not None else datetime.now(timezone.utc).replace(tzinfo=None)
         ts_now = int(now_u.replace(tzinfo=timezone.utc).timestamp() * 1000)
-        retention_ms = max(60_000, int(float(retention_days) * 86_400_000.0))
+        retention_ms = max(60_000, int(self.retention_days * 86_400_000.0))
         cutoff_ms = ts_now - retention_ms
 
-        pts: List[Tuple[int, float]] = []
-        raw_list = data.get("equity_snapshots") if isinstance(data, dict) else None
-        if isinstance(raw_list, list):
-            for item in raw_list:
-                if isinstance(item, (list, tuple)) and len(item) >= 2:
-                    try:
-                        p_ts = int(item[0])
-                        p_eq = float(item[1])
-                        if p_ts >= cutoff_ms:
-                            pts.append((p_ts, p_eq))
-                    except (ValueError, TypeError):
-                        continue
+        raw_pts = self._normalize_and_trim(self.get_snapshots(scope_id), ref_now_ms=ts_now)
+        pts: List[Tuple[int, float]] = [(int(p[0]), float(p[1])) for p in raw_pts]
 
-        pts.sort(key=lambda x: x[0])
         cur_eq_clean = round(float(current_equity), 4)
         start_bal_clean = round(float(start_balance), 4)
 
@@ -131,3 +184,6 @@ class EquitySnapshotStore:
         balances = [round(v, 4) for _, v in pts]
         net_profits = [round(v - start_bal_clean, 4) for v in balances]
         return times, net_profits, balances
+
+
+DEFAULT_SNAPSHOT_STORE = EquitySnapshotStore()
