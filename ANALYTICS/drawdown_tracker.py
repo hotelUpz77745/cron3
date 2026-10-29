@@ -371,13 +371,15 @@ class DrawdownTracker:
             if not getattr(self, "_floating_synced", False):
                 can_update_peak = False
                 logger.info("[ANALYTICS] First API sync verified. Marking floating stats as synced.")
-                self._floating_synced = True
-                self.manager._floating_synced = True
-                data["_floating_synced"] = True
-                if hasattr(self.manager, "fsm") and self.manager.fsm:
-                    self.manager.fsm.on_api_sync_success(data)
-                if hasattr(self.manager, "_persisted_global_cache"):
-                    self.manager._persisted_global_cache = data
+
+            self._floating_synced = True
+            self.manager._floating_synced = True
+            data["_floating_synced"] = True
+            if hasattr(self.manager, "_persisted_global_cache"):
+                self.manager._persisted_global_cache = data
+
+            if hasattr(self.manager, "fsm") and self.manager.fsm:
+                self.manager.fsm.on_api_sync_success(data)
 
             if len(coin_details) > 0 and abs(bot_unrealized) < 1e-5:
                 can_update_peak = False

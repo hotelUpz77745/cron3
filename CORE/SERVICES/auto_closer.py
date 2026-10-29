@@ -387,7 +387,8 @@ class AutoCloser:
             if th_neg == 0 or th_neg == 0.0:
                 th_neg = None
             if th_neg is not None:
-                th_neg = round(float(th_neg) * scale_money, 2)
+                th_neg = -abs(float(th_neg))
+                th_neg = round(th_neg * scale_money, 2)
 
             if not strat_triggered and th_neg is not None and iter_net <= th_neg:
                 strat_triggered = True

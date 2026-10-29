@@ -170,7 +170,7 @@ class AnalyticsFSM:
 
     def transition_to_autocloser_ready(self) -> None:
         """Переход в Состояние 4: Метрики сохранены, AutoCloser разрешен."""
-        if self.state == AnalyticsState.LIVE_SYNCED:
+        if self.state in (AnalyticsState.LIVE_SYNCED, AnalyticsState.AWAITING_API):
             self.state = AnalyticsState.AUTOCLOSER_READY
             logger.info("[AnalyticsFSM] 🚀 [STATE 4: AUTOCLOSER_READY] AutoCloser unlocked and armed.")
 
@@ -284,11 +284,25 @@ class AnalyticsFSM:
         except Exception as e:
             logger.error(f"[AnalyticsFSM] Error saving auto_close_history.json: {e}")
 
+        if self.iteration_file.exists():
+            try:
+                disk_state = json.loads(self.iteration_file.read_text(encoding="utf-8"))
+                if isinstance(disk_state, dict):
+                    for k, v in disk_state.items():
+                        if isinstance(v, dict):
+                            self._iteration_state.setdefault(k, {}).update(v)
+            except Exception:
+                pass
+
         next_idx = iter_idx + 1
         strat_entry = self._iteration_state.setdefault(strat_id, {})
         strat_entry["iteration_index"] = next_idx
         strat_entry["last_closed_iteration"] = iter_idx
         strat_entry["updated_at"] = now_utc
+        if "strat_net" in details and details["strat_net"] is not None:
+            strat_entry["iteration_start_net_profit_usdt"] = float(details["strat_net"])
+        if "settled_realized" in details and details["settled_realized"] is not None:
+            strat_entry["iteration_start_realized_pnl_usdt"] = float(details["settled_realized"])
         try:
             Utils.atomic_write_json(self.iteration_file, self._iteration_state, indent=4)
         except Exception as e:

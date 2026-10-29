@@ -1,1 +1,0 @@
-Id;Timestamp (UTC);Strategy;Symbol;Winning Side;Realized Profit (USDT);Losing Side;Losing Level;Losing DD %;Burn Qty;Burn Vol (USDT);Slice Loss (USDT);Burn Budget (USDT);Remaining Pos Qty

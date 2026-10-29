@@ -88,6 +88,10 @@ class BaseTrailingSystem:
                     state["armed_floor"] = floor_val
                     state["active_level_idx"] = idx
                     state["armed_level_desc"] = lvl.get("_desc", f"L{idx}")
+                    logger.info(
+                        f"[TRAILING RATCHET] 🎯 ARM L{idx} '{lvl.get('_desc', f'L{idx}')}': "
+                        f"Net {iter_net:+.2f} >= Act {act_val:.2f} USDT -> Floor armed at {floor_val:.2f} USDT!"
+                    )
 
         armed_floor = state.get("armed_floor")
         if armed_floor is None:
