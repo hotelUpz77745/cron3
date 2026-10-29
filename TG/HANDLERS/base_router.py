@@ -9,7 +9,7 @@ import pickle
 from typing import Any
 
 from aiogram import F, Router
-from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramServerError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
@@ -60,8 +60,8 @@ class BaseRouterHandler:
         self.router.callback_query(F.data == "logs_get_runtime_backup")(self.on_get_runtime_backup)
 
     async def global_error_handler(self, event: ErrorEvent):
-        if isinstance(event.exception, TelegramNetworkError):
-            logger.warning(f"[TG] Network Error (suppressed): {event.exception}")
+        if isinstance(event.exception, (TelegramNetworkError, TelegramServerError)):
+            logger.warning(f"[TG] Telegram API/Network Error (suppressed): {event.exception}")
             return True
         if isinstance(event.exception, TelegramRetryAfter):
             logger.warning(f"[TG] Rate Limit exceeded, retry after {event.exception.retry_after}s")
@@ -377,14 +377,65 @@ class BaseRouterHandler:
         ])
         await message.answer("Выберите нужный лог или бэкап рантайма:", reply_markup=keyboard)
 
+    @staticmethod
+    def _extract_log_tail(source_path: str, target_path: str, max_lines: int = 3000) -> bool:
+        """Извлекает последние max_lines строк из файла без загрузки гигабайтов в память."""
+        try:
+            from collections import deque
+            with open(source_path, "r", encoding="utf-8", errors="replace") as f:
+                lines = deque(f, maxlen=max_lines)
+            with open(target_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to extract log tail: {e}")
+            return False
+
     async def on_get_logs(self, callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.answer()
+        await callback.answer("⏳ Подготовка логов...")
         log_path = os.path.join("logs", "all.log")
-        if os.path.exists(log_path):
-            await callback.message.answer_document(FSInputFile(log_path))
-        else:
+        if not os.path.exists(log_path):
             await callback.message.answer("Global log file not found.")
+            return
+
+        try:
+            file_size = os.path.getsize(log_path)
+            max_direct_size = 5 * 1024 * 1024  # 5 MB
+
+            if file_size <= max_direct_size:
+                await callback.message.answer_document(
+                    FSInputFile(log_path, filename="all.log"),
+                    caption=f"📜 <b>Полный лог бота</b> ({file_size / 1024.0:.1f} KB)",
+                    parse_mode="HTML",
+                )
+            else:
+                tail_path = os.path.join("logs", "all_tail.log")
+                success = self._extract_log_tail(log_path, tail_path, max_lines=3000)
+                if success and os.path.exists(tail_path):
+                    tail_size = os.path.getsize(tail_path)
+                    caption = (
+                        f"📜 <b>Лог бота (последние 3000 строк)</b>\n"
+                        f"Размер полного лога: <code>{file_size / (1024.0 * 1024.0):.1f} MB</code> (хвост: {tail_size / 1024.0:.1f} KB)\n"
+                        f"<i>Полный лог доступен на сервере в: logs/all.log</i>"
+                    )
+                    await callback.message.answer_document(
+                        FSInputFile(tail_path, filename="all_tail.log"),
+                        caption=caption,
+                        parse_mode="HTML",
+                    )
+                else:
+                    await callback.message.answer(
+                        f"⚠️ Лог-файл слишком большой ({file_size / (1024.0 * 1024.0):.1f} MB) для отправки в Telegram. "
+                        f"Используйте консоль сервера: <code>tail -n 1000 logs/all.log</code>",
+                        parse_mode="HTML",
+                    )
+        except Exception as e:
+            logger.error(f"Error sending logs: {e}")
+            try:
+                await callback.message.answer(f"❌ Ошибка отправки логов: {e}")
+            except Exception:
+                pass
 
     async def on_get_runtime_backup(self, callback: CallbackQuery, state: FSMContext):
         await state.clear()

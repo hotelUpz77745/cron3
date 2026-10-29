@@ -14,6 +14,8 @@ if str(_CUR_DIR) not in sys.path:
     sys.path.insert(0, str(_CUR_DIR))
 
 import asyncio
+import contextlib
+import signal
 from typing import Optional, List, Dict, Any
 
 from consts import TG_ENABLED
@@ -25,8 +27,19 @@ from CORE.bot import BotCore
 os.environ["PYDANTIC_DISABLE_MODEL_REBUILD"] = "1"
 
 
-async def run_app(bot, logger):
+async def _safe_tg_runner(tg_bot: TelegramReceiver, logger: UnifiedLogger) -> None:
+    """Безопасный запуск TG-ресивера: непредвиденные сбои в TG не должны ронять торговое ядро."""
+    try:
+        await tg_bot.start()
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.error(f"[main] TGReceiver unexpected loop failure: {e}", exc_info=True)
+
+
+async def run_app(bot: BotCore, logger: UnifiedLogger) -> None:
     tg_bot = None
+    tg_task: Optional[asyncio.Task] = None
     if TG_ENABLED:
         try:
             tg_bot = TelegramReceiver(bot)
@@ -34,18 +47,35 @@ async def run_app(bot, logger):
         except Exception as e:
             logger.error(f"Failed to initialize TGReceiver: {e}")
 
-    tasks = [bot.start()]
+    loop = asyncio.get_running_loop()
+
+    def _shutdown_signal_handler(sig_name: str) -> None:
+        logger.info(f"Received signal {sig_name}. Initiating graceful shutdown of BotCore...")
+        bot.stop()
+        if tg_bot:
+            asyncio.create_task(tg_bot.stop())
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _shutdown_signal_handler, sig.name)
+        except (NotImplementedError, AttributeError):
+            pass
+
     if tg_bot:
-        tasks.append(tg_bot.start())
+        tg_task = asyncio.create_task(_safe_tg_runner(tg_bot, logger), name="TGReceiver")
 
     try:
-        await asyncio.gather(*tasks)
+        await bot.start()
     finally:
+        if tg_task and not tg_task.done():
+            tg_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await tg_task
         if tg_bot:
-            try:
+            with contextlib.suppress(Exception):
                 await tg_bot.stop()
-            except Exception:
-                pass
+        with contextlib.suppress(Exception):
+            await bot.shutdown()
 
 
 def send_telegram_fatal(msg: str):

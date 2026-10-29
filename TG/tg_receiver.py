@@ -8,8 +8,9 @@ from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from aiogram import Bot, Dispatcher
+from aiogram.exceptions import TelegramNetworkError, TelegramServerError, TelegramRetryAfter
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup, ErrorEvent
 
 from ANALYTICS.report_service import AnalyticsReportService
 from ANALYTICS.portfolio_aggregator import PortfolioAggregator
@@ -89,6 +90,17 @@ class TelegramReceiver:
 
     def _setup_routes(self):
         """Подключает подсистемы вселенных и все модульные aiogram 3 роутеры."""
+        @self.dp.errors()
+        async def handle_root_errors(event: ErrorEvent):
+            if isinstance(event.exception, (TelegramNetworkError, TelegramServerError)):
+                logger.warning(f"[TG] Root error handler: transient network/server error suppressed: {event.exception}")
+                return True
+            if isinstance(event.exception, TelegramRetryAfter):
+                logger.warning(f"[TG] Root error handler: rate limit exceeded, retry after {event.exception.retry_after}s")
+                return True
+            logger.error(f"[TG] Root error handler: unhandled exception: {event.exception}", exc_info=True)
+            return True
+
         self.dp.include_router(get_universe_router(self.bot_core))
         self.dp.include_router(get_base_router(self.bot_core, self.template_manager))
         self.dp.include_router(get_positions_router(self.bot_core))
@@ -186,12 +198,38 @@ class TelegramReceiver:
     # LIFECYCLE
     # =========================================================
     async def start(self):
-        """Запуск цикла поллинга Telegram бота."""
+        """Запуск цикла поллинга Telegram бота с самовосстановлением при сетевых сбоях."""
         logger.info("Starting Telegram Receiver...")
-        try:
-            await self.dp.start_polling(self.bot)
-        finally:
-            await self.stop()
+        backoff_sec = 5
+        while True:
+            try:
+                if self.bot is None:
+                    logger.info("Initializing Telegram Bot instance with a fresh session...")
+                    self.bot = Bot(token=TG_TOKEN)
+
+                await self.dp.start_polling(self.bot, handle_signals=False)
+                break
+            except asyncio.CancelledError:
+                logger.info("Telegram Receiver cancelled.")
+                break
+            except (TelegramServerError, TelegramNetworkError, Exception) as e:
+                logger.warning(
+                    f"Telegram polling error: {e}. Reconnecting in {backoff_sec}s...",
+                    exc_info=False,
+                )
+                try:
+                    await self.stop()
+                except Exception:
+                    pass
+                try:
+                    await asyncio.sleep(backoff_sec)
+                except asyncio.CancelledError:
+                    break
+                backoff_sec = min(backoff_sec * 2, 60)
+            else:
+                backoff_sec = 5
+
+        await self.stop()
 
     async def stop(self):
         """Корректная остановка поллинга и закрытие сетевой сессии."""
@@ -204,6 +242,7 @@ class TelegramReceiver:
                 await self.bot.session.close()
         except Exception:
             pass
+        self.bot = None
 
 
 def build_rotation_inline_keyboard(req_id: str, count: int = 1) -> dict:
