@@ -20,8 +20,20 @@ import logging
 import traceback
 from pathlib import Path
 
-from consts import LOG_TO_CONSOLE, LOG_TO_FILE, LOG_DIR
+import threading
 import time
+
+from consts import (
+    LOG_TO_CONSOLE,
+    LOG_TO_FILE,
+    LOG_DIR,
+    LOG_DEBUG,
+    LOG_INFO,
+    LOG_WARNING,
+    LOG_ERROR,
+    MAX_LOG_LINES,
+    TIME_ZONE,
+)
 
 DEFAULT_LOG_DIR = str(LOG_DIR)
 class UnlockedRotatingFileHandler(RotatingFileHandler):
@@ -29,27 +41,40 @@ class UnlockedRotatingFileHandler(RotatingFileHandler):
     Кастомный RotatingFileHandler, который не держит файл постоянно открытым.
     Каждая запись (emit) открывает, пишет и закрывает файл.
     Это снимает жесткую блокировку Windows, позволяя удалять/переименовывать логи.
+    Поддерживает строгий лимит строк (max_lines): при превышении лимита формирует новый файл,
+    сдвигая архивы (all.log.1, all.log.2, ...).
     """
-    def __init__(self, filename, mode='a', maxBytes=0, backupCount=0, encoding=None):
+    _line_counts: dict[str, int] = {}
+    _lock = threading.Lock()
+
+    def __init__(self, filename, mode='a', maxBytes=0, max_lines=MAX_LOG_LINES, backupCount=5, encoding=None):
         super().__init__(filename, mode, maxBytes, backupCount, encoding, delay=True)
         self.stream = None  # Принудительно отключаем постоянный стрим
+        self.max_lines = max_lines
 
     def _open(self):  # type: ignore[override]
         return None  # type: ignore[return-value]
 
-    def emit(self, record):
-        try:
-            if self.shouldRollover(record):
-                self.doRollover()
-                
-            msg = self.format(record)
-            os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
-            with open(self.baseFilename, self.mode, encoding=self.encoding) as f:
-                f.write(msg + self.terminator)
-        except Exception:
-            self.handleError(record)
+    @classmethod
+    def _get_line_count(cls, filename: str) -> int:
+        with cls._lock:
+            if filename not in cls._line_counts:
+                count = 0
+                if os.path.exists(filename):
+                    try:
+                        with open(filename, "r", encoding="utf-8", errors="replace") as f:
+                            count = sum(1 for _ in f)
+                    except Exception:
+                        count = 0
+                cls._line_counts[filename] = count
+            return cls._line_counts[filename]
 
     def shouldRollover(self, record):
+        # 1. Первоочередная проверка по лимиту строк
+        if self.max_lines > 0:
+            if self._get_line_count(self.baseFilename) >= self.max_lines:
+                return 1
+        # 2. Резервная проверка по размеру файла в байтах
         if self.maxBytes > 0:
             msg = "%s\n" % self.format(record)
             try:
@@ -60,14 +85,58 @@ class UnlockedRotatingFileHandler(RotatingFileHandler):
                 return 1
         return 0
 
-from consts import (
-    LOG_DEBUG,
-    LOG_INFO,
-    LOG_WARNING,
-    LOG_ERROR,
-    MAX_LOG_LINES,
-    TIME_ZONE,
-)
+    def doRollover(self):
+        """Безопасная ротация: формирует новый файл, сдвигая предыдущие в .1, .2, ..."""
+        with self._lock:
+            if self.stream:
+                try:
+                    self.stream.close()
+                except Exception:
+                    pass
+                self.stream = None
+
+            for i in range(self.backupCount - 1, 0, -1):
+                sfn = f"{self.baseFilename}.{i}"
+                dfn = f"{self.baseFilename}.{i + 1}"
+                if os.path.exists(sfn):
+                    try:
+                        if os.path.exists(dfn):
+                            os.remove(dfn)
+                        os.replace(sfn, dfn)
+                    except Exception:
+                        pass
+
+            dfn = f"{self.baseFilename}.1"
+            if os.path.exists(self.baseFilename):
+                try:
+                    if os.path.exists(dfn):
+                        os.remove(dfn)
+                    os.replace(self.baseFilename, dfn)
+                except Exception:
+                    try:
+                        import shutil
+                        shutil.copy2(self.baseFilename, dfn)
+                        with open(self.baseFilename, "w", encoding=self.encoding or "utf-8") as f:
+                            pass
+                    except Exception:
+                        pass
+
+            self._line_counts[self.baseFilename] = 0
+
+    def emit(self, record):
+        try:
+            if self.shouldRollover(record):
+                self.doRollover()
+                
+            msg = self.format(record)
+            lines_added = msg.count('\n') + 1
+            os.makedirs(os.path.dirname(self.baseFilename), exist_ok=True)
+            with open(self.baseFilename, self.mode, encoding=self.encoding) as f:
+                f.write(msg + self.terminator)
+            with self._lock:
+                self._line_counts[self.baseFilename] = self._line_counts.get(self.baseFilename, 0) + lines_added
+        except Exception:
+            self.handleError(record)
 
 
 # ============================================================
@@ -125,10 +194,6 @@ class UnifiedLogger:
         if log_dir is None:
             log_dir = DEFAULT_LOG_DIR
         os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, f"{name}.log")
-
-        avg_len = estimate_average_line_length(log_path)
-        max_bytes = calc_max_bytes(avg_len, max_lines)
 
         argv_str = " ".join(sys.argv).lower()
         is_backtesting = (
@@ -139,6 +204,17 @@ class UnifiedLogger:
             or ("unittest" in sys.modules and any("test" in a.lower() for a in sys.argv))
             or "pytest" in sys.modules
         )
+
+        if is_backtesting:
+            log_filename = "backtest_errors.log"
+        elif is_testing:
+            log_filename = "tests.log"
+        else:
+            log_filename = "all.log"
+
+        all_log_path = os.path.join(log_dir, log_filename)
+        avg_len = estimate_average_line_length(all_log_path)
+        max_bytes = calc_max_bytes(avg_len, max_lines)
 
         if is_backtesting:
             desired_level = logging.ERROR
@@ -157,18 +233,11 @@ class UnifiedLogger:
             )
             
             if LOG_TO_FILE:
-                if is_backtesting:
-                    log_filename = "backtest_errors.log"
-                elif is_testing:
-                    log_filename = "tests.log"
-                else:
-                    log_filename = "all.log"
-
-                all_log_path = os.path.join(log_dir, log_filename)
                 all_handler = UnlockedRotatingFileHandler(
                     all_log_path,
                     maxBytes=max_bytes,
-                    backupCount=1,
+                    max_lines=max_lines,
+                    backupCount=5,
                     encoding="utf-8",
                 )
                 all_handler.setLevel(desired_level)

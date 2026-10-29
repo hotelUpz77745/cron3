@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 from aiogram import F, Router
+from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramServerError
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import (
     CallbackQuery,
+    ErrorEvent,
     FSInputFile,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -65,6 +67,7 @@ class AnalyticsRouterHandler:
 
     def _register_routes(self) -> None:
         r = self.router
+        r.errors()(self.analytics_error_handler)
         r.message(Command("analytics"))(self.cmd_analytics)
         r.message(F.text == "📊 Analytics")(self.cmd_analytics)
         r.callback_query(F.data.startswith("analytics_dome:") | (F.data == "analytics_dome") | (F.data == "analytics_back_to_univ"))(self.cb_analytics_dome)
@@ -125,6 +128,17 @@ class AnalyticsRouterHandler:
         except Exception:
             await callback.message.answer(text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
 
+    async def analytics_error_handler(self, event: ErrorEvent):
+        """Перехватчик ошибок для роутера аналитики: предотвращает крах бота при сбоях графиков или Telegram."""
+        if isinstance(event.exception, (TelegramNetworkError, TelegramServerError)):
+            logger.warning(f"[TG] Analytics Network/Server Error (suppressed): {event.exception}")
+            return True
+        if isinstance(event.exception, TelegramRetryAfter):
+            logger.warning(f"[TG] Analytics Rate Limit exceeded, retry after {event.exception.retry_after}s")
+            return True
+        logger.error(f"[TG] Analytics unhandled exception: {event.exception}", exc_info=True)
+        return True
+
     async def cb_analytics_chart(self, callback: CallbackQuery):
         await callback.answer()
         parts = callback.data.split(":", 1)
@@ -133,17 +147,27 @@ class AnalyticsRouterHandler:
         set_user_universe_id(callback.from_user.id, current_uid)
 
         msg = await callback.message.answer(f"⏳ Генерация графика Net Profit для <code>{current_uid}</code>...", parse_mode="HTML")
-        report_svc = self._get_report_service()
-        chart_path = await report_svc.get_equity_chart_path_async(universe_id=current_uid)
-        if chart_path and chart_path.exists():
-            await msg.delete()
-            await callback.message.answer_photo(
-                FSInputFile(str(chart_path)),
-                caption=f"📈 <b>Кривая чистого Net Profit & Эквити</b>: <b>{univ_name}</b> (<code>{current_uid}</code>)",
-                parse_mode="HTML",
-            )
-        else:
-            await msg.edit_text(f"❌ Не удалось построить график эквити для {current_uid}.")
+        try:
+            report_svc = self._get_report_service()
+            chart_path = await report_svc.get_equity_chart_path_async(universe_id=current_uid)
+            if chart_path and chart_path.exists():
+                try:
+                    await msg.delete()
+                except Exception:
+                    pass
+                await callback.message.answer_photo(
+                    FSInputFile(str(chart_path)),
+                    caption=f"📈 <b>Кривая чистого Net Profit & Эквити</b>: <b>{univ_name}</b> (<code>{current_uid}</code>)",
+                    parse_mode="HTML",
+                )
+            else:
+                await msg.edit_text(f"❌ Не удалось построить график эквити для {current_uid}.")
+        except Exception as e:
+            logger.error(f"Error generating or sending equity chart: {e}")
+            try:
+                await msg.edit_text(f"❌ Ошибка построения графика: {e}")
+            except Exception:
+                await callback.message.answer(f"❌ Ошибка построения графика: {e}")
 
     async def cb_analytics_txt(self, callback: CallbackQuery):
         await callback.answer()
@@ -151,16 +175,32 @@ class AnalyticsRouterHandler:
         target_uid = parts[1] if len(parts) > 1 and parts[1] else None
         current_uid, _ = self._get_universe_meta(callback.from_user.id, target_uid=target_uid)
 
-        report_svc = self._get_report_service()
-        ledger_path = report_svc.get_ledger_file_path(universe_id=current_uid)
-        if ledger_path and ledger_path.exists():
-            await callback.message.answer_document(
-                FSInputFile(str(ledger_path)),
-                caption=f"📝 <b>Лента сделок (Trades Ledger)</b>: <code>{current_uid}</code>",
-                parse_mode="HTML",
-            )
-        else:
-            await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден или пуст.", parse_mode="HTML")
+        try:
+            report_svc = self._get_report_service()
+            ledger_path = report_svc.get_ledger_file_path(universe_id=current_uid)
+            if ledger_path and ledger_path.exists():
+                file_size = os.path.getsize(str(ledger_path))
+                if file_size > 2 * 1024 * 1024:
+                    import zipfile
+                    zip_target = ANALYTICS_STATS_DIR / f"ledger_{current_uid}.zip"
+                    with zipfile.ZipFile(str(zip_target), "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                        zf.write(str(ledger_path), arcname=ledger_path.name)
+                    await callback.message.answer_document(
+                        FSInputFile(str(zip_target)),
+                        caption=f"📝 <b>Лента сделок (Trades Ledger)</b>: <code>{current_uid}</code> (сжато в ZIP, {file_size / 1024.0:.1f} KB)",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await callback.message.answer_document(
+                        FSInputFile(str(ledger_path)),
+                        caption=f"📝 <b>Лента сделок (Trades Ledger)</b>: <code>{current_uid}</code>",
+                        parse_mode="HTML",
+                    )
+            else:
+                await callback.message.answer(f"Trades ledger TXT для купола <code>{current_uid}</code> не найден или пуст.", parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Error sending analytics txt ledger: {e}")
+            await callback.message.answer(f"❌ Ошибка отправки леджера: {e}")
 
     async def cb_analytics_full_report(self, callback: CallbackQuery):
         await callback.answer()
@@ -168,15 +208,19 @@ class AnalyticsRouterHandler:
         target_uid = parts[1] if len(parts) > 1 and parts[1] else None
         current_uid, univ_name = self._get_universe_meta(callback.from_user.id, target_uid=target_uid)
 
-        report_svc = self._get_report_service()
-        full_text = report_svc.render_full_report_text(current_uid, univ_name)
-        report_file = ANALYTICS_STATS_DIR / f"full_report_{current_uid}.txt"
-        report_file.write_text(full_text, encoding="utf-8")
-        await callback.message.answer_document(
-            FSInputFile(str(report_file)),
-            caption=f"📄 <b>Полный аналитический отчет</b>: <code>{current_uid}</code>",
-            parse_mode="HTML",
-        )
+        try:
+            report_svc = self._get_report_service()
+            full_text = report_svc.render_full_report_text(current_uid, univ_name)
+            report_file = ANALYTICS_STATS_DIR / f"full_report_{current_uid}.txt"
+            report_file.write_text(full_text, encoding="utf-8")
+            await callback.message.answer_document(
+                FSInputFile(str(report_file)),
+                caption=f"📄 <b>Полный аналитический отчет</b>: <code>{current_uid}</code>",
+                parse_mode="HTML",
+            )
+        except Exception as e:
+            logger.error(f"Error sending full report: {e}")
+            await callback.message.answer(f"❌ Ошибка генерации полного отчета: {e}")
 
     async def show_leaderboard(self, event: Any):
         is_cb = isinstance(event, CallbackQuery)
@@ -212,11 +256,15 @@ class AnalyticsRouterHandler:
 
     async def cb_download_leaderboard(self, callback: CallbackQuery):
         await callback.answer()
-        lb_file = ANALYTICS_DIR / "leaderboard.txt"
-        if lb_file.exists():
-            await callback.message.answer_document(FSInputFile(str(lb_file)), caption="🏆 <b>Leaderboard TXT</b>", parse_mode="HTML")
-        else:
-            await callback.message.answer("Leaderboard file not found.")
+        try:
+            lb_file = ANALYTICS_DIR / "leaderboard.txt"
+            if lb_file.exists():
+                await callback.message.answer_document(FSInputFile(str(lb_file)), caption="🏆 <b>Leaderboard TXT</b>", parse_mode="HTML")
+            else:
+                await callback.message.answer("Leaderboard file not found.")
+        except Exception as e:
+            logger.error(f"Error sending leaderboard: {e}")
+            await callback.message.answer(f"❌ Ошибка отправки лидерборда: {e}")
 
     async def cb_analytics_ranking(self, callback: CallbackQuery):
         await callback.answer()
@@ -286,17 +334,24 @@ class AnalyticsRouterHandler:
         current_uid, univ_name = self._get_universe_meta(callback.from_user.id, target_uid=target_uid)
         set_user_universe_id(callback.from_user.id, current_uid)
 
-        report_svc = self._get_report_service()
-        is_active = symbol in getattr(self.bot_core, "symbols", [])
-        detail_msg = report_svc.render_coin_detail_report(current_uid, univ_name, symbol, is_active)
-        if detail_msg:
-            chart_path = await report_svc.get_coin_chart_path_async(symbol=symbol, universe_id=current_uid)
-            if chart_path and chart_path.exists():
-                await callback.message.answer_photo(FSInputFile(str(chart_path)), caption=detail_msg, parse_mode="HTML")
+        try:
+            report_svc = self._get_report_service()
+            is_active = symbol in getattr(self.bot_core, "symbols", [])
+            detail_msg = report_svc.render_coin_detail_report(current_uid, univ_name, symbol, is_active)
+            if detail_msg:
+                chart_path = await report_svc.get_coin_chart_path_async(symbol=symbol, universe_id=current_uid)
+                if chart_path and chart_path.exists():
+                    try:
+                        await callback.message.answer_photo(FSInputFile(str(chart_path)), caption=detail_msg, parse_mode="HTML")
+                    except Exception:
+                        await callback.message.answer(detail_msg, parse_mode="HTML")
+                else:
+                    await callback.message.answer(detail_msg, parse_mode="HTML")
             else:
-                await callback.message.answer(detail_msg, parse_mode="HTML")
-        else:
-            await callback.message.answer(f"⚠️ Нет данных аналитики для монеты <b>{symbol}</b> в куполе <code>{current_uid}</code>.", parse_mode="HTML")
+                await callback.message.answer(f"⚠️ Нет данных аналитики для монеты <b>{symbol}</b> в куполе <code>{current_uid}</code>.", parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Error in cb_analytics_coin_detail: {e}")
+            await callback.message.answer(f"❌ Ошибка отображения аналитики монеты {symbol}: {e}")
 
     async def cb_analytics_cheat_sheet(self, callback: CallbackQuery):
         await callback.answer()
@@ -307,12 +362,28 @@ class AnalyticsRouterHandler:
     async def cb_strat_ledger(self, callback: CallbackQuery):
         await callback.answer()
         strat_id = callback.data.split("strat_ledger:")[1]
-        report_svc = self._get_report_service()
-        cand = report_svc.get_ledger_file_path(universe_id=strat_id)
-        if cand and cand.exists():
-            await callback.message.answer_document(FSInputFile(str(cand)), caption=f"📝 Леджер для {strat_id}", parse_mode="HTML")
-        else:
-            await callback.message.answer(f"Леджер для {strat_id} пока пуст.")
+        try:
+            report_svc = self._get_report_service()
+            cand = report_svc.get_ledger_file_path(universe_id=strat_id)
+            if cand and cand.exists():
+                file_size = os.path.getsize(str(cand))
+                if file_size > 2 * 1024 * 1024:
+                    import zipfile
+                    zip_target = ANALYTICS_STATS_DIR / f"ledger_{strat_id}.zip"
+                    with zipfile.ZipFile(str(zip_target), "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                        zf.write(str(cand), arcname=cand.name)
+                    await callback.message.answer_document(
+                        FSInputFile(str(zip_target)),
+                        caption=f"📝 Леджер для {strat_id} (сжато в ZIP, {file_size / 1024.0:.1f} KB)",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await callback.message.answer_document(FSInputFile(str(cand)), caption=f"📝 Леджер для {strat_id}", parse_mode="HTML")
+            else:
+                await callback.message.answer(f"Леджер для {strat_id} пока пуст.")
+        except Exception as e:
+            logger.error(f"Error sending strat ledger: {e}")
+            await callback.message.answer(f"❌ Ошибка отправки леджера стратегии {strat_id}: {e}")
 
     async def cb_analytics_reset(self, callback: CallbackQuery, state: FSMContext):
         await state.clear()
