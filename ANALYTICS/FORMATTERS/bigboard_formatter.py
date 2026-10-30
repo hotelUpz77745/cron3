@@ -116,9 +116,13 @@ class BigBoardFormatter:
                 recovery = float(adata.get("recovery_factor", 0.0))
                 trades_cnt = int(adata.get("total_trades", 0))
                 iter_idx = int(adata.get("iteration_index", 1))
+                iter_net = float(adata.get("iteration_net_profit_usdt", net_profit))
+                iter_real = float(adata.get("iteration_realized_pnl_usdt", realized))
                 dome_vel = adata.get("trade_velocity")
             except Exception as e:
                 logger.error(f"[BIGBOARD_FORMATTER] Error reading analytics for {current_uid}: {e}")
+                iter_net = net_profit
+                iter_real = realized
 
         if not dome_vel and analytics_manager and hasattr(analytics_manager, "get_trade_velocity"):
             dome_vel = analytics_manager.get_trade_velocity(current_uid)
@@ -144,6 +148,13 @@ class BigBoardFormatter:
 
         def_line = f"├ <b>Дефенс:</b> 🍊 {peel_cnt} пилинг ({peel_vol:.1f}$) | ♻️ {rec_cnt} рециклер ({rec_vol:.1f}$)\n"
 
+        if iter_idx > 1:
+            iter_n_sign = "+" if iter_net > 0 else ""
+            iter_r_sign = "+" if iter_real > 0 else ""
+            iter_line = f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx}: Net {iter_n_sign}{iter_net:,.2f}$, Real {iter_r_sign}{iter_real:,.2f}$)\n\n"
+        else:
+            iter_line = f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
+
         text = (
             f"📊 <b>АНАЛИТИКА КУПОЛА СТРАТЕГИИ</b>\n"
             f"🌌 <b>{clean_name}</b> (<code>{current_uid}</code>)\n\n"
@@ -157,7 +168,7 @@ class BigBoardFormatter:
             f"├ <b>Realized:</b> {real_sign}{realized:,.2f}$ | <b>Floating:</b> {unreal_sign}{unrealized:,.2f}$\n"
             f"{def_line}"
             f"├ <b>Max Drawdown:</b> {max_dd:,.2f}$ | <b>Recovery:</b> {recovery:.2f}\n"
-            f"└ <b>Сделок:</b> {trades_cnt} сд. (Итерация #{iter_idx})\n\n"
+            f"{iter_line}"
             f"{vel_block}"
             f"<i>Выберите раздел аналитики:</i>"
         )
