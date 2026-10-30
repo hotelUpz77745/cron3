@@ -159,23 +159,31 @@ class AnalyticsFSM:
         """Переход в Состояние 2: Ожидание ответа REST API биржи."""
         if self.state in (AnalyticsState.RESTORED_FROZEN, AnalyticsState.AUTOCLOSER_READY):
             self.state = AnalyticsState.AWAITING_API
-            logger.info("[AnalyticsFSM] ⏳ [STATE 2: AWAITING_API] Waiting for verified Binance REST response.")
+            logger.debug("[AnalyticsFSM] ⏳ [STATE 2: AWAITING_API] Waiting for verified Binance REST response.")
 
     def on_api_sync_success(self, data: Optional[dict] = None) -> None:
         """Переход в Состояние 3: Ответ получен, плавающий PnL рассчитан."""
         self.last_api_sync_ts = time.time()
         self.api_sync_count += 1
         self.state = AnalyticsState.LIVE_SYNCED
-        logger.info(f"[AnalyticsFSM] ⚡ [STATE 3: LIVE_SYNCED] Sync #{self.api_sync_count} verified.")
+        logger.debug(f"[AnalyticsFSM] ⚡ [STATE 3: LIVE_SYNCED] Sync #{self.api_sync_count} verified.")
 
     def transition_to_autocloser_ready(self) -> None:
         """Переход в Состояние 4: Метрики сохранены, AutoCloser разрешен."""
         if self.state in (AnalyticsState.LIVE_SYNCED, AnalyticsState.AWAITING_API):
+            prev_state = self.state
             self.state = AnalyticsState.AUTOCLOSER_READY
-            logger.info("[AnalyticsFSM] 🚀 [STATE 4: AUTOCLOSER_READY] AutoCloser unlocked and armed.")
+            if self.api_sync_count <= 1:
+                logger.info("[AnalyticsFSM] 🚀 [STATE 4: AUTOCLOSER_READY] AutoCloser unlocked and armed.")
+            elif prev_state == AnalyticsState.AWAITING_API and getattr(self, "_was_api_error", False):
+                self._was_api_error = False
+                logger.info("[AnalyticsFSM] 🚀 [STATE 4: AUTOCLOSER_READY] Connection restored. AutoCloser re-armed.")
+            else:
+                logger.debug("[AnalyticsFSM] 🚀 [STATE 4: AUTOCLOSER_READY] AutoCloser unlocked and armed.")
 
     def on_api_error(self, err_msg: str) -> None:
         """При ошибке API или потере связи автоклозер разоружается в Состояние 2."""
+        self._was_api_error = True
         if self.state == AnalyticsState.AUTOCLOSER_READY:
             self.state = AnalyticsState.AWAITING_API
             logger.warning(f"[AnalyticsFSM] ⚠️ API error: {err_msg}. Disarming AutoCloser -> AWAITING_API.")

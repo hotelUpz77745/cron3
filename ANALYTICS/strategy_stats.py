@@ -305,12 +305,18 @@ class StrategyStatsEngine:
             # Iteration Realized PnL
             if iter_idx == 1:
                 iter_start_real = 0.0
-            elif "iteration_start_realized_pnl_usdt" in strat_data:
-                iter_start_real = float(strat_data["iteration_start_realized_pnl_usdt"])
-            elif "iteration_start_realized_pnl_usdt" in iter_cache:
-                iter_start_real = float(iter_cache["iteration_start_realized_pnl_usdt"])
             else:
-                iter_start_real = s_real if iter_idx > 1 else 0.0
+                raw_start_real = strat_data.get("iteration_start_realized_pnl_usdt")
+                if raw_start_real is None:
+                    raw_start_real = iter_cache.get("iteration_start_realized_pnl_usdt")
+
+                # Защита от десинхронизации: если базовая точка realized PnL отсутствует,
+                # либо превышает текущий s_real из-за закрытия позиций старой итерации,
+                # выравниваем базовую точку по iter_start_net
+                if raw_start_real is None or (float(raw_start_real) > s_real and iter_start_net > 0 and float(raw_start_real) > iter_start_net + 1e-4):
+                    iter_start_real = iter_start_net
+                else:
+                    iter_start_real = float(raw_start_real)
 
             iter_real = round(s_real - iter_start_real, 4)
             strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
