@@ -63,9 +63,8 @@ class DomeCloserExecutor:
         # 3. Чтение свежих данных аналитики после закрытия ордеров
         fresh_analytics = Utils.read_json_file(stats_path) if stats_path.exists() else raw_analytics
         settled_net = round(float(fresh_analytics.get("net_profit_usdt", strat_net)), 4)
-        settled_realized = round(
-            float(fresh_analytics.get("realized_pnl_net_usdt", fresh_analytics.get("realized_pnl_usdt", 0.0))), 4
-        )
+        # При закрытии всех позиций купола плавающий PnL фиксируется, поэтому стартовый realized равен стартовому net
+        settled_realized = settled_net
 
         now_ms = int(time.time() * 1000)
         fresh_analytics["iteration_index"] = next_iter_idx

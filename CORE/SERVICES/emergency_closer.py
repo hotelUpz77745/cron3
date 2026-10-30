@@ -375,10 +375,8 @@ class EmergencyCloserService:
             cur_iter_idx = int(strat_analytics.get("iteration_index", 1))
             next_iter_idx = cur_iter_idx + 1
             new_iter_start_net = round(strat_net, 4)
-            new_iter_start_real = round(
-                float(strat_analytics.get("realized_pnl_net_usdt", strat_analytics.get("realized_pnl_usdt", strat_net))),
-                4,
-            )
+            # При закрытии позиций плавающий PnL фиксируется, поэтому стартовый realized равен стартовому net
+            new_iter_start_real = new_iter_start_net
 
             strat_analytics["iteration_index"] = next_iter_idx
             strat_analytics["iteration_start_net_profit_usdt"] = new_iter_start_net
