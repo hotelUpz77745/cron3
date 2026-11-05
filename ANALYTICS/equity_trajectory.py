@@ -138,6 +138,19 @@ class EquitySnapshotStore:
         key = (scope_id or "ALL").strip()
         return [list(pt) for pt in self._cache.get(key, [])]
 
+    def get_max_recorded_equity(self, scope_id: str) -> Optional[float]:
+        """Возвращает максимальное значение эквити, зафиксированное в слепках кэша."""
+        pts = self.get_snapshots(scope_id)
+        if pts:
+            equities = [
+                float(p[1])
+                for p in pts
+                if isinstance(p, (list, tuple)) and len(p) >= 2 and isinstance(p[1], (int, float))
+            ]
+            if equities:
+                return round(max(equities), 4)
+        return None
+
     def extract_series(
         self,
         scope_id: str,
