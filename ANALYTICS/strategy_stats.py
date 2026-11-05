@@ -211,17 +211,63 @@ class StrategyStatsEngine:
             s_trough = float(strat_data.get("_current_trough_usdt", s_init))
             s_min = float(strat_data.get("min_balance_usdt", s_init))
 
+            # Auto-healing of corrupted historical peak balance (swallowed zero-drawdown / desync artifact)
+            max_snap_strat = DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity(strat_id)
+            positive_floating = sum(max(0.0, float(c.get("current_drawdown", 0.0))) for c in strat_per_coin.values())
+            theoretical_max_net = s_real + max(positive_floating, 15.0)
+
+            if max_snap_strat is not None and max_snap_strat > 0:
+                credible_strat_peak = max(s_cur, max_snap_strat)
+            else:
+                credible_strat_peak = max(s_cur, s_init + theoretical_max_net)
+
+            if s_peak > credible_strat_peak + 0.5 and (s_peak - s_init) > theoretical_max_net:
+                logger.critical(
+                    f"[STRATEGY_STATS][{strat_id}] 🩹 Corrupted peak balance detected: {s_peak}$ "
+                    f"(credible peak: {credible_strat_peak}$, s_cur: {s_cur}$, s_real: {s_real}$, s_unreal: {s_unreal}$). "
+                    f"Auto-healing peak balance to {credible_strat_peak}$!"
+                )
+                s_peak = credible_strat_peak
+                strat_data["peak_balance_usdt"] = round(s_peak, 4)
+                strat_data["peak_net_profit_usdt"] = round(s_peak - s_init, 4)
+
             strat_data["_floating_synced"] = True
             has_active_positions = any(
                 abs(float(c.get("long_amt", 0.0))) > 1e-8 or abs(float(c.get("short_amt", 0.0))) > 1e-8
                 for c in strat_per_coin.values()
             )
+
+            active_sync_locks = getattr(self.manager, "_sync_locks", set())
+            strat_has_sync_locks = any(
+                (sym in strat_symbols or sym in strat_per_coin)
+                for (sym, side) in active_sync_locks
+            ) if isinstance(active_sync_locks, (set, list, tuple)) else False
+
             can_update_strat_peak = True
+            if strat_has_sync_locks:
+                can_update_strat_peak = False
+                logger.warning(
+                    f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: pending income sync locks exist "
+                    f"for strategy symbols. Blocking peak balance update."
+                )
+
             if has_active_positions and abs(s_unreal) < 1e-5:
                 can_update_strat_peak = False
                 logger.warning(
                     f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: active position(s) exist, "
                     f"but s_unreal is 0.0. Blocking peak balance update."
+                )
+
+            has_unconfirmed_coin_dd = any(
+                (abs(float(c.get("long_amt", 0.0))) > 1e-8 or abs(float(c.get("short_amt", 0.0))) > 1e-8)
+                and abs(float(c.get("current_drawdown", 0.0))) < 1e-6
+                for c in strat_per_coin.values()
+            )
+            if has_unconfirmed_coin_dd:
+                can_update_strat_peak = False
+                logger.warning(
+                    f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: coin with active position has 0.0 drawdown. "
+                    f"Blocking peak balance update."
                 )
 
             if s_cur > s_peak and can_update_strat_peak:
@@ -254,6 +300,16 @@ class StrategyStatsEngine:
             hist_peak_ts = iter_cache.get("historical_peak_net_ts")
             hist_max_dd = float(iter_cache.get("historical_max_drawdown_usdt", 0.0))
 
+            # Clamp hist_peak if it was infected with a corrupted peak
+            if hist_peak > round(credible_strat_peak - s_init, 4) + 0.5 and hist_peak > theoretical_max_net:
+                healed_hist_peak = round(credible_strat_peak - s_init, 4)
+                logger.warning(
+                    f"[STRATEGY_STATS][{strat_id}] Clamping infected historical_peak_net_profit_usdt: {hist_peak}$ -> {healed_hist_peak}$"
+                )
+                hist_peak = healed_hist_peak
+                iter_cache["historical_peak_net_profit_usdt"] = hist_peak
+                self.save_iteration_cache(strat_id, iter_cache)
+
             cur_peak_net = float(strat_data.get("peak_net_profit_usdt", 0.0))
             if hist_peak > cur_peak_net and can_update_strat_peak:
                 strat_data["peak_net_profit_usdt"] = hist_peak
@@ -274,7 +330,8 @@ class StrategyStatsEngine:
             fsm_i = int(fsm_val) if isinstance(fsm_val, int) or (isinstance(fsm_val, str) and str(fsm_val).isdigit()) else 1
             iter_idx = max(int(strat_data.get("iteration_index", 1)), int(iter_cache.get("iteration_index", 1)), fsm_i)
             fsm_obj = getattr(self.manager, "fsm", None)
-            fsm_base = fsm_obj.get_iteration_baseline_net(strat_id, iter_idx) if hasattr(fsm_obj, "get_iteration_baseline_net") else 0.0
+            raw_base = fsm_obj.get_iteration_baseline_net(strat_id, iter_idx) if hasattr(fsm_obj, "get_iteration_baseline_net") else 0.0
+            fsm_base = float(raw_base) if isinstance(raw_base, (int, float)) else 0.0
             cached_start = float(strat_data.get("iteration_start_net_profit_usdt", iter_cache.get("iteration_start_net_profit_usdt", 0.0)))
             iter_start_net = 0.0 if iter_idx == 1 else max(cached_start, fsm_base)
 
@@ -323,7 +380,7 @@ class StrategyStatsEngine:
             strat_data["iteration_realized_pnl_usdt"] = iter_real
 
             cur_peak = strat_data.get("peak_net_profit_usdt", 0.0)
-            if cur_peak > hist_peak:
+            if cur_peak > hist_peak and can_update_strat_peak:
                 hist_peak = cur_peak
                 hist_peak_ts = strat_data.get("peak_net_ts", now_ms)
             net_dd = min(0.0, round(s_min - s_init, 4))
