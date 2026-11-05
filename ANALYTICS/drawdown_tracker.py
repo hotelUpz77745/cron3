@@ -174,6 +174,7 @@ class DrawdownTracker:
             tracked_symbols = list(dict.fromkeys(config_symbols + list(data.get("per_coin", {}).keys()) + list(data.get("historical_symbols", []))))
 
             # FSM Position Transition Detector for tracked symbols
+            has_position_reductions = False
             for sym in tracked_symbols:
                 details = coin_details.get(sym, {})
                 for side in ("LONG", "SHORT"):
@@ -187,12 +188,14 @@ class DrawdownTracker:
                         prev_amt = self.manager._symbol_fsm_positions[fsm_key]
                         if abs(curr_amt - prev_amt) > 1e-4:
                             self.manager._symbol_fsm_positions[fsm_key] = curr_amt
-                            if abs(curr_amt) < abs(prev_amt) and fsm_key not in self.manager._sync_locks:
-                                logger.info(
-                                    f"[ANALYTICS][FSM] Position reduction detected on {sym} {side} "
-                                    f"({prev_amt} -> {curr_amt}). Scheduling income sync."
-                                )
-                                self.manager.record_finished_position(client, sym, side, 0, int(time.time() * 1000))
+                            if abs(curr_amt) < abs(prev_amt):
+                                has_position_reductions = True
+                                if fsm_key not in self.manager._sync_locks:
+                                    logger.info(
+                                        f"[ANALYTICS][FSM] Position reduction detected on {sym} {side} "
+                                        f"({prev_amt} -> {curr_amt}). Scheduling income sync."
+                                    )
+                                    self.manager.record_finished_position(client, sym, side, 0, int(time.time() * 1000))
 
             if "per_coin" not in data:
                 data["per_coin"] = {}
@@ -381,12 +384,33 @@ class DrawdownTracker:
             if hasattr(self.manager, "fsm") and self.manager.fsm:
                 self.manager.fsm.on_api_sync_success(data)
 
+            active_sync_locks = getattr(self.manager, "_sync_locks", set())
+            if active_sync_locks or has_position_reductions:
+                can_update_peak = False
+                logger.warning(
+                    f"[ANALYTICS] Peak guard triggered: {len(active_sync_locks)} active sync lock(s) / pending reduction. "
+                    f"Blocking peak balance update until income is synced."
+                )
+
             if len(coin_details) > 0 and abs(bot_unrealized) < 1e-5:
                 can_update_peak = False
                 logger.warning(
                     f"[ANALYTICS] Peak guard triggered: {len(coin_details)} active position(s) exist, "
                     f"but bot_unrealized is 0.0. Blocking peak balance update."
                 )
+
+            # Auto-healing of corrupted global peak balance
+            max_snap_eq = DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity("ALL")
+            credible_global_peak = max(bot_cur_balance, max_snap_eq if max_snap_eq is not None else bot_cur_balance)
+            unreal_cushion = max(0.0, bot_unrealized) + 15.0
+            if peak > credible_global_peak + 1.0 and (peak - initial) > (bot_realized_net + unreal_cushion):
+                logger.critical(
+                    f"[ANALYTICS] 🩹 Corrupted global peak balance detected: {peak}$ "
+                    f"(credible: {credible_global_peak}$, cur: {bot_cur_balance}$, realized: {bot_realized_net}$, unrealized: {bot_unrealized}$). "
+                    f"Auto-healing global peak balance to {credible_global_peak}$!"
+                )
+                peak = credible_global_peak
+                data["peak_balance_usdt"] = round(peak, 4)
 
             now_ms = int(time.time() * 1000)
             if bot_cur_balance > peak and can_update_peak:
