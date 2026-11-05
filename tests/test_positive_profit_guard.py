@@ -528,6 +528,169 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(hist_data[strat][0]["iter_net"], 15.5)
 
 
+    async def test_drawdown_tracker_blocks_peak_update_during_sync_locks(self):
+        """When _sync_locks has active symbols (pending deep sync), peak updates must be strictly blocked."""
+        mock_manager = MagicMock()
+        mock_manager._sync_locks = {("SOLVUSDT", "LONG")}
+        mock_manager._symbol_fsm_positions = {("SOLVUSDT", "LONG"): 0.0}
+        tracker = DrawdownTracker(mock_manager)
+        tracker._floating_synced = True
+
+        mock_client = MagicMock()
+        res_ok = MagicMock()
+        res_ok.success = True
+        res_ok.data = {
+            "totalMarginBalance": "550.0",
+            "positions": [],
+        }
+        mock_client.fetch_account_info = AsyncMock(return_value=res_ok)
+
+        data = {
+            "start_balance_usdt": 448.0,
+            "peak_balance_usdt": 448.0,
+            "iteration_peak_net_profit_usdt": 0.0,
+            "per_coin": {"SOLVUSDT": {"realized_pnl_usdt": 76.33, "current_drawdown": 0.0}},
+        }
+
+        # Even though net profit would calculate to 76.33 and cur_balance to 524.33,
+        # _sync_locks MUST block peak from updating!
+        await tracker.update_drawdowns(mock_client, data)
+        self.assertEqual(data["peak_balance_usdt"], 448.0, "Peak balance must NOT update while _sync_locks is active")
+        self.assertEqual(data["iteration_peak_net_profit_usdt"], 0.0)
+
+    async def test_drawdown_tracker_blocks_peak_update_on_position_reduction_tick(self):
+        """On the exact tick where position reduction is detected, peak update must be blocked."""
+        mock_manager = MagicMock()
+        mock_manager._sync_locks = set()
+        mock_manager._symbol_fsm_positions = {("ERAUSDT", "LONG"): 398.0}
+        mock_manager.record_finished_position = MagicMock()
+        tracker = DrawdownTracker(mock_manager)
+        tracker._floating_synced = True
+
+        mock_client = MagicMock()
+        res_ok = MagicMock()
+        res_ok.success = True
+        res_ok.data = {
+            "totalMarginBalance": "524.0",
+            "positions": [],  # All positions flat
+        }
+        mock_client.fetch_account_info = AsyncMock(return_value=res_ok)
+
+        data = {
+            "start_balance_usdt": 448.0,
+            "peak_balance_usdt": 448.0,
+            "iteration_peak_net_profit_usdt": 0.0,
+            "per_coin": {"ERAUSDT": {"realized_pnl_usdt": 76.33, "current_drawdown": 0.0}},
+        }
+
+        # Position reduction from 398.0 -> 0.0 is detected in this call!
+        await tracker.update_drawdowns(mock_client, data)
+        self.assertEqual(data["peak_balance_usdt"], 448.0, "Peak balance must NOT spike on position reduction tick")
+        self.assertEqual(data["iteration_peak_net_profit_usdt"], 0.0)
+
+    def test_strategy_stats_auto_heals_corrupted_peak_balance(self):
+        """StrategyStatsEngine must detect and auto-heal corrupted historical peaks (e.g. $524.33)."""
+        mock_manager = MagicMock()
+        mock_manager.fsm = None
+        mock_manager._floating_synced = True
+        mock_manager._sync_locks = set()
+        mock_manager.stats_dir = Path(tempfile.mkdtemp())
+        mock_manager.cache_dir = Path(tempfile.mkdtemp())
+        mock_manager.ledgers_dir = Path(tempfile.mkdtemp())
+        mock_manager.peels_ledger = mock_manager.ledgers_dir / "peels_ledger.txt"
+        mock_manager.recycling_ledger = mock_manager.ledgers_dir / "recycling_ledger.txt"
+
+        strat_id = "u96_omni_zenith13__trailing_ratchet"
+        strat_cfg = MagicMock()
+        strat_cfg.name = "Omni Zenith 13"
+        strat_cfg.start_balance_usdt = 448.0
+        strat_cfg.analytics_cfg = {"start_balance_usdt": 448.0}
+        strat_cfg.symbols = ["ERAUSDT", "SOLVUSDT"]
+
+        mock_registry = MagicMock()
+        mock_registry.active_strategies = {strat_id: strat_cfg}
+        mock_registry.get_active_strategies.return_value = {strat_id: strat_cfg}
+        mock_registry.get_all_active_symbols.return_value = ["ERAUSDT", "SOLVUSDT"]
+        mock_manager.strategy_registry = mock_registry
+
+        # Write corrupted analytics file to disk
+        strat_file = mock_manager.stats_dir / f"analytics_{strat_id}.json"
+        corrupted_data = {
+            "universe_id": strat_id,
+            "name": "Omni Zenith 13",
+            "start_balance_usdt": 448.0,
+            "_rebased_start_balance_usdt": 448.0,
+            "cur_balance_usdt": 474.46,
+            "peak_balance_usdt": 524.33,  # CORRUPTED PEAK!
+            "peak_net_profit_usdt": 76.33,
+            "min_balance_usdt": 434.44,
+            "_current_trough_usdt": 434.44,
+            "net_profit_usdt": 26.46,
+            "realized_pnl_net_usdt": 32.49,
+            "unrealized_pnl_usdt": -6.03,
+            "total_trades": 253,
+            "per_coin": {
+                "ERAUSDT": {"long_amt": 0.0, "short_amt": 0.0, "realized_pnl_net_usdt": 20.0, "current_drawdown": -3.0},
+                "SOLVUSDT": {"long_amt": 0.0, "short_amt": 0.0, "realized_pnl_net_usdt": 12.49, "current_drawdown": -3.03},
+            },
+        }
+        strat_file.write_text(json.dumps(corrupted_data), encoding="utf-8")
+
+        # Also write corrupted iteration state cache
+        iter_file = mock_manager.cache_dir / "iteration_state.json"
+        iter_file.write_text(json.dumps({
+            strat_id: {
+                "historical_peak_net_profit_usdt": 76.33,  # CORRUPTED CACHED PEAK!
+                "iteration_index": 4,
+            }
+        }), encoding="utf-8")
+
+        engine = StrategyStatsEngine(mock_manager)
+        global_data = {
+            "_floating_synced": True,
+            "per_coin": corrupted_data["per_coin"],
+        }
+
+        # Run recalculation
+        engine.update_strategies_stats(global_data)
+
+        # Check healed file on disk
+        healed_data = json.loads(strat_file.read_text(encoding="utf-8"))
+        self.assertLess(healed_data["peak_balance_usdt"], 500.0, "Peak balance must be healed from false $524.33")
+        self.assertLessEqual(healed_data["peak_balance_usdt"], 448.0 + 32.49 + 15.0)
+
+        # Check healed iteration cache on disk
+        healed_iter = json.loads(iter_file.read_text(encoding="utf-8"))
+        self.assertLess(healed_iter[strat_id]["historical_peak_net_profit_usdt"], 50.0)
+
+    def test_bigboard_formatter_sanity_clamps_corrupted_peak(self):
+        """BigBoardFormatter must clamp an impossible peak balance in presentation HTML."""
+        from ANALYTICS.FORMATTERS.bigboard_formatter import BigBoardFormatter
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            stats_d = Path(tmp_dir) / "STATS"
+            stats_d.mkdir(parents=True, exist_ok=True)
+            strat_id = "u96_omni_zenith13__trailing_ratchet"
+            f = stats_d / f"analytics_{strat_id}.json"
+            f.write_text(json.dumps({
+                "start_balance_usdt": 448.0,
+                "cur_balance_usdt": 474.46,
+                "peak_balance_usdt": 524.33,  # Corrupted!
+                "min_balance_usdt": 434.44,
+                "net_profit_usdt": 26.46,
+                "realized_pnl_net_usdt": 32.49,
+                "unrealized_pnl_usdt": -6.03,
+                "total_trades": 253,
+                "iteration_index": 4,
+            }), encoding="utf-8")
+
+            text, buttons = BigBoardFormatter.render_universe_analytics_card(
+                stats_dir=stats_d,
+                current_uid=strat_id,
+                univ_name="Omni Zenith 13",
+            )
+            self.assertNotIn("524.33$", text, "BigBoardFormatter must NOT display corrupted $524.33 ATH")
+            self.assertIn("474.46$", text)
+
 if __name__ == "__main__":
     unittest.main()
 
