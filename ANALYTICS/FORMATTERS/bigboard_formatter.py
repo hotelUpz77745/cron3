@@ -16,6 +16,7 @@ from consts import (
 )
 from c_log import UnifiedLogger
 from ANALYTICS.leaderboard import LeaderboardEngine
+from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
 
 logger = UnifiedLogger("BigBoardFormatter")
 
@@ -119,6 +120,13 @@ class BigBoardFormatter:
                 iter_net = float(adata.get("iteration_net_profit_usdt", net_profit))
                 iter_real = float(adata.get("iteration_realized_pnl_usdt", realized))
                 dome_vel = adata.get("trade_velocity")
+
+                # Presentation layer sanity check: ATH cannot unphysically exceed credible equity
+                max_snap = DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity(current_uid)
+                max_theoretical = start_bal + max(realized, net_profit) + 15.0
+                credible_ceiling = max(cur_bal, max_snap if max_snap is not None else cur_bal)
+                if peak_bal > credible_ceiling + 0.5 and peak_bal > max_theoretical:
+                    peak_bal = credible_ceiling
             except Exception as e:
                 logger.error(f"[BIGBOARD_FORMATTER] Error reading analytics for {current_uid}: {e}")
                 iter_net = net_profit
@@ -229,6 +237,13 @@ class BigBoardFormatter:
         realized = float(portfolio_summary.get("aggregate_realized_pnl_usdt", 0.0))
         unrealized = float(portfolio_summary.get("aggregate_unrealized_pnl_usdt", 0.0))
         trades_cnt = int(portfolio_summary.get("aggregate_total_trades", 0))
+
+        # Presentation layer sanity check: Aggregate ATH cannot unphysically exceed credible equity
+        max_snap_all = DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity("ALL")
+        max_theoretical_port = start_bal + max(realized, net_profit) + (len(active_strats) if active_strats else 1) * 15.0
+        credible_port_ceiling = max(cur_bal, max_snap_all if max_snap_all is not None else cur_bal)
+        if peak_bal > credible_port_ceiling + 0.5 and peak_bal > max_theoretical_port:
+            peak_bal = credible_port_ceiling
         active_count = int(portfolio_summary.get("total_universes_active", len(active_strats) if active_strats else 1))
 
         roi_pct = round((net_profit / start_bal * 100.0), 2) if start_bal > 0 else 0.0
