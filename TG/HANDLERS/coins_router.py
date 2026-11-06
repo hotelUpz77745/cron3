@@ -26,6 +26,7 @@ from TG.states import TGStates
 from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 from c_utils import Utils
 from CORE.strategy_applicator import StrategyApplicator
+from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
 
 logger = UnifiedLogger("TGCoinsRouter")
 
@@ -70,11 +71,11 @@ class CoinsRouterHandler:
         )
         keyboard = get_strategy_selection_inline_keyboard(active_strategies, symbol, self.bot_core)
         if edit_msg and isinstance(msg_or_cb, CallbackQuery):
-            await msg_or_cb.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+            await safe_edit_callback(msg_or_cb, text, reply_markup=keyboard, parse_mode="HTML")
         elif isinstance(msg_or_cb, CallbackQuery):
-            await msg_or_cb.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            await safe_answer(msg_or_cb, text, reply_markup=keyboard, parse_mode="HTML")
         else:
-            await msg_or_cb.answer(text, reply_markup=keyboard, parse_mode="HTML")
+            await safe_answer(msg_or_cb, text, reply_markup=keyboard, parse_mode="HTML")
         await state.set_state(TGStates.waiting_for_add_strategy_choice)
 
     async def on_set_coins(self, message: Message, state: FSMContext):
@@ -298,7 +299,7 @@ class CoinsRouterHandler:
             f"Запустить сразу с параметрами стратегии или настроить параметры кастомно?"
         )
         keyboard = get_launch_params_inline_keyboard(symbol, strat_id)
-        await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
+        await safe_edit_callback(callback, text, reply_markup=keyboard, parse_mode="HTML")
 
     async def process_add_run(self, callback: CallbackQuery, state: FSMContext):
         await callback.answer()
@@ -312,7 +313,8 @@ class CoinsRouterHandler:
         meta = get_strategy_meta(strat_id, self.bot_core)
         def_inv = meta.get("default_invest_size") or meta.get("invest_size") or 0.0
 
-        await callback.message.edit_text(
+        await safe_edit_callback(
+            callback,
             f"✅ <b>Монета {symbol} успешно добавлена и запущена!</b>\n\n"
             f"🎯 Стратегия: <b>{meta.get('name', strat_id)}</b> (<code>{strat_id}</code>)\n"
             f"💰 Депозит: <b>{def_inv} USDT</b> (дефолтный из конфига, Плечо: {meta.get('leverage', 20)}x)\n"
@@ -320,7 +322,7 @@ class CoinsRouterHandler:
             f"📁 Конфиг: <code>CFG/runtime/{strat_id}/{symbol.lower()}.json</code>",
             parse_mode="HTML",
         )
-        await callback.message.answer("Монета активна в торговом пуле.", reply_markup=get_set_coins_keyboard())
+        await safe_answer(callback, "Монета активна в торговом пуле.", reply_markup=get_set_coins_keyboard())
         await state.clear()
 
     async def process_add_back_strats(self, callback: CallbackQuery, state: FSMContext):
@@ -452,7 +454,8 @@ class CoinsRouterHandler:
                 univ_data = Utils.read_json_file(DATA_DIR / "universes.json") or {}
 
         keyboard = get_catalog_selection_inline_keyboard(univ_data, symbol)
-        await callback.message.edit_text(
+        await safe_edit_callback(
+            callback,
             f"🌐 <b>Каталог стратегий (Universes) для {symbol}</b>\n\n"
             f"Выберите любую стратегию из базы для активации и запуска:",
             reply_markup=keyboard,
@@ -498,18 +501,20 @@ class CoinsRouterHandler:
         try:
             res = await self.bot_core.delete_symbol(sym)
             if res:
-                await callback.message.edit_text(
+                await safe_edit_callback(
+                    callback,
                     f"✅ Монета <b>{sym}</b> успешно удалена из купола <code>{dome_id}</code>.",
                     parse_mode="HTML",
                 )
             else:
-                await callback.message.edit_text(
+                await safe_edit_callback(
+                    callback,
                     f"⚠️ Монета <b>{sym}</b> уже отсутствует в куполе <code>{dome_id}</code>.",
                     parse_mode="HTML",
                 )
         except Exception as e:
             logger.error(f"Error deleting symbol {sym}: {e}")
-            await callback.message.edit_text(f"❌ Ошибка удаления монеты {sym}: {e}")
+            await safe_edit_callback(callback, f"❌ Ошибка удаления монеты {sym}: {e}")
 
     async def process_del_dome_coin_cancel(self, callback: CallbackQuery):
         await callback.answer()
