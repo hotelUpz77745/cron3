@@ -29,6 +29,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from TG.keyboards import get_confirm_start_keyboard, get_main_keyboard
 from TG.template_manager import TemplateManager
+from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
 
 logger = UnifiedLogger("TGBaseRouter")
@@ -86,13 +87,17 @@ class BaseRouterHandler:
 
 
     async def sonnik_restore_cmd(self, message: Message):
-        msg = await message.answer("⏳ Запуск принудительного Deep Sync. Это займет некоторое время...")
+        msg = await safe_answer(message, "⏳ Запуск принудительного Deep Sync. Это займет некоторое время...")
         try:
             await self.bot_core.analytics.deep_sync_analytics(self.bot_core.client, self.bot_core.prices)
-            await msg.edit_text("✅ Принудительный Deep Sync успешно завершен! Исторические данные восстановлены по первой строке леджера.")
+            if msg:
+                await safe_edit_text(msg, "✅ Принудительный Deep Sync успешно завершен! Исторические данные восстановлены по первой строке леджера.")
         except Exception as e:
             logger.error(f"Failed to execute manual deep sync: {e}")
-            await msg.edit_text(f"❌ Ошибка во время Deep Sync: {e}")
+            if msg:
+                await safe_edit_text(msg, f"❌ Ошибка во время Deep Sync: {e}")
+            else:
+                await safe_answer(message, f"❌ Ошибка во время Deep Sync: {e}")
 
     async def radar_cmd(self, message: Message):
         nav = getattr(self.bot_core, "radar_navigator", None)
@@ -151,7 +156,8 @@ class BaseRouterHandler:
                 applied_lines.append(f"• <b>{r['old_symbol']}</b> ➔ <b>{r['new_symbol']}</b> (+{r['lead_pct']:.1f}%)")
 
             msg_applied = "\n".join(applied_lines)
-            await callback.message.edit_text(
+            await safe_edit_callback(
+                callback,
                 f"✅ <b>Ротация выполнена!</b> (Замен: {len(rotations)})\n"
                 f"{msg_applied}\n"
                 f"Новый цикл стартует на обновленном составе!",
@@ -159,7 +165,7 @@ class BaseRouterHandler:
             )
         except Exception as e:
             logger.error(f"[TG] Ошибка применения ротации: {e}")
-            await callback.message.answer(f"❌ Ошибка применения ротации: {e}")
+            await safe_answer(callback, f"❌ Ошибка применения ротации: {e}")
 
     async def on_rot_reject(self, callback: CallbackQuery):
         await callback.answer()
@@ -173,13 +179,14 @@ class BaseRouterHandler:
                 rotations = [rot_data]
             for r in rotations:
                 nav.symbols_pending_rotation.discard(r["old_symbol"])
-            await callback.message.edit_text(
+            await safe_edit_callback(
+                callback,
                 f"❌ <b>Ротация отклонена.</b>\n"
                 f"Боевой пул стратегии [{rot_data['strat_id']}] сохранен без изменений.",
                 parse_mode="HTML",
             )
         else:
-            await callback.message.answer("ℹ️ Запрос на ротацию не найден или уже закрыт.")
+            await safe_answer(callback, "ℹ️ Запрос на ротацию не найден или уже закрыт.")
 
     async def on_pre_start(self, message: Message, state: FSMContext):
         await state.clear()
