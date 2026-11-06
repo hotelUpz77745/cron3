@@ -37,6 +37,7 @@ from TG.keyboards import (
 from TG.states import TGStates
 from TG.strategy_helpers import extract_strategy_symbols, get_strategy_meta
 from TG.template_manager import TemplateManager
+from TG.ui_utils import is_benign_telegram_error
 from TG.universe_commands import get_user_universe_id
 from TG.HANDLERS.universe_router import get_universe_router
 
@@ -97,6 +98,9 @@ class TelegramReceiver:
                 return True
             if isinstance(event.exception, TelegramRetryAfter):
                 logger.warning(f"[TG] Root error handler: rate limit exceeded, retry after {event.exception.retry_after}s")
+                return True
+            if is_benign_telegram_error(event.exception):
+                logger.warning(f"[TG] Root error handler: benign Telegram API error suppressed: {event.exception}")
                 return True
             logger.error(f"[TG] Root error handler: unhandled exception: {event.exception}", exc_info=True)
             return True
