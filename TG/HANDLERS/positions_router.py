@@ -18,6 +18,7 @@ from aiogram.types import (
 from c_log import UnifiedLogger
 from TG.keyboards import get_main_keyboard
 from TG.states import TGStates
+from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
 
 logger = UnifiedLogger("TGPositionsRouter")
 
@@ -69,7 +70,7 @@ class PositionsRouterHandler:
         cdata = callback.data
         if cdata == "close_dome_cancel":
             await state.clear()
-            await callback.message.edit_text("❌ Закрытие отменено.")
+            await safe_edit_callback(callback, "❌ Закрытие отменено.")
             return
 
         cancel_kb = InlineKeyboardMarkup(inline_keyboard=[
@@ -79,7 +80,8 @@ class PositionsRouterHandler:
         if cdata == "close_dome_all":
             await state.set_state(TGStates.waiting_for_close_all_confirm)
             await state.update_data(target_close_dome="all")
-            await callback.message.edit_text(
+            await safe_edit_callback(
+                callback,
                 "🚨 <b>ПОДТВЕРЖДЕНИЕ ЗАКРЫТИЯ ВСЕХ КУПОЛОВ</b>\n\n"
                 "⚠️ <b>ВНИМАНИЕ!</b>\n"
                 "Будут отменены все лимитные ордера и закрыты позиции по рынку <b>ВО ВСЕХ СТРАТЕГИЯХ</b> портфеля, а циклы перезапущены!\n\n"
@@ -98,7 +100,8 @@ class PositionsRouterHandler:
 
         await state.set_state(TGStates.waiting_for_close_all_confirm)
         await state.update_data(target_close_dome=strat_id)
-        await callback.message.edit_text(
+        await safe_edit_callback(
+            callback,
             f"⚠️ <b>ПОДТВЕРЖДЕНИЕ ЗАКРЫТИЯ КУПОЛА</b>\n\n"
             f"🌌 Купол: <b>{strat_name}</b> (<code>{strat_id}</code>)\n"
             f"🪙 Обойма монет: <b>{symbols_str}</b>\n\n"
@@ -118,11 +121,11 @@ class PositionsRouterHandler:
 
         text_val = (message.text or "").strip().lower()
         if text_val != "закрыть":
-            await message.answer("❌ Закрытие отменено.", reply_markup=get_main_keyboard())
+            await safe_answer(message, "❌ Закрытие отменено.", reply_markup=get_main_keyboard())
             return
 
         if target == "all":
-            msg = await message.answer("⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=get_main_keyboard())
+            msg = await safe_answer(message, "⏳ Закрытие всех куполов и отмена лимитных ордеров...", reply_markup=get_main_keyboard())
             try:
                 reset_report = await self.bot_core.close_all_positions(reset_iterations=True)
                 active_tfrs = []
@@ -146,16 +149,20 @@ class PositionsRouterHandler:
                             f"• <b>{name}</b>: Старт <b>Цикла #{info['new_iteration']}</b> (базовая точка Net: <b>{info['base_net']:+.2f} USDT</b>)"
                         )
                 lines.append("\n📊 <b>Лидерборд синхронизирован.</b>")
-                await msg.edit_text("\n".join(lines), parse_mode="HTML")
+                if msg:
+                    await safe_edit_text(msg, "\n".join(lines), parse_mode="HTML")
             except Exception as e:
-                logger.error(f"Failed to Close All: {e}")
-                await msg.edit_text(f"❌ Произошла ошибка при закрытии всех куполов: {e}")
+                logger.error(f"Failed to Close All: {e}", exc_info=True)
+                if msg:
+                    await safe_edit_text(msg, f"❌ Произошла ошибка при закрытии всех куполов: {e}")
+                else:
+                    await safe_answer(message, f"❌ Произошла ошибка при закрытии всех куполов: {e}")
         elif target:
             strat_id = target
             strat = self.bot_core.strategy_registry.get_strategy(strat_id) if hasattr(self.bot_core, "strategy_registry") else None
             strat_name = getattr(strat, "name", None) or strat_id
             tfr_strat_label = getattr(strat, "signal_heartbeat_tfr", "5m") if strat else "5m"
-            msg = await message.answer(f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", reply_markup=get_main_keyboard(), parse_mode="HTML")
+            msg = await safe_answer(message, f"⏳ Закрытие позиций купола <b>{strat_name}</b>...", reply_markup=get_main_keyboard(), parse_mode="HTML")
             try:
                 await self.bot_core.close_strategy_positions(strat_id)
                 info = await self.bot_core.reset_strategy_iteration(strat_id)
@@ -166,12 +173,16 @@ class PositionsRouterHandler:
                     f"🛡️ <b>Идемпотентный замок входов:</b> активен до открытия новой свечи ({tfr_strat_label}) (защита от дергания).",
                     "\n📊 Лидерборд и аналитика обновлены.",
                 ]
-                await msg.edit_text("\n".join(lines), parse_mode="HTML")
+                if msg:
+                    await safe_edit_text(msg, "\n".join(lines), parse_mode="HTML")
             except Exception as e:
-                logger.error(f"Failed to close strategy dome {strat_id}: {e}")
-                await msg.edit_text(f"❌ Ошибка закрытия купола {strat_name}: {e}")
+                logger.error(f"Failed to close strategy dome {strat_id}: {e}", exc_info=True)
+                if msg:
+                    await safe_edit_text(msg, f"❌ Ошибка закрытия купола {strat_name}: {e}")
+                else:
+                    await safe_answer(message, f"❌ Ошибка закрытия купола {strat_name}: {e}")
         else:
-            await message.answer("❌ Купол для закрытия не найден.", reply_markup=get_main_keyboard())
+            await safe_answer(message, "❌ Купол для закрытия не найден.", reply_markup=get_main_keyboard())
 
 
 def get_positions_router(bot_core: Any) -> Router:
