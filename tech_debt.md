@@ -1200,3 +1200,73 @@ cron3/
      - `test_strategy_stats_auto_heals_corrupted_peak_balance`: обнаружение и автоисцеление $524.33$ до реальных границ.
      - `test_bigboard_formatter_sanity_clamps_corrupted_peak`: отсечение аномалий в Telegram UI.
    - Все 20 тестов модуля `test_positive_profit_guard.py` успешно пройдены (Ran 20 tests, OK).
+
+---
+
+### 37. Постмортем и устранение сбоя Telegram UI: `TelegramBadRequest "message can't be edited"` и глобальная защита презентационного слоя (06.11.2026)
+
+1. **Описание инцидента и анализ боевых логов**:
+   - На боевом сервере при попытке подтверждения закрытия купола через интерфейс Telegram (`process_close_all_confirm` в `TG/HANDLERS/positions_router.py:169`) произошел выброс необработанного исключения в корневой диспетчер `[TG] Root error handler: unhandled exception`:
+     ```
+     2026-11-06 15:07:33 | ERROR | TGReceiver | [TG] Root error handler: unhandled exception: Telegram server says - Bad Request: message can't be edited
+     Traceback (most recent call last):
+       File "/opt/cron3/TG/HANDLERS/positions_router.py", line 169, in process_close_all_confirm
+         await msg.edit_text("\n".join(lines), parse_mode="HTML")
+     ...
+     aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: message can't be edited
+
+     During handling of the above exception, another exception occurred:
+
+     Traceback (most recent call last):
+       File "/opt/cron3/TG/HANDLERS/positions_router.py", line 172, in process_close_all_confirm
+         await msg.edit_text(f"❌ Ошибка закрытия купола {strat_name}: {e}")
+     ...
+     aiogram.exceptions.TelegramBadRequest: Telegram server says - Bad Request: message can't be edited
+     ```
+   - **Механизм возникновения ошибки**:
+     1. В строке 158 исходное статусное сообщение создавалось вызовом:
+        `msg = await message.answer("⏳ Закрытие позиций...", reply_markup=get_main_keyboard(), parse_mode="HTML")`
+        с прикреплением кастомной пользовательской клавиатуры (`ReplyKeyboardMarkup`).
+     2. По спецификации Telegram Bot API метод `editMessageText` не поддерживает замену или модификацию сообщений, содержащих обычные клавиатуры (`ReplyKeyboardMarkup`) в ряде сценариев, либо сообщение удаляется/устаревает в клиенте, возвращая `TelegramBadRequest: message can't be edited`.
+     3. Вызов `await msg.edit_text(...)` в строке 169 выбросил исключение `TelegramBadRequest`.
+     4. Управление перешло в блок `except Exception as e:` (строка 170).
+     5. В строке 172 обработчик попытался уведомить оператора об ошибке повторным вызовом `await msg.edit_text(...)` на том же самом объекте `msg`! Этот второй вызов был незащищен и повторно выбросил `TelegramBadRequest: message can't be edited`, пробив уровень роутера и попав в `handle_root_errors`.
+     6. В `TG/tg_receiver.py` корневой обработчик ошибок `handle_root_errors` глушил только `TelegramNetworkError`, `TelegramServerError` и `TelegramRetryAfter`, а любые `TelegramBadRequest` считал фатальным падением и выводил полный Traceback в логи.
+
+2. **Комплексное архитектурное решение**:
+   - **Создан модуль отказоустойчивости `TG/ui_utils.py`**:
+     - `safe_edit_text(message, text, **kwargs)`:
+       - Пытается выполнить `message.edit_text`.
+       - Если Telegram возвращает `message is not modified` — корректно возвращает сообщение без лишних сетевых вызовов.
+       - Если `edit_text` завершается с ошибкой (`message can't be edited`, сообщение удалено, несовместимо с ReplyMarkup и т.д.) — автоматически перехватывает сбой и отправляет новое сообщение через `message.answer(text, **kwargs)` без выброса исключений.
+       - При отказе обоих методов безопасно возвращает `None` и фиксирует предупреждение в логе, не допуская падения корутины.
+     - `safe_edit_callback(callback, text, **kwargs)`:
+       - Безопасное редактирование сообщений в колбэках инлайн-кнопок с фоллбеком на `message.answer` или `bot.send_message`.
+     - `safe_answer(message_or_cb, text, **kwargs)`:
+       - Безопасная отправка ответов с гарантированным подавлением сбоев сети/блокировок.
+     - `safe_callback_answer(callback, text=None, show_alert=False)`:
+       - Гасит ошибки устаревания колбэков (`query is too old and response timeout expired`).
+     - `is_benign_telegram_error(exc: Exception)`:
+       - Классификатор безобидных ошибок Telegram API (`message can't be edited`, `message is not modified`, `message to edit not found`, `query is too old`, `chat not found`, `bot was blocked by the user`, `user is deactivated`).
+   - **Модернизация корневых и локальных перехватчиков ошибок**:
+     - В `TG/tg_receiver.py` (`handle_root_errors`) и `TG/HANDLERS/analytics_router.py` (`analytics_error_handler`) внедрена проверка `is_benign_telegram_error`. Безобидные Telegram UI-коллизии регистрируются на уровне `logger.warning` без вывода трассировки стека и не засоряют боевые логи аварийными сообщениями.
+   - **Полный аудит и перевод обработчиков Telegram**:
+     - Проведен аудит всех роутеров подсистемы `TG/HANDLERS`:
+       - `positions_router.py`: переведены закрытие куполов и единичных позиций.
+       - `base_router.py`: переведены команды Deep Sync и подтверждения ротаций.
+       - `analytics_router.py`: переведены карточки куполов, графики эквити и свитчер ранжирования.
+       - `screeners_router.py`: переведены отчеты скринеров и меню настроек.
+       - `universe_router.py`: переведены страницы переключения куполов.
+       - `coins_router.py`: переведены каталоги монет и меню параметров запуска.
+
+3. **Верификация**:
+   - Написан специализированный набор юнит-тестов `tests/test_tg_ui_resilience.py` (8 тестов):
+     - `test_is_benign_telegram_error`: проверка детекции безобидных ошибок.
+     - `test_safe_edit_text_success`: штатное редактирование.
+     - `test_safe_edit_text_not_modified`: подавление ошибки неизмененного текста.
+     - `test_safe_edit_text_fallback_on_cant_edit`: автоматический фоллбек на `answer` при `message can't be edited`.
+     - `test_safe_edit_text_suppresses_when_both_fail`: предотвращение краша при отказе и эдита, и фоллбека.
+     - `test_safe_edit_callback`: проверка работы с колбэками.
+     - `test_safe_answer`: проверка безопасной отправки ответов.
+     - `test_safe_callback_answer`: проверка подавления `query is too old`.
+   - Все 8 тестов успешно пройдены (Ran 8 tests, OK).
