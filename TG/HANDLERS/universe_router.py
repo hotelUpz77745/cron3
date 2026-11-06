@@ -23,6 +23,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from ANALYTICS.report_service import AnalyticsReportService
 from CORE.strategy_applicator import StrategyApplicator
+from TG.ui_utils import safe_edit_callback
 
 logger = UnifiedLogger("TGUniverseRouter")
 
@@ -139,10 +140,9 @@ class UniverseRouterHandler:
                 page=page,
             )
             kb = _build_inline_keyboard(btn_data)
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            await safe_edit_callback(callback, text, reply_markup=kb, parse_mode="HTML")
         except Exception as e:
-            if "message is not modified" not in str(e).lower():
-                logger.error(f"Error in cb_universe_page: {e}")
+            logger.error(f"Error in cb_universe_page: {e}")
         await callback.answer()
 
     async def cb_toggle_universe(self, callback: CallbackQuery):
@@ -179,11 +179,7 @@ class UniverseRouterHandler:
                 page=page,
             )
             kb = _build_inline_keyboard(btn_data)
-            try:
-                await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-            except Exception as e:
-                if "message is not modified" not in str(e).lower():
-                    logger.error(f"Error editing message on universe toggle: {e}")
+            await safe_edit_callback(callback, text, reply_markup=kb, parse_mode="HTML")
 
             status_toast = f"🟢 Стратегия [{uid}] ВКЛЮЧЕНА!" if new_state else f"⚪ Стратегия [{uid}] ВЫКЛЮЧЕНА!"
             await callback.answer(status_toast, show_alert=False)
@@ -205,10 +201,7 @@ class UniverseRouterHandler:
             page=page,
         )
         kb = _build_inline_keyboard(btn_data)
-        try:
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
-        except Exception:
-            pass
+        await safe_edit_callback(callback, text, reply_markup=kb, parse_mode="HTML")
         await callback.answer("Управление куполами переведено на тумблер [ВКЛ / ВЫКЛ]", show_alert=False)
 
     async def cb_back_to_univ_list(self, callback: CallbackQuery):
@@ -223,10 +216,9 @@ class UniverseRouterHandler:
                 page=page,
             )
             kb = _build_inline_keyboard(btn_data)
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            await safe_edit_callback(callback, text, reply_markup=kb, parse_mode="HTML")
         except Exception as e:
-            if "message is not modified" not in str(e).lower():
-                logger.error(f"Error returning to universes list: {e}")
+            logger.error(f"Error returning to universes list: {e}")
         await callback.answer()
 
     async def cb_legacy_sizing_closer(self, callback: CallbackQuery):
@@ -244,7 +236,7 @@ class UniverseRouterHandler:
                 page=1,
             )
             kb = _build_inline_keyboard(btn_data)
-            await callback.message.edit_text(text, reply_markup=kb, parse_mode="HTML")
+            await safe_edit_callback(callback, text, reply_markup=kb, parse_mode="HTML")
         except Exception:
             pass
 
