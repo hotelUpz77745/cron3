@@ -26,6 +26,7 @@ from c_log import UnifiedLogger
 from TG.keyboards import get_back_keyboard, get_main_keyboard
 from TG.states import TGStates
 from TG.universe_commands import get_user_universe_id, set_user_universe_id
+from TG.ui_utils import is_benign_telegram_error, safe_answer, safe_edit_callback, safe_edit_text
 from ANALYTICS.report_service import AnalyticsReportService
 from ANALYTICS.leaderboard import LeaderboardEngine
 
@@ -108,10 +109,7 @@ class AnalyticsRouterHandler:
         current_uid, univ_name = self._get_universe_meta(callback.from_user.id, target_uid=target_uid)
         report_svc = self._get_report_service()
         text, buttons = report_svc.render_universe_analytics_card(current_uid, univ_name)
-        try:
-            await callback.message.edit_text(text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
+        await safe_edit_callback(callback, text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
 
     async def cb_analytics_bb_global(self, callback: CallbackQuery):
         await callback.answer()
@@ -123,10 +121,7 @@ class AnalyticsRouterHandler:
             active_strats = reg.get_active_strategies() if hasattr(reg, "get_active_strategies") else getattr(reg, "active_strategies", {})
 
         text, buttons = report_svc.render_portfolio_big_board(current_uid, univ_name, active_strats=active_strats)
-        try:
-            await callback.message.edit_text(text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
+        await safe_edit_callback(callback, text, reply_markup=_buttons_to_markup(buttons), parse_mode="HTML")
 
     async def analytics_error_handler(self, event: ErrorEvent):
         """Перехватчик ошибок для роутера аналитики: предотвращает крах бота при сбоях графиков или Telegram."""
@@ -135,6 +130,9 @@ class AnalyticsRouterHandler:
             return True
         if isinstance(event.exception, TelegramRetryAfter):
             logger.warning(f"[TG] Analytics Rate Limit exceeded, retry after {event.exception.retry_after}s")
+            return True
+        if is_benign_telegram_error(event.exception):
+            logger.warning(f"[TG] Analytics Benign Telegram UI Error (suppressed): {event.exception}")
             return True
         logger.error(f"[TG] Analytics unhandled exception: {event.exception}", exc_info=True)
         return True
@@ -161,13 +159,10 @@ class AnalyticsRouterHandler:
                     parse_mode="HTML",
                 )
             else:
-                await msg.edit_text(f"❌ Не удалось построить график эквити для {current_uid}.")
+                await safe_edit_text(msg, f"❌ Не удалось построить график эквити для {current_uid}.")
         except Exception as e:
             logger.error(f"Error generating or sending equity chart: {e}")
-            try:
-                await msg.edit_text(f"❌ Ошибка построения графика: {e}")
-            except Exception:
-                await callback.message.answer(f"❌ Ошибка построения графика: {e}")
+            await safe_edit_text(msg, f"❌ Ошибка построения графика: {e}")
 
     async def cb_analytics_txt(self, callback: CallbackQuery):
         await callback.answer()
@@ -286,11 +281,9 @@ class AnalyticsRouterHandler:
         switch_kb = _buttons_to_markup(buttons) if buttons else None
 
         if is_switch and msgs:
-            try:
-                await callback.message.edit_text(msgs[0], parse_mode="HTML", reply_markup=switch_kb)
+            res = await safe_edit_callback(callback, msgs[0], parse_mode="HTML", reply_markup=switch_kb)
+            if res:
                 return
-            except Exception:
-                pass
 
         for i, text in enumerate(msgs):
             rm = switch_kb if i == len(msgs) - 1 else None
