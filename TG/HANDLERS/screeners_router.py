@@ -17,6 +17,7 @@ from consts import DATA_DIR
 from c_log import UnifiedLogger
 from TG.keyboards import get_back_keyboard, get_main_keyboard
 from TG.states import TGStates
+from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
 from c_utils import Utils
 from CORE.SERVICES.SELECTOR.coin_selection_service import CoinSelectionService
 import CORE.SERVICES.VOLATILITY.volatility_scanner as vs
@@ -86,10 +87,7 @@ class ScreenersRouterHandler:
             "1️⃣ ⚡ <b>Alpha Selector</b> — Institutional Wiggle & NATR ранжирование (поверх пула волатильности).\n"
             "2️⃣ 🔍 <b>Volatility Scanner (Сонник)</b> — Мультифакторный фильтр волатильности (ATR, RSI, BB)."
         )
-        try:
-            await callback.message.edit_text(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
+        await safe_edit_callback(callback, text, reply_markup=_get_screener_main_markup(), parse_mode="HTML")
 
     async def process_cb_screener_settings_menu(self, callback: CallbackQuery, state: Optional[FSMContext] = None):
         await callback.answer()
@@ -101,10 +99,7 @@ class ScreenersRouterHandler:
             ]
         )
         text = "⚙️ <b>Настройки сервиса скринеров</b>\n\nВыберите компонент для редактирования параметров в <code>app.json</code>:"
-        try:
-            await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
-        except Exception:
-            await callback.message.answer(text, reply_markup=keyboard, parse_mode="HTML")
+        await safe_edit_callback(callback, text, reply_markup=keyboard, parse_mode="HTML")
 
     async def process_cb_edit_scanner_config_compat(self, callback: CallbackQuery, state: Optional[FSMContext] = None):
         await self.process_cb_screener_settings_menu(callback, state)
@@ -163,7 +158,7 @@ class ScreenersRouterHandler:
                 [InlineKeyboardButton(text="🔙 В меню скринеров", callback_data="cb_screener_main_menu")],
             ]
             keyboard = InlineKeyboardMarkup(inline_keyboard=inline_buttons)
-            await status_msg.edit_text(report_text, reply_markup=keyboard, parse_mode="HTML")
+            await safe_edit_text(status_msg, report_text, reply_markup=keyboard, parse_mode="HTML")
 
             if selector_type == "volatility_scanner":
                 txt_output_path = DATA_DIR / "volatile_symbols.txt"
@@ -173,7 +168,7 @@ class ScreenersRouterHandler:
                     )
         except Exception as e:
             logger.error(f"Error in screener run: {e}", exc_info=True)
-            await status_msg.edit_text(f"❌ Ошибка при выполнении скринера: {e}")
+            await safe_edit_text(status_msg, f"❌ Ошибка при выполнении скринера: {e}")
         finally:
             self._scanner_running = False
 
