@@ -1,0 +1,32 @@
+{
+  "alpha_coin_selector": {
+    "enabled": true,
+    "_desc_enabled": "Альфа-селектор монет: включен. Классический профиль на базе NATR и Wiggle без отсечений по Херсту.",
+    "target_count": 15,
+    "_desc_target_count": "Количество лучших монет, отбираемых в целевой пул.",
+    "timeframe": "15m",
+    "_desc_timeframe": "Таймфрейм свечей для расчета метрик волатильности (15 минут).",
+    "candles_limit": 96,
+    "_desc_candles_limit": "Глубина истории: 96 свечей по 15м = 24 часа.",
+    "use_volatility_scanner_pool": true,
+    "_desc_use_volatility_scanner_pool": "Брать сырье кандидатов строго из пула скринера волатильности (volatility_scanner).",
+    "min_natr_threshold": 0.25,
+    "_desc_min_natr_threshold": "Минимальный порог нормализованного ATR % для допуска монеты в рейтинг.",
+    "max_parabolic_pump_pct": 60.0,
+    "_desc_max_parabolic_pump_pct": "Анти-памп потолок: отсечение монет с параболическим суточным ростом выше +60%.",
+    "max_death_spiral_dump_pct": -45.0,
+    "_desc_max_death_spiral_dump_pct": "Анти-дамп пол: отсечение монет со спиральным падением ниже -45%.",
+    "enable_hurst_filter": false,
+    "_desc_enable_hurst_filter": "ОТКЛЮЧЕН: Классический режим отбора (чистый Wiggle / NATR скоринг без фильтрации ракет по Херсту).",
+    "max_hurst_threshold": 0.50,
+    "_desc_max_hurst_threshold": "Порог экспоненты Херста (неактивен при enable_hurst_filter: false).",
+    "enable_volume_climax_filter": false,
+    "_desc_enable_volume_climax_filter": "Детектор кульминации объема: отключен.",
+    "volume_climax_multiplier": 4.5,
+    "enable_multi_hurst_filter": false,
+    "_desc_enable_multi_hurst_filter": "Двухфакторный фильтр моментума: отключен.",
+    "short_hurst_candles": 48,
+    "max_short_hurst_threshold": 0.53
+  }
+}
+
