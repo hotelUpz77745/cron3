@@ -157,9 +157,9 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         summary = self.analytics.get_summary()
         coin_info = summary["per_coin_summary"]["MEMEUSDT"]
         self.assertEqual(coin_info["exceeded_l8_count"], 1)
-        self.assertEqual(coin_info["would_hit_sl_100_count"], 1)
+        self.assertEqual(coin_info["would_hit_sl_120_count"], 1)
         self.assertEqual(summary["total_exceeded_l8"], 1)
-        self.assertEqual(summary["total_would_hit_sl_100"], 1)
+        self.assertEqual(summary["total_would_hit_sl_120"], 1)
 
     def test_merge_analytics(self):
         """Проверка корректного слияния данных между декадами."""

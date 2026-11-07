@@ -284,7 +284,7 @@ class CoinGridRiskAnalytics:
                 "max_floating_dd_usdt": 0.0,
                 "total_duration_hours": 0.0,
                 "exceeded_l8_count": 0,
-                "would_hit_sl_100_count": 0,
+                "would_hit_sl_120_count": 0,
             }
 
         s = self.per_coin_stats[sym]
@@ -311,8 +311,8 @@ class CoinGridRiskAnalytics:
         # Проверка критических порогов отступа
         if record["max_adverse_from_entry0_pct"] >= 89.0:
             s["exceeded_l8_count"] += 1
-        if record["max_adverse_from_entry0_pct"] >= 100.0:
-            s["would_hit_sl_100_count"] += 1
+        if record["max_adverse_from_entry0_pct"] >= 120.0:
+            s["would_hit_sl_120_count"] += 1
 
     def force_close_all_cycles(
         self,
@@ -427,7 +427,7 @@ class CoinGridRiskAnalytics:
                 "max_floating_dd_usdt": round(s["max_floating_dd_usdt"], 2),
                 "avg_duration_hours": round(avg_dur, 2),
                 "exceeded_l8_count": s["exceeded_l8_count"],
-                "would_hit_sl_100_count": s["would_hit_sl_100_count"],
+                "would_hit_sl_120_count": s.get("would_hit_sl_120_count", s.get("would_hit_sl_100_count", 0)),
             }
 
         # 4. Топ худших просадок (Worst 10 Adverse Excursions)
@@ -437,9 +437,9 @@ class CoinGridRiskAnalytics:
             reverse=True
         )[:15]
 
-        # 5. Глобальные счетчики L8 и SL-100%
+        # 5. Глобальные счетчики L8 и SL-120%
         tot_l8_exceeded = sum(s.get("exceeded_l8_count", 0) for s in coins_summary.values())
-        tot_sl_100 = sum(s.get("would_hit_sl_100_count", 0) for s in coins_summary.values())
+        tot_sl_120 = sum(s.get("would_hit_sl_120_count", 0) for s in coins_summary.values())
 
         return {
             "strategy_id": self.strategy_id,
@@ -447,7 +447,7 @@ class CoinGridRiskAnalytics:
             "total_fills": total_fills,
             "average_cycle_level": round(avg_cycle_depth, 2),
             "total_exceeded_l8": tot_l8_exceeded,
-            "total_would_hit_sl_100": tot_sl_100,
+            "total_would_hit_sl_120": tot_sl_120,
             "grid_level_distribution": level_dist,
             "per_coin_summary": coins_summary,
             "worst_drawdown_events": sorted_worst,
@@ -487,7 +487,7 @@ class CoinGridRiskAnalytics:
                         "max_floating_dd_usdt": 0.0,
                         "total_duration_hours": 0.0,
                         "exceeded_l8_count": 0,
-                        "would_hit_sl_100_count": 0,
+                        "would_hit_sl_120_count": 0,
                     }
                 s = self.per_coin_stats[sym]
                 s["total_cycles"] += cdata.get("total_cycles", 0)
@@ -503,7 +503,7 @@ class CoinGridRiskAnalytics:
                 s["max_adverse_from_avg_pct"] = max(s["max_adverse_from_avg_pct"], cdata.get("max_adverse_from_avg_pct", 0.0))
                 s["max_floating_dd_usdt"] = max(s["max_floating_dd_usdt"], cdata.get("max_floating_dd_usdt", 0.0))
                 s["exceeded_l8_count"] += cdata.get("exceeded_l8_count", 0)
-                s["would_hit_sl_100_count"] += cdata.get("would_hit_sl_100_count", 0)
+                s["would_hit_sl_120_count"] += cdata.get("would_hit_sl_120_count", cdata.get("would_hit_sl_100_count", 0))
 
             for ev in summary.get("worst_drawdown_events", []):
                 self.completed_cycles.append(ev)
@@ -537,7 +537,7 @@ class CoinGridRiskAnalytics:
                     s["max_adverse_from_avg_pct"] = max(s["max_adverse_from_avg_pct"], s_other["max_adverse_from_avg_pct"])
                     s["max_floating_dd_usdt"] = max(s["max_floating_dd_usdt"], s_other["max_floating_dd_usdt"])
                     s["exceeded_l8_count"] += s_other["exceeded_l8_count"]
-                    s["would_hit_sl_100_count"] += s_other["would_hit_sl_100_count"]
+                    s["would_hit_sl_120_count"] += s_other.get("would_hit_sl_120_count", s_other.get("would_hit_sl_100_count", 0))
 
         return self
 
@@ -605,7 +605,7 @@ class CoinGridRiskAnalytics:
         footer = (
             f"ИТОГО: {total_cyc:,} закрытых циклов | {total_fls:,} исполнений | "
             f"Средняя глубина: L{summary['average_cycle_level']:.2f} | "
-            f"Превысили L8 (-89%): {summary['total_exceeded_l8']} | Коснулись SL-100%: {summary['total_would_hit_sl_100']}"
+            f"Превысили L8 (-89%): {summary['total_exceeded_l8']} | Коснулись SL-120%: {summary['total_would_hit_sl_120']}"
         )
 
         table_lines = [
@@ -634,7 +634,7 @@ class CoinGridRiskAnalytics:
 
         headers = [
             "Rank", "Символ", "Циклов", "WinRate %", "Макс Lvl", "Ср. Lvl",
-            "Откат от L0 %", "Откат от Avg %", "Макс DD $", "Net PnL $", "Ср. время", ">L8", ">SL-100%"
+            "Откат от L0 %", "Макс DD $", "Net PnL $", "Ср. время", ">L8", ">SL-120%"
         ]
         rows = []
 
@@ -645,12 +645,11 @@ class CoinGridRiskAnalytics:
             max_l = f"L{c['max_level_ever']}"
             avg_l = f"L{c['avg_cycle_level']:.2f}"
             adv_l0 = f"{c['max_adverse_from_entry0_pct']:5.1f}%"
-            adv_avg = f"{c['max_adverse_from_avg_pct']:5.1f}%"
             m_dd = f"{c['max_floating_dd_usdt']:6.2f}$"
             net_p = f"{c['net_pnl']:+7.2f}$"
             avg_dur = f"{c['avg_duration_hours']:4.1f}ч"
             ex_l8 = str(c["exceeded_l8_count"]) if c["exceeded_l8_count"] > 0 else "-"
-            sl100 = str(c["would_hit_sl_100_count"]) if c["would_hit_sl_100_count"] > 0 else "-"
+            sl120 = str(c.get("would_hit_sl_120_count", c.get("would_hit_sl_100_count", 0))) if c.get("would_hit_sl_120_count", c.get("would_hit_sl_100_count", 0)) > 0 else "-"
 
             rows.append([
                 str(rank),
@@ -660,12 +659,11 @@ class CoinGridRiskAnalytics:
                 max_l,
                 avg_l,
                 adv_l0,
-                adv_avg,
                 m_dd,
                 net_p,
                 avg_dur,
                 ex_l8,
-                sl100
+                sl120
             ])
 
         col_widths = [len(h) for h in headers]
@@ -674,7 +672,7 @@ class CoinGridRiskAnalytics:
                 col_widths[i] = max(col_widths[i], len(val))
 
         def make_row(cols):
-            return " | ".join(val.rjust(col_widths[i]) if i in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12) else val.ljust(col_widths[i]) for i, val in enumerate(cols))
+            return " | ".join(val.rjust(col_widths[i]) if i in (0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11) else val.ljust(col_widths[i]) for i, val in enumerate(cols))
 
         sep = "-+-".join("-" * w for w in col_widths)
         banner = "=" * len(make_row(headers))

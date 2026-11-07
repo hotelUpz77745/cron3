@@ -241,7 +241,7 @@
     }
   },
   "per_coin_stop_loss": {
-    "max_adverse_from_entry_pct": 100.0,
+    "max_adverse_from_entry_pct": 120.0,
     "notify_telegram": true
   },
   "LONG": {
