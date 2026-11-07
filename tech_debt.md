@@ -1389,3 +1389,18 @@ CORE/SERVICES/coin_grid_analytics.py
 CORE/SERVICES/per_coin_stop_loss.py
 CORE/STRATEGY/strategy_config.py
 tests/test_per_coin_stop_loss.py
+
+
+Точечный коммит калибровки порога Per-Coin Stop-Loss:
+Коммит: fc7a7bf
+Сообщение: feat(risk): update per-coin stop loss threshold to 120.0% to give breathing room past L8
+Затронутые файлы:
+CFG/universes/u96_omni_zenith13.json
+CORE/SERVICES/coin_grid_analytics.py
+tests/test_coin_grid_analytics.py
+
+Точечный коммит нормализации аварийного стоп-крана корзины:
+Коммит: 4157af9
+Сообщение: fix(config): set max_drawdown_from_start_pct to null by default to prevent premature basket cutoffs during rotations
+Затронутые файлы:
+CFG/universes/u96_omni_zenith13.json
