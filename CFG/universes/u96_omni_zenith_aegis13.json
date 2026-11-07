@@ -673,6 +673,5 @@
     "directional_trend_gate": {
         "enabled": false,
         "_desc": "Отключен во избежание запаздывания скользящих средних на контртрендовой сетке."
-    },
-    "start_balance_usdt": 449.0
+    }
 }

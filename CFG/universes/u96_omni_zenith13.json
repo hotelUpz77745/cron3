@@ -694,6 +694,5 @@
     "allow_counter_trend": true,
     "freeze_averaging_on_disposition": false,
     "_desc": "Однонаправленный макро-шлюз (1d Dual EMA 10/30). В этой стратегии отключен для обратной совместимости."
-  },
-  "start_balance_usdt": 449.0
+  }
 }
