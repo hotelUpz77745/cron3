@@ -236,7 +236,7 @@
       }
     },
     "negative": {
-      "max_drawdown_from_start_pct": 45.0,
+      "max_drawdown_from_start_pct": null,
       "notify_telegram": true
     }
   },
