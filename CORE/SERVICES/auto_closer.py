@@ -28,6 +28,7 @@ from CORE.SERVICES.stagnation_evaluator import StagnationEvaluator
 from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 from CORE.SERVICES.portfolio_closer import PortfolioCloser
+from CORE.SERVICES.trailing_ratchet_analytics import TrailingRatchetAnalytics
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -46,6 +47,7 @@ class AutoCloser:
         self._is_closing = False
         self._last_close_ts: dict[str, float] = {}
         self._trailing_ratchet_state: dict[str, dict] = {}
+        self.ratchet_analytics: dict[str, TrailingRatchetAnalytics] = {}
 
     @staticmethod
     def _build_close_msg(
@@ -333,6 +335,21 @@ class AutoCloser:
                     )
                     if should_close and trig_floor is not None:
                         strat_triggered = True
+                        if strat_id not in self.ratchet_analytics:
+                            self.ratchet_analytics[strat_id] = TrailingRatchetAnalytics(strategy_id=strat_id)
+                        lvl_idx = int(r_state.get("active_level_idx", 0))
+                        lvl_desc = str(r_state.get("armed_level_desc", f"L{lvl_idx}"))
+                        self.ratchet_analytics[strat_id].record_close(
+                            level_idx=lvl_idx,
+                            level_desc=lvl_desc,
+                            armed_floor=trig_floor,
+                            iter_net=iter_net,
+                            highest_net=float(r_state.get("highest_net", iter_net)),
+                            iter_age_hours=iter_age_h,
+                            strategy_id=strat_id,
+                            info=r_info,
+                            timestamp=time.time(),
+                        )
                         logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {r_info}. Auto-closing dome!")
                         strat_msg = self._build_close_msg(
                             name=f"КУПОЛА [{strat_cfg.name}]",

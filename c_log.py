@@ -217,8 +217,11 @@ class UnifiedLogger:
         max_bytes = calc_max_bytes(avg_len, max_lines)
 
         if is_backtesting:
-            desired_level = logging.ERROR
+            # 🚀 Инвариант производительности бэктестов: дисковое логирование полностью отключается
+            file_logging_allowed = (os.getenv("CRON3_BACKTEST_FILE_LOG") == "1")
+            desired_level = logging.ERROR if file_logging_allowed else logging.CRITICAL
         else:
+            file_logging_allowed = LOG_TO_FILE
             desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
 
         logger = logging.getLogger(name)
@@ -232,7 +235,7 @@ class UnifiedLogger:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
             
-            if LOG_TO_FILE:
+            if file_logging_allowed and LOG_TO_FILE:
                 all_handler = UnlockedRotatingFileHandler(
                     all_log_path,
                     maxBytes=max_bytes,
