@@ -48,13 +48,29 @@ class DomeCloserExecutor:
         app_json_path: Path,
         action_msg: str,
         trailing_ratchet_state: dict,
+        is_emergency_stop: bool = False,
+        emergency_details: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Атомарно исполняет закрытие купола или глобального портфеля."""
         # 1. Закрытие позиций на бирже
-        if is_global:
+        if is_global or is_emergency_stop:
             await bot_core.close_all_positions()
         else:
             await bot_core.close_strategy_positions(strat_id)
+
+        # 1.1 Перевод на холостые при аварийном стоп-кране (Basket Equity Cutoff)
+        if is_emergency_stop:
+            bot_core.is_paused = True
+            bot_core.entry_blocked = True
+            if app_data and isinstance(app_data, dict):
+                if "app" not in app_data:
+                    app_data["app"] = {}
+                app_data["app"]["auto_start"] = False
+                if app_json_path:
+                    Utils.write_json_file(app_json_path, app_data)
+            from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
+            EmergencyStopManager.set_active(emergency_details)
+            logger.critical(f"[DOME_CLOSER_EXECUTOR][{strat_id}] 🛑 АВАРИЙНЫЙ СТОП-КРАН: Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False)!")
 
         # 2. Сброс трейлинг-храповика
         if strat_id in trailing_ratchet_state:

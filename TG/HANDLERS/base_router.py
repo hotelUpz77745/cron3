@@ -31,6 +31,7 @@ from TG.keyboards import get_confirm_start_keyboard, get_main_keyboard
 from TG.template_manager import TemplateManager
 from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
+from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
 logger = UnifiedLogger("TGBaseRouter")
 
@@ -81,7 +82,13 @@ class BaseRouterHandler:
 
     async def start_cmd(self, message: Message, state: FSMContext):
         await state.clear()
-        status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+        is_em, _ = EmergencyStopManager.is_active()
+        if is_em:
+            status = "🚨 EMERGENCY STOP (Paused)"
+        elif self.bot_core.is_paused:
+            status = "⏸️ Paused"
+        else:
+            status = "▶️ Running"
         text = f"<b>Control Panel</b>\nCurrent Status: {status}"
         await message.answer(text, reply_markup=get_main_keyboard(), parse_mode="HTML")
 
@@ -190,6 +197,26 @@ class BaseRouterHandler:
 
     async def on_pre_start(self, message: Message, state: FSMContext):
         await state.clear()
+        is_em, em_info = EmergencyStopManager.is_active()
+        if is_em:
+            trig_time = em_info.get("triggered_at", "недавно")
+            dd_pct = em_info.get("drawdown_pct", 0.0)
+            lim_pct = em_info.get("max_drawdown_limit_pct", 0.0)
+            s_bal = em_info.get("start_balance_usdt", 0.0)
+            eq = em_info.get("current_equity_usdt", 0.0)
+
+            text = (
+                "🚨 <b>ВНИМАНИЕ: АКТИВЕН АВАРИЙНЫЙ СТОП-КРАН!</b>\n\n"
+                "Ранее сработал защитный стоп-кран корзины (Basket Equity Cutoff):\n"
+                f"• Время срабатывания: <b>{trig_time}</b>\n"
+                f"• Зафиксированная просадка: <b>-{dd_pct:.2f}%</b> (Лимит: <b>{lim_pct:.1f}%</b>)\n"
+                f"• Эквити при сбросе: <b>{eq:.2f}$</b> / Старт: <b>{s_bal:.2f}$</b>\n\n"
+                "Все позиции были экстренно закрыты в 100% кэш.\n"
+                "Вы уверены, что хотите снять аварийную блокировку и возобновить торговлю?"
+            )
+            await message.answer(text, reply_markup=get_confirm_start_keyboard(), parse_mode="HTML")
+            return
+
         if not self.bot_core.is_paused:
             await message.answer("⚠️ Trading is already running!", reply_markup=get_main_keyboard())
             return
@@ -302,11 +329,22 @@ class BaseRouterHandler:
 
     async def on_back(self, message: Message, state: FSMContext):
         await state.clear()
-        status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+        is_em, _ = EmergencyStopManager.is_active()
+        if is_em:
+            status = "🚨 EMERGENCY STOP (Paused)"
+        elif self.bot_core.is_paused:
+            status = "⏸️ Paused"
+        else:
+            status = "▶️ Running"
         await message.answer(f"<b>Control Panel</b>\nCurrent Status: {status}", reply_markup=get_main_keyboard(), parse_mode="HTML")
 
     async def on_confirm_start(self, message: Message, state: FSMContext):
         await state.clear()
+        was_emergency, _ = EmergencyStopManager.is_active()
+        if was_emergency:
+            EmergencyStopManager.clear()
+            logger.info("[TG] Operator confirmed reset of Emergency Stop-Loss (__emergency_stop__ cleared).")
+
         app_json_path = DATA_DIR / "app.json"
         app_data = Utils.read_json_file(app_json_path) or {}
         if "app" not in app_data:
@@ -314,12 +352,20 @@ class BaseRouterHandler:
         app_data["app"]["auto_start"] = True
         Utils.write_json_file(app_json_path, app_data)
 
-        if not self.bot_core.is_paused:
+        # Unblock entry and clear strategy cooldown blocks
+        self.bot_core.entry_blocked = False
+        if hasattr(self.bot_core, "symbol_blocked_until") and isinstance(self.bot_core.symbol_blocked_until, dict):
+            self.bot_core.symbol_blocked_until.clear()
+        if hasattr(self.bot_core, "strategy_blocked_until") and isinstance(self.bot_core.strategy_blocked_until, dict):
+            self.bot_core.strategy_blocked_until.clear()
+
+        if not self.bot_core.is_paused and not was_emergency:
             await message.answer("Trading is already running!", reply_markup=get_main_keyboard())
             return
         self.bot_core.is_paused = False
         logger.info("[TG] User started trading loops. auto_start flag saved to True.")
-        await message.answer("<b>Control Panel</b>\nCurrent Status: ▶️ Running", reply_markup=get_main_keyboard(), parse_mode="HTML")
+        confirm_msg = "✅ <b>Аварийный стоп-кран успешно снят!</b>\nТорговый цикл возобновлен.\n\n" if was_emergency else ""
+        await message.answer(f"{confirm_msg}<b>Control Panel</b>\nCurrent Status: ▶️ Running", reply_markup=get_main_keyboard(), parse_mode="HTML")
 
     async def on_stop_trade(self, message: Message, state: FSMContext):
         await state.clear()
@@ -339,7 +385,13 @@ class BaseRouterHandler:
 
     async def on_status(self, message: Message, state: FSMContext):
         await state.clear()
-        status = "⏸️ Paused" if self.bot_core.is_paused else "▶️ Running"
+        is_em, _ = EmergencyStopManager.is_active()
+        if is_em:
+            status = "🚨 EMERGENCY STOP (Paused)"
+        elif self.bot_core.is_paused:
+            status = "⏸️ Paused"
+        else:
+            status = "▶️ Running"
 
         strat_info = []
         if hasattr(self.bot_core, "strategy_registry"):

@@ -239,8 +239,8 @@
       }
     },
     "negative": {
-      "threshold": null,
-      "threshold_increment": null
+      "max_drawdown_from_start_pct": 45.0,
+      "notify_telegram": true
     }
   },
   "LONG": {

@@ -29,6 +29,7 @@ from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 from CORE.SERVICES.portfolio_closer import PortfolioCloser
 from CORE.SERVICES.trailing_ratchet_analytics import TrailingRatchetAnalytics
+from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -398,8 +399,53 @@ class AutoCloser:
                             new_iter_start_net=0.0, close_type=close_tag, detail_info=detail
                         )
 
-            # Check Negative for Strategy Dome
+            # Check Negative for Strategy Dome (Basket Equity Cutoff & Negative Stop)
             neg_enabled = neg_cfg.get("enabled", True)
+            raw_pct = neg_cfg.get("max_drawdown_from_start_pct")
+            max_dd_pct = EmergencyStopManager.normalize_dd_pct(raw_pct) if neg_enabled else None
+
+            start_bal = float(strat_analytics.get("start_balance_usdt", 0.0) or getattr(strat_cfg, "start_balance_usdt", 0.0) or 0.0)
+
+            is_emergency_stop = False
+            emergency_details = None
+
+            if not strat_triggered and max_dd_pct is not None and start_bal > 0.0:
+                cur_equity = round(start_bal + strat_net, 4)
+                cur_loss = -strat_net if strat_net < 0.0 else 0.0
+                cur_dd_pct = (cur_loss / start_bal) * 100.0
+
+                if cur_dd_pct >= max_dd_pct:
+                    is_emergency_stop = True
+                    strat_triggered = True
+                    is_stagnation = False
+                    emergency_details = {
+                        "strategy_id": strat_id,
+                        "strat_name": getattr(strat_cfg, "name", strat_id),
+                        "start_balance_usdt": start_bal,
+                        "current_equity_usdt": cur_equity,
+                        "net_profit_usdt": strat_net,
+                        "drawdown_pct": round(cur_dd_pct, 2),
+                        "max_drawdown_limit_pct": max_dd_pct,
+                    }
+                    logger.critical(
+                        f"[AUTO_CLOSER][{strat_id}] 🚨 АВАРИЙНЫЙ СТОП-КРАН КОРЗИНЫ! "
+                        f"Просадка {cur_dd_pct:.2f}% >= {max_dd_pct:.1f}% (Эквити: {cur_equity:.2f}$ / Старт: {start_bal:.2f}$). "
+                        f"Остановка бота на холостые!"
+                    )
+                    strat_msg = (
+                        f"🚨🚨🚨 <b>АВАРИЙНЫЙ СТОП-КРАН ПОРТФЕЛЯ (BASKET EQUITY CUTOFF)!</b> 🚨🚨🚨\n\n"
+                        f"Зафиксирована критическая просадка капитала купола <b>[{getattr(strat_cfg, 'name', strat_id)}]</b>:\n"
+                        f"• Стартовый баланс: <b>{start_bal:.2f} USDT</b>\n"
+                        f"• Текущее эквити: <b>{cur_equity:.2f} USDT</b>\n"
+                        f"• Просадка: <b>-{cur_dd_pct:.2f}%</b> (Лимит: <b>{max_dd_pct:.1f}%</b>)\n"
+                        f"• Чистый PnL: <b>{strat_net:+.2f} USDT</b>\n\n"
+                        f"✅ <b>Все позиции экстренно закрыты в 100% кэш.</b>\n"
+                        f"⏸️ <b>Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False).</b>\n"
+                        f"🛑 Вход в новые позиции заблокирован во избежание дальнейших потерь.\n\n"
+                        f"ℹ️ Для возобновления торговли перейдите в главное меню и нажмите <b>▶️ Start</b>."
+                    )
+
+            # Legacy threshold check
             th_neg = neg_cfg.get("threshold") if neg_enabled else None
             if th_neg == 0 or th_neg == 0.0:
                 th_neg = None
@@ -420,7 +466,7 @@ class AutoCloser:
                 )
 
             # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ноль!
-            is_negative_stop = ("NEGATIVE STOP" in strat_msg)
+            is_negative_stop = ("NEGATIVE STOP" in strat_msg or is_emergency_stop)
             if strat_triggered and not is_negative_stop and iter_net <= 0.0:
                 logger.critical(
                     f"[AUTO_CLOSER][{strat_id}] 🛡️ [POSITIVE PROFIT GUARD] Blocked positive auto-close! "
@@ -447,6 +493,8 @@ class AutoCloser:
                         app_json_path=app_json_path,
                         action_msg=strat_msg,
                         trailing_ratchet_state=self._trailing_ratchet_state,
+                        is_emergency_stop=is_emergency_stop,
+                        emergency_details=emergency_details,
                     )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")

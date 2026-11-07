@@ -21,6 +21,7 @@ from consts import GLOBAL_ANALYTICS_JSON
 from c_log import UnifiedLogger
 from CORE.STRATEGY.trailing_system import ToxicityEngine
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
+from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
 logger = UnifiedLogger("PortfolioCloser")
 
@@ -192,7 +193,56 @@ class PortfolioCloser:
                     close_type=close_tag, detail_info=detail
                 )
 
-        # Check Negative Portfolio
+        # Check Negative Portfolio (Basket Equity Cutoff & Negative Stop)
+        raw_pct_g = neg_cfg.get("max_drawdown_from_start_pct")
+        max_dd_pct_g = EmergencyStopManager.normalize_dd_pct(raw_pct_g)
+        start_bal_g = float(
+            analytics_data.get("start_balance_usdt", 0.0)
+            or analytics_data.get("aggregate_start_balance_usdt", 0.0)
+            or app_data.get("start_balance_usdt", 0.0)
+            or 0.0
+        )
+
+        is_emergency_stop_g = False
+        emergency_details_g = None
+
+        if not triggered and max_dd_pct_g is not None and start_bal_g > 0.0:
+            cur_equity_g = round(start_bal_g + net_usdt, 4)
+            cur_loss_g = -net_usdt if net_usdt < 0.0 else 0.0
+            cur_dd_pct_g = (cur_loss_g / start_bal_g) * 100.0
+
+            if cur_dd_pct_g >= max_dd_pct_g:
+                is_emergency_stop_g = True
+                triggered = True
+                is_stagnation = False
+                emergency_details_g = {
+                    "strategy_id": "__global__",
+                    "strat_name": "ПОРТФЕЛЯ",
+                    "start_balance_usdt": start_bal_g,
+                    "current_equity_usdt": cur_equity_g,
+                    "net_profit_usdt": net_usdt,
+                    "drawdown_pct": round(cur_dd_pct_g, 2),
+                    "max_drawdown_limit_pct": max_dd_pct_g,
+                }
+                logger.critical(
+                    f"[AUTO_CLOSER] 🚨 АВАРИЙНЫЙ СТОП-КРАН ПОРТФЕЛЯ! "
+                    f"Просадка {cur_dd_pct_g:.2f}% >= {max_dd_pct_g:.1f}% (Эквити: {cur_equity_g:.2f}$ / Старт: {start_bal_g:.2f}$). "
+                    f"Остановка бота на холостые!"
+                )
+                action_msg = (
+                    f"🚨🚨🚨 <b>АВАРИЙНЫЙ СТОП-КРАН ПОРТФЕЛЯ (BASKET EQUITY CUTOFF)!</b> 🚨🚨🚨\n\n"
+                    f"Зафиксирована критическая совокупная просадка <b>ПОРТФЕЛЯ</b>:\n"
+                    f"• Стартовый баланс: <b>{start_bal_g:.2f} USDT</b>\n"
+                    f"• Текущее эквити: <b>{cur_equity_g:.2f} USDT</b>\n"
+                    f"• Просадка: <b>-{cur_dd_pct_g:.2f}%</b> (Лимит: <b>{max_dd_pct_g:.1f}%</b>)\n"
+                    f"• Чистый PnL: <b>{net_usdt:+.2f} USDT</b>\n\n"
+                    f"✅ <b>Все позиции экстренно закрыты в 100% кэш.</b>\n"
+                    f"⏸️ <b>Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False).</b>\n"
+                    f"🛑 Вход в новые позиции заблокирован во избежание дальнейших потерь.\n\n"
+                    f"ℹ️ Для возобновления торговли перейдите в главное меню и нажмите <b>▶️ Start</b>."
+                )
+
+        # Legacy threshold check
         scale_money_neg = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
         if scale_money_neg <= 0:
             scale_money_neg = 1.0
@@ -216,7 +266,7 @@ class PortfolioCloser:
             )
 
         # ЖЕЛЕЗНЫЙ ИНВАРИАНТ: Секция positive ни при каких обстоятельствах не закрывается в минус или ноль!
-        is_negative_stop_g = ("NEGATIVE STOP" in action_msg)
+        is_negative_stop_g = ("NEGATIVE STOP" in action_msg or is_emergency_stop_g)
         if triggered and not is_negative_stop_g and iter_net_g <= 0.0:
             logger.critical(
                 f"[AUTO_CLOSER] 🛡️ [POSITIVE PROFIT GUARD] Blocked global positive auto-close! "
@@ -243,6 +293,8 @@ class PortfolioCloser:
                     app_json_path=app_json_path,
                     action_msg=action_msg,
                     trailing_ratchet_state=auto_closer_inst._trailing_ratchet_state,
+                    is_emergency_stop=is_emergency_stop_g,
+                    emergency_details=emergency_details_g,
                 )
             except Exception as e:
                 logger.error(f"[AUTO_CLOSER] Error during portfolio auto-close: {e}")
