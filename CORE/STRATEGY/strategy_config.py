@@ -100,6 +100,8 @@ class StrategyConfig:
         self.auto_closing_cfg: Dict[str, Any] = domes_res["auto_closing_cfg"]
         self.mode: str = domes_res["mode"]
         self.auto_closing_mode: str = domes_res["auto_closing_mode"]
+        pcsl = self.active_settings.get("per_coin_stop_loss") or self.overrides.get("per_coin_stop_loss") or self.raw_meta.get("per_coin_stop_loss") or {}
+        self.per_coin_stop_loss_cfg: Dict[str, Any] = copy.deepcopy(pcsl) if isinstance(pcsl, dict) else {}
 
         # 5. Разрешение Smart Features & Momentum
         smart_res = StrategyConfigParser.resolve_smart_features(

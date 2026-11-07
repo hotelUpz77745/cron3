@@ -333,6 +333,24 @@ class CoinGridRiskAnalytics:
                 p = self.active_cycles[key]["avg_entry_price"]
             self._finalize_cycle(key, fill_price=p, timestamp=timestamp, close_reason=close_reason)
 
+    def force_close_symbol_cycle(
+        self,
+        symbol: str,
+        close_reason: str = "STOP_LOSS",
+        final_price: float = 0.0,
+        timestamp: float = 0.0,
+    ) -> None:
+        """
+        Принудительно закрывает активный цикл конкретного символа
+        (например, при срабатывании Per-Coin Stop-Loss).
+        """
+        sym_u = symbol.upper()
+        for key in list(self.active_cycles.keys()):
+            s, side = key
+            if s.upper() == sym_u:
+                p = final_price if final_price > 0.0 else self.active_cycles[key]["avg_entry_price"]
+                self._finalize_cycle(key, fill_price=p, timestamp=timestamp, close_reason=close_reason)
+
     # =========================================================================
     # SUMMARY & AGGREGATION
     # =========================================================================
@@ -682,7 +700,7 @@ class CoinGridRiskAnalytics:
             return f"\n[{title}]: События глубоких просадок отсутствуют\n"
 
         headers = [
-            "№", "Символ", "Side", "Откат от L0 %", "Откат от Avg %",
+            "№", "Символ", "Side", "Откат от L0 %",
             "Макс DD $", "Макс Lvl", "Net PnL $", "Длительность", "Причина закрытия"
         ]
         rows = []
@@ -691,7 +709,6 @@ class CoinGridRiskAnalytics:
             sym = ev.get("symbol", "N/A")
             side = ev.get("side", "N/A")
             adv_l0 = f"{ev.get('max_adverse_from_entry0_pct', 0.0):5.1f}%"
-            adv_avg = f"{ev.get('max_adverse_from_avg_pct', 0.0):5.1f}%"
             dd = f"{ev.get('max_floating_dd_usdt', 0.0):6.2f}$"
             lvl = f"L{ev.get('max_level_reached', 0)}"
             net_p = f"{ev.get('net_pnl', 0.0):+7.2f}$"
@@ -703,7 +720,6 @@ class CoinGridRiskAnalytics:
                 sym,
                 side,
                 adv_l0,
-                adv_avg,
                 dd,
                 lvl,
                 net_p,
@@ -717,7 +733,7 @@ class CoinGridRiskAnalytics:
                 col_widths[i] = max(col_widths[i], len(val))
 
         def make_row(cols):
-            return " | ".join(val.rjust(col_widths[i]) if i in (0, 3, 4, 5, 6, 7, 8) else val.ljust(col_widths[i]) for i, val in enumerate(cols))
+            return " | ".join(val.rjust(col_widths[i]) if i in (0, 3, 4, 5, 6, 7) else val.ljust(col_widths[i]) for i, val in enumerate(cols))
 
         sep = "-+-".join("-" * w for w in col_widths)
         banner = "=" * len(make_row(headers))

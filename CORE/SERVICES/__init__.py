@@ -14,6 +14,7 @@ from CORE.SERVICES.leverage_adapter import LeverageAdapter, LeverageManager
 from CORE.SERVICES.emergency_closer import EmergencyCloserService
 from CORE.SERVICES.symbol_lifecycle_manager import SymbolLifecycleManager
 from CORE.SERVICES.bot_bootstrap import BotBootstrapService
+from CORE.SERVICES.per_coin_stop_loss import PerCoinStopLossManager
 
 __all__ = [
     "AutoCloser",
@@ -25,5 +26,6 @@ __all__ = [
     "EmergencyCloserService",
     "SymbolLifecycleManager",
     "BotBootstrapService",
+    "PerCoinStopLossManager",
 ]
 

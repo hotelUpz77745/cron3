@@ -138,6 +138,13 @@ class AutoCloser:
         now_sec = time.time()
         now_ms = int(now_sec * 1000)
 
+        # 0. Индивидуальный аварийный стоп-лосс монет (Per-Coin Stop-Loss)
+        try:
+            from CORE.SERVICES.per_coin_stop_loss import PerCoinStopLossManager
+            await PerCoinStopLossManager.check_per_coin_stop_loss(self.bot_core)
+        except Exception as pe:
+            logger.error(f"[AUTO_CLOSER] Error in PerCoinStopLoss check: {pe}")
+
         # 1. Стратегические купола
         await self._check_strategy_domes(app_data, app_json_path, analytics_data, now_sec, now_ms, fsm)
 
