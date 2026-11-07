@@ -1,6 +1,6 @@
 {
-  "name": "🥉 U96: Omni Zenith 13 [Min TP 1.0% | Multiplied TPs x1.3 | L3+ 50% Recycler]",
-  "description": "Омен-96 с укрупненными тейк-профитами: min_tp_indent поднят с 0.62% до 1.0%; все отступы tp_map (LONG и SHORT) увеличены в 1.3 раза для снижения комиссионного трения и увеличения матожидания.",
+  "name": "🥉 U96: Omni Zenith 13 [Min TP 1.0% | Multiplied TPs x1.3 | L3+ 50% Recycler | Chronos 36h Evacuation]",
+  "description": "Омен-96 с укрупненными тейк-профитами (min_tp 1.0%, отступы 1.3x) и интеллектуальной возрастной эвакуацией Chronos (E1: 36ч / +$8, E2: 72ч / +$5).",
   "signal_heartbeat_tfr": "5m",
   "tp_purpose": "self",
   "_tp_purpose_modes": {
@@ -89,7 +89,10 @@
   },
   "smart_grace": {
     "start_period_sec": 57,
-    "shift_interval_sec": 13,
+    "shift_interval_sec": [
+      10,
+      16
+    ],
     "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
     "increments_card": {
       "==1": 30,
@@ -217,6 +220,20 @@
             "min_age_hours": 0.0,
             "enabled": true,
             "_desc": "L5: F12 ($144 instant Mega rally)"
+          },
+          {
+            "activation": 8.0,
+            "floor": 8.0,
+            "min_age_hours": 36.0,
+            "enabled": true,
+            "_desc": "E1: Chronos 36h — instant +$8 evacuation of stale dome"
+          },
+          {
+            "activation": 5.0,
+            "floor": 5.0,
+            "min_age_hours": 72.0,
+            "enabled": true,
+            "_desc": "E2: Chronos 72h — instant +$5 (MinGuard) evacuation of stale dome"
           }
         ]
       }
