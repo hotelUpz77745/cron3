@@ -1354,3 +1354,38 @@ cron3/
 
 
 
+Git коммит:
+
+Точечный коммит выполнен в ветку stivenson (строго БЕЗ git push согласно Правилу 9):
+
+Коммит: b7612df
+Сообщение: feat(risk): implement Basket Equity Cutoff stop-loss with idle halt and Telegram operator reset
+Затронутые файлы:
+CFG/universes/u96_omni_zenith13.json
+CORE/SERVICES/emergency_stop_manager.py
+CORE/SERVICES/auto_closer.py
+CORE/SERVICES/portfolio_closer.py
+CORE/SERVICES/dome_closer_executor.py
+TG/HANDLERS/base_router.py
+tests/test_emergency_basket_cutoff.py
+
+
+Точечный коммит сервиса аналитики сетки:
+Коммит: a5026e8
+Сообщение: feat(analytics): add CoinGridRiskAnalytics service and grid depth tracker
+Затронутые файлы:
+CORE/SERVICES/coin_grid_analytics.py
+tests/test_coin_grid_analytics.py
+
+
+Точечный коммит индивидуального стоп-лосса монет:
+Коммит: 6ddd26a
+Сообщение: feat(risk): implement PerCoinStopLossManager with market liquidation, pool eviction and Telegram notifications
+Затронутые файлы:
+CFG/universes/u96_omni_zenith13.json
+CORE/SERVICES/__init__.py
+CORE/SERVICES/auto_closer.py
+CORE/SERVICES/coin_grid_analytics.py
+CORE/SERVICES/per_coin_stop_loss.py
+CORE/STRATEGY/strategy_config.py
+tests/test_per_coin_stop_loss.py
