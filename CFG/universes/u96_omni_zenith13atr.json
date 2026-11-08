@@ -238,10 +238,10 @@
         }
     },
     "per_coin_stop_loss": {
-        "max_adverse_short_pct": 120.0,
+        "max_adverse_short_pct": 130.0,
         "max_adverse_long_pct": null,
         "notify_telegram": true,
-        "_desc_short": "Индивидуальный стоп-лосс для SHORT: 120.0% от входа L0.",
+        "_desc_short": "Индивидуальный стоп-лосс для SHORT: 130.0% от входа L0.",
         "_desc_long": "Индивидуальный стоп-лосс для LONG: отключен (null), давая тяжелому якорю L8 (-89.0%, 19.95%) вытягивать глубокие проливы."
     },
     "LONG": {
