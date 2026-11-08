@@ -52,34 +52,34 @@
             "margin_type": "CROSSED",
             "notifications": {
                 "enabled": true,
-                "negative_threshold": -50.0,
+                "negative_threshold": -100.0,
                 "positive_threshold": 100.0
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 1200,
                 "invest_size": {
-                    "ERAUSDT": 400.0,
-                    "BILLUSDT": 400.0,
-                    "KMNOUSDT": 400.0,
-                    "GRASSUSDT": 400,
-                    "SOLVUSDT": 400,
-                    "LAUSDT": 400
+                    "ERAUSDT": 1200,
+                    "ZECUSDT": 1200,
+                    "LITUSDT": 1200,
+                    "MERLUSDT": 1200,
+                    "SOLVUSDT": 1200,
+                    "VVVUSDT": 1200
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 1200,
                 "invest_size": {
-                    "ERAUSDT": 400.0,
-                    "BILLUSDT": 400.0,
-                    "KMNOUSDT": 400.0,
-                    "GRASSUSDT": 400,
-                    "SOLVUSDT": 400,
-                    "LAUSDT": 400
+                    "ERAUSDT": 1200,
+                    "ZECUSDT": 1200,
+                    "LITUSDT": 1200,
+                    "MERLUSDT": 1200,
+                    "SOLVUSDT": 1200,
+                    "VVVUSDT": 1200
                 }
             },
-            "start_balance_usdt": 448.0
+            "start_balance_usdt": 1435.0
         }
     },
     "telegram": {
@@ -177,7 +177,7 @@
             "enable_hurst_filter": false,
             "_desc": "Канонический базовый профиль альфа-фильтра до внедрения Херста и Volume Climax."
         },
-        "enable_hurst_filter": true,
+        "enable_hurst_filter": false,
         "_desc_enable_hurst_filter": "Фильтр показателя Херста: H <= max_hurst_threshold отбирает Mean-Reverting монеты и отсекает трендовые ракеты (H > 0.50).",
         "max_hurst_threshold": 0.5,
         "_desc_max_hurst_threshold": "Порог экспоненты Херста (0.50 - граница случайного блуждания; <=0.50 возврат к среднему).",
