@@ -36,12 +36,12 @@
         "cache_ttl_sec": 300,
         "fallback_atr_pct": 2.0,
         "ref_atr_pct": 2.0,
-        "min_multiplier": 0.85,
+        "min_multiplier": 1.0,
         "max_multiplier": 1.85,
         "max_scaled_level": 5,
         "max_indent_cap_pct": 45.0,
         "min_indent_floor_pct": 1.5,
-        "_desc": "Динамическое масштабирование шагов сетки по 1h ATR: на волатильных монетах сетка автоматически расширяется до 1.85x, удерживая среднюю цену входа близко к рынку."
+        "_desc": "Динамическое масштабирование шагов сетки по 1h ATR (1.0x-1.85x): без сжатия шага во флэте (min 1.0x), на волатильности расширяется до 1.85x."
     },
     "cross_side_recycling": {
         "enabled": true,
@@ -238,10 +238,10 @@
         }
     },
     "per_coin_stop_loss": {
-        "max_adverse_short_pct": 120.0,
+        "max_adverse_short_pct": 130.0,
         "max_adverse_long_pct": null,
         "notify_telegram": true,
-        "_desc_short": "Индивидуальный стоп-лосс для SHORT: 120.0% от входа L0.",
+        "_desc_short": "Индивидуальный стоп-лосс для SHORT: 130.0% от входа L0 (защита от ложных сбитий на ракетах 120-125%).",
         "_desc_long": "Индивидуальный стоп-лосс для LONG: отключен (null) для полной свободы ATR-динамики."
     },
     "LONG": {
