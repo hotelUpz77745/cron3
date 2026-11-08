@@ -46,9 +46,23 @@ class TestPerCoinStopLoss(unittest.IsolatedAsyncioTestCase):
                 "notify_telegram": True,
             }
         }
-        thresh, notify = PerCoinStopLossManager.extract_config(strat_dict)
-        self.assertEqual(thresh, 100.0)
+        short_th, long_th, notify = PerCoinStopLossManager.extract_config(strat_dict)
+        self.assertEqual(short_th, 100.0)
+        self.assertIsNone(long_th)  # 100.0 >= 100 -> long disabled
         self.assertTrue(notify)
+
+        # Раздельные пороги для SHORT и LONG
+        strat_asym = {
+            "per_coin_stop_loss": {
+                "max_adverse_short_pct": 120.0,
+                "max_adverse_long_pct": 85.0,
+                "notify_telegram": True,
+            }
+        }
+        s_th, l_th, n = PerCoinStopLossManager.extract_config(strat_asym)
+        self.assertEqual(s_th, 120.0)
+        self.assertEqual(l_th, 85.0)
+        self.assertTrue(n)
 
         # Отключенный стоп-лосс
         strat_disabled = {
@@ -57,8 +71,9 @@ class TestPerCoinStopLoss(unittest.IsolatedAsyncioTestCase):
                 "notify_telegram": False,
             }
         }
-        thresh2, notify2 = PerCoinStopLossManager.extract_config(strat_disabled)
-        self.assertIsNone(thresh2)
+        thresh2_s, thresh2_l, notify2 = PerCoinStopLossManager.extract_config(strat_disabled)
+        self.assertIsNone(thresh2_s)
+        self.assertIsNone(thresh2_l)
         self.assertFalse(notify2)
 
     def test_evaluate_symbol_long(self):

@@ -54,13 +54,13 @@ class PerCoinStopLossManager:
             return None
 
     @classmethod
-    def extract_config(cls, strat_cfg: Any) -> Tuple[Optional[float], bool]:
+    def extract_config(cls, strat_cfg: Any) -> Tuple[Optional[float], Optional[float], bool]:
         """
         Извлекает и нормализует параметры per_coin_stop_loss из конфигурации стратегии.
-        Возвращает: (max_adverse_from_entry_pct, notify_telegram).
+        Возвращает: (max_adverse_short_pct, max_adverse_long_pct, notify_telegram).
         """
         if not strat_cfg:
-            return None, True
+            return None, None, True
 
         cfg_dict: Dict[str, Any] = {}
         # Проверяем возможные места хранения в StrategyConfig / raw_meta / overrides
@@ -71,15 +71,27 @@ class PerCoinStopLossManager:
         elif hasattr(strat_cfg, "raw_meta") and isinstance(strat_cfg.raw_meta, dict) and "per_coin_stop_loss" in strat_cfg.raw_meta:
             cfg_dict = strat_cfg.raw_meta["per_coin_stop_loss"]
         elif isinstance(strat_cfg, dict):
-            cfg_dict = strat_cfg.get("per_coin_stop_loss") or {}
+            cfg_dict = strat_cfg.get("per_coin_stop_loss") or strat_cfg
 
         if not isinstance(cfg_dict, dict):
-            return None, True
+            return None, None, True
 
-        raw_thresh = cfg_dict.get("max_adverse_from_entry_pct")
-        threshold = cls.normalize_threshold(raw_thresh)
+        raw_legacy = cfg_dict.get("max_adverse_from_entry_pct")
+        raw_short = cfg_dict.get("max_adverse_short_pct", raw_legacy)
+        raw_long = cfg_dict.get("max_adverse_long_pct")
+
+        short_thresh = cls.normalize_threshold(raw_short)
+        long_thresh = cls.normalize_threshold(raw_long)
+
+        # Fallback для legacy max_adverse_from_entry_pct:
+        # Для LONG он применим только если явно < 100% (так как падение более 100% невозможно)
+        if long_thresh is None and raw_legacy is not None:
+            norm_leg = cls.normalize_threshold(raw_legacy)
+            if norm_leg is not None and norm_leg < 100.0:
+                long_thresh = norm_leg
+
         notify = bool(cfg_dict.get("notify_telegram", True))
-        return threshold, notify
+        return short_thresh, long_thresh, notify
 
     @classmethod
     def evaluate_symbol(
@@ -252,8 +264,8 @@ class PerCoinStopLossManager:
         liquidated_symbols = []
 
         for strat_id, strat_cfg in active_strats.items():
-            threshold, notify = cls.extract_config(strat_cfg)
-            if threshold is None:
+            short_thresh, long_thresh, notify = cls.extract_config(strat_cfg)
+            if short_thresh is None and long_thresh is None:
                 continue
 
             symbols = getattr(strat_cfg, "symbols", []) or []
@@ -274,11 +286,15 @@ class PerCoinStopLossManager:
                     if not fsm_state or not getattr(fsm_state, "in_position", False):
                         continue
 
+                    side_threshold = long_thresh if side == "LONG" else short_thresh
+                    if side_threshold is None or side_threshold <= 0.0:
+                        continue
+
                     is_triggered, adv_pct, entry0 = cls.evaluate_symbol(
                         symbol=sym_u,
                         fsm_state=fsm_state,
                         cur_price=cur_price,
-                        threshold_pct=threshold
+                        threshold_pct=side_threshold
                     )
 
                     if is_triggered:
@@ -287,7 +303,7 @@ class PerCoinStopLossManager:
                             symbol=sym_u,
                             side=side,
                             adverse_pct=adv_pct,
-                            threshold_pct=threshold,
+                            threshold_pct=side_threshold,
                             entry0_price=entry0,
                             cur_price=cur_price,
                             strat_id=strat_id,
