@@ -302,6 +302,34 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         self.assertNotIn("DOGEUSDT", self.analytics.open_symbols)
         self.assertEqual(len(self.analytics.completed_cycles), 2)
 
+    def test_merge_from_dict_multicycle_count_p7(self):
+        """Проверка фикса P7: слияние из словаря с >15 циклами не теряет общий счётчик циклов."""
+        # Моделируем сериализованный summary с 50 циклами (30 BTC + 20 ETH), где в worst_drawdown_events только 15
+        mock_summary = {
+            "strategy_id": "test_strat",
+            "total_cycles": 50,
+            "total_fills": 70,
+            "average_cycle_level": 1.4,
+            "grid_level_distribution": {
+                "L0": {"fills_count": 50, "total_notional_usdt": 5000.0, "cycles_max_depth_count": 30},
+                "L1": {"fills_count": 20, "total_notional_usdt": 2000.0, "cycles_max_depth_count": 20},
+            },
+            "per_coin_summary": {
+                "BTCUSDT": {"total_cycles": 30, "winning_cycles": 25, "losing_cycles": 5, "avg_cycle_level": 1.0, "level_depths_sum": 30, "realized_pnl": 100.0, "fees_paid": 5.0, "net_pnl": 95.0},
+                "ETHUSDT": {"total_cycles": 20, "winning_cycles": 18, "losing_cycles": 2, "avg_cycle_level": 2.0, "level_depths_sum": 40, "realized_pnl": 50.0, "fees_paid": 3.0, "net_pnl": 47.0},
+            },
+            "worst_drawdown_events": [{"symbol": "BTCUSDT", "max_adverse_from_entry0_pct": 10.0} for _ in range(15)],
+        }
+
+        target = CoinGridRiskAnalytics("strat_target")
+        target.merge(mock_summary)
+        res = target.get_summary()
+
+        # Без фикса P7 здесь было бы 15 (по len(worst_drawdown_events))
+        self.assertEqual(res["total_cycles"], 50)
+        # Сумма глубин: 30 + 40 = 70. 70 / 50 = 1.4
+        self.assertAlmostEqual(res["average_cycle_level"], 1.4, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()

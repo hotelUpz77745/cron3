@@ -14,7 +14,8 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
     Возвращает агрегированный статистический отчет в структурированном виде
     по всем завершенным циклам, уровням сетки и инструментам.
     """
-    total_cycles = len(tracker.completed_cycles)
+    total_from_coins = sum(s.get("total_cycles", 0) for s in tracker.per_coin_stats.values())
+    total_cycles = total_from_coins if total_from_coins > 0 else len(tracker.completed_cycles)
     total_fills = sum(tracker.level_fills_count.values())
 
     # 1. Распределение уровней сетки (Fills & Depth) по каноническим ступеням L0..L8
@@ -24,7 +25,7 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
     # Воронка выживания: сколько циклов дошли хотя бы до уровня i
     cycles_reached_at_least: Dict[str, int] = defaultdict(int)
     for c in tracker.completed_cycles:
-        max_lvl = c["max_level_reached"]
+        max_lvl = int(c.get("max_level_reached", 0))
         for i in range(max_lvl + 1):
             cycles_reached_at_least[f"L{i}"] += 1
 
@@ -58,7 +59,11 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
     # 2. Средняя глубина цикла
     avg_cycle_depth = 0.0
     if total_cycles > 0:
-        avg_cycle_depth = sum(c["max_level_reached"] for c in tracker.completed_cycles) / total_cycles
+        tot_levels_sum = sum(s.get("level_depths_sum", 0) for s in tracker.per_coin_stats.values())
+        if tot_levels_sum > 0:
+            avg_cycle_depth = tot_levels_sum / total_cycles
+        elif tracker.completed_cycles:
+            avg_cycle_depth = sum(c.get("max_level_reached", 0) for c in tracker.completed_cycles) / len(tracker.completed_cycles)
 
     # 3. Per-Coin Ledger
     coins_summary: Dict[str, Dict[str, Any]] = {}
@@ -93,7 +98,7 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
         tracker.completed_cycles,
         key=lambda x: (x.get("max_adverse_from_entry0_pct", 0.0), x.get("max_floating_dd_usdt", 0.0)),
         reverse=True
-    )[:15]
+    )[:RiskThresholds.TOP_WORST_EVENTS_LIMIT]
 
     # 5. Глобальные счетчики L8, SL-120% и SL-130%
     tot_l8_exceeded = sum(s.get("exceeded_l8_count", 0) for s in coins_summary.values())

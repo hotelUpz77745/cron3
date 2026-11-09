@@ -25,6 +25,7 @@ class RiskThresholds:
     EPSILON: float = 1e-8
     CANONICAL_GRID_LEVELS: int = 9
     SECONDS_PER_HOUR: float = 3600.0
+    TOP_WORST_EVENTS_LIMIT: int = 15
 
 
 # Каноническая схема ступеней сетки (Omen-13 Canon)
