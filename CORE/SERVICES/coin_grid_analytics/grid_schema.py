@@ -108,3 +108,4 @@ class GridLevelSchema:
     DEFAULT_LEVELS = DEFAULT_LEVEL_METADATA
     load = staticmethod(load_level_metadata)
     empty_coin_record = staticmethod(create_empty_coin_record)
+

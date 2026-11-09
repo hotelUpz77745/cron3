@@ -115,3 +115,4 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
         "per_coin_summary": coins_summary,
         "worst_drawdown_events": sorted_worst,
     }
+

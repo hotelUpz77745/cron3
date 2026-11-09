@@ -229,3 +229,4 @@ def format_worst_drawdowns_table(
         right_align_indices={0, 3, 4, 5, 6, 7},
         title_prefix="⚠️",
     )
+

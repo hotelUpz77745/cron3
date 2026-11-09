@@ -35,3 +35,4 @@ __all__ = [
     "format_worst_drawdowns_table",
     "format_ascii_table",
 ]
+

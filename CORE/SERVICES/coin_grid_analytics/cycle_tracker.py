@@ -347,3 +347,4 @@ class CoinGridRiskAnalytics:
     ) -> str:
         """Форматирует визуальную ASCII-таблицу топ наихудших просадок за историю."""
         return format_worst_drawdowns_table(self, top_n=top_n, title=title)
+
