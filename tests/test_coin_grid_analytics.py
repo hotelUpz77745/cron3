@@ -231,6 +231,67 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         self.assertIn("BTCUSDT", tbl_coin)
         self.assertIn("ТОП НАИХУДШИХ ПРОСАДОК", tbl_worst)
 
+    def test_empty_analytics_edge_cases(self):
+        """Проверка нулевого состояния: отсутствие циклов не вызывает DivisionByZero."""
+        empty_a = CoinGridRiskAnalytics("empty_strat")
+        summary = empty_a.get_summary()
+        self.assertEqual(summary["total_cycles"], 0)
+        self.assertEqual(summary["total_fills"], 0)
+        self.assertEqual(summary["average_cycle_level"], 0.0)
+        self.assertEqual(summary["total_exceeded_l8"], 0)
+        self.assertEqual(summary["total_would_hit_sl_120"], 0)
+        self.assertEqual(summary["total_would_hit_sl_130"], 0)
+
+        tbl_grid = empty_a.format_grid_distribution_table()
+        tbl_coin = empty_a.format_per_coin_table()
+        tbl_worst = empty_a.format_worst_drawdowns_table()
+        self.assertIn("Срабатывания сетки не зафиксированы", tbl_grid)
+        self.assertIn("Данные по монетам отсутствуют", tbl_coin)
+        self.assertIn("События глубоких просадок отсутствуют", tbl_worst)
+
+    def test_merge_from_dict(self):
+        """Проверка десериализации и слияния данных из сырого словаря get_summary()."""
+        source = CoinGridRiskAnalytics("strat_source")
+        source.record_fill("AVAXUSDT", "LONG", 50.0, 2.0, True, 2.0, 50.0, level_idx=0)
+        source.record_fill("AVAXUSDT", "LONG", 55.0, 2.0, False, 0.0, 0.0)
+
+        dict_summary = source.get_summary()
+
+        target = CoinGridRiskAnalytics("strat_target")
+        target.merge(dict_summary)
+
+        t_summary = target.get_summary()
+        self.assertEqual(t_summary["total_cycles"], 1)
+        self.assertEqual(t_summary["total_fills"], 1)
+        self.assertIn("AVAXUSDT", t_summary["per_coin_summary"])
+        self.assertEqual(t_summary["per_coin_summary"]["AVAXUSDT"]["net_pnl"], 10.0)
+
+    def test_partial_fill_peeling_and_open_symbols(self):
+        """Проверка частичного закрытия (пилинг) и корректности open_symbols при двух сторонах."""
+        # Открываем LONG и SHORT по DOGEUSDT
+        self.analytics.record_fill("DOGEUSDT", "LONG", 0.10, 1000.0, True, 1000.0, 0.10, level_idx=0)
+        self.analytics.record_fill("DOGEUSDT", "SHORT", 0.10, 1000.0, True, 1000.0, 0.10, level_idx=0)
+
+        self.assertIn("DOGEUSDT", self.analytics.open_symbols)
+        self.assertEqual(len(self.analytics.active_cycles), 2)
+
+        # Частичное закрытие LONG на 50% (пилинг 500 монет по 0.12)
+        self.analytics.record_fill("DOGEUSDT", "LONG", 0.12, 500.0, False, 500.0, 0.10)
+        long_cycle = self.analytics.active_cycles[("DOGEUSDT", "LONG")]
+        self.assertEqual(long_cycle["current_qty"], 500.0)
+        self.assertAlmostEqual(long_cycle["realized_pnl"], 10.0, places=4) # (0.12 - 0.10) * 500 = 10
+
+        # Полное закрытие остатка LONG (500 монет по 0.11)
+        self.analytics.record_fill("DOGEUSDT", "LONG", 0.11, 500.0, False, 0.0, 0.0)
+        self.assertNotIn(("DOGEUSDT", "LONG"), self.analytics.active_cycles)
+        # Символ DOGEUSDT все еще открыт, т.к. активен SHORT!
+        self.assertIn("DOGEUSDT", self.analytics.open_symbols)
+
+        # Закрываем SHORT
+        self.analytics.record_fill("DOGEUSDT", "SHORT", 0.09, 1000.0, False, 0.0, 0.0)
+        self.assertNotIn("DOGEUSDT", self.analytics.open_symbols)
+        self.assertEqual(len(self.analytics.completed_cycles), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
