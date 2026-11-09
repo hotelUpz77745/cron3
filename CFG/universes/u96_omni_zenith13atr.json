@@ -86,7 +86,10 @@
     },
     "smart_grace": {
         "start_period_sec": 57,
-        "shift_interval_sec": 13,
+        "shift_interval_sec": [
+            11,
+            15
+        ],
         "_window_desc": "Окно оценки строго привязано к тикам сигнала ('signal_heartbeat_tfr': '5m'). Наступление новой физической пятиминутки со сдвигом shift_interval_sec автоматически сбрасывает весь накопленный прогресс счетчиков закрытий (recent_closes) для smart_grace, smart_size и smart_tp.",
         "increments_card": {
             "==1": 30,
@@ -144,7 +147,7 @@
     ],
     "auto_closing": {
         "positive": {
-            "scale_money": 1.0,
+            "scale_money": 2.0,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "min_guaranteed_profit_usdt": 5.0,
             "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
