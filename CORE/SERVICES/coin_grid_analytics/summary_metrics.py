@@ -6,6 +6,7 @@
 
 from collections import defaultdict
 from typing import Dict, Any, List
+from .grid_schema import RiskThresholds
 
 
 def build_summary(tracker: Any) -> Dict[str, Any]:
@@ -16,12 +17,8 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
     total_cycles = len(tracker.completed_cycles)
     total_fills = sum(tracker.level_fills_count.values())
 
-    # 1. Распределение уровней сетки (Fills & Depth)
-    seen_keys = set(tracker.level_metadata.keys()) | set(tracker.level_fills_count.keys())
-    all_lvl_keys = [f"L{i}" for i in range(9)]
-    extra_keys = sorted([k for k in seen_keys if k not in all_lvl_keys])
-    ordered_keys = all_lvl_keys + extra_keys
-
+    # 1. Распределение уровней сетки (Fills & Depth) по каноническим ступеням L0..L8
+    canonical_lvl_keys = [f"L{i}" for i in range(RiskThresholds.CANONICAL_GRID_LEVELS)]
     level_dist: Dict[str, Dict[str, Any]] = {}
 
     # Воронка выживания: сколько циклов дошли хотя бы до уровня i
@@ -31,7 +28,7 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
         for i in range(max_lvl + 1):
             cycles_reached_at_least[f"L{i}"] += 1
 
-    for lvl_key in ordered_keys:
+    for lvl_key in canonical_lvl_keys:
         fills = tracker.level_fills_count.get(lvl_key, 0)
         fills_pct = (fills / total_fills * 100.0) if total_fills > 0 else 0.0
         notional = tracker.level_fills_notional.get(lvl_key, 0.0)
@@ -115,4 +112,3 @@ def build_summary(tracker: Any) -> Dict[str, Any]:
         "per_coin_summary": coins_summary,
         "worst_drawdown_events": sorted_worst,
     }
-

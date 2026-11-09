@@ -4,10 +4,17 @@
 #       порогов риска и фабрик структур per-coin записей.
 # ==============================================================================
 
-import os
+from pathlib import Path
 import json
 import copy
 from typing import Dict, Any
+
+try:
+    from c_log import UnifiedLogger
+    logger = UnifiedLogger("CoinGridAnalytics")
+except ImportError:
+    import logging
+    logger = logging.getLogger("CoinGridAnalytics")
 
 
 class RiskThresholds:
@@ -16,6 +23,8 @@ class RiskThresholds:
     SL_120_THRESHOLD_PCT: float = 120.0
     SL_130_THRESHOLD_PCT: float = 130.0
     EPSILON: float = 1e-8
+    CANONICAL_GRID_LEVELS: int = 9
+    SECONDS_PER_HOUR: float = 3600.0
 
 
 # Каноническая схема ступеней сетки (Omen-13 Canon)
@@ -57,25 +66,20 @@ def create_empty_coin_record(symbol: str) -> Dict[str, Any]:
 def load_level_metadata(strategy_id: str = "") -> Dict[str, Dict[str, Any]]:
     """
     Динамически загружает метаданные ступеней сетки из конфигурационного файла
-    вселенной стратегии CFG/universes/{strategy_id}.json. Если файл не найден
-    или в нем нет структуры сетки, возвращает институциональный дефолт DEFAULT_LEVEL_METADATA.
+    вселенной стратегии CFG/universes/{strategy_id}.json относительно корня репозитория cron3.
+    Исключает зависимость от CWD (P1) и явным образом логирует предупреждения и ошибки парсинга.
     """
     if not strategy_id:
         return copy.deepcopy(DEFAULT_LEVEL_METADATA)
 
-    candidates = [
-        os.path.join("CFG", "universes", f"{strategy_id}.json"),
-        os.path.join("..", "cron3", "CFG", "universes", f"{strategy_id}.json"),
-        os.path.join(os.path.dirname(__file__), "..", "..", "CFG", "universes", f"{strategy_id}.json"),
-    ]
+    cron3_root = Path(__file__).resolve().parents[3]
+    cfg_path = cron3_root / "CFG" / "universes" / f"{strategy_id}.json"
 
-    cfg_path = None
-    for cand in candidates:
-        if os.path.exists(cand):
-            cfg_path = cand
-            break
-
-    if not cfg_path:
+    if not cfg_path.is_file():
+        logger.warning(
+            f"[CoinGridAnalytics] Config for strategy '{strategy_id}' not found at '{cfg_path}'. "
+            f"Falling back to institutional DEFAULT_LEVEL_METADATA."
+        )
         return copy.deepcopy(DEFAULT_LEVEL_METADATA)
 
     try:
@@ -87,6 +91,10 @@ def load_level_metadata(strategy_id: str = "") -> Dict[str, Dict[str, Any]]:
             grid_cfg = cfg.get("SHORT", {}).get("grid", {})
 
         if not grid_cfg:
+            logger.warning(
+                f"[CoinGridAnalytics] No 'grid' definition found in '{cfg_path}'. "
+                f"Falling back to institutional DEFAULT_LEVEL_METADATA."
+            )
             return copy.deepcopy(DEFAULT_LEVEL_METADATA)
 
         result: Dict[str, Dict[str, Any]] = {}
@@ -97,8 +105,13 @@ def load_level_metadata(strategy_id: str = "") -> Dict[str, Dict[str, Any]]:
                 "indent_pct": float(item.get("indent", 0.0)),
                 "volume_pct": float(item.get("volume", 0.0)),
             }
-        return result if result else copy.deepcopy(DEFAULT_LEVEL_METADATA)
-    except Exception:
+        return result
+    except Exception as exc:
+        logger.error(
+            f"[CoinGridAnalytics] Failed to parse universe config '{cfg_path}': {exc}. "
+            f"Falling back to institutional DEFAULT_LEVEL_METADATA.",
+            exc_info=True,
+        )
         return copy.deepcopy(DEFAULT_LEVEL_METADATA)
 
 
@@ -108,4 +121,3 @@ class GridLevelSchema:
     DEFAULT_LEVELS = DEFAULT_LEVEL_METADATA
     load = staticmethod(load_level_metadata)
     empty_coin_record = staticmethod(create_empty_coin_record)
-

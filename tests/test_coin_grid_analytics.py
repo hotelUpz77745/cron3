@@ -190,9 +190,19 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         meta = zenith.level_metadata
         self.assertIn("L0", meta)
         self.assertIn("L8", meta)
-        # Проверяем устранение бага двойного источника истины:
+
+        # 1. Проверяем, что прочитана РЕАЛЬНАЯ конфигурация вселенной (а не дефолтный шаблон)
+        # В u96_omni_zenith13.json роль содержит 'Стартовый импульс / Скальп-ядро' (в дефолте: 'Стартовый вход')
+        self.assertIn("Стартовый импульс / Скальп-ядро", meta["L0"]["role"])
+        self.assertIn("Первое усреднение", meta["L1"]["role"])
         self.assertEqual(meta["L0"]["volume_pct"], 7.0)
         self.assertEqual(meta["L1"]["indent_pct"], -3.0)
+
+        # 2. Проверяем корректный фолбэк на DEFAULT_LEVEL_METADATA для несуществующей стратегии
+        fallback = CoinGridRiskAnalytics(strategy_id="non_existent_mock_strategy")
+        fb_meta = fallback.level_metadata
+        self.assertEqual(fb_meta["L0"]["role"], "Стартовый вход")
+        self.assertEqual(fb_meta["L1"]["role"], "Зона 1: Первое колено")
 
     def test_merge_analytics(self):
         """Проверка корректного слияния данных между декадами."""

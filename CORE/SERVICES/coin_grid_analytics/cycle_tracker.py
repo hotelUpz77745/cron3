@@ -209,7 +209,7 @@ class CoinGridRiskAnalytics:
 
         start_t = cycle.get("start_time", 0.0)
         end_t = timestamp if timestamp > 0 else start_t
-        duration_h = max(0.0, (end_t - start_t) / 3600.0) if start_t > 0 else 0.0
+        duration_h = max(0.0, (end_t - start_t) / RiskThresholds.SECONDS_PER_HOUR) if start_t > 0 else 0.0
 
         max_lvl = int(cycle["max_level_reached"])
         lvl_key = f"L{max_lvl}"
