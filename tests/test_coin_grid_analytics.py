@@ -134,7 +134,7 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         self.assertEqual(summary["grid_level_distribution"]["L2"]["fills_count"], 1)
 
     def test_critical_thresholds_l8_and_sl100(self):
-        """Проверка фиксации превышения уровня L8 (-89%) и стоп-лосса 100%."""
+        """Проверка фиксации превышения уровня L8 (-89%) и стоп-лосса 120% / 130%."""
         # SHORT по 10.0
         self.analytics.record_fill(
             symbol="MEMEUSDT",
@@ -158,8 +158,41 @@ class TestCoinGridRiskAnalytics(unittest.TestCase):
         coin_info = summary["per_coin_summary"]["MEMEUSDT"]
         self.assertEqual(coin_info["exceeded_l8_count"], 1)
         self.assertEqual(coin_info["would_hit_sl_120_count"], 1)
+        self.assertEqual(coin_info["would_hit_sl_130_count"], 0)
         self.assertEqual(summary["total_exceeded_l8"], 1)
         self.assertEqual(summary["total_would_hit_sl_120"], 1)
+        self.assertEqual(summary["total_would_hit_sl_130"], 0)
+
+        # Дополнительный цикл с пампом на 135% (касание SL 130%)
+        self.analytics.record_fill(
+            symbol="ROCKETUSDT",
+            side="SHORT",
+            fill_price=10.0,
+            qty=10.0,
+            is_opening=True,
+            pos_qty_after=10.0,
+            pos_entry_after=10.0,
+            level_idx=0,
+            timestamp=3000.0,
+        )
+        self.analytics.update_price("ROCKETUSDT", price=23.5, timestamp=3100.0)
+        self.analytics.force_close_symbol_cycle("ROCKETUSDT", close_reason="STOP_LOSS", timestamp=3200.0)
+
+        summary2 = self.analytics.get_summary()
+        r_info = summary2["per_coin_summary"]["ROCKETUSDT"]
+        self.assertEqual(r_info["would_hit_sl_120_count"], 1)
+        self.assertEqual(r_info["would_hit_sl_130_count"], 1)
+        self.assertEqual(summary2["total_would_hit_sl_130"], 1)
+
+    def test_dynamic_grid_schema_loading(self):
+        """Проверка динамической загрузки схемы сетки из конфига вселенной без рассинхрона."""
+        zenith = CoinGridRiskAnalytics(strategy_id="u96_omni_zenith13")
+        meta = zenith.level_metadata
+        self.assertIn("L0", meta)
+        self.assertIn("L8", meta)
+        # Проверяем устранение бага двойного источника истины:
+        self.assertEqual(meta["L0"]["volume_pct"], 7.0)
+        self.assertEqual(meta["L1"]["indent_pct"], -3.0)
 
     def test_merge_analytics(self):
         """Проверка корректного слияния данных между декадами."""
