@@ -50,6 +50,7 @@ from CORE.SERVICES.leverage_adapter import LeverageAdapter, LeverageManager
 from CORE.SERVICES.VOLATILITY.volatility_manager import VolatilityManager
 from CORE.SERVICES.emergency_closer import EmergencyCloserService
 from CORE.SERVICES.symbol_lifecycle_manager import SymbolLifecycleManager
+from CORE.SERVICES.delisting_detector import DelistingDetector
 from CORE.SERVICES.bot_bootstrap import BotBootstrapService
 from CORE.ENTRY.signal import TimeControl
 from CORE.GRID.avg_manager import AverageManager
@@ -196,6 +197,7 @@ class BotCore:
         
         self.volatility_manager = VolatilityManager(self)
         self.auto_closer = AutoCloser(self)
+        self.delisting_detector = DelistingDetector(self)
 
     def _init_clients(self):
         """
