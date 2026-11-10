@@ -26,6 +26,8 @@ from consts import (
     DELISTING_POLL_INTERVAL_SEC,
     DELISTING_HARD_CLOSE_SEC,
     DELISTING_DELIVERY_HORIZON_SEC,
+    DELISTING_MS_PER_SEC,
+    DELISTING_SEC_PER_HOUR,
     DELISTING_NOTIFY_TELEGRAM,
     DELISTING_QUOTE_ASSET,
     DELISTING_EXCHANGE_ACTIVE_STATUSES,
@@ -40,10 +42,6 @@ from consts import (
 from API.BINANCE.public import BinancePublic
 
 logger = UnifiedLogger("DelistingDetector")
-
-# Binance отдаёт deliveryDate в миллисекундах; внутри группы работаем в секундах (Rule 6).
-MS_PER_SEC = 1000
-SEC_PER_HOUR = 3600.0
 
 # Регэксп тикеров компилируется один раз из конфига (Rule 3).
 _NEWS_TICKER_RE = re.compile(DELISTING_NEWS_TICKER_REGEX)
@@ -66,7 +64,7 @@ def _fmt_eta(sec: Optional[float]) -> str:
     """Человекочитаемый остаток до делистинга (секунды -> часы)."""
     if sec is None:
         return "неизвестно (новостной сигнал)"
-    return f"≈{max(sec, 0.0) / SEC_PER_HOUR:.2f}ч"
+    return f"≈{max(sec, 0.0) / DELISTING_SEC_PER_HOUR:.2f}ч"
 
 
 class DelistingDetector:
@@ -170,7 +168,7 @@ class DelistingDetector:
                 delivery_ms = _safe_int(item.get("deliveryDate"))
                 if delivery_ms is None:
                     continue
-                delivery_sec = delivery_ms / MS_PER_SEC
+                delivery_sec = delivery_ms / DELISTING_MS_PER_SEC
                 if now_sec < delivery_sec <= now_sec + self.delivery_horizon_sec:
                     signals[sym] = {
                         "reason": "DELIST_SCHEDULED",
