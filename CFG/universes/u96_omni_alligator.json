@@ -172,6 +172,13 @@
                 "relaxed_exit_floor_usdt": 15.0
             },
             "trailing_ratchet": {
+                "transfer_profit_to_spot": {
+                    "enabled": true,
+                    "transfer_profit_pct": 100.0,
+                    "min_transfer_usdt": 1.0,
+                    "asset": "USDT",
+                    "_desc": "Автоматический перевод чистой прибыли закрытой итерации с USDⓈ-M Futures на Spot (UMFUTURE_MAIN) при срабатывании храповика trailing_ratchet. transfer_profit_pct задается в процентах от ста (например, 100.0 для перевода 100% профита итерации, 50.0 для 50%)."
+                },
                 "levels": [
                     {
                         "activation": 13.0,

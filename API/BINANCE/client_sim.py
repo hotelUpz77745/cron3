@@ -1,6 +1,3 @@
-# C:\Users\user\Desktop\My_Pro\HP_EliteBook_735_old\MY\HRON_3\cron3\API\BINANCE\client_sim.py
-# Role: client_sim.py module
-
 # ==============================================================================
 # Path: API/BINANCE/client_sim.py
 # Role: Высокоточный симулированный клиент Binance Futures (In-Memory Match Engine для бэктестов)
@@ -87,6 +84,8 @@ class SimulatedBinanceClient:
         self.peak_balance: float = float(start_balance_usdt)
         self.max_drawdown_usdt: float = 0.0
         self.trade_fills_count: int = 0
+        self.spot_balance: float = 0.0
+        self.total_transferred_to_spot_usdt: float = 0.0
         self.on_fill_callback: Optional[Any] = None
 
     @property
@@ -192,71 +191,38 @@ class SimulatedBinanceClient:
         return APIResponse(success=True, data={"canceled": canceled})
 
     async def make_order(
-        self,
-        symbol: str,
-        qty: float,
-        side: str,
-        position_side: str,
-        market_type: str = "MARKET",
-        price: Optional[float] = None,
-        reduce_only: bool = False,
-        concurrent_mode: bool = False
+        self, symbol: str, qty: float, side: str, position_side: str,
+        market_type: str = "MARKET", price: Optional[float] = None,
+        reduce_only: bool = False, concurrent_mode: bool = False
     ) -> APIResponse:
-        sym_u = symbol.upper()
-        side_u = side.upper()
-        pos_side_u = position_side.upper()
-        qty_abs = abs(float(qty))
-
+        sym_u, side_u, pos_side_u, qty_abs = symbol.upper(), side.upper(), position_side.upper(), abs(float(qty))
         if qty_abs <= 0:
             return APIResponse(success=False, error_code=-1013, error_msg="Filter failure: LOT_SIZE qty <= 0")
 
         self._next_order_id += 1
         oid = self._next_order_id
-
         order = SimOrder(
-            order_id=oid,
-            symbol=sym_u,
-            side=side_u,
-            position_side=pos_side_u,
-            order_type=market_type.upper(),
-            qty=qty_abs,
-            price=float(price or 0.0),
-            reduce_only=reduce_only,
-            created_ts=self.current_sim_time,
+            order_id=oid, symbol=sym_u, side=side_u, position_side=pos_side_u,
+            order_type=market_type.upper(), qty=qty_abs, price=float(price or 0.0),
+            reduce_only=reduce_only, created_ts=self.current_sim_time,
         )
 
         if market_type.upper() == "MARKET":
             # Исполнение немедленно по текущей рыночной цене
-            cur_price = self.current_prices.get(sym_u, 0.0)
-            if cur_price <= 0:
-                cur_price = order.price if order.price > 0 else 100.0
-
+            cur_price = self.current_prices.get(sym_u, 0.0) or (order.price if order.price > 0 else 100.0)
             success, err = self._execute_fill(order, fill_price=cur_price, fill_ts=self.current_sim_time)
             if not success:
                 return APIResponse(success=False, error_code=-2010, error_msg=err or "Insufficient margin")
-
             return APIResponse(
                 success=True,
-                data={
-                    "orderId": oid,
-                    "symbol": sym_u,
-                    "status": "FILLED",
-                    "executedQty": str(qty_abs),
-                    "avgPrice": str(cur_price),
-                }
+                data={"orderId": oid, "symbol": sym_u, "status": "FILLED", "executedQty": str(qty_abs), "avgPrice": str(cur_price)}
             )
         else:
             # LIMIT ордер ставится в стакан
             self.open_orders[oid] = order
             return APIResponse(
                 success=True,
-                data={
-                    "orderId": oid,
-                    "symbol": sym_u,
-                    "status": "NEW",
-                    "price": str(order.price),
-                    "origQty": str(qty_abs),
-                }
+                data={"orderId": oid, "symbol": sym_u, "status": "NEW", "price": str(order.price), "origQty": str(qty_abs)}
             )
 
     _historical_klines_loaded = False
@@ -314,73 +280,30 @@ class SimulatedBinanceClient:
         val = self._precomputed_atr.get(key_s)
         return float(val) if val is not None else None
 
-    def get_precomputed_trend(self, symbol: str, timeframe: str, sma_fast: int = 10, sma_slow: int = 30) -> Optional[str]:
-        self._ensure_historical_klines()
-        if not self._precomputed_trends:
-            return None
-        cur_ts = int(self.current_sim_time)
-        if not cur_ts:
-            return None
-        tf = str(timeframe).lower().strip()
-        if "4h" in tf:
-            bucket_ts = (cur_ts // 14400000) * 14400000
-        elif "1d" in tf or tf == "d":
-            bucket_ts = (cur_ts // 86400000) * 86400000
-        else:
-            bucket_ts = (cur_ts // 3600000) * 3600000
-        if sma_fast != 10 or sma_slow != 30:
-            key_custom = f"{symbol.upper().strip()}|{tf}_{sma_fast}_{sma_slow}|{bucket_ts}"
-            if key_custom in self._precomputed_trends:
-                return self._precomputed_trends[key_custom]
-        key = f"{symbol.upper().strip()}|{tf}|{bucket_ts}"
-        return self._precomputed_trends.get(key)
-
     async def get_klines(self, symbol: str, interval: str, limit: int = 35) -> List[Dict[str, Any]]:
-        """
-        Возвращает исторические свечи (OHLCV) строго на виртуальное время симуляции.
-        Исключает заглядывание в будущее и обеспечивает 100% паритет с боевым ботом.
-        """
+        """Возвращает исторические свечи (OHLCV) строго на виртуальное время симуляции."""
         self._ensure_historical_klines()
-        sym_u = symbol.upper().strip()
-        cur_ts = int(self.current_sim_time)
-        cur_p = self.current_prices.get(sym_u, 0.0)
-
-        # 1. Свечи, сформированные на лету из входящего потока тиков
+        sym_u, cur_ts, cur_p = symbol.upper().strip(), int(self.current_sim_time), self.current_prices.get(symbol.upper().strip(), 0.0)
         dyn_bars = getattr(self, "_completed_hourly_bars", {}).get(sym_u, [])
-        # 2. Свечи из precomputed файла (если доступны)
         file_bars = [
             (int(b.get("open_time", 0)), float(b["close"]))
             for b in self._sim_1h.get(sym_u, [])
             if int(b.get("open_time", 0)) + 3600000 <= cur_ts
         ] if self._sim_1h.get(sym_u) else []
-        
         sim_bars = file_bars if file_bars else dyn_bars
 
         interval_str = str(interval).lower().strip()
         if interval_str == "1h":
-            warm = list(self._warmup_1h.get(sym_u, []))
-            closes = warm + [b[1] for b in sim_bars]
-            if cur_p > 0:
-                closes.append(cur_p)
-            return [{"close": float(c)} for c in closes[-limit:]]
-
+            closes = list(self._warmup_1h.get(sym_u, [])) + [b[1] for b in sim_bars]
         elif interval_str == "4h":
-            warm = list(self._warmup_4h.get(sym_u, []))
-            sim_4h = [b[1] for b in sim_bars if (b[0] + 3600000) % 14400000 == 0]
-            closes = warm + sim_4h
-            if cur_p > 0:
-                closes.append(cur_p)
-            return [{"close": float(c)} for c in closes[-limit:]]
-
+            closes = list(self._warmup_4h.get(sym_u, [])) + [b[1] for b in sim_bars if (b[0] + 3600000) % 14400000 == 0]
         elif interval_str in ("1d", "d"):
-            warm = list(self._warmup_1d.get(sym_u, []))
-            sim_1d = [b[1] for b in sim_bars if (b[0] + 3600000) % 86400000 == 0]
-            closes = warm + sim_1d
-            if cur_p > 0:
-                closes.append(cur_p)
-            return [{"close": float(c)} for c in closes[-limit:]]
-
-        return []
+            closes = list(self._warmup_1d.get(sym_u, [])) + [b[1] for b in sim_bars if (b[0] + 3600000) % 86400000 == 0]
+        else:
+            return []
+        if cur_p > 0:
+            closes.append(cur_p)
+        return [{"close": float(c)} for c in closes[-limit:]]
 
     # ==================================================
     # MATCH ENGINE & TICK INGESTION
@@ -434,11 +357,11 @@ class SimulatedBinanceClient:
                 if success:
                     del self.open_orders[oid]
 
-        # Непрерывный мониторинг пика эквити и максимальной просадки
-        cur_equity = self.get_equity()
-        if cur_equity > self.peak_balance:
-            self.peak_balance = cur_equity
-        dd = self.peak_balance - cur_equity
+        # Непрерывный мониторинг пика эквити и максимальной просадки (с учетом выведенного на спот профита)
+        cur_total_equity = self.get_total_equity()
+        if cur_total_equity > self.peak_balance:
+            self.peak_balance = cur_total_equity
+        dd = self.peak_balance - cur_total_equity
         if dd > self.max_drawdown_usdt:
             self.max_drawdown_usdt = dd
 
@@ -502,11 +425,11 @@ class SimulatedBinanceClient:
             except Exception as e:
                 logger.error(f"[SimulatedBinanceClient] on_fill_callback error: {e}")
 
-        # Обновление пика баланса и просадки
-        cur_equity = self.get_equity()
-        if cur_equity > self.peak_balance:
-            self.peak_balance = cur_equity
-        dd = self.peak_balance - cur_equity
+        # Обновление пика баланса и просадки (с учетом выведенного на спот профита)
+        cur_total_equity = self.get_total_equity()
+        if cur_total_equity > self.peak_balance:
+            self.peak_balance = cur_total_equity
+        dd = self.peak_balance - cur_total_equity
         if dd > self.max_drawdown_usdt:
             self.max_drawdown_usdt = dd
 
@@ -525,15 +448,84 @@ class SimulatedBinanceClient:
         unrealized = sum(self._calc_unrealized_pnl(p) for p in self.positions.values())
         return self.balance + unrealized
 
+    def get_total_equity(self) -> float:
+        """Совокупное эквити (фьючерсный баланс + нереализованный PnL + переведенный на спот профит)."""
+        return self.get_equity() + self.spot_balance
+
     def get_free_margin(self) -> float:
         margin_used = sum((p.qty * p.entry_price) / p.leverage for p in self.positions.values() if p.qty > 0)
         return max(0.0, self.get_equity() - margin_used)
 
+    async def transfer_futures_to_spot(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """
+        Эмуляция перевода средств с USDⓈ-M Futures на Spot в симуляторе бэктеста.
+        Реально списывает средства с фьючерсного баланса (self.balance) и зачисляет на self.spot_balance.
+        """
+        amt = round(float(amount), 2)
+        if amt <= 0.0:
+            return APIResponse(success=False, error_code=-1, error_msg=f"Invalid transfer amount: {amount}")
+
+        avail = round(min(self.balance, self.get_free_margin()), 2)
+        if avail <= 0.0:
+            return APIResponse(
+                success=False,
+                error_code=-3005,
+                error_msg=f"Insufficient free margin on Futures for transfer (requested {amt:.2f}, available {avail:.2f})",
+            )
+
+        actual_amt = min(amt, avail)
+        self.balance = round(self.balance - actual_amt, 4)
+        self.spot_balance = round(self.spot_balance + actual_amt, 4)
+        self.total_transferred_to_spot_usdt = round(self.total_transferred_to_spot_usdt + actual_amt, 4)
+
+        self._next_order_id += 1
+        tran_id = self._next_order_id
+        logger.info(
+            f"✅ [SIM_TRANSFER] UMFUTURE_MAIN: {actual_amt:.2f} {asset} "
+            f"(futures_balance={self.balance:.2f}, spot_balance={self.spot_balance:.2f})"
+        )
+        return APIResponse(
+            success=True,
+            data={
+                "tranId": tran_id,
+                "amount": actual_amt,
+                "asset": asset,
+                "futures_balance": self.balance,
+                "spot_balance": self.spot_balance,
+            },
+            meta={"simulated": True},
+        )
+
+    async def transfer_spot_to_futures(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """Эмуляция обратного перевода со Spot на USDⓈ-M Futures."""
+        amt = round(float(amount), 2)
+        if amt <= 0.0 or amt > self.spot_balance:
+            return APIResponse(
+                success=False,
+                error_code=-1,
+                error_msg=f"Insufficient spot balance (requested {amt:.2f}, spot {self.spot_balance:.2f})",
+            )
+        self.spot_balance = round(self.spot_balance - amt, 4)
+        self.balance = round(self.balance + amt, 4)
+        self._next_order_id += 1
+        return APIResponse(
+            success=True,
+            data={
+                "tranId": self._next_order_id,
+                "amount": amt,
+                "asset": asset,
+                "futures_balance": self.balance,
+                "spot_balance": self.spot_balance,
+            },
+            meta={"simulated": True},
+        )
+
     def get_performance_stats(self) -> Dict[str, Any]:
-        equity = self.get_equity()
-        realized_pnl = self.balance - self.initial_balance
-        floating_pnl = equity - self.balance
-        net_profit = equity - self.initial_balance
+        futures_equity = self.get_equity()
+        total_equity = self.get_total_equity()
+        realized_pnl = (self.balance + self.spot_balance) - self.initial_balance
+        floating_pnl = futures_equity - self.balance
+        net_profit = total_equity - self.initial_balance
         roi_pct = (net_profit / self.initial_balance) * 100.0 if self.initial_balance > 0 else 0.0
         peak_gain = max(0.0, self.peak_balance - self.initial_balance)
         max_dd = self.max_drawdown_usdt
@@ -542,10 +534,13 @@ class SimulatedBinanceClient:
         return {
             "initial_balance": self.initial_balance,
             "wallet_balance": round(self.balance, 2),
-            "final_balance": round(self.balance, 2),
+            "spot_balance": round(self.spot_balance, 2),
+            "total_transferred_to_spot_usdt": round(self.total_transferred_to_spot_usdt, 2),
+            "final_balance": round(self.balance + self.spot_balance, 2),
             "realized_pnl": round(realized_pnl, 2),
             "floating_pnl": round(floating_pnl, 2),
-            "equity": round(equity, 2),
+            "equity": round(total_equity, 2),
+            "futures_equity": round(futures_equity, 2),
             "peak_balance": round(self.peak_balance, 2),
             "net_profit": round(net_profit, 2),
             "roi_pct": round(roi_pct, 2),
@@ -559,40 +554,24 @@ class SimulatedBinanceClient:
     _precomputed_trends_db: Optional[Dict[str, str]] = None
 
     def get_precomputed_trend(
-        self,
-        symbol: str,
-        timeframe: str = "4h",
-        sma_fast: int = 10,
-        sma_slow: int = 30
+        self, symbol: str, timeframe: str = "4h", sma_fast: int = 10, sma_slow: int = 30
     ) -> Optional[str]:
         """Мгновенный O(1) доступ к предрасчитанным EMA трендам для сверхбыстрого макро-шлюза в бэктестере."""
         if SimulatedBinanceClient._precomputed_trends_db is None:
             trends_path = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA" / "precomputed_ema_trends.json"
-            if trends_path.exists():
-                try:
-                    with open(trends_path, "r", encoding="utf-8") as f:
-                        SimulatedBinanceClient._precomputed_trends_db = json.load(f)
-                except Exception:
-                    SimulatedBinanceClient._precomputed_trends_db = {}
-            else:
+            try:
+                SimulatedBinanceClient._precomputed_trends_db = json.loads(trends_path.read_text(encoding="utf-8")) if trends_path.exists() else {}
+            except Exception:
                 SimulatedBinanceClient._precomputed_trends_db = {}
 
-        sym_u = symbol.upper().strip()
-        ts_ms = int(self.current_sim_time * 1000) if self.current_sim_time > 0 else 0
-        if ts_ms <= 0:
+        if self.current_sim_time <= 0:
             return None
-
+        ts_ms = int(self.current_sim_time) if self.current_sim_time > 1e11 else int(self.current_sim_time * 1000)
         tf = timeframe.lower()
-        if "1d" in tf:
-            bin_ms = 86400000
-        elif "4h" in tf:
-            bin_ms = 14400000
-        else:
-            bin_ms = 3600000
-
-        bin_ts = ts_ms // bin_ms * bin_ms
+        bin_ms = 86400000 if "1d" in tf else (14400000 if "4h" in tf else 3600000)
+        bin_ts = (ts_ms // bin_ms) * bin_ms
         suffix = "_7_25" if (sma_fast == 7 and sma_slow == 25) else ""
-        key = f"{sym_u}|{timeframe}{suffix}|{bin_ts}"
+        key = f"{symbol.upper().strip()}|{timeframe}{suffix}|{bin_ts}"
         return SimulatedBinanceClient._precomputed_trends_db.get(key)
 
 

@@ -17,6 +17,7 @@ if str(_ROOT) not in sys.path:
 from consts import CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.SERVICES.profit_transfer_service import ProfitTransferService
 
 logger = UnifiedLogger("DomeCloserExecutor")
 
@@ -72,6 +73,22 @@ class DomeCloserExecutor:
             EmergencyStopManager.set_active(emergency_details)
             logger.critical(f"[DOME_CLOSER_EXECUTOR][{strat_id}] 🛑 АВАРИЙНЫЙ СТОП-КРАН: Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False)!")
 
+        # 1.2 Автоматический перевод профита итерации с Futures на Spot при срабатывании trailing_ratchet
+        close_type_parsed = (
+            action_msg.split("(")[1].split(")")[0]
+            if (action_msg and "(" in action_msg and ")" in action_msg)
+            else ("PORTFOLIO AUTO-CLOSE" if is_global else "AUTO-CLOSE")
+        )
+        transfer_res: Optional[Dict[str, Any]] = None
+        if not is_emergency_stop:
+            transfer_res = await ProfitTransferService.execute_on_ratchet_close(
+                bot_core=bot_core,
+                strat_id=strat_id,
+                strat_cfg=strat_cfg,
+                iter_net_usdt=iter_net,
+                close_type=close_type_parsed,
+            )
+
         # 2. Сброс трейлинг-храповика
         if strat_id in trailing_ratchet_state:
             trailing_ratchet_state[strat_id] = {}
@@ -126,18 +143,19 @@ class DomeCloserExecutor:
         # 5. Оповещение FSM
         fsm = getattr(getattr(bot_core, "analytics", None), "fsm", None)
         if fsm:
-            c_type = "PORTFOLIO AUTO-CLOSE" if is_global else (
-                action_msg.split("(")[1].split(")")[0] if "(" in action_msg else "AUTO-CLOSE"
-            )
+            c_type = "PORTFOLIO AUTO-CLOSE" if is_global else close_type_parsed
+            fsm_details: Dict[str, Any] = {
+                "close_type": c_type,
+                "iter_net": iter_net,
+                "strat_net": settled_net,
+                "settled_realized": settled_realized,
+            }
+            if transfer_res is not None:
+                fsm_details["spot_transfer"] = transfer_res
             fsm.mark_iteration_closed(
                 strat_id=strat_id,
                 iter_idx=iter_idx,
-                details={
-                    "close_type": c_type,
-                    "iter_net": iter_net,
-                    "strat_net": settled_net,
-                    "settled_realized": settled_realized,
-                },
+                details=fsm_details,
             )
 
         # 6. Сброс recent_closes
@@ -153,4 +171,6 @@ class DomeCloserExecutor:
         Utils.write_json_file(app_json_path, app_data)
         if action_msg and getattr(bot_core, "notifier", None):
             final_msg = action_msg.replace("базовая точка Net: <b>0.00 USDT</b>", f"базовая точка Net: <b>{settled_net:+.2f} USDT</b>")
+            if transfer_res and transfer_res.get("alert_line"):
+                final_msg = f"{final_msg}\n\n{transfer_res['alert_line']}"
             await bot_core.notifier.send_alert(final_msg)

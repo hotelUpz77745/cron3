@@ -216,6 +216,11 @@ class StrategyConfig:
         return self.cross_recycling_cfg
 
     @property
+    def transfer_profit_to_spot_cfg(self) -> Dict[str, Any]:
+        from CORE.SERVICES.profit_transfer_service import ProfitTransferService
+        return ProfitTransferService.extract_transfer_config(self)
+
+    @property
     def modes(self) -> List[str]:
         """Обратная совместимость: возвращает список с текущим строковым режимом."""
         return [self.mode]

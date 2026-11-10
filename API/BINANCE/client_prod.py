@@ -25,6 +25,7 @@ from c_log import UnifiedLogger
 from API.BINANCE.validator import OrderValidator, APIResponse
 from API.BINANCE.leverage_manager import LeverageManager
 from API.BINANCE.income_collector import IncomeCollector, KlineFetcher
+from API.BINANCE.transfer_manager import TransferManager, UNIVERSAL_TRANSFER_ENDPOINT
 
 logger = UnifiedLogger("BINANCE_API_PROD")
 
@@ -56,6 +57,7 @@ class BinanceClient:
         self.leverage_bracket_url = "https://fapi.binance.com/fapi/v1/leverageBracket"
         self.open_orders_url  = "https://fapi.binance.com/fapi/v1/openOrders"
         self.income_url       = "https://fapi.binance.com/fapi/v1/income"
+        self.universal_transfer_url = UNIVERSAL_TRANSFER_ENDPOINT
 
         # Session manager
         self._session: Optional[aiohttp.ClientSession] = None
@@ -499,3 +501,14 @@ class BinanceClient:
     ) -> Optional[List[dict]]:
         """Загрузка исторических свечей (klines)."""
         return await KlineFetcher.get_klines(self, symbol, interval, limit)
+
+    # ==================================================
+    # ASSET TRANSFER (FUTURES <-> SPOT)
+    # ==================================================
+    async def transfer_futures_to_spot(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """Перевод средств с USDⓈ-M Futures на Spot (UMFUTURE_MAIN)."""
+        return await TransferManager.transfer_futures_to_spot(self, amount=amount, asset=asset)
+
+    async def transfer_spot_to_futures(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """Перевод средств со Spot на USDⓈ-M Futures (MAIN_UMFUTURE)."""
+        return await TransferManager.transfer_spot_to_futures(self, amount=amount, asset=asset)

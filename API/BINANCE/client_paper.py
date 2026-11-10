@@ -49,6 +49,8 @@ class BinanceClient:
 
         self._kline_lock = asyncio.Lock()
         self._kline_last_send = 0.0
+        self.spot_balance: float = 0.0
+        self.total_transferred_to_spot_usdt: float = 0.0
 
     # ==================================================
     # SESSION MANAGER
@@ -360,3 +362,36 @@ class BinanceClient:
             err_msg = str(e) or repr(e)
             logger.error(f"[{symbol}] Exception in get_klines: {type(e).__name__} ({err_msg})")
             return None
+
+    # ==================================================
+    # ASSET TRANSFER (PAPER / VIRTUAL)
+    # ==================================================
+    async def transfer_futures_to_spot(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """Виртуальный перевод с USDⓈ-M Futures на Spot в режиме Paper Trading."""
+        await asyncio.sleep(0)
+        amt = round(float(amount), 2)
+        if amt <= 0.0:
+            return APIResponse(success=False, error_code=-1, error_msg=f"Invalid transfer amount: {amount}")
+        self.spot_balance = round(self.spot_balance + amt, 2)
+        self.total_transferred_to_spot_usdt = round(self.total_transferred_to_spot_usdt + amt, 2)
+        tran_id = int(time.time() * 1000)
+        logger.info(f"✅ [PAPER_TRANSFER] UMFUTURE_MAIN: {amt:.2f} {asset} (spot_balance={self.spot_balance:.2f})")
+        return APIResponse(
+            success=True,
+            data={"tranId": tran_id, "amount": amt, "asset": asset, "spot_balance": self.spot_balance},
+            meta={"paper_trading": True},
+        )
+
+    async def transfer_spot_to_futures(self, amount: float, asset: str = "USDT") -> APIResponse:
+        """Виртуальный перевод со Spot на USDⓈ-M Futures в режиме Paper Trading."""
+        await asyncio.sleep(0)
+        amt = round(float(amount), 2)
+        if amt <= 0.0:
+            return APIResponse(success=False, error_code=-1, error_msg=f"Invalid transfer amount: {amount}")
+        self.spot_balance = round(max(0.0, self.spot_balance - amt), 2)
+        tran_id = int(time.time() * 1000)
+        return APIResponse(
+            success=True,
+            data={"tranId": tran_id, "amount": amt, "asset": asset, "spot_balance": self.spot_balance},
+            meta={"paper_trading": True},
+        )

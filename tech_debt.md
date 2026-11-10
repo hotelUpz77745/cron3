@@ -1726,3 +1726,31 @@ CFG/universes/u96_omni_zenith13.json
 - **Размер кода**: Все 6 файлов укладываются в диапазон 35–303 строк (жесткий лимит 600 строк и золотой стандарт 150–450 строк полностью соблюдены).
 - **Синхронизация**: `cron3TradeBacktest/ENGINE/coin_grid_analytics.py` преобразован в легковесный форвардер к `CORE.SERVICES.coin_grid_analytics`, устранив дублирование 657 строк между репозиториями.
 - **Тестовое покрытие**: Все 6 модульных тестов (`tests/test_coin_grid_analytics.py`), включая новые тесты динамической загрузки схемы без рассинхрона и фиксации SL 130%, проходят со 100% успехом.
+
+---
+
+### 10. Автоматический перевод профита итерации `trailing_ratchet` с Futures на Spot (ADR-26)
+
+#### 1. Контекст и Бизнес-задача:
+- При срабатывании храповика `trailing_ratchet` и закрытии купола в плюс заработанный чистый профит итерации (`iter_net`) оставался на фьючерсном балансе USDⓈ-M, участвуя в маржинальном обеспечении следующих циклов.
+- Требовалось реализовать конфигурируемый на уровне паспорта стратегии механизм автоматического вывода зафиксированного профита итерации с фьючерсного счета на спотовый кошелек (`UMFUTURE_MAIN`), а также его полную бумажную эмуляцию в симуляторе бэктеста (`SimulatedBinanceClient`).
+
+#### 2. Архитектурное решение (SRP, Протокол Самсонова):
+1. **Конфигурация в шаблонах вселенных (`CFG/universes/*.json`)**:
+   - В блок `auto_closing.positive.trailing_ratchet` всех трех канонических шаблонов (`u96_omni_zenith13.json`, `u96_omni_zenith13atr.json`, `u96_omni_alligator.json`) добавлен узел `transfer_profit_to_spot`:
+     ```json
+     "transfer_profit_to_spot": {
+         "enabled": true,
+         "transfer_profit_pct": 100.0,
+         "min_transfer_usdt": 1.0,
+         "asset": "USDT"
+     }
+     ```
+   - Строго соблюдена семантика суффикса `_pct` (Правило 5): `transfer_profit_pct: 100.0` означает 100% от чистого профита закрытой итерации (`50.0` — 50%).
+2. **Транспортный слой Binance API ([`API/BINANCE/transfer_manager.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/transfer_manager.py))**:
+   - Изолирован `TransferManager` для вызовов SAPI эндпоинта `POST https://api.binance.com/sapi/v1/asset/transfer` (`type="UMFUTURE_MAIN"` и `type="MAIN_UMFUTURE"`) с округлением суммы вниз (`ROUND_DOWN` до 2 знаков).
+   - Интегрированы делегаты `transfer_futures_to_spot` и `transfer_spot_to_futures` в `client_prod.py`, `client_paper.py` и `client_sim.py`.
+   - В `SimulatedBinanceClient` (`client_sim.py`) вывод профита реально списывается с фьючерсного баланса `self.balance` (уменьшая свободную маржу `get_free_margin()`) и начисляется на `self.spot_balance`. Расчет просадки (`max_drawdown_usdt`) и совокупного эквити (`get_total_equity()`) учитывает `self.spot_balance`, исключая ложные скачки просадки при переводе средств между своими кошельками.
+3. **Сервисный слой ([`CORE/SERVICES/profit_transfer_service.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/SERVICES/profit_transfer_service.py))**:
+   - `ProfitTransferService` извлекает настройки с учетом иерархии оверрайдов (`CFG/universes/*.json` -> `CFG/app.json`), рассчитывает сумму к переводу и безопасно исполняет трансфер в `DomeCloserExecutor.execute_close` и `BacktestBotCore.check_auto_closing` сразу после рыночного закрытия позиций купола, добавляя строку отчета в Telegram-уведомление.
+
