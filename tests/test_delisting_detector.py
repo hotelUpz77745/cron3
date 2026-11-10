@@ -137,6 +137,17 @@ class TestDelistingDetector(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(res["ERAUSDT"]["reason"], "NEWS_DELIST")
         self.assertNotIn("BTCUSDT", res)
 
+    async def test_news_fetch_uses_adapter_and_extracts_tickers(self):
+        det = self._make(("ERAUSDT",))
+        articles = [{"code": "ARTICLE1"}]
+        detail = {"title": "Binance Futures Will Delist ERAUSDT Perpetual", "body": "Trading stops."}
+        with patch.object(BinancePublic, "get_cms_articles", new=AsyncMock(return_value=articles)) as m_cat:
+            with patch.object(BinancePublic, "get_cms_article_detail", new=AsyncMock(return_value=detail)):
+                found = await det._fetch_news_delistings()
+
+        m_cat.assert_awaited_once()
+        self.assertEqual(found, {"ERAUSDT"})
+
     async def test_backtest_is_noop(self):
         det = self._make(("BTCUSDT",))
         with patch.dict(os.environ, {"CRON3_BACKTEST": "1"}):
