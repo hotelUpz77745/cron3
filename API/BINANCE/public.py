@@ -24,22 +24,26 @@ def is_valid_symbol(symbol: Any) -> bool:
 class BinancePublic:
     BASE_URL = "https://fapi.binance.com"
 
+    # Новостной CMS Binance (домен www, не fapi) — константы адаптера, не конфига.
+    CMS_BASE_URL = "https://www.binance.com"
+    CMS_CATALOG_PATH = "/bapi/composite/v1/public/cms/article/catalog/list/query"
+    CMS_DETAIL_PATH = "/bapi/composite/v1/public/cms/article/detail/query"
+
     # ==================================================
     # INTERNAL GET
     # ==================================================
     @staticmethod
-    async def _get(
-        path: str,
+    async def _get_url(
+        url: str,
         params: Optional[Dict[str, Any]] = None,
+        timeout_sec: float = 10,
     ) -> Optional[Any]:
-        """Внутренний GET для публичных запросов."""
+        """Внутренний GET по абсолютному URL для публичных запросов."""
         if os.environ.get("CRON3_BACKTEST") == "1":
             return None
 
-        url = BinancePublic.BASE_URL + path
-
         try:
-            timeout = aiohttp.ClientTimeout(total=10)
+            timeout = aiohttp.ClientTimeout(total=timeout_sec)
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.get(url, params=params) as resp:
                     if resp.status != 200:
@@ -48,6 +52,14 @@ class BinancePublic:
 
         except Exception:
             return None
+
+    @staticmethod
+    async def _get(
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Any]:
+        """Внутренний GET для публичных запросов из BASE_URL."""
+        return await BinancePublic._get_url(BinancePublic.BASE_URL + path, params=params)
 
     # ==================================================
     # PUBLIC ENDPOINTS
@@ -188,4 +200,38 @@ class BinancePublic:
                 except Exception:
                     continue
             return out
+        return None
+
+    # ==================================================
+    # PUBLIC CMS (news) ENDPOINTS
+    # ==================================================
+    @staticmethod
+    async def get_cms_articles(
+        catalog_id: int,
+        page_no: int,
+        page_size: int,
+        timeout_sec: float,
+    ) -> Optional[List[Dict]]:
+        """GET CMS Binance: список анонсов каталога. Возвращает сырой список статей или None."""
+        data = await BinancePublic._get_url(
+            BinancePublic.CMS_BASE_URL + BinancePublic.CMS_CATALOG_PATH,
+            params={"catalogId": catalog_id, "pageNo": page_no, "pageSize": page_size},
+            timeout_sec=timeout_sec,
+        )
+        if isinstance(data, dict):
+            articles = (data.get("data") or {}).get("articles")
+            if isinstance(articles, list):
+                return articles
+        return None
+
+    @staticmethod
+    async def get_cms_article_detail(article_code: str, timeout_sec: float) -> Optional[Dict]:
+        """GET CMS Binance: детальная статья анонса по коду. Возвращает payload статьи или None."""
+        data = await BinancePublic._get_url(
+            BinancePublic.CMS_BASE_URL + BinancePublic.CMS_DETAIL_PATH,
+            params={"articleCode": article_code},
+            timeout_sec=timeout_sec,
+        )
+        if isinstance(data, dict) and isinstance(data.get("data"), dict):
+            return data["data"]
         return None
