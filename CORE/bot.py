@@ -523,6 +523,12 @@ class BotCore:
             logger.error(f"Error saving FSM snapshot during shutdown: {e}")
 
         try:
+            if getattr(self, "delisting_detector", None):
+                await self.delisting_detector.stop()
+        except Exception:
+            pass
+
+        try:
             if self.client:
                 await self.client.shutdown()
         except Exception:

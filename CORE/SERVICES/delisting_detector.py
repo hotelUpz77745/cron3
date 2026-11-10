@@ -91,6 +91,8 @@ class DelistingDetector:
         self._cached: Dict[str, dict] = {}
         self._warned: Set[str] = set()
         self._closed: Set[str] = set()
+        self._parsed_article_codes: Set[str] = set()
+        self._news_delisted_symbols: Set[str] = set()
 
     # ============================ life-cycle ============================
     async def start(self) -> None:
@@ -183,10 +185,9 @@ class DelistingDetector:
         return signals
 
     async def _fetch_news_delistings(self) -> Set[str]:
-        """Через API-адаптер читает новостной CMS Binance и извлекает тикеры-кандидаты (монеты обоймы)."""
+        """Через API-адаптер читает новостной CMS Binance и извлекает тикеры-кандидаты (с кэшированием проверенных статей)."""
         if _is_backtest():
             return set()
-        found: Set[str] = set()
         try:
             articles = await BinancePublic.get_cms_articles(
                 DELISTING_NEWS_CATALOG_ID,
@@ -195,26 +196,33 @@ class DelistingDetector:
                 DELISTING_NEWS_HTTP_TIMEOUT_SEC,
             )
             if not articles:
-                return found
+                return set(self._news_delisted_symbols)
             for art in articles:
-                code = (art or {}).get("code")
-                if not code:
+                if not isinstance(art, dict):
+                    continue
+                code = art.get("code")
+                if not code or code in self._parsed_article_codes:
+                    continue
+                cat_title = str(art.get("title") or "")
+                if cat_title and not any(kw in cat_title.lower() for kw in DELISTING_NEWS_KEYWORDS):
+                    self._parsed_article_codes.add(code)
                     continue
                 payload = await BinancePublic.get_cms_article_detail(code, DELISTING_NEWS_HTTP_TIMEOUT_SEC)
                 if not payload:
                     continue
-                title = str(payload.get("title") or "")
+                title = str(payload.get("title") or cat_title)
                 body = str(payload.get("body") or "")
+                self._parsed_article_codes.add(code)
                 if not any(kw in title.lower() for kw in DELISTING_NEWS_KEYWORDS):
                     continue
                 for token in _NEWS_TICKER_RE.findall(f"{title} {body}"):
                     if token in DELISTING_NEWS_TICKER_STOPWORDS:
                         continue
                     base = token[: -len(DELISTING_QUOTE_ASSET)] if token.endswith(DELISTING_QUOTE_ASSET) else token
-                    found.add(f"{base}{DELISTING_QUOTE_ASSET}")
+                    self._news_delisted_symbols.add(f"{base}{DELISTING_QUOTE_ASSET}")
         except Exception as e:
             logger.warning(f"[DELISTING] Ошибка разбора новостей Binance: {e}")
-        return found
+        return set(self._news_delisted_symbols)
 
     # ============================ reaction ============================
     async def _check_once(self) -> None:
@@ -267,52 +275,65 @@ class DelistingDetector:
             f"Причина: {reason} (status={info.get('status', '')}), осталось: {_fmt_eta(time_left_sec)}."
         )
         client = self._client_for(sym)
+        closing_set = getattr(self.bot, "_closing_symbols", None)
+        if isinstance(closing_set, set):
+            closing_set.add(sym)
+        states = getattr(self.bot, "fsm_states", None)
+        if isinstance(states, dict) and sym in states and isinstance(states[sym], dict):
+            for s_side in ("LONG", "SHORT"):
+                st = states[sym].get(s_side)
+                if st is not None:
+                    st.is_closing = True
 
-        # 1. Отмена всех отложенных лимитных ордеров
         try:
-            async with self._symbol_lock(sym):
-                await client.cancel_all_orders(sym)
-            logger.info(f"[DELISTING][{sym}] Все лимитные ордера сняты.")
-        except Exception as e:
-            logger.error(f"[DELISTING][{sym}] Ошибка отмены ордеров: {e}")
-
-        # 2. Мгновенная рыночная ликвидация открытых позиций
-        try:
-            positions = await client.fetch_positions()
-            for p in positions or []:
-                if not isinstance(p, dict):
-                    continue
-                if (p.get("symbol") or "").upper() != sym:
-                    continue
-                amt_raw = p.get("positionAmt")
-                if amt_raw is None:
-                    continue
-                amt = float(amt_raw)
-                if abs(amt) <= FLOAT_ZERO_EPSILON:
-                    continue
-                pos_side = p.get("positionSide")
-                order_side = "SELL" if pos_side == "LONG" else "BUY"
-                logger.critical(f"[DELISTING][{sym}] Рыночное закрытие {pos_side} позиции: Qty {abs(amt)}")
+            # 1. Отмена всех отложенных лимитных ордеров
+            try:
                 async with self._symbol_lock(sym):
-                    await client.make_order(
-                        symbol=sym,
-                        qty=abs(amt),
-                        side=order_side,
-                        position_side=pos_side,
-                        market_type="MARKET",
-                    )
-        except Exception as e:
-            logger.error(f"[DELISTING][{sym}] Ошибка ликвидации позиции: {e}")
+                    await client.cancel_all_orders(sym)
+                logger.info(f"[DELISTING][{sym}] Все лимитные ордера сняты.")
+            except Exception as e:
+                logger.error(f"[DELISTING][{sym}] Ошибка отмены ордеров: {e}")
 
-        # 3. Сброс FSM/AvgManager (снимает блокировку delete_symbol)
-        self._reset_fsm(sym)
+            # 2. Мгновенная рыночная ликвидация открытых позиций
+            try:
+                positions = await client.fetch_positions()
+                for p in positions or []:
+                    if not isinstance(p, dict):
+                        continue
+                    if (p.get("symbol") or "").upper() != sym:
+                        continue
+                    amt_raw = p.get("positionAmt")
+                    if amt_raw is None:
+                        continue
+                    amt = float(amt_raw)
+                    if abs(amt) <= FLOAT_ZERO_EPSILON:
+                        continue
+                    pos_side = p.get("positionSide")
+                    order_side = "SELL" if pos_side == "LONG" else "BUY"
+                    logger.critical(f"[DELISTING][{sym}] Рыночное закрытие {pos_side} позиции: Qty {abs(amt)}")
+                    async with self._symbol_lock(sym):
+                        await client.make_order(
+                            symbol=sym,
+                            qty=abs(amt),
+                            side=order_side,
+                            position_side=pos_side,
+                            market_type="MARKET",
+                        )
+            except Exception as e:
+                logger.error(f"[DELISTING][{sym}] Ошибка ликвидации позиции: {e}")
 
-        # 4. Полное удаление монеты из пула (app.json + дисковый кэш + стримы + FSM)
-        try:
-            deleted = await self.bot.delete_symbol(sym)
-            logger.info(f"[DELISTING][{sym}] Символ выведен из пула бота: {deleted}")
-        except Exception as e:
-            logger.error(f"[DELISTING][{sym}] Ошибка удаления из пула: {e}")
+            # 3. Сброс FSM/AvgManager (снимает блокировку delete_symbol)
+            self._reset_fsm(sym)
+
+            # 4. Полное удаление монеты из пула (app.json + дисковый кэш + стримы + FSM)
+            try:
+                deleted = await self.bot.delete_symbol(sym)
+                logger.info(f"[DELISTING][{sym}] Символ выведен из пула бота: {deleted}")
+            except Exception as e:
+                logger.error(f"[DELISTING][{sym}] Ошибка удаления из пула: {e}")
+        finally:
+            if isinstance(closing_set, set):
+                closing_set.discard(sym)
 
         # 5. Telegram-уведомление оператору
         if self.notify_telegram:
