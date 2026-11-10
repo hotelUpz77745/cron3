@@ -214,6 +214,10 @@ class BotBootstrapService:
         await bot_core.analytics.deep_sync_analytics(bot_core.client, bot_core.prices)
         bot_core.analytics.start_realtime_tracker(bot_core.client)
 
+        # Монитор делистингов Binance для активной обоймы (no-op в бэктесте)
+        if getattr(bot_core, "delisting_detector", None):
+            await bot_core.delisting_detector.start()
+
     @classmethod
     async def shutdown_game_loop(cls, bot_core: "BotCore") -> None:
         """Корректная остановка задач и стримов игрового цикла."""
@@ -232,6 +236,9 @@ class BotBootstrapService:
             bot_core._pos_task.cancel()
         if getattr(bot_core, "analytics", None):
             bot_core.analytics.stop_realtime_tracker()
+
+        if getattr(bot_core, "delisting_detector", None):
+            await bot_core.delisting_detector.stop()
 
         for creds, cl in getattr(bot_core, '_key_clients', {}).items():
             with contextlib.suppress(Exception):
