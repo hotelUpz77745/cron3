@@ -18,8 +18,6 @@ import re
 import time
 from typing import Any, Dict, Optional, Set
 
-import aiohttp
-
 from c_log import UnifiedLogger
 from consts import (
     DELISTING_ENABLED,
@@ -31,8 +29,9 @@ from consts import (
     DELISTING_NOTIFY_TELEGRAM,
     DELISTING_QUOTE_ASSET,
     DELISTING_EXCHANGE_ACTIVE_STATUSES,
-    DELISTING_NEWS_CATALOG_URL,
-    DELISTING_NEWS_DETAIL_URL_PREFIX,
+    DELISTING_NEWS_CATALOG_ID,
+    DELISTING_NEWS_PAGE_NO,
+    DELISTING_NEWS_PAGE_SIZE,
     DELISTING_NEWS_HTTP_TIMEOUT_SEC,
     DELISTING_NEWS_KEYWORDS,
     DELISTING_NEWS_TICKER_REGEX,
@@ -184,36 +183,35 @@ class DelistingDetector:
         return signals
 
     async def _fetch_news_delistings(self) -> Set[str]:
-        """Разбирает новостной CMS Binance и извлекает тикеры-кандидаты (только монеты обоймы)."""
+        """Через API-адаптер читает новостной CMS Binance и извлекает тикеры-кандидаты (монеты обоймы)."""
         if _is_backtest():
             return set()
         found: Set[str] = set()
-        timeout = aiohttp.ClientTimeout(total=DELISTING_NEWS_HTTP_TIMEOUT_SEC)
         try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(DELISTING_NEWS_CATALOG_URL) as resp:
-                    if resp.status != 200:
-                        return found
-                    catalog = await resp.json()
-                articles = ((catalog or {}).get("data") or {}).get("articles") or []
-                for art in articles:
-                    code = (art or {}).get("code")
-                    if not code:
+            articles = await BinancePublic.get_cms_articles(
+                DELISTING_NEWS_CATALOG_ID,
+                DELISTING_NEWS_PAGE_NO,
+                DELISTING_NEWS_PAGE_SIZE,
+                DELISTING_NEWS_HTTP_TIMEOUT_SEC,
+            )
+            if not articles:
+                return found
+            for art in articles:
+                code = (art or {}).get("code")
+                if not code:
+                    continue
+                payload = await BinancePublic.get_cms_article_detail(code, DELISTING_NEWS_HTTP_TIMEOUT_SEC)
+                if not payload:
+                    continue
+                title = str(payload.get("title") or "")
+                body = str(payload.get("body") or "")
+                if not any(kw in title.lower() for kw in DELISTING_NEWS_KEYWORDS):
+                    continue
+                for token in _NEWS_TICKER_RE.findall(f"{title} {body}"):
+                    if token in DELISTING_NEWS_TICKER_STOPWORDS:
                         continue
-                    async with session.get(f"{DELISTING_NEWS_DETAIL_URL_PREFIX}{code}") as d_resp:
-                        if d_resp.status != 200:
-                            continue
-                        detail = await d_resp.json()
-                    payload = (detail or {}).get("data") or {}
-                    title = str(payload.get("title") or "")
-                    body = str(payload.get("body") or "")
-                    if not any(kw in title.lower() for kw in DELISTING_NEWS_KEYWORDS):
-                        continue
-                    for token in _NEWS_TICKER_RE.findall(f"{title} {body}"):
-                        if token in DELISTING_NEWS_TICKER_STOPWORDS:
-                            continue
-                        base = token[: -len(DELISTING_QUOTE_ASSET)] if token.endswith(DELISTING_QUOTE_ASSET) else token
-                        found.add(f"{base}{DELISTING_QUOTE_ASSET}")
+                    base = token[: -len(DELISTING_QUOTE_ASSET)] if token.endswith(DELISTING_QUOTE_ASSET) else token
+                    found.add(f"{base}{DELISTING_QUOTE_ASSET}")
         except Exception as e:
             logger.warning(f"[DELISTING] Ошибка разбора новостей Binance: {e}")
         return found
