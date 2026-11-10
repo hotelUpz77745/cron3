@@ -246,6 +246,26 @@ TRADE_VELOCITY_BENCHMARK_TRADES: float = float(TRADE_VELOCITY_CFG.get("benchmark
 TRADE_VELOCITY_TOP_SLICE: Optional[int] = TRADE_VELOCITY_CFG.get("top_coins_slice")
 
 # ============================================================
+# DELISTING DETECTOR (Binance USDT-M)
+# Все значения читаются напрямую из CFG/app.json (Protocol Rule 2),
+# единая единица времени группы — секунды (Protocol Rule 6).
+# ============================================================
+DELISTING_CFG: dict = _CFG["delisting_detector"]
+DELISTING_ENABLED: bool = bool(DELISTING_CFG["enabled"])
+DELISTING_POLL_INTERVAL_SEC: float = float(DELISTING_CFG["poll_interval_sec"])
+DELISTING_HARD_CLOSE_SEC: float = float(DELISTING_CFG["hard_close_sec"])
+DELISTING_DELIVERY_HORIZON_SEC: float = float(DELISTING_CFG["delivery_horizon_sec"])
+DELISTING_NOTIFY_TELEGRAM: bool = bool(DELISTING_CFG["notify_telegram"])
+DELISTING_QUOTE_ASSET: str = DELISTING_CFG["quote_asset"]
+DELISTING_EXCHANGE_ACTIVE_STATUSES: frozenset = frozenset(DELISTING_CFG["exchange_active_statuses"])
+DELISTING_NEWS_CATALOG_URL: str = DELISTING_CFG["news_catalog_url"]
+DELISTING_NEWS_DETAIL_URL_PREFIX: str = DELISTING_CFG["news_detail_url_prefix"]
+DELISTING_NEWS_HTTP_TIMEOUT_SEC: float = float(DELISTING_CFG["news_http_timeout_sec"])
+DELISTING_NEWS_KEYWORDS: tuple = tuple(DELISTING_CFG["news_keywords"])
+DELISTING_NEWS_TICKER_REGEX: str = DELISTING_CFG["news_ticker_regex"]
+DELISTING_NEWS_TICKER_STOPWORDS: frozenset = frozenset(DELISTING_CFG["news_ticker_stopwords"])
+
+# ============================================================
 # NUMERICAL PRECISION & EPSILONS (Samsonov Protocol Rule 3 & 3.1)
 # ============================================================
 FLOAT_ZERO_EPSILON: float = 1e-6
