@@ -2514,3 +2514,11 @@ Rank | Strategy                            | Start$ | Realized$ | Floating$ | En
 
 
 а из кнопки Set Universes убери отчет по аналитике. у нас аналитика в аналитике. тут -- чисто отключить-включить вселенную(стратегию). -->
+
+
+
+
+
+
+
+<!-- git fetch origin stivenson && git checkout origin/stivenson -- CORE/SERVICES/coin_grid_analytics/ CORE/SERVICES/coin_grid_analytics.py CFG/universes/u96_omni_zenith13atr.json tests/test_coin_grid_analytics.py tech_debt.md -->
