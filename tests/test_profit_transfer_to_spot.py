@@ -179,7 +179,7 @@ class TestProfitTransferToSpot(unittest.TestCase):
         - зачисление на self.spot_balance;
         - отсутствие ложного скачка просадки (max_drawdown_usdt == 0.0) при переводе в свой спот-карман.
         """
-        sim = SimulatedBinanceClient(start_balance_usdt=1000.0, fee_rate=0.0, maker_fee_rate=0.0)
+        sim = SimulatedBinanceClient(start_balance_usdt=1000.0, fee_rate=0.0, maker_fee_rate=0.0, slippage_rate=0.0)
         sim.on_tick("ERAUSDT", 100.0, 1.0, 1700000000000)
         asyncio.run(sim.make_order("ERAUSDT", qty=1.0, side="BUY", position_side="LONG", market_type="MARKET"))
         sim.on_tick("ERAUSDT", 150.0, 1.0, 1700000001000)

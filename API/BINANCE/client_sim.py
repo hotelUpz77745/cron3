@@ -65,11 +65,13 @@ class SimulatedBinanceClient:
         fee_rate: float = 0.0005,  # 0.05% Taker по регламенту лаборатории
         leverage: int = 20,
         maker_fee_rate: float = 0.0002,  # 0.02% Maker для лимитных ордеров (Take-Profit)
+        slippage_rate: float = 0.0002,  # 0.02% проскальзывание на всех MARKET-ордерах (вход и выход)
     ):
         self.initial_balance = float(start_balance_usdt)
         self.balance = float(start_balance_usdt)
         self.fee_rate = float(fee_rate)
         self.maker_fee_rate = float(maker_fee_rate)
+        self.slippage_rate = max(0.0, float(slippage_rate))
         self.default_leverage = int(leverage)
 
         self._next_order_id = 100000
@@ -190,6 +192,14 @@ class SimulatedBinanceClient:
                 del self.open_orders[oid]
         return APIResponse(success=True, data={"canceled": canceled})
 
+    def _apply_market_slippage(self, base_price: float, side: str) -> float:
+        """Применяет однонаправленное рыночное проскальзывание (BUY дороже, SELL дешевле)."""
+        if self.slippage_rate <= 0.0 or base_price <= 0.0:
+            return base_price
+        if side.upper() == "BUY":
+            return base_price * (1.0 + self.slippage_rate)
+        return base_price * (1.0 - self.slippage_rate)
+
     async def make_order(
         self, symbol: str, qty: float, side: str, position_side: str,
         market_type: str = "MARKET", price: Optional[float] = None,
@@ -208,14 +218,15 @@ class SimulatedBinanceClient:
         )
 
         if market_type.upper() == "MARKET":
-            # При явно переданной цене (например, закрытие со slippage_rate) используем ее, иначе текущую рыночную
-            cur_price = order.price if order.price > 0 else (self.current_prices.get(sym_u, 0.0) or 100.0)
-            success, err = self._execute_fill(order, fill_price=cur_price, fill_ts=self.current_sim_time)
+            # Базовая цена: явно переданная (например, триггер SL/AutoClose) либо текущая рыночная, с единым slippage_rate для всех MARKET-ордеров
+            base_price = order.price if order.price > 0 else (self.current_prices.get(sym_u, 0.0) or 100.0)
+            fill_price = self._apply_market_slippage(base_price, side_u)
+            success, err = self._execute_fill(order, fill_price=fill_price, fill_ts=self.current_sim_time)
             if not success:
                 return APIResponse(success=False, error_code=-2010, error_msg=err or "Insufficient margin")
             return APIResponse(
                 success=True,
-                data={"orderId": oid, "symbol": sym_u, "status": "FILLED", "executedQty": str(qty_abs), "avgPrice": str(cur_price)}
+                data={"orderId": oid, "symbol": sym_u, "status": "FILLED", "executedQty": str(qty_abs), "avgPrice": str(fill_price)}
             )
         else:
             # LIMIT ордер ставится в стакан
