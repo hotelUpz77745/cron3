@@ -23,7 +23,7 @@
 | **Комиссия Maker (`maker_fee_rate`)** | **`0.0002` (`0.02%`)** | Лимитные ордера (`Take-Profit`) |
 | **Проскальзывание закрытия (`close_slippage`)** | **`0.0002` (`0.02%`)** | Применяется к `AutoClose`, `Rotation`, `PerCoinStopLoss`; для регулярных `MARKET`-входов/усреднений не моделируется |
 | **Фандинг (8h Binance Funding)** | **Исключен (`funding_modeled: false`)** | Осознанная конвенция симулятора (`client_sim.py`) |
-| **Перевод прибыли на Spot** | **`enabled: true`, `50.0%`** | Читается строго из SSOT `cron3/CFG/app.json -> active_strategies` |
+| **Перевод прибыли на Spot** | **`enabled: false` (выкл, пресет `50.0%`)** | Читается строго из SSOT `cron3/CFG/app.json -> active_strategies` |
 | **Ротации пула** | **Каждые 10 дней (`alpha_rotations_180d.json`)** | Жесткая ликвидация открытых позиций `ROTATION` в конце каждой декады |
 | **Тихий режим логгера** | **`CRON3_BACKTEST=1`** | Нулевой I/O в консоль и на диск (`UnifiedLogger._silent_backtest`, пока `CRON3_BACKTEST_FILE_LOG != "1"`) |
 | **Каденс сигнала в бэктесте** | **`shift_interval_sec = 13`**, сброс на 5m свече | Сброс счетчиков `recent_closes` (`smart_grace`, `smart_size`, `smart_tp`) |
@@ -32,9 +32,9 @@
 
 ## 2. Правило Single Source of Truth (SSOT)
 
-1. **`transfer_profit_to_spot` (50% на Spot):**
+1. **`transfer_profit_to_spot` (отключен по умолчанию: `enabled: false`):**
    - Единственный источник истины: `cron3/CFG/app.json -> active_strategies.<strategy_id>.transfer_profit_to_spot`.
-   - Дефолт в коде сервиса [`ProfitTransferService`](CORE/SERVICES/profit_transfer_service.py): `DEFAULT_TRANSFER_PROFIT_PCT = 50.0`.
+   - Дефолт в коде сервиса [`ProfitTransferService`](CORE/SERVICES/profit_transfer_service.py): `enabled: False`, `DEFAULT_TRANSFER_PROFIT_PCT = 50.0`.
    - **Категорически запрещено** дублировать блок `transfer_profit_to_spot` внутри `CFG/universes/*.json`.
    - [`BacktestBotCore`](../cron3TradeBacktest/ENGINE/backtest_core.py) автоматически наследует `transfer_profit_to_spot` из `CFG/app.json`, если параметр не переопределен явно в конструкторе.
    - Учет капитала: выведенный на Spot профит списывается с фьючерсного баланса `balance` (не участвует в доступной марже фьючерсов), начисляется на `spot_balance`, а итоговое состояние считается как `Wealth = Futures Equity + Spot Balance` (без ложных скачков просадки).

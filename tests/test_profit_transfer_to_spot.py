@@ -64,14 +64,14 @@ class TestProfitTransferToSpot(unittest.TestCase):
             self.assertAlmostEqual(t_cfg["min_transfer_usdt"], 1.0)
             self.assertEqual(t_cfg["asset"], "USDT")
 
-        # Проверяем явную фиксацию 50% в боевом CFG/app.json -> active_strategies и дефолт в ProfitTransferService
+        # Проверяем явную фиксацию (enabled=false, 50%) в боевом CFG/app.json -> active_strategies и дефолт в ProfitTransferService
         app_cfg = json.loads((_ROOT / "CFG" / "app.json").read_text(encoding="utf-8"))
         for sid, sdata in (app_cfg.get("active_strategies") or {}).items():
             if not isinstance(sdata, dict):
                 continue
             self.assertIn("transfer_profit_to_spot", sdata, f"{sid} in app.active_strategies must define transfer_profit_to_spot")
             resolved_app_transfer = ProfitTransferService.extract_transfer_config(sdata)
-            self.assertTrue(resolved_app_transfer["enabled"], f"{sid} in app.json must have spot transfer enabled")
+            self.assertFalse(resolved_app_transfer["enabled"], f"{sid} in app.json must have spot transfer disabled")
             self.assertAlmostEqual(resolved_app_transfer["transfer_profit_pct"], 50.0)
         self.assertAlmostEqual(ProfitTransferService.extract_transfer_config({"transfer_profit_to_spot": True})["transfer_profit_pct"], 50.0)
 

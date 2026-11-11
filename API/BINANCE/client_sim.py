@@ -293,12 +293,16 @@ class SimulatedBinanceClient:
         sim_bars = file_bars if file_bars else dyn_bars
 
         interval_str = str(interval).lower().strip()
+        use_warmup = cur_ts >= 1775000000000
         if interval_str == "1h":
-            closes = list(self._warmup_1h.get(sym_u, [])) + [b[1] for b in sim_bars]
+            w1 = list(self._warmup_1h.get(sym_u, [])) if use_warmup else []
+            closes = w1 + [b[1] for b in sim_bars]
         elif interval_str == "4h":
-            closes = list(self._warmup_4h.get(sym_u, [])) + [b[1] for b in sim_bars if (b[0] + 3600000) % 14400000 == 0]
+            w4 = list(self._warmup_4h.get(sym_u, [])) if use_warmup else []
+            closes = w4 + [b[1] for b in sim_bars if (b[0] + 3600000) % 14400000 == 0]
         elif interval_str in ("1d", "d"):
-            closes = list(self._warmup_1d.get(sym_u, [])) + [b[1] for b in sim_bars if (b[0] + 3600000) % 86400000 == 0]
+            w1d = list(self._warmup_1d.get(sym_u, [])) if use_warmup else []
+            closes = w1d + [b[1] for b in sim_bars if (b[0] + 3600000) % 86400000 == 0]
         else:
             return []
         if cur_p > 0:

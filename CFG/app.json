@@ -49,7 +49,7 @@
             "api_secret_name": "API_SECRET",
             "auto_closing_mode": "trailing_ratchet",
             "transfer_profit_to_spot": {
-                "enabled": true,
+                "enabled": false,
                 "transfer_profit_pct": 50.0,
                 "min_transfer_usdt": 1.0,
                 "asset": "USDT",
