@@ -440,6 +440,17 @@ class StrategyConfigParser:
                 if req_k not in micro_step_filter_cfg:
                     raise KeyError(f"[StrategyConfig][{strategy_id}] Missing required micro_step_filter field: '{req_k}'")
 
+        raw_cgf = (
+            active_settings.get("counter_grid_frontload")
+            or raw_meta.get("counter_grid_frontload")
+            or overrides.get("counter_grid_frontload")
+        )
+        if raw_cgf and isinstance(raw_cgf, dict):
+            from CORE.STRATEGY.counter_grid_frontload import CounterGridFrontloader
+            counter_grid_frontload_cfg = CounterGridFrontloader.validate_config(copy.deepcopy(raw_cgf), strategy_id=strategy_id)
+        else:
+            counter_grid_frontload_cfg = {"enabled": False}
+
         tfr_val = raw_meta.get("signal_heartbeat_tfr") or overrides.get("signal_heartbeat_tfr")
         if not tfr_val:
             for alias in ("heartbeat_tfr", "timeframe"):
@@ -469,6 +480,7 @@ class StrategyConfigParser:
             "recycling_max_slice_pct": recycling_max_slice_pct,
             "recycling_max_slice_ratio": recycling_max_slice_ratio,
             "micro_step_filter_cfg": micro_step_filter_cfg,
+            "counter_grid_frontload_cfg": counter_grid_frontload_cfg,
             "signal_heartbeat_tfr": tfr_str,
             "heartbeat_tfr": tfr_str,
             "timeframe": tfr_str,

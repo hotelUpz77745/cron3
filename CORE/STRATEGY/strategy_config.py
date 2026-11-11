@@ -138,6 +138,7 @@ class StrategyConfig:
         self.recycling_max_slice_pct: float = rec_res["recycling_max_slice_pct"]
         self.recycling_max_slice_ratio: float = rec_res["recycling_max_slice_ratio"]
         self.micro_step_filter_cfg: Dict[str, Any] = rec_res["micro_step_filter_cfg"]
+        self.counter_grid_frontload_cfg: Dict[str, Any] = rec_res["counter_grid_frontload_cfg"]
         self.signal_heartbeat_tfr: str = rec_res["signal_heartbeat_tfr"]
         self.heartbeat_tfr: str = rec_res["heartbeat_tfr"]
         self.timeframe: str = rec_res["timeframe"]
@@ -214,6 +215,10 @@ class StrategyConfig:
     @property
     def cross_side_recycling(self) -> Dict[str, Any]:
         return self.cross_recycling_cfg
+
+    @property
+    def counter_grid_frontload(self) -> Dict[str, Any]:
+        return self.counter_grid_frontload_cfg
 
     @property
     def transfer_profit_to_spot_cfg(self) -> Dict[str, Any]:

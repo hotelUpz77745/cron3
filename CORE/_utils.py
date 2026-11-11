@@ -144,14 +144,22 @@ from typing import Dict, Any
 
 class RiskCalculatingUtils:
     @staticmethod
-    def get_current_grid_level(grid: dict) -> str:
+    def get_current_grid_level(grid: dict, include_absorbed: bool = False) -> str:
         """
         Определяет текущий активный уровень сетки на основе флагов is_active.
+        Уровни с маркером _absorbed_to_l0 игнорируются по умолчанию, чтобы
+        поглощённый в L0 старт сохранял поведение L0 для TP/cur_step до реального добора.
         Возвращает строковый ключ уровня (например, "0", "1", "2").
         """
+        if not isinstance(grid, dict):
+            return "0"
         active_levels = [
             int(k) for k, v in grid.items()
-            if isinstance(v, dict) and v.get("is_active") and v.get("enabled", True) is not False and str(k).isdigit()
+            if isinstance(v, dict)
+            and v.get("is_active")
+            and v.get("enabled", True) is not False
+            and str(k).isdigit()
+            and (include_absorbed or not v.get("_absorbed_to_l0"))
         ]
         return str(max(active_levels)) if active_levels else "0"
 

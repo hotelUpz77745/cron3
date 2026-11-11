@@ -10,6 +10,7 @@ ROLE: Доменный расчет объема первого ордера L0 
 from typing import Any, Dict, Optional, Tuple
 from c_log import UnifiedLogger
 from CORE.STRATEGY.momentum_engine import MomentumEngine
+from CORE.STRATEGY.counter_grid_frontload import CounterGridFrontloader
 from CORE._utils import TradeMath
 
 logger = UnifiedLogger("EntrySizeResolver")
@@ -57,7 +58,12 @@ class EntrySizeResolver:
         if hasattr(bot, "fsm_states") and bot.fsm_states:
             opp_state = bot.fsm_states.get(symbol, {}).get(opp_side)
         opp_in_pos = bool(opp_state and (getattr(opp_state, "in_position", False) or getattr(opp_state, "in_position_papper", False)))
-        opp_step = int(getattr(opp_state, "cur_step", 0)) if opp_state else 0
+        opp_step = CounterGridFrontloader.resolve_opp_step(
+            opp_state=opp_state,
+            runtime_manager=getattr(bot, "runtime_manager", None),
+            symbol=symbol,
+            opp_side=opp_side,
+        )
 
         # 3. Smart Size
         smart_size_mult = 1.0
@@ -126,7 +132,32 @@ class EntrySizeResolver:
                     if target_lvl in side_cfg.get("grid", {}):
                         side_cfg["grid"][target_lvl]["enabled"] = is_active
 
-        # 6. Квантование объема
-        grid_0_invest = base_invest * smart_size_mult
-        volume = TradeMath.calculate_order_volume(grid_0_invest, volume_pct, current_price, bot.spec_data, symbol)
+        # 6. Контр-разгон L0 (counter_grid_frontload) и квантование объема
+        raw_cgf = (
+            getattr(strat, "counter_grid_frontload_cfg", None)
+            or (getattr(strat, "raw_meta", {}).get("counter_grid_frontload") if isinstance(getattr(strat, "raw_meta", None), dict) else None)
+            or (getattr(strat, "overrides", {}).get("counter_grid_frontload") if isinstance(getattr(strat, "overrides", None), dict) else None)
+        ) if strat else None
+        cgf_cfg = raw_cgf if isinstance(raw_cgf, dict) else None
+
+        active_grid = getattr(state, "grid", None) or side_cfg.get("grid", {})
+        eff_volume_pct, absorbed_keys = CounterGridFrontloader.plan_entry_absorption(
+            frontload_cfg=cgf_cfg,
+            side_grid=active_grid,
+            base_l0_pct=volume_pct,
+            smart_size_mult=smart_size_mult,
+            opp_in_pos=opp_in_pos,
+            opp_step=opp_step,
+        )
+        state._pending_absorbed_levels = list(absorbed_keys)
+        state._pending_preserve_l0_identity = bool(cgf_cfg.get("preserve_l0_identity", True)) if (cgf_cfg and absorbed_keys) else True
+        if absorbed_keys:
+            strat_tag = f"[{getattr(strat, 'strategy_id', '')}]" if strat else ""
+            logger.info(
+                f"[{symbol}]{strat_tag} {side} 🛡️ [COUNTER FRONTLOAD PLAN] "
+                f"opp({opp_side})_step={opp_step} -> merging {absorbed_keys} into L0: "
+                f"{volume_pct:.2f}% (x{smart_size_mult:.2f}) -> {eff_volume_pct:.2f}% (100% cap preserved)"
+            )
+
+        volume = TradeMath.calculate_order_volume(base_invest, eff_volume_pct, current_price, bot.spec_data, symbol)
         return volume, base_invest

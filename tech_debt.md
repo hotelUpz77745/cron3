@@ -1754,3 +1754,27 @@ CFG/universes/u96_omni_zenith13.json
 3. **Сервисный слой ([`CORE/SERVICES/profit_transfer_service.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/SERVICES/profit_transfer_service.py))**:
    - `ProfitTransferService` извлекает настройки с учетом иерархии оверрайдов (`CFG/universes/*.json` -> `CFG/app.json`), рассчитывает сумму к переводу и безопасно исполняет трансфер в `DomeCloserExecutor.execute_close` и `BacktestBotCore.check_auto_closing` сразу после рыночного закрытия позиций купола, добавляя строку отчета в Telegram-уведомление.
 
+---
+
+### 11. Движок контр-разгона L0 (`u97_zenith13_hedge_shield`) и бэклог 180d бэктестов (ADR-28, 11.11.2026)
+
+#### 1. Контекст (вскрытый стресс холодного старта при 100% выводе на Spot):
+- При 100% выводе прибыли итераций на Spot (`$1,435` старт / `$1,200` на сторону, `alpha_180d_2026_zenith13_spot_1435.json`) фьючерсный кошелек всегда возвращается к базовой марже `$1,435`.
+- Любая декада класса `BILLUSDT` (`SL +130.82%` при полном наборе `L0..L8` `$1,200` с `avg_entry +29.48%` -> цикл `-$818.82`, `57%` от `$1,435`) в сочетании с просадкой корзины (~`-$1,110`) критически сжимает маржу последующих декад (деградация `u96_omni_zenith13` до `-$65.02` на Фьючерсе к Декаде 6 при `$1,028.93` в сейфе Spot).
+- Модули `smart_size` и `smart_tp` работают корректно, но их счетчик `recent_closes` сбрасывается каждые `5m` (`300s`), поэтому на затяжном 75.8h пампе они усилили лишь 2 из 36 циклов `LONG`.
+
+#### 2. Архитектурное решение (`counter_grid_frontload` + динамический `cur_step`):
+- Создан изолированный класс [`CORE/STRATEGY/counter_grid_frontload.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/counter_grid_frontload.py) и паспорт [`CFG/universes/u97_zenith13_hedge_shield.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u97_zenith13_hedge_shield.json) (клон `u96_omni_zenith13.json` с одинаковыми `per_coin_stop_loss: 130.0`, `cross_side_recycling: >=3 -> 0.5`, `smart_*` и `auto_closing`):
+  - `counter_grid_frontload.absorb_tiers`: `{"==5": 1, "==6": 2, ">=7": 3}` — авансовое слияние объема ближайших `L1..Lk` в стартовый `L0` (`14.70%` / `23.17%` / `32.49%`), суммарный капитал стороны строго `<= 100% invest_size`, без дополнительного усреднения уже поглощенных ступеней на откате.
+  - Поглощенные ступени помечаются `is_active: true` и `_absorbed_to_l0: true` строго ПОСЛЕ успешного исполнения рыночного ордера в [`CORE/CYCLE/order_submitter.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/CYCLE/order_submitter.py).
+  - [`POS_FSM/models.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/POS_FSM/models.py): поле `cur_step` заменено динамическим `@property`, вычисляемым на лету по флагам `is_active` рантайм-сетки; [`RiskCalculatingUtils.get_current_grid_level`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/_utils.py) по умолчанию игнорирует `_absorbed_to_l0`, сохраняя поведение `L0` (`tp_map["0"]`, `smart_grace`, `smart_size` с кэпом 100%, `smart_tp`) до реального добора `L4+`.
+- **Контрольный результат Декады 3 (`$1,435 / $1,200`, `alpha_d3_u96_vs_u97_1435.json`):**
+  - `u96_omni_zenith13`: Net `-$1,118.08` (Wealth `$316.92`), Max DD `$1,339.52`, `BILLUSDT`: `-$694.33` (`L8`, `SL +130.82%`).
+  - `u97_zenith13_hedge_shield`: Net **`+$94.21`** (Wealth **`$1,529.21`**, Spot `$304.28`), Max DD **`$354.33`**, `AutoCloser: 9` (`L4` на `+$101.71`), `BILLUSDT`: **`+$107.68`** (`L6 +43.93%`, `0` SL).
+
+#### 3. Открытый техдолг и задачи на продолжение (`TODO` после паузы):
+- **[BACKTEST — ПРИОРИТЕТ 1] Прогнать полный 180-дневный марафон (Декады 1–6, 7–12, 13–18)** для `u97_zenith13_hedge_shield` (`--start-balance 1435 --invest-size 1200`, режим Spot 100%), чтобы проверить риск зависания крупной контр-ноги на V-образных разворотах по всем 18 декадам. Запущенный Пакет 1 остановлен по запросу оператора.
+- **[TUNING]** Проверить абляции по `absorb_tiers` (старт с `L5` vs `L6`, агрессивность `1/2/3` vs `2/3/4` колен) и при необходимости протестировать соотношение Spot-резерва / `per_coin_stop_loss` в отдельном стресс-турнире.
+- **[TESTS / CLEANUP]** Актуализировать устаревшие ассерты в `tests/test_u17_u96_config_sanctity.py` и `tests/test_smart_size_dyn_ema.py` (завязаны на архивные шаблоны `u17` и `u96_omni_zenith_apex`), а также `cron3TradeBacktest/tests/test_combat_parity_v3.py::test_corridor_delegation`; проверить порядок `check_per_coin_stop_loss` до `client.on_tick` в `cron3TradeBacktest/ENGINE/backtest_core.py`.
+
+

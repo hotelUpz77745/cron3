@@ -149,6 +149,7 @@ class TradeCycleManager:
 
         finally:
             state.in_position_papper = False
+            state._pending_absorbed_levels = []
             if hasattr(self.bot, "runtime_manager") and self.bot.runtime_manager:
                 if hasattr(self.bot.runtime_manager, "caches") and symbol in self.bot.runtime_manager.caches and side in self.bot.runtime_manager.caches[symbol]:
                     self.bot.runtime_manager.caches[symbol][side]["eff_invest"] = getattr(state, "eff_invest", 0.0)

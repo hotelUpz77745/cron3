@@ -181,7 +181,7 @@ class PositionState:
     last_closed_volume: float = 0.0
     last_closed_avg_price: float = 0.0
     last_closed_timestamp: float = 0.0
-    cur_step: int = 0
+    _cur_step_fallback: int = field(default=0, repr=False)
     fees: float = 0.0
     peel_filled: bool = False
     next_grid_p: float = 0.0
@@ -191,6 +191,34 @@ class PositionState:
     peel_q: float = 0.0
     _last_resolved_vol: Optional[float] = None
     _last_resolved_price: Optional[float] = None
+    _pending_absorbed_levels: list = field(default_factory=list, repr=False)
+
+    @property
+    def cur_step(self) -> int:
+        """
+        Динамически вычисляет актуальный уровень усреднения на лету
+        по флагам is_active в рантайм-секции сетки (игнорируя _absorbed_to_l0).
+        """
+        grid = getattr(self, "grid", None)
+        if isinstance(grid, dict) and grid:
+            active_levels = [
+                int(k)
+                for k, v in grid.items()
+                if isinstance(v, dict)
+                and v.get("is_active")
+                and v.get("enabled", True) is not False
+                and str(k).isdigit()
+                and not v.get("_absorbed_to_l0")
+            ]
+            if active_levels:
+                return max(active_levels)
+            if any(isinstance(v, dict) and v.get("is_active") for v in grid.values()):
+                return 0
+        return int(getattr(self, "_cur_step_fallback", 0))
+
+    @cur_step.setter
+    def cur_step(self, value: int):
+        self._cur_step_fallback = int(value or 0)
 
     @property
     def in_pos(self) -> bool:
@@ -373,6 +401,7 @@ class PositionState:
         self.trailing_grid_state = {}
         self._last_resolved_vol = None
         self._last_resolved_price = None
+        self._pending_absorbed_levels = []
         
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():
@@ -401,6 +430,7 @@ class PositionState:
             v.pop("_skip_desc", None)
             v.pop("_skipped_by_level", None)
             v.pop("_skipped_levels_handled", None)
+            v.pop("_absorbed_to_l0", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

@@ -12,6 +12,7 @@ from typing import Any, Optional, Callable
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.CYCLE.signal_validator import SignalValidator
+from CORE.STRATEGY.counter_grid_frontload import CounterGridFrontloader
 
 logger = UnifiedLogger("OrderSubmitter")
 
@@ -77,6 +78,7 @@ class OrderSubmitter:
             opened = await _do_open()
 
         if not opened:
+            state._pending_absorbed_levels = []
             return False
 
         # Инициализация сетки и таймстемпов открытой позиции
@@ -87,6 +89,17 @@ class OrderSubmitter:
             state.grid["0"]["is_active"] = True
             state.grid["0"]["activated_at"] = current_time_ms / 1000.0
             state.grid["0"]["timestamp"] = current_time_ms
+
+        pending_absorbed = list(getattr(state, "_pending_absorbed_levels", []) or [])
+        preserve_l0 = bool(getattr(state, "_pending_preserve_l0_identity", True))
+        state._pending_absorbed_levels = []
+        if pending_absorbed:
+            CounterGridFrontloader.apply_absorbed_levels(
+                state=state,
+                absorbed_keys=pending_absorbed,
+                current_time_ms=current_time_ms,
+                preserve_l0_identity=preserve_l0,
+            )
 
         state.fallback_price = None
         state.next_avg_price = None
