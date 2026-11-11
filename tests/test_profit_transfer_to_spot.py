@@ -34,24 +34,46 @@ class TestProfitTransferToSpot(unittest.TestCase):
     """Тестирование цепочки перевода профита итерации с USDⓈ-M Futures на Spot при срабатывании trailing_ratchet."""
 
     def test_universe_templates_have_transfer_enabled_by_default(self):
-        """Проверяет, что во всех 4 боевых шаблонах CFG/universes/*.json включен перевод 50% профита на спот."""
+        """Проверяет SSOT: transfer_profit_to_spot НЕ дублируется в CFG/universes/*.json и задан (50%) строго в app.active_strategies."""
         universes_dir = _ROOT / "CFG" / "universes"
         for tpl_name in ("u96_omni_zenith13", "u96_omni_zenith13atr", "u96_omni_alligator", "u97_zenith13_hedge_shield"):
             tpl_path = universes_dir / f"{tpl_name}.json"
             self.assertTrue(tpl_path.exists(), f"Missing template {tpl_path}")
-            raw_meta = json.loads(tpl_path.read_text(encoding="utf-8"))
+            raw_text = tpl_path.read_text(encoding="utf-8")
+            self.assertNotIn("transfer_profit_to_spot", raw_text, f"{tpl_name} must not duplicate transfer_profit_to_spot")
 
+            raw_meta = json.loads(raw_text)
             strat_cfg = StrategyConfig(
                 strategy_id=f"{tpl_name}__trailing_ratchet",
                 raw_meta=raw_meta,
                 symbols=["ERAUSDT", "ZECUSDT"],
-                active_settings={"auto_closing_mode": "trailing_ratchet", "default_invest_size": 1200},
+                active_settings={
+                    "auto_closing_mode": "trailing_ratchet",
+                    "default_invest_size": 1200,
+                    "transfer_profit_to_spot": {
+                        "enabled": True,
+                        "transfer_profit_pct": 50.0,
+                        "min_transfer_usdt": 1.0,
+                        "asset": "USDT",
+                    },
+                },
             )
             t_cfg = strat_cfg.transfer_profit_to_spot_cfg
-            self.assertTrue(t_cfg["enabled"], f"{tpl_name} should have transfer_profit_to_spot.enabled=True")
+            self.assertTrue(t_cfg["enabled"], f"{tpl_name} should support transfer_profit_to_spot from active_strategies")
             self.assertAlmostEqual(t_cfg["transfer_profit_pct"], 50.0)
             self.assertAlmostEqual(t_cfg["min_transfer_usdt"], 1.0)
             self.assertEqual(t_cfg["asset"], "USDT")
+
+        # Проверяем явную фиксацию 50% в боевом CFG/app.json -> active_strategies и дефолт в ProfitTransferService
+        app_cfg = json.loads((_ROOT / "CFG" / "app.json").read_text(encoding="utf-8"))
+        for sid, sdata in (app_cfg.get("active_strategies") or {}).items():
+            if not isinstance(sdata, dict):
+                continue
+            self.assertIn("transfer_profit_to_spot", sdata, f"{sid} in app.active_strategies must define transfer_profit_to_spot")
+            resolved_app_transfer = ProfitTransferService.extract_transfer_config(sdata)
+            self.assertTrue(resolved_app_transfer["enabled"], f"{sid} in app.json must have spot transfer enabled")
+            self.assertAlmostEqual(resolved_app_transfer["transfer_profit_pct"], 50.0)
+        self.assertAlmostEqual(ProfitTransferService.extract_transfer_config({"transfer_profit_to_spot": True})["transfer_profit_pct"], 50.0)
 
     def test_config_override_disable_and_custom_pct(self):
         """Проверяет отключение опции и кастомный процент (например, 50%) через active_settings."""

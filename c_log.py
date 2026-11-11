@@ -191,14 +191,28 @@ class UnifiedLogger:
         max_lines: int = MAX_LOG_LINES,
         context: Optional[dict] = None,
     ):
-        if log_dir is None:
-            log_dir = DEFAULT_LOG_DIR
-        os.makedirs(log_dir, exist_ok=True)
-
         argv_str = " ".join(sys.argv).lower()
         is_backtesting = (
             "backtest" in argv_str or "study" in argv_str or "tournament" in argv_str or os.getenv("CRON3_BACKTEST") == "1"
         )
+        file_logging_allowed_bt = (os.getenv("CRON3_BACKTEST_FILE_LOG") == "1")
+        self._silent_backtest: bool = bool(is_backtesting and not file_logging_allowed_bt)
+        self._last_log_times = {}
+
+        logger = logging.getLogger(name)
+        if self._silent_backtest:
+            # 🚀 Полное отключение дисковых/консольных логов и ФС-операций в бэктесте
+            logger.setLevel(logging.CRITICAL + 10)
+            logger.propagate = False
+            if not logger.handlers:
+                logger.addHandler(logging.NullHandler())
+            self._logger = logging.LoggerAdapter(logger, extra={"context": context or name})
+            return
+
+        if log_dir is None:
+            log_dir = DEFAULT_LOG_DIR
+        os.makedirs(log_dir, exist_ok=True)
+
         is_testing = (
             any(k in argv_str for k in ("unittest", "pytest", "discover", "tests\\", "tests/"))
             or ("unittest" in sys.modules and any("test" in a.lower() for a in sys.argv))
@@ -217,14 +231,12 @@ class UnifiedLogger:
         max_bytes = calc_max_bytes(avg_len, max_lines)
 
         if is_backtesting:
-            # 🚀 Инвариант производительности бэктестов: дисковое логирование полностью отключается
-            file_logging_allowed = (os.getenv("CRON3_BACKTEST_FILE_LOG") == "1")
-            desired_level = logging.ERROR if file_logging_allowed else logging.CRITICAL
+            file_logging_allowed = file_logging_allowed_bt
+            desired_level = logging.ERROR
         else:
             file_logging_allowed = LOG_TO_FILE
             desired_level = logging.DEBUG if LOG_DEBUG else logging.INFO
 
-        logger = logging.getLogger(name)
         logger.setLevel(desired_level)
         logger.propagate = False  # 🔒 важно: не всплывать в root
 
@@ -278,26 +290,38 @@ class UnifiedLogger:
         return False
 
     def debug(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_DEBUG and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.debug(msg, *args, **kwargs)
 
     def info(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_INFO and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.info(msg, *args, **kwargs)
 
     def warning(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_WARNING and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.warning(msg, *args, **kwargs)
 
     def error(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.error(msg, *args, **kwargs)
 
     def critical(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.critical(msg, *args, **kwargs)
 
     def exception(self, msg: str, *args, throttle_sec: int = 0, throttle_key: Optional[str] = None, exc: Optional[Exception] = None, **kwargs):
+        if self._silent_backtest:
+            return
         if LOG_ERROR and not self._should_throttle(msg, throttle_sec, throttle_key):
             self._logger.exception(msg, *args, **kwargs)
 

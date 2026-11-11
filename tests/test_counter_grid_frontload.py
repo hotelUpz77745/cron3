@@ -53,9 +53,20 @@ class TestCounterGridFrontload(unittest.TestCase):
         u97 = json.loads((cfg_dir / "u97_zenith13_hedge_shield.json").read_text(encoding="utf-8"))
 
         for k in u96:
-            if k in ("name", "description"):
+            if k in ("name", "description", "counter_grid_frontload"):
                 continue
             self.assertEqual(u97[k], u96[k], f"Field '{k}' must match u96_omni_zenith13 for clean comparison")
+
+        self.assertIn("counter_grid_frontload", u96)
+        self.assertFalse(u96["counter_grid_frontload"]["enabled"])
+        self.assertEqual(u96["counter_grid_frontload"]["absorb_tiers"], {"==5": 1, "==6": 2, ">=7": 3})
+        self.assertTrue(u96["counter_grid_frontload"]["preserve_l0_identity"])
+
+        for extra_name in ("u96_omni_alligator.json", "u96_omni_zenith13atr.json"):
+            extra = json.loads((cfg_dir / extra_name).read_text(encoding="utf-8"))
+            self.assertIn("counter_grid_frontload", extra, f"{extra_name} must declare counter_grid_frontload for compat")
+            self.assertFalse(extra["counter_grid_frontload"]["enabled"])
+            self.assertEqual(extra["counter_grid_frontload"]["absorb_tiers"], {"==5": 1, "==6": 2, ">=7": 3})
 
         self.assertTrue(u97["counter_grid_frontload"]["enabled"])
         self.assertEqual(u97["counter_grid_frontload"]["absorb_tiers"], {"==5": 1, "==6": 2, ">=7": 3})

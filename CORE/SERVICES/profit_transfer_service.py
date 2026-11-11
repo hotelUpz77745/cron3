@@ -13,7 +13,7 @@ from c_log import UnifiedLogger
 
 logger = UnifiedLogger("ProfitTransferService")
 
-DEFAULT_TRANSFER_PROFIT_PCT: float = 100.0
+DEFAULT_TRANSFER_PROFIT_PCT: float = 50.0
 DEFAULT_MIN_TRANSFER_USDT: float = 1.0
 HUNDRED_PCT: float = 100.0
 

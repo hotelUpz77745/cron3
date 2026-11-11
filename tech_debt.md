@@ -1777,4 +1777,23 @@ CFG/universes/u96_omni_zenith13.json
 - **[TUNING]** Проверить абляции по `absorb_tiers` (старт с `L5` vs `L6`, агрессивность `1/2/3` vs `2/3/4` колен) и при необходимости протестировать соотношение Spot-резерва / `per_coin_stop_loss` в отдельном стресс-турнире.
 - **[TESTS / CLEANUP]** Актуализировать устаревшие ассерты в `tests/test_u17_u96_config_sanctity.py` и `tests/test_smart_size_dyn_ema.py` (завязаны на архивные шаблоны `u17` и `u96_omni_zenith_apex`), а также `cron3TradeBacktest/tests/test_combat_parity_v3.py::test_corridor_delegation`; проверить порядок `check_per_coin_stop_loss` до `client.on_tick` в `cron3TradeBacktest/ENGINE/backtest_core.py`.
 
+---
+
+### 12. Единый Протокол Сущностей, исправление багов симулятора и канонический стенд 1435/1200 (ADR-29, 11.11.2026)
+
+1. **Протокол Per-Coin Stop-Loss (Паритет Прод / Бэктест):**
+   - В `cron3TradeBacktest/ENGINE/backtest_core.py` устранено критическое расхождение с продом: `check_per_coin_stop_loss` -> `_purge_symbol_on_stop_loss` при пробое (`130.0%` от `entry0`) теперь закрывает **ОБЕ открытые стороны (`LONG` и `SHORT`)** рыночными ордерами (`MARKET` с close-slippage `0.02%`), отменяет все лимитные ордера по символу, сбрасывает `PositionState` / `avg_manager`, закрывает аналитику `STOP_LOSS` и навсегда выводит монету из пула до конца текущей декады; на **проде** (`PerCoinStopLossManager.execute_stop_loss` -> `SymbolLifecycleManager.delete_symbol`) монета полностью **удаляется из торгового списка `CFG/app.json`**, из памяти (`StrategyRegistry`, FSM, `bot.symbols`), стримов и рантайм-файлов с диска.
+   - В [`CFG/universes/*.json`](CFG/universes/u96_omni_zenith13.json) (секция `per_coin_stop_loss._protocol`) и в [`ENTITY_PROTOCOL.md`](ENTITY_PROTOCOL.md) зафиксирован единый канон для всех стратегий.
+2. **Single Source of Truth для `transfer_profit_to_spot` (50% Spot):**
+   - Дублирующие блоки `transfer_profit_to_spot` удалены из всех шаблонов `CFG/universes/*.json`; единственный источник истины — `CFG/app.json -> active_strategies`, дефолт в [`CORE/SERVICES/profit_transfer_service.py`](CORE/SERVICES/profit_transfer_service.py) выставлен на `50.0%`. `BacktestBotCore` наследует конфиг напрямую из `CFG/app.json`.
+   - Для обратной совместимости схема `counter_grid_frontload` добавлена во все 3 `u96`-стратегии с флагом `"enabled": false` (`enabled: true` только в `u97_zenith13_hedge_shield.json`).
+3. **Коридор тиков, RAM-оптимизация и тихий логгер (`cron3TradeBacktest`):**
+   - [`ENGINE/corridor_calculator.py`](../cron3TradeBacktest/ENGINE/corridor_calculator.py): блокировка пропуска тиков при неинициализированных уровнях сетки (`entry0 <= 0.0` / `price is None`), добавление границ `PerCoinSL`, точных `%` `dd_pct`, `peel_tp_pct`, `fallback_price`, фикс кулдауна `last_failed_entry_ts == 0.0`.
+   - `client_sim.py`: `MARKET`-закрытия с явной ценой `order.price > 0` используют цену проскальзывания `slip_p`.
+   - `ENGINE/tick_feed.py` (`SymbolArrayView` `UInt16`), `multi_stream_engine.py`, `CACHE/precompute_indicators.py`: устранен `MemoryError` на 37M+ тиков.
+   - `c_log.py`: быстрый тихий режим `CRON3_BACKTEST=1` (`_silent_backtest`, `NullHandler`, 0 записи в консоль/диск без `CRON3_BACKTEST_FILE_LOG=1`).
+4. **Канонический стенд бэктеста (SSOT):**
+   - В [`cron3TradeBacktest/CFG/backtest.json`](../cron3TradeBacktest/CFG/backtest.json), `CFG/config.json` и `run_alpha_180d_marathon.py` зафиксирован единый старт: `start_balance_usdt = 1435.0`, `invest_size_usdt = 1200.0`, `20x CROSSED`, `0.05% taker / 0.02% maker / 0.02% close slippage`, без 8h фандинга, `Spot 50%` из `app.json`, 4-way ростер (`u96_omni_zenith13`, `u96_omni_zenith13atr`, `u96_omni_alligator`, `u97_zenith13_hedge_shield`).
+
+
 

@@ -208,8 +208,8 @@ class SimulatedBinanceClient:
         )
 
         if market_type.upper() == "MARKET":
-            # Исполнение немедленно по текущей рыночной цене
-            cur_price = self.current_prices.get(sym_u, 0.0) or (order.price if order.price > 0 else 100.0)
+            # При явно переданной цене (например, закрытие со slippage_rate) используем ее, иначе текущую рыночную
+            cur_price = order.price if order.price > 0 else (self.current_prices.get(sym_u, 0.0) or 100.0)
             success, err = self._execute_fill(order, fill_price=cur_price, fill_ts=self.current_sim_time)
             if not success:
                 return APIResponse(success=False, error_code=-2010, error_msg=err or "Insufficient margin")
