@@ -19,6 +19,7 @@ ROLE: Асимметричный балансир инвестиционных �
    - ADX ('adx_di_4h') в стадии тестирования.
 """
 
+import os
 import math
 import time
 import asyncio
@@ -286,9 +287,11 @@ class TrendSizeDepender:
         timeframe = str(trend_size_cfg.get("timeframe", "4h")).strip()
         scale = int(trend_size_cfg.get("scale", 16))
         cache_key = (symbol.upper(), timeframe, trend_mode, scale)
-        now = time.time()
+        sim_ts = getattr(client, "current_sim_time", None) if client is not None else None
+        is_sim = bool(os.environ.get("CRON3_BACKTEST") == "1" or isinstance(sim_ts, (int, float)))
+        now = (float(sim_ts) / 1000.0) if isinstance(sim_ts, (int, float)) and sim_ts > 1e9 else time.time()
 
-        cached = cls._cache.get(cache_key)
+        cached = None if is_sim else cls._cache.get(cache_key)
         if cached is not None:
             inv_l, inv_s, ts = cached
             if now - ts < cache_ttl_sec:
@@ -296,7 +299,7 @@ class TrendSizeDepender:
 
         async with cls._lock:
             # Двойная проверка под локом
-            cached = cls._cache.get(cache_key)
+            cached = None if is_sim else cls._cache.get(cache_key)
             if cached is not None:
                 inv_l, inv_s, ts = cached
                 if now - ts < cache_ttl_sec:
@@ -306,9 +309,12 @@ class TrendSizeDepender:
                 eval_window = int(trend_size_cfg.get("eval_window", 20))
                 limit = max(35, eval_window + 10)
 
-                klines = await BinancePublic.get_klines(symbol, timeframe, limit)
-                if not klines and client and hasattr(client, "get_klines"):
+                if is_sim and client and hasattr(client, "get_klines"):
                     klines = await client.get_klines(symbol, timeframe, limit)
+                else:
+                    klines = await BinancePublic.get_klines(symbol, timeframe, limit)
+                    if not klines and client and hasattr(client, "get_klines"):
+                        klines = await client.get_klines(symbol, timeframe, limit)
 
                 if not klines or len(klines) < 15:
                     logger.debug(
@@ -335,7 +341,8 @@ class TrendSizeDepender:
                 w_long, w_short = cls.calculate_weights_from_grade(grade, trend_mode=trend_mode, scale=scale)
                 inv_l, inv_s = cls.calculate_invest_sizes(base_invest_size, w_long, w_short)
 
-                cls._cache[cache_key] = (inv_l, inv_s, now)
+                if not is_sim:
+                    cls._cache[cache_key] = (inv_l, inv_s, now)
                 logger.info(
                     f"[TrendSizeDepender][{symbol}] Evaluated {trend_mode} (scale={scale}, {timeframe}): "
                     f"Grade k={grade:+d} -> LONG {w_long:.2f}% ({inv_l:.2f}$), SHORT {w_short:.2f}% ({inv_s:.2f}$)"

@@ -7,6 +7,7 @@ ROLE: Сервис асинхронного расчета и кеширован
 ==============================================================================
 """
 
+import os
 import time
 import asyncio
 from typing import Dict, Tuple, Optional
@@ -46,8 +47,10 @@ class ATRProvider:
         Если в кеше есть свежее значение (< cache_ttl_sec), возвращает его O(1).
         В случае недоступности свежих свечей возвращает строго fallback_atr_pct из конфига стратегии.
         """
+        sim_ts = getattr(client, "current_sim_time", None) if client is not None else None
+        is_sim = bool(os.environ.get("CRON3_BACKTEST") == "1" or isinstance(sim_ts, (int, float)))
+        now = (float(sim_ts) / 1000.0) if isinstance(sim_ts, (int, float)) and sim_ts > 1e9 else time.time()
         cache_key = (symbol, timeframe, period)
-        now = time.time()
 
         if client and hasattr(client, "get_precomputed_atr"):
             try:
@@ -57,7 +60,7 @@ class ATRProvider:
             except Exception:
                 pass
 
-        cached = cls._cache.get(cache_key)
+        cached = None if is_sim else cls._cache.get(cache_key)
         if cached is not None:
             val, ts = cached
             if now - ts < cache_ttl_sec:
@@ -65,7 +68,7 @@ class ATRProvider:
 
         async with cls._lock:
             # Двойная проверка под локом
-            cached = cls._cache.get(cache_key)
+            cached = None if is_sim else cls._cache.get(cache_key)
             if cached is not None:
                 val, ts = cached
                 if now - ts < cache_ttl_sec:
@@ -73,9 +76,13 @@ class ATRProvider:
 
             try:
                 limit = period + 2
-                klines = await BinancePublic.get_klines(symbol, timeframe, limit)
-                if not klines and client and hasattr(client, "get_klines"):
+                klines = None
+                if is_sim and client and hasattr(client, "get_klines"):
                     klines = await client.get_klines(symbol, timeframe, limit)
+                else:
+                    klines = await BinancePublic.get_klines(symbol, timeframe, limit)
+                    if not klines and client and hasattr(client, "get_klines"):
+                        klines = await client.get_klines(symbol, timeframe, limit)
 
                 if not klines or len(klines) < period:
                     logger.debug(
@@ -104,7 +111,8 @@ class ATRProvider:
                     return fallback_atr_pct
 
                 atr_pct = round((atr_val / cur_price) * 100.0, 4)
-                cls._cache[cache_key] = (atr_pct, now)
+                if not is_sim:
+                    cls._cache[cache_key] = (atr_pct, now)
                 return atr_pct
 
             except Exception as e:

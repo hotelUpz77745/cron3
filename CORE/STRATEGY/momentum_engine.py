@@ -58,7 +58,8 @@ class MomentumEngine:
         sma_slow = int(cfg.get("sma_slow", 30))
         confirmation = int(cfg.get("confirmation_candles", 5 if "4h" in timeframe else 3))
         cache_key = (symbol.upper(), timeframe, sma_fast, sma_slow, confirmation)
-        sim_ts = getattr(client, "current_sim_time", 0)
+        sim_ts = getattr(client, "current_sim_time", None) if client is not None else None
+        is_sim = bool(os.environ.get("CRON3_BACKTEST") == "1" or isinstance(sim_ts, (int, float)))
         if not isinstance(sim_ts, (int, float)):
             sim_ts = 0
         now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
@@ -72,14 +73,14 @@ class MomentumEngine:
             if p_trend is not None:
                 return p_trend
 
-        cached = cls._trend_cache.get(cache_key)
+        cached = None if is_sim else cls._trend_cache.get(cache_key)
         if cached is not None:
             trend_val, ts = cached
             if now - ts < cache_ttl_sec:
                 return trend_val
 
         async with cls._get_trend_lock():
-            cached = cls._trend_cache.get(cache_key)
+            cached = None if is_sim else cls._trend_cache.get(cache_key)
             if cached is not None:
                 trend_val, ts = cached
                 if now - ts < cache_ttl_sec:
@@ -120,7 +121,8 @@ class MomentumEngine:
                 calc = TrendCalculator(trend_calc_cfg)
                 trend_state = calc.calculate(closes)
 
-                cls._trend_cache[cache_key] = (trend_state, now)
+                if not is_sim:
+                    cls._trend_cache[cache_key] = (trend_state, now)
                 logger.debug(
                     f"[MomentumEngine][{symbol}] Evaluated EMA trend "
                     f"({timeframe} {cfg.get('sma_fast', 10)}/{sma_slow}): {trend_state}"

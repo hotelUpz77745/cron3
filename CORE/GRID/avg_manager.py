@@ -110,7 +110,9 @@ class AverageManager:
                 if not level_data.get("is_active") or level_data.get("activated_at") is None:
                     level_data["is_active"] = True
                     level_data["price"] = initial_price
-                    act_time = (state.open_time / 1000.0) if (state.open_time and state.open_time > 0) else time.time()
+                    sim_ts = getattr(client, "current_sim_time", None) if client is not None else None
+                    sim_sec = (float(sim_ts) / 1000.0 if sim_ts > 1e9 else float(sim_ts)) if isinstance(sim_ts, (int, float)) and sim_ts > 0 else None
+                    act_time = (state.open_time / 1000.0) if (state.open_time and state.open_time > 0) else (sim_sec if sim_sec is not None else time.time())
                     level_data["activated_at"] = act_time
                     level_data["timestamp"] = int(act_time * 1000)
                     needs_save = True

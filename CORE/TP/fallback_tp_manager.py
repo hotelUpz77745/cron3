@@ -17,6 +17,13 @@ class FallbackTpManager:
     def __init__(self):
         pass
 
+    @staticmethod
+    def _resolve_now_ts(client) -> float:
+        sim_ts = getattr(client, "current_sim_time", None) if client is not None else None
+        if isinstance(sim_ts, (int, float)) and sim_ts > 0:
+            return float(sim_ts) / 1000.0 if sim_ts > 1e9 else float(sim_ts)
+        return time.time()
+
     async def process(self, client, runtime_manager, symbol: str, side: str, state, current_price: float, spec_data: dict, opposite_state=None):
         if (
             not state.in_position
@@ -88,7 +95,7 @@ class FallbackTpManager:
                     logger.info(f"[{symbol}] Trailing TP Market Order successfully executed.")
                     state.last_closed_volume = volume_float
                     state.last_closed_avg_price = state.avg_entry_price
-                    state.last_closed_timestamp = time.time()
+                    state.last_closed_timestamp = self._resolve_now_ts(client)
                     state.is_finished = True
                     state.trailing_tp_state = {}
                     if isinstance(state.tp_map, dict):
@@ -198,7 +205,7 @@ class FallbackTpManager:
                 logger.info(f"[{symbol}] Fallback Market Order successfully executed.")
                 state.last_closed_volume = volume_float
                 state.last_closed_avg_price = state.avg_entry_price
-                state.last_closed_timestamp = time.time()
+                state.last_closed_timestamp = self._resolve_now_ts(client)
                 state.is_finished = True  # Только теперь говорим оркестратору, что всё
             else:
                 if res.error_code == -2022 or "-2022" in str(res.error_msg):

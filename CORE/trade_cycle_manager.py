@@ -116,6 +116,7 @@ class TradeCycleManager:
                         state=state,
                         closed_count=closed_count,
                         current_price=current_price,
+                        rng=getattr(self.bot, "_rng", None),
                     )
                     fresh_price = await res if inspect.isawaitable(res) else res
                     if fresh_price is None:
