@@ -102,6 +102,10 @@ class StrategyIterationManager:
                 except Exception:
                     c_dict = {}
             prev_entry = c_dict.get(strategy_id, {})
+            transferred_spot = max(
+                float(strat_analytics.get("transferred_to_spot_usdt", 0.0) or 0.0),
+                float(prev_entry.get("transferred_to_spot_usdt", 0.0) or 0.0),
+            )
             c_dict[strategy_id] = {
                 "iteration_index": next_iter_idx,
                 "iteration_start_net_profit_usdt": new_iter_start_net,
@@ -115,6 +119,8 @@ class StrategyIterationManager:
                 "historical_max_drawdown_usdt": prev_entry.get("historical_max_drawdown_usdt", 0.0),
                 "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
+            if transferred_spot > 0.0:
+                c_dict[strategy_id]["transferred_to_spot_usdt"] = round(transferred_spot, 4)
             Utils.atomic_write_json(c_file, c_dict, indent=4)
         except Exception as ce:
             logger.error(f"[{strategy_id}] Error saving iteration cache on manual reset: {ce}")

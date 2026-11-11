@@ -50,7 +50,8 @@ class BinanceClient:
         self.cancel_all_url   = "https://fapi.binance.com/fapi/v1/allOpenOrders"
         self.positions_url    = "https://fapi.binance.com/fapi/v2/account"
         self.position_mode_url = "https://fapi.binance.com/fapi/v1/positionSide/dual"
-        self.balance_url      = "https://fapi.binance.com/fapi/v2/balance"
+        # ЗАПРЕЩЕНО АРХИТЕКТУРОЙ HRON-3 (ADR-27): баланс кошелька /fapi/v2/balance не опрашивается.
+        # self.balance_url      = "https://fapi.binance.com/fapi/v2/balance"
         self.user_trades_url  = "https://fapi.binance.com/fapi/v1/userTrades"
         self.set_leverage_url = "https://fapi.binance.com/fapi/v1/leverage"
         self.set_margin_url   = "https://fapi.binance.com/fapi/v1/marginType"
@@ -424,17 +425,21 @@ class BinanceClient:
             signed=True,
         )
 
-    async def fetch_balance(self) -> List[dict]:
-        params = {"recvWindow": 20000}
-        res = await self._request(
-            "GET",
-            self.balance_url,
-            params=params,
-            signed=True,
-        )
-        if res.success and isinstance(res.data, list):
-            return res.data
-        return []
+    # ЗАПРЕЩЕНО АРХИТЕКТУРОЙ HRON-3 (ADR-27):
+    # Бот никогда не запрашивает физический баланс кошелька Futures через /fapi/v2/balance.
+    # Вся математика баланса, храповиков и автопереводов базируется строго на расчетной аналитике сделок,
+    # чтобы ручные пополнения/выводы (+$1000 и т.п.) не искажали работу куполов.
+    # async def fetch_balance(self) -> List[dict]:
+    #     params = {"recvWindow": 20000}
+    #     res = await self._request(
+    #         "GET",
+    #         self.balance_url,
+    #         params=params,
+    #         signed=True,
+    #     )
+    #     if res.success and isinstance(res.data, list):
+    #         return res.data
+    #     return []
 
     async def get_position_mode(self) -> dict:
         params = {"recvWindow": 20000}

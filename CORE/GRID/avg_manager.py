@@ -47,6 +47,11 @@ class AverageManager:
             tp_manager=tp_manager,
         )
 
+    @staticmethod
+    def _current_time(runtime_manager: Any) -> float:
+        bot_core = getattr(runtime_manager, "bot_core", None) if runtime_manager is not None else None
+        return Utils.get_current_time(getattr(bot_core, "current_sim_time", None))
+
     def reset(self, symbol: str, side: str):
         pass
 
@@ -246,15 +251,15 @@ class AverageManager:
             return
 
         level_data = grid[candidate_level]
+        now_sec = self._current_time(runtime_manager)
         # Защитный кулдаун: если прошлый ордер отклонен (например, Margin Insufficient), не долбим биржу каждую миллисекунду
-        if level_data.get("failed_cooldown_until", 0) > time.time():
+        if level_data.get("failed_cooldown_until", 0) > now_sec:
             return
 
         # 4. Обработка пропущенных уровней (avg_free_volume_behavior)
         if skipped_levels:
             behavior = getattr(state, "avg_free_volume_behavior", "distribute_remaining")
             skipped_vol = sum(float(grid[sk].get("volume") or 0.0) for sk in skipped_levels if isinstance(grid.get(sk), dict) and grid[sk].get("enabled", True) is not False)
-            now_sec = time.time()
             for sk in skipped_levels:
                 grid[sk]["is_active"] = True
                 grid[sk]["activated_at"] = now_sec
@@ -386,7 +391,7 @@ class AverageManager:
         state.pre_avg_price = state.avg_entry_price
         level_data["is_active"] = True
         level_data["is_armed"] = False
-        now_sec = time.time()
+        now_sec = self._current_time(runtime_manager)
         level_data["activated_at"] = now_sec
         level_data["timestamp"] = int(now_sec * 1000)
 
@@ -399,7 +404,7 @@ class AverageManager:
             logger.error(f"[{symbol}] {side} Critical error during averaging execution: {e}", exc_info=True)
             level_data["is_active"] = False
             level_data["timestamp"] = None
-            level_data["failed_cooldown_until"] = time.time() + 30.0
+            level_data["failed_cooldown_until"] = self._current_time(runtime_manager) + 30.0
             raise
         finally:
             state.pending_avg = False
@@ -449,7 +454,7 @@ class AverageManager:
             level_data["timestamp"] = None
             state.pending_avg = False
             state.next_avg_price = None
-            level_data["failed_cooldown_until"] = time.time() + 30.0
+            level_data["failed_cooldown_until"] = self._current_time(runtime_manager) + 30.0
             return
 
         level_data.pop("failed_cooldown_until", None)

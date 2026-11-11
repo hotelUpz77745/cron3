@@ -388,23 +388,31 @@ class StrategyStatsEngine:
             calc_dd = net_dd
             strat_data["max_drawdown_usdt"] = calc_dd
 
-            # Сохраняем состояние итерации и исторические рекорды в кеш
-            self.save_iteration_cache(
-                strat_id,
-                {
-                    "iteration_index": iter_idx,
-                    "iteration_start_net_profit_usdt": round(iter_start_net, 4),
-                    "iteration_start_realized_pnl_usdt": round(iter_start_real, 4),
-                    "iteration_realized_pnl_usdt": iter_real,
-                    "iteration_start_ts": iter_start_ts,
-                    "iteration_peak_net_profit_usdt": round(iter_peak_net, 4),
-                    "iteration_peak_ts": iter_peak_ts,
-                    "historical_peak_net_profit_usdt": hist_peak,
-                    "historical_peak_net_ts": hist_peak_ts,
-                    "historical_max_drawdown_usdt": hist_max_dd,
-                    "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
-                },
+            # Сохраняем накопленный автовыведенный на Spot профит (без привязки к fetch_balance)
+            transferred_spot = max(
+                float(strat_data.get("transferred_to_spot_usdt", 0.0) or 0.0),
+                float(iter_cache.get("transferred_to_spot_usdt", 0.0) or 0.0),
             )
+            if transferred_spot > 0.0:
+                strat_data["transferred_to_spot_usdt"] = round(transferred_spot, 4)
+
+            # Сохраняем состояние итерации и исторические рекорды в кеш
+            iter_payload = {
+                "iteration_index": iter_idx,
+                "iteration_start_net_profit_usdt": round(iter_start_net, 4),
+                "iteration_start_realized_pnl_usdt": round(iter_start_real, 4),
+                "iteration_realized_pnl_usdt": iter_real,
+                "iteration_start_ts": iter_start_ts,
+                "iteration_peak_net_profit_usdt": round(iter_peak_net, 4),
+                "iteration_peak_ts": iter_peak_ts,
+                "historical_peak_net_profit_usdt": hist_peak,
+                "historical_peak_net_ts": hist_peak_ts,
+                "historical_max_drawdown_usdt": hist_max_dd,
+                "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
+            }
+            if transferred_spot > 0.0:
+                iter_payload["transferred_to_spot_usdt"] = round(transferred_spot, 4)
+            self.save_iteration_cache(strat_id, iter_payload)
 
             strat_data["max_drawdown_usdt"] = round(calc_dd, 4)
 

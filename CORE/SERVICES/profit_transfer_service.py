@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, ROUND_DOWN
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 from API.BINANCE.transfer_manager import TransferManager, DEFAULT_TRANSFER_ASSET
 from c_log import UnifiedLogger
@@ -20,8 +20,9 @@ HUNDRED_PCT: float = 100.0
 
 class ProfitTransferService:
     """
-    Инкапсулирует бизнес-логику автоматического вывода чистого профита закрытой итерации
-    с фьючерсного счета (USDⓈ-M) на спотовый кошелек (Spot) при срабатывании храповика trailing_ratchet.
+    Чистый сервис конфигурации, математической валидации и SAPI-транспорта для вывода профита
+    закрытой итерации trailing_ratchet с Futures (USDⓈ-M) на Spot.
+    Правило ADR-27: никогда не вызывает fetch_balance(), опирается строго на расчетные цифры аналитики.
     """
 
     @staticmethod
@@ -120,6 +121,33 @@ class ProfitTransferService:
 
         return rounded_amount
 
+    @staticmethod
+    def resolve_eligible_profit_usdt(
+        actual_iter_profit_usdt: float,
+        net_profit_usdt: Optional[float] = None,
+        transferred_to_spot_usdt: float = 0.0,
+        min_profit_guard_usdt: float = 0.0,
+    ) -> Tuple[float, Optional[str]]:
+        """
+        Проверяет два обязательных условия перевода профита на Spot строго по расчетным данным:
+          1) Закрытая итерация прибыльна и превышает min_profit_guard_usdt.
+          2) Расчетный баланс маржи купола выше стартового (net_profit_usdt - transferred_to_spot_usdt > 0).
+        Возвращает (eligible_profit_usdt, skip_reason_or_none).
+        """
+        iter_profit = round(float(actual_iter_profit_usdt or 0.0), 4)
+        min_guard = max(0.0, float(min_profit_guard_usdt or 0.0))
+
+        if iter_profit <= 0.0 or (min_guard > 0.0 and iter_profit < min_guard):
+            return 0.0, "below_min_profit_guard"
+
+        if net_profit_usdt is not None:
+            pure_over_start = round(float(net_profit_usdt) - float(transferred_to_spot_usdt or 0.0), 4)
+            if pure_over_start <= 0.0:
+                return 0.0, "margin_balance_not_above_start"
+            return min(iter_profit, pure_over_start), None
+
+        return iter_profit, None
+
     @classmethod
     async def execute_on_ratchet_close(
         cls,
@@ -128,10 +156,12 @@ class ProfitTransferService:
         strat_cfg: Optional[Any],
         iter_net_usdt: float,
         close_type: str = "TRAILING RATCHET",
+        net_profit_usdt: Optional[float] = None,
+        transferred_to_spot_usdt: float = 0.0,
+        min_profit_guard_usdt: float = 0.0,
     ) -> Optional[Dict[str, Any]]:
         """
-        Исполняет перевод профита на Spot после закрытия всех позиций купола по храповику trailing_ratchet.
-        Безопасен к сбоям сети/API: не блокирует закрытие итерации и возвращает статус для уведомления в Telegram.
+        Исполняет SAPI перевод допустимого профита на Spot (без опроса fetch_balance).
         """
         c_type_upper = str(close_type or "").upper().strip()
         if "TRAILING RATCHET" not in c_type_upper and c_type_upper not in (
@@ -151,13 +181,35 @@ class ProfitTransferService:
 
         pct = float(transfer_cfg.get("transfer_profit_pct", DEFAULT_TRANSFER_PROFIT_PCT))
         asset = str(transfer_cfg.get("asset", DEFAULT_TRANSFER_ASSET)).upper()
-        amount_usdt = cls.calculate_transfer_amount(iter_net_usdt, transfer_cfg)
+
+        eligible_usdt, block_reason = cls.resolve_eligible_profit_usdt(
+            actual_iter_profit_usdt=iter_net_usdt,
+            net_profit_usdt=net_profit_usdt,
+            transferred_to_spot_usdt=transferred_to_spot_usdt,
+            min_profit_guard_usdt=min_profit_guard_usdt,
+        )
+        if block_reason is not None:
+            logger.info(
+                f"[PROFIT_TRANSFER][{strat_id}] Перевод пропущен ({block_reason}): "
+                f"iter_profit={iter_net_usdt:+.2f} {asset}, net_profit={net_profit_usdt}, "
+                f"transferred_total={transferred_to_spot_usdt:.2f} {asset}."
+            )
+            return {
+                "executed": False,
+                "reason": block_reason,
+                "amount_usdt": 0.0,
+                "transfer_profit_pct": pct,
+                "asset": asset,
+                "alert_line": "",
+            }
+
+        amount_usdt = cls.calculate_transfer_amount(eligible_usdt, transfer_cfg)
 
         if amount_usdt <= 0.0:
             logger.info(
                 f"[PROFIT_TRANSFER][{strat_id}] Перевод пропущен: расчетная сумма {amount_usdt:.2f} {asset} "
                 f"меньше порога min_transfer_usdt={transfer_cfg.get('min_transfer_usdt')} "
-                f"(iter_net={iter_net_usdt:+.2f} USDT, pct={pct:g}%)."
+                f"(eligible={eligible_usdt:+.2f} USDT, pct={pct:g}%)."
             )
             return {
                 "executed": False,
@@ -171,6 +223,10 @@ class ProfitTransferService:
         client = None
         if hasattr(bot_core, "get_client_for_strategy") and callable(bot_core.get_client_for_strategy):
             client = bot_core.get_client_for_strategy(strat_id)
+        if client is None:
+            clients_map = getattr(bot_core, "clients", None)
+            if isinstance(clients_map, dict) and strat_id in clients_map:
+                client = clients_map[strat_id]
         if client is None:
             client = getattr(bot_core, "client", None)
 
@@ -197,17 +253,21 @@ class ProfitTransferService:
                     except (TypeError, ValueError):
                         actual_amt = amount_usdt
                 tran_id = res.data.get("tranId") if isinstance(getattr(res, "data", None), dict) else None
+                raw_name = strat_cfg.get("name") if isinstance(strat_cfg, dict) else getattr(strat_cfg, "name", None)
+                strat_label = raw_name if (isinstance(raw_name, str) and raw_name) else strat_id
                 logger.info(
                     f"💸 [PROFIT_TRANSFER][{strat_id}] Успешно переведено на Spot: "
-                    f"+{actual_amt:.2f} {asset} ({pct:g}% от профита итерации {iter_net_usdt:+.2f} USDT, tranId={tran_id})"
+                    f"+{actual_amt:.2f} {asset} ({pct:g}% от допустимого профита {eligible_usdt:+.2f} {asset}, tranId={tran_id})"
                 )
                 alert_line = (
-                    f"💸 Перевод профита на Spot: <b>+{actual_amt:.2f} {asset}</b> "
+                    f"💸 <b>[{strat_label}]</b> Перевод профита на Spot: <b>+{actual_amt:.2f} {asset}</b> "
                     f"(<b>{pct:g}%</b> от профита итерации)"
                 )
                 return {
                     "executed": True,
+                    "strategy_id": strat_id,
                     "amount_usdt": actual_amt,
+                    "eligible_profit_usdt": eligible_usdt,
                     "transfer_profit_pct": pct,
                     "asset": asset,
                     "tran_id": tran_id,

@@ -240,6 +240,11 @@ class BotBootstrapService:
         if getattr(bot_core, "delisting_detector", None):
             await bot_core.delisting_detector.stop()
 
+        pt_fsm = getattr(getattr(bot_core, "auto_closer", None), "profit_transfer_fsm", None)
+        if pt_fsm is not None and hasattr(pt_fsm, "wait_for_pending_tasks"):
+            with contextlib.suppress(Exception):
+                await pt_fsm.wait_for_pending_tasks()
+
         for creds, cl in getattr(bot_core, '_key_clients', {}).items():
             with contextlib.suppress(Exception):
                 await cl.shutdown()

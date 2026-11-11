@@ -273,9 +273,11 @@ class BinanceClient:
         await asyncio.sleep(0)
         return APIResponse(success=True, data={"positions": []}, meta={"paper_trading": True})
 
-    async def fetch_balance(self) -> List[dict]:
-        await asyncio.sleep(0)
-        return [{"asset": "USDT", "balance": "10000.0", "availableBalance": "10000.0"}]
+    # ЗАПРЕЩЕНО АРХИТЕКТУРОЙ HRON-3 (ADR-27): физический баланс кошелька не опрашивается.
+    # Все расчеты выполняются строго на базе аналитики сделок.
+    # async def fetch_balance(self) -> List[dict]:
+    #     await asyncio.sleep(0)
+    #     return [{"asset": "USDT", "balance": "10000.0", "availableBalance": "10000.0"}]
 
     async def get_position_mode(self) -> dict:
         return {"dualSidePosition": True}

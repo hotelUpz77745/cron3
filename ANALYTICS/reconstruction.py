@@ -42,6 +42,7 @@ class ReconstructionService:
             logger.info("Deep Sync already in progress, waiting...")
 
         async with self.manager._sync_in_progress:
+            sync_started_ts = time.time()
             async with self.manager._lock:
                 data = self.manager._read_data()
                 if not data:
@@ -342,6 +343,12 @@ class ReconstructionService:
 
                     await self.manager._update_drawdowns(client, data)
                     self.manager._write_data(data)
+                    self.manager.last_deep_sync_ts = sync_started_ts
+                    if hasattr(self.manager, "last_deep_sync_ts_by_client") and isinstance(self.manager.last_deep_sync_ts_by_client, dict):
+                        self.manager.last_deep_sync_ts_by_client[id(client)] = sync_started_ts
+                    self.manager.last_deep_sync_ts = sync_started_ts
+                    if hasattr(self.manager, "last_deep_sync_ts_by_client") and isinstance(self.manager.last_deep_sync_ts_by_client, dict):
+                        self.manager.last_deep_sync_ts_by_client[id(client)] = sync_started_ts
 
             except Exception as e:
                 logger.error(f"Absolute Deep Sync error: {e}")

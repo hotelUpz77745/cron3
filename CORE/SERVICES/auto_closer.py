@@ -30,6 +30,7 @@ from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 from CORE.SERVICES.portfolio_closer import PortfolioCloser
 from CORE.SERVICES.trailing_ratchet_analytics import TrailingRatchetAnalytics
 from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
+from CORE.SERVICES.profit_transfer_fsm import ProfitTransferFSM
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -49,6 +50,7 @@ class AutoCloser:
         self._last_close_ts: dict[str, float] = {}
         self._trailing_ratchet_state: dict[str, dict] = {}
         self.ratchet_analytics: dict[str, TrailingRatchetAnalytics] = {}
+        self.profit_transfer_fsm = ProfitTransferFSM(stats_dir=ANALYTICS_STATS_DIR, cache_dir=CACHE_DIR)
 
     @staticmethod
     def _build_close_msg(
@@ -121,6 +123,13 @@ class AutoCloser:
     async def check(self):
         if self._is_closing:
             return
+
+        # Надстройка автоперевода профита на Spot: тикает на каждом цикле главного лупа
+        if getattr(self, "profit_transfer_fsm", None):
+            active_strats = {}
+            if hasattr(self.bot_core, "strategy_registry") and self.bot_core.strategy_registry:
+                active_strats = getattr(self.bot_core.strategy_registry, "active_strategies", {}) or {}
+            await self.profit_transfer_fsm.process_tick(self.bot_core, active_strats)
 
         # Машина состояний аналитики (FSM): AutoCloser разрешен ТОЛЬКО в 4-м состоянии (AUTOCLOSER_READY)
         fsm = getattr(getattr(self.bot_core, "analytics", None), "fsm", None)
@@ -502,6 +511,7 @@ class AutoCloser:
                         trailing_ratchet_state=self._trailing_ratchet_state,
                         is_emergency_stop=is_emergency_stop,
                         emergency_details=emergency_details,
+                        profit_transfer_fsm=getattr(self, "profit_transfer_fsm", None),
                     )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")

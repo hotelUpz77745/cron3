@@ -98,6 +98,8 @@ class AnalyticsManager:
         )
 
         self._floating_synced = False
+        self.last_deep_sync_ts: float = 0.0
+        self.last_deep_sync_ts_by_client: Dict[int, float] = {}
         self._persisted_global_cache: dict = {}
         self._persisted_strat_cache: dict = {}
 

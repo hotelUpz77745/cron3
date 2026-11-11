@@ -17,7 +17,6 @@ if str(_ROOT) not in sys.path:
 from consts import CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
-from CORE.SERVICES.profit_transfer_service import ProfitTransferService
 
 logger = UnifiedLogger("DomeCloserExecutor")
 
@@ -51,8 +50,33 @@ class DomeCloserExecutor:
         trailing_ratchet_state: dict,
         is_emergency_stop: bool = False,
         emergency_details: Optional[Dict[str, Any]] = None,
+        profit_transfer_fsm: Optional[Any] = None,
     ) -> None:
         """Атомарно исполняет закрытие купола или глобального портфеля."""
+        pt_fsm = profit_transfer_fsm or getattr(getattr(bot_core, "auto_closer", None), "profit_transfer_fsm", None)
+        close_type_parsed = (
+            action_msg.split("(")[1].split(")")[0]
+            if (action_msg and "(" in action_msg and ")" in action_msg)
+            else ("PORTFOLIO AUTO-CLOSE" if is_global else "AUTO-CLOSE")
+        )
+        prev_baseline_net = round(float(strat_net) - float(iter_net), 4)
+
+        if pt_fsm is not None:
+            if is_emergency_stop:
+                pt_fsm.cancel_job(strat_id, reason="emergency_stop")
+            elif not is_global:
+                pt_fsm.arm_on_ratchet_trigger(
+                    strat_id=strat_id,
+                    strat_cfg=strat_cfg,
+                    close_type=close_type_parsed,
+                    closed_iter_idx=iter_idx,
+                    next_iter_idx=next_iter_idx,
+                    prev_baseline_net=prev_baseline_net,
+                    ready_at_ts=0.0,
+                    is_global=is_global,
+                    stats_path=stats_path,
+                )
+
         # 1. Закрытие позиций на бирже
         if is_global or is_emergency_stop:
             await bot_core.close_all_positions()
@@ -72,22 +96,6 @@ class DomeCloserExecutor:
             from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
             EmergencyStopManager.set_active(emergency_details)
             logger.critical(f"[DOME_CLOSER_EXECUTOR][{strat_id}] 🛑 АВАРИЙНЫЙ СТОП-КРАН: Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False)!")
-
-        # 1.2 Автоматический перевод профита итерации с Futures на Spot при срабатывании trailing_ratchet
-        close_type_parsed = (
-            action_msg.split("(")[1].split(")")[0]
-            if (action_msg and "(" in action_msg and ")" in action_msg)
-            else ("PORTFOLIO AUTO-CLOSE" if is_global else "AUTO-CLOSE")
-        )
-        transfer_res: Optional[Dict[str, Any]] = None
-        if not is_emergency_stop:
-            transfer_res = await ProfitTransferService.execute_on_ratchet_close(
-                bot_core=bot_core,
-                strat_id=strat_id,
-                strat_cfg=strat_cfg,
-                iter_net_usdt=iter_net,
-                close_type=close_type_parsed,
-            )
 
         # 2. Сброс трейлинг-храповика
         if strat_id in trailing_ratchet_state:
@@ -120,6 +128,10 @@ class DomeCloserExecutor:
             c_file = CACHE_DIR / "iteration_state.json"
             c_dict = json.loads(c_file.read_text(encoding="utf-8")) if c_file.exists() else {}
             prev_entry = c_dict.get(strat_id, {})
+            transferred_spot = max(
+                float(fresh_analytics.get("transferred_to_spot_usdt", 0.0) or 0.0),
+                float(prev_entry.get("transferred_to_spot_usdt", 0.0) or 0.0),
+            )
             cache_entry: Dict[str, Any] = {
                 "iteration_index": next_iter_idx,
                 "iteration_start_net_profit_usdt": settled_net,
@@ -128,6 +140,8 @@ class DomeCloserExecutor:
                 "iteration_peak_ts": now_ms,
                 "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC"),
             }
+            if transferred_spot > 0.0:
+                cache_entry["transferred_to_spot_usdt"] = round(transferred_spot, 4)
             if not is_global:
                 cache_entry["iteration_start_realized_pnl_usdt"] = settled_realized
                 cache_entry["iteration_realized_pnl_usdt"] = 0.0
@@ -150,13 +164,22 @@ class DomeCloserExecutor:
                 "strat_net": settled_net,
                 "settled_realized": settled_realized,
             }
-            if transfer_res is not None:
-                fsm_details["spot_transfer"] = transfer_res
             fsm.mark_iteration_closed(
                 strat_id=strat_id,
                 iter_idx=iter_idx,
                 details=fsm_details,
             )
+
+        # 5.1 Перевод автомата автоперевода в ожидание чистой аналитики + нового цикла сердцебиения
+        if pt_fsm is not None and not is_emergency_stop and not is_global:
+            st_blk_dict = getattr(bot_core, "strategy_blocked_until", None)
+            raw_st_blk = st_blk_dict.get(strat_id, 0.0) if isinstance(st_blk_dict, dict) else 0.0
+            raw_gl_blk = getattr(bot_core, "block_until_timestamp", 0.0)
+            ready_at_ts = max(
+                float(raw_st_blk) if isinstance(raw_st_blk, (int, float)) else 0.0,
+                float(raw_gl_blk) if isinstance(raw_gl_blk, (int, float)) else 0.0,
+            )
+            pt_fsm.mark_positions_closed(strat_id=strat_id, now_ts=time.time(), ready_at_ts=ready_at_ts)
 
         # 6. Сброс recent_closes
         if hasattr(bot_core, "fsm_states"):
@@ -171,6 +194,4 @@ class DomeCloserExecutor:
         Utils.write_json_file(app_json_path, app_data)
         if action_msg and getattr(bot_core, "notifier", None):
             final_msg = action_msg.replace("базовая точка Net: <b>0.00 USDT</b>", f"базовая точка Net: <b>{settled_net:+.2f} USDT</b>")
-            if transfer_res and transfer_res.get("alert_line"):
-                final_msg = f"{final_msg}\n\n{transfer_res['alert_line']}"
             await bot_core.notifier.send_alert(final_msg)

@@ -285,7 +285,8 @@ class EmergencyCloserService:
                     except Exception as e:
                         logger.error(f"[{strategy_id}][{sym}] Failed to cancel orders: {e}")
 
-            # Закрытие позиций
+            # Закрытие позиций с обязательным контрольным ре-чеком
+            closed_any = False
             try:
                 positions = await strat_client.fetch_positions()
                 for p in positions:
@@ -294,6 +295,7 @@ class EmergencyCloserService:
                         continue
                     amt = float(p.get("positionAmt", 0.0))
                     if abs(amt) > 0:
+                        closed_any = True
                         pos_side = p.get("positionSide")
                         side = "SELL" if pos_side == "LONG" else "BUY"
                         async with bot_core._get_symbol_lock(sym):
@@ -305,6 +307,27 @@ class EmergencyCloserService:
                                 position_side=pos_side,
                                 market_type="MARKET"
                             )
+                if closed_any:
+                    await asyncio.sleep(0.3)
+                    positions_recheck = await strat_client.fetch_positions()
+                    for p in positions_recheck:
+                        sym = (p.get("symbol") or "").upper()
+                        if sym not in symbols_set:
+                            continue
+                        amt = float(p.get("positionAmt", 0.0))
+                        if abs(amt) > 0:
+                            pos_side = p.get("positionSide")
+                            side = "SELL" if pos_side == "LONG" else "BUY"
+                            async with bot_core._get_symbol_lock(sym):
+                                logger.critical(f"[{strategy_id}][{sym}] [RE-CHECK] Emergency closing hanging {pos_side} pos! Qty: {abs(amt)}")
+                                await strat_client.make_order(
+                                    symbol=sym,
+                                    qty=abs(amt),
+                                    side=side,
+                                    position_side=pos_side,
+                                    market_type="MARKET"
+                                )
+                                await strat_client.cancel_all_orders(sym)
             except Exception as e:
                 logger.error(f"[{strategy_id}] Error closing positions: {e}")
 
