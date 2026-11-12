@@ -24,7 +24,7 @@ from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_D
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
-from CORE.STRATEGY.smoothed_profit_closer import SmoothedProfitDrawdownCloser
+from CORE.STRATEGY.profit_closer_common import BucketedCloserRouter
 from CORE.SERVICES.stagnation_evaluator import StagnationEvaluator
 from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
@@ -184,6 +184,8 @@ class AutoCloser:
                 mode = "ratchet_smoothed_drawdown"
             elif strat_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in strat_id:
                 mode = "smoothed_drawdown"
+            elif strat_id.endswith("__ma_crossover") or "__ma_crossover" in strat_id:
+                mode = "ma_crossover"
             elif strat_id.endswith("__classic") or "__classic" in strat_id:
                 mode = "trailing_ratchet"
             elif strat_id.endswith("__toxic") or "__toxic" in strat_id:
@@ -203,7 +205,7 @@ class AutoCloser:
                 raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
                 if raw_m_str in ("trailing_ratchet", "classic", "iter_net_classic"):
                     mode = "trailing_ratchet"
-                elif raw_m_str in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
+                elif BucketedCloserRouter.is_supported(raw_m_str):
                     mode = raw_m_str
                 elif raw_m_str in ("toxic", "toxicity_adaptive"):
                     mode = "toxic"
@@ -383,8 +385,8 @@ class AutoCloser:
                             detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
                         )
 
-                elif mode in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
-                    sm_ok, sm_trig, sm_info = SmoothedProfitDrawdownCloser.evaluate_mode(
+                elif BucketedCloserRouter.is_supported(mode):
+                    sm_ok, sm_trig, sm_info = BucketedCloserRouter.evaluate(
                         mode=mode,
                         pos_cfg=pos_cfg,
                         iter_net=iter_net,

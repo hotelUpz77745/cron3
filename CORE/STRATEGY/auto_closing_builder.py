@@ -145,8 +145,25 @@ class AutoClosingConfigBuilder:
                 "positive": pos_cfg,
                 "negative": neg_cfg,
             }
+        elif mode == "ma_crossover":
+            ma_cfg = copy.deepcopy(pos_base["ma_crossover"])
+            pos_cfg = {
+                "mode": "ma_crossover",
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
+                "ma_crossover": ma_cfg,
+            }
+            return {
+                "mode": "ma_crossover",
+                "positive": pos_cfg,
+                "negative": neg_cfg,
+            }
         else:
             raise ValueError(
                 f"[AutoClosingConfigBuilder] Неизвестный режим автозакрытия '{mode}'! "
-                "Допустимые режимы: 'trailing_ratchet', 'smoothed_drawdown', 'ratchet_smoothed_drawdown', 'toxic', 'fixed', 'off'."
+                "Допустимые режимы: 'trailing_ratchet', 'smoothed_drawdown', 'ratchet_smoothed_drawdown', 'ma_crossover', 'toxic', 'fixed', 'off'."
             )

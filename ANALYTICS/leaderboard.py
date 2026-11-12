@@ -29,6 +29,7 @@ class LeaderboardEngine:
         "ratchet": "[RATCHET]",
         "smoothed_drawdown": "[SMOOTH_DD]",
         "ratchet_smoothed_drawdown": "[RATCHET_DD]",
+        "ma_crossover": "[MA_CROSS]",
         "toxicity_adaptive": "[TOXIC]",
         "toxic": "[TOXIC]",
         "fixed_net": "[FIXED]",
@@ -123,6 +124,9 @@ class LeaderboardEngine:
         elif universe_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in universe_id:
             mode = "smoothed_drawdown"
             mode_badge = "[SMOOTH_DD]"
+        elif universe_id.endswith("__ma_crossover") or "__ma_crossover" in universe_id:
+            mode = "ma_crossover"
+            mode_badge = "[MA_CROSS]"
         elif universe_id.endswith("__toxic") or "__toxic" in universe_id:
             mode = "toxic"
             mode_badge = "[TOXIC]"
@@ -152,6 +156,9 @@ class LeaderboardEngine:
             elif raw_mode_str == "ratchet_smoothed_drawdown":
                 mode = "ratchet_smoothed_drawdown"
                 mode_badge = "[RATCHET_DD]"
+            elif raw_mode_str == "ma_crossover":
+                mode = "ma_crossover"
+                mode_badge = "[MA_CROSS]"
             elif raw_mode_str in ("toxic", "toxicity_adaptive"):
                 mode = "toxic"
                 mode_badge = "[TOXIC]"

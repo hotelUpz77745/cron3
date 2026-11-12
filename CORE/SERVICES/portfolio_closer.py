@@ -20,6 +20,7 @@ if str(_ROOT) not in sys.path:
 from consts import GLOBAL_ANALYTICS_JSON
 from c_log import UnifiedLogger
 from CORE.STRATEGY.trailing_system import ToxicityEngine
+from CORE.STRATEGY.profit_closer_common import BucketedCloserRouter
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
@@ -155,12 +156,11 @@ class PortfolioCloser:
                     detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
                 )
 
-        elif mode_g in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
-            from CORE.STRATEGY.smoothed_profit_closer import SmoothedProfitDrawdownCloser
+        elif BucketedCloserRouter.is_supported(mode_g):
             scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
             if scale_money_g <= 0:
                 scale_money_g = 1.0
-            sm_ok, sm_trig, sm_info = SmoothedProfitDrawdownCloser.evaluate_mode(
+            sm_ok, sm_trig, sm_info = BucketedCloserRouter.evaluate(
                 mode=mode_g, pos_cfg=pos_cfg, iter_net=iter_net_g, now_sec=now_ms / 1000.0,
                 iter_age_hours=iter_age_h_g, state=r_state_g, scale_money=scale_money_g,
             )

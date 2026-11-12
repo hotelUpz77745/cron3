@@ -7,6 +7,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+from CORE.STRATEGY.profit_closer_common import (
+    BucketedProfitHistorySampler,
+    ChronosTimeForceEvaluator,
+)
+
 
 class SmoothedProfitDrawdownCloser:
     """
@@ -15,7 +20,8 @@ class SmoothedProfitDrawdownCloser:
     - Сэмплирует прибыль строго по закрытию бакета sample_interval_sec (например, 60с = 1 мин);
     - Поддерживает 2 режима:
       1) smoothed_drawdown: фиксированный порог min_profit_usdt * scale_money;
-      2) ratchet_smoothed_drawdown: плавающий порог от карты уровней trailing_ratchet.levels (Вариант А).
+      2) ratchet_smoothed_drawdown: плавающий порог от карты уровней trailing_ratchet.levels (Вариант А);
+    - Дополнительно поддерживает отключаемое временное форсирование выхода chronos_exit (E1).
     """
 
     def __init__(self, cfg: Dict[str, Any]):
@@ -27,6 +33,7 @@ class SmoothedProfitDrawdownCloser:
         self.min_profit_usdt: Optional[float] = (
             float(cfg["min_profit_usdt"]) if "min_profit_usdt" in cfg and cfg["min_profit_usdt"] is not None else None
         )
+        self.chronos: ChronosTimeForceEvaluator = ChronosTimeForceEvaluator(cfg["chronos_exit"])
 
         if self.sample_interval_sec <= 0:
             raise ValueError(f"sample_interval_sec must be > 0, got {self.sample_interval_sec}")
@@ -44,29 +51,13 @@ class SmoothedProfitDrawdownCloser:
         now_sec: float,
         sample_interval_sec: int,
     ) -> Tuple[bool, List[float], float]:
-        """
-        Добавляет новый сэмпл ровно один раз на интервал sample_interval_sec.
-        Возвращает (is_new_sample, profit_history, peak_profit).
-        """
-        history: List[float] = state.setdefault("profit_history", [])
-        last_bucket = state.get("last_sample_bucket")
-        cur_bucket = int(now_sec // sample_interval_sec)
-
-        if last_bucket is not None and cur_bucket <= int(last_bucket):
-            peak = float(state.get("peak_profit", 0.0) if history else 0.0)
-            return False, history, peak
-
-        val = float(iter_net)
-        history.append(val)
-        state["last_sample_bucket"] = cur_bucket
-        if "peak_profit" not in state or len(history) == 1:
-            peak = val
-        else:
-            prev_peak = float(state["peak_profit"])
-            peak = val if val > prev_peak else prev_peak
-        state["peak_profit"] = peak
-        state["highest_net"] = peak if peak > 0.0 else 0.0
-        return True, history, peak
+        """Делегирует в единый BucketedProfitHistorySampler без дублирования."""
+        return BucketedProfitHistorySampler.sample_bucket(
+            state=state,
+            iter_net=iter_net,
+            now_sec=now_sec,
+            sample_interval_sec=sample_interval_sec,
+        )
 
     @staticmethod
     def resolve_ratchet_min_profit(
@@ -77,22 +68,24 @@ class SmoothedProfitDrawdownCloser:
     ) -> Tuple[Optional[float], int, str]:
         """
         Вариант А (Подход 2B без курков):
-        - Среди активных уровней (enabled=True, iter_age_hours >= min_age_hours), чей порог
+        - Среди активных Fibo-ступеней (enabled=True, min_age_hours == 0 или <= 0), чей порог
           activation * scale_money <= peak_profit, выбирается максимальный floor * scale_money.
-        - Если ни один уровень еще не достигнут (например пик 12 < 13), ориентир равен
-          минимальному активному activation * scale_money (13 * scale_money).
+        - Временные уровни Chronos (min_age_hours > 0) управляются строго через chronos_exit.
+        - Если ни один уровень еще не достигнут, ориентир равен минимальному активному activation * scale_money.
         Возвращает (eff_min_profit_usdt, level_idx, level_desc).
         """
         active: List[Tuple[int, float, float, str]] = []
         for idx, lvl in enumerate(levels):
-            if not lvl.get("enabled", True):
+            if not bool(lvl["enabled"]):
                 continue
-            min_age = float(lvl["min_age_hours"] if lvl.get("min_age_hours") is not None else 0.0)
+            min_age = float(lvl["min_age_hours"]) if lvl["min_age_hours"] is not None else 0.0
+            if min_age > 0.0:
+                continue
             if iter_age_hours < min_age:
                 continue
             act_val = float(lvl["activation"]) * scale_money
             flr_val = float(lvl["floor"]) * scale_money
-            desc = str(lvl.get("_desc") or f"L{idx}")
+            desc = str(lvl["_desc"]) if "_desc" in lvl and lvl["_desc"] else f"L{idx}"
             active.append((idx, act_val, flr_val, desc))
 
         if not active:
@@ -152,6 +145,15 @@ class SmoothedProfitDrawdownCloser:
         """
         if not self.enabled:
             return False, None, ""
+
+        ch_ok, ch_floor, ch_info = self.chronos.evaluate(
+            iter_net=iter_net,
+            iter_age_hours=iter_age_hours,
+            scale_money=scale_money,
+            state=state,
+        )
+        if ch_ok and ch_floor is not None:
+            return True, ch_floor, ch_info
 
         is_new, history, peak = self._ensure_sample(
             state=state,
@@ -245,10 +247,5 @@ class SmoothedProfitDrawdownCloser:
     @staticmethod
     def resolve_sample_interval_sec(mode: str, pos_cfg: Dict[str, Any]) -> int:
         """Возвращает шаг дискретизации sample_interval_sec строго из конфига режима."""
-        mode_norm = str(mode).lower().strip()
-        sec_val = pos_cfg[mode_norm]["sample_interval_sec"]
-        interval = int(sec_val)
-        if interval <= 0:
-            raise ValueError(f"sample_interval_sec must be > 0, got {interval}")
-        return interval
+        return BucketedProfitHistorySampler.resolve_sample_interval_sec(mode, pos_cfg)
 

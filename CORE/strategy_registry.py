@@ -332,6 +332,7 @@ class StrategyRegistry:
                     "__trailing_ratchet",
                     "__ratchet_smoothed_drawdown",
                     "__smoothed_drawdown",
+                    "__ma_crossover",
                     "__classic",
                     "__fixed",
                     "__toxic",
@@ -365,6 +366,8 @@ class StrategyRegistry:
                 target_mode = "ratchet_smoothed_drawdown"
             elif "__smoothed_drawdown" in strat_id:
                 target_mode = "smoothed_drawdown"
+            elif "__ma_crossover" in strat_id:
+                target_mode = "ma_crossover"
             elif "__fixed" in strat_id:
                 target_mode = "fixed"
             elif "__classic" in strat_id:
