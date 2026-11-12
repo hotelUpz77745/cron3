@@ -1833,6 +1833,41 @@ CFG/universes/u96_omni_zenith13.json
   2. Но отключение `L8 (89%)` + сокращение SL до `100%` разрушает устойчивость на типовых сквизах `80–128%`: в `D2` (`MUSDT 127.3%`, `AIOT`) и `D5` (`AIOT 123.0%`) `u96` за счёт якоря `L8` вытягивал среднюю и выходил через `AutoClose`/`Rotation` (`+592.12$` в `D2`, `+29.09$` в `D5`), тогда как `u98` получил `3` лишних стоп-лосса на `100%` и просел на `SIRENUSDT` в `D4` (`97.6%`, `-457.3$`).
   3. Идея «убрать 89% + поставить SL 90%/100%» в чистом виде признана математически убыточной по сравнению с `L8 + SL 130%`; фокус решения проблемы ликвидации в `2025-H2` должен оставаться на **[TD-LIQ-1]** и **[TD-LIQ-2]** (динамический риск-сайз от текущего баланса), а не на сужении сетки/SL до 100%.
 
+---
+
+### 14. Полный аудит ядра, оптимизация скорости, удаление Chronos E2 и эталонный турнир 2026 V2 (ADR-31, 12.11.2026)
+
+#### 1. Абляция Chronos `E1/E2` на 180 днях `2026` (`2026-04-19 -> 2026-10-15`, `0.01%` slip, `Spot=OFF`, `1435$/1200$`):
+- Отчёт: `cron3TradeBacktest/REPORTS/ablation_chronos_2026_u96_slip001.json` (с каноническим `ROTATION` settle на рубеже каждой декады):
+  - **`u96_chronos_e1_only` (без `E2`, только `E1: 36ч / +$8`):** **`6,451.05$ (+349.55%)`**, `MaxDD 568.01$`, `AC 194` (`E1 = 15`), `0 SL`, `Fees 2,398.99$`.
+  - **`u96_omni_zenith13` (База `E1 + E2`):** **`6,441.00$ (+348.85%)`**, `MaxDD 568.01$`, `AC 193` (`E1 = 13`, `E2 = 2`), `0 SL`, `Fees 2,394.59$`. Полное побитовое совпадение с V1 4-way турниром.
+  - **`u96_chronos_off` (без `E1` и `E2`):** **`6,208.45$ (+332.64%)`**, `MaxDD 656.35$`, `AC 198`, `0 SL`, `Fees 2,379.00$`.
+- **Решение (внедрено):** ступенька **`E2 (72ч / +$5)` удалена** из всех 5 шаблонов вселенных в обеих репах (`cron3/CFG/universes/` и `cron3TradeBacktest/CFG/universes/`), сохранена только **`E1 (36ч / +$8)`**, снизившая `MaxDD` на `88.34$` и добавившая `+242.60$` к чистому итогу полугодия.
+
+#### 2. Устранённые бреши и оптимизация архитектуры (Протокол разработки):
+- **Закрыт `[TD-LIQ-1]` — Кросс-маржинальный ликвидационный страж:**
+  - В [`cron3TradeBacktest/CFG/backtest.json`](../cron3TradeBacktest/CFG/backtest.json) вынесены явные SSOT-параметры (`liquidation_guard_enabled=true`, `maint_margin_rate=0.005`, `tick_safety_slack_sec=0.002`, `missing_atr_fallback_pct=4.0`).
+  - Созданы ООП/SRP-модули [`API/BINANCE/sim_liquidation.py`](API/BINANCE/sim_liquidation.py) (`BacktestExecutionConfigLoader`, `CrossMarginLiquidationGuard`) и [`API/BINANCE/sim_history_store.py`](API/BINANCE/sim_history_store.py) (`SimHistoricalDataStore` с `O(log N)` `bisect`-индексом свечей вместо линейного перебора `sim_klines_1h`).
+  - В [`API/BINANCE/client_sim.py`](API/BINANCE/client_sim.py) (`537` LOC) устранены фиктивный фоллбэк `100.0` при отсутствии рыночной цены, начисление комиссии на зависший `reduce_only`-лимитник при нулевой позиции, и интегрирован единый ликвидационный страж.
+- **Декомпозиция [`backtest_core.py`](../cron3TradeBacktest/ENGINE/backtest_core.py) (`696 -> 373` LOC) и исправление багов стримера:**
+  - Выделены [`backtest_core_resources.py`](../cron3TradeBacktest/ENGINE/backtest_core_resources.py) (`157` LOC — кэш `specifications.json`, `CFG/app.json`, прототип `StrategyRegistry`, прямое чтение SSOT `backtest.json`) и [`backtest_risk_lifecycle.py`](../cron3TradeBacktest/ENGINE/backtest_risk_lifecycle.py) (`277` LOC — исправлен фоллбэк `st.avg_entry_price` вместо несуществующего `st.entry_price`).
+  - Исправлен баг схемы `get_atr_for_symbol` (делегирование в `client.get_precomputed_atr` + SSOT fallback, удален дубль `15 МБ` кэша); в [`stream_state_tracker.py`](../cron3TradeBacktest/ENGINE/stream_state_tracker.py) исправлен перекат закрытого часового бара (`h_ts > chb[0]`), добавлен трекинг поддерживающей маржи (`sym_mm` / `total_mm`) и статус ликвидации; в [`auto_closing_evaluator.py`](../cron3TradeBacktest/ENGINE/auto_closing_evaluator.py) убран потиковый `copy.deepcopy(ratchet_cfg)`.
+- **Оптимизация скорости (`21x–38x` на заблокированных кулдаунах + мультивалютный стример `N > 1`):**
+  - [`corridor_calculator.py`](../cron3TradeBacktest/ENGINE/corridor_calculator.py): отслеживание `blocked_static_floor` (устранён шторм пробуждений при кулдауне `L2`), учет `is_paused`, `is_liquidated`, `global_blocked_until`, настраиваемый `tick_safety_slack_sec=0.002`.
+  - [`stream_block_scanner.py`](../cron3TradeBacktest/ENGINE/stream_block_scanner.py): O(1) pre-check первого тика, порядок проверки стратегий от минимального запаса до границы (`estimate_headroom()`), ленивый разделяемый кэш `p_series_cache` с sentinel-индексацией `p_ext[-1]` и `np.bincount` на сбросе.
+  - Побитовый паритет `RAW == SOLO == N-WAY` (включая ликвидацию посреди векторного блока) доказан юнит-тестами. Все модули уложились в лимит `<= 600` LOC (`157–537` LOC).
+
+#### 3. Повторный контрольный 180-дневный 4-way турнир `2026` (без E2, с Liquidation Guard, `0.01%` slip, `Spot=OFF`):
+- Отчёт: `cron3TradeBacktest/REPORTS/alpha_180d_2026_4way_nospot_1435_slip001_v2_no_e2.json` — прогон 18 декад завершен за **`15.5 минут`** (`0` ликвидаций):
+  1. **`u96_omni_zenith13`:** **`6,451.05$ (+349.55%)`** | `MaxDD 568.01$` | `AC = 194` (`E1 = 15`) | `0 SL` | `Fees = 2,398.99$` | `Fills = 59,358` | Точное **`0.00$`** совпадение с `u96_chronos_e1_only`.
+     - Топ-5 монет: `GWEIUSDT +683.23$`, `GIGGLEUSDT +644.79$`, `BASEDUSDT +469.04$`, `ZEREBROUSDT +453.65$`, `MUSDT +426.11$`.
+     - Худшие 5: `ZECUSDT -300.29$`, `EDGEUSDT -96.84$`, `ENAUSDT -85.93$`, `ARBUSDT -71.18$`, `GRASSUSDT -68.84$`.
+  2. **`u97_zenith13_hedge_shield`:** **`6,325.58$ (+340.81%)`** | `MaxDD 926.16$` | `AC = 192` | `1 SL` (`D18 OGNUSDT`) | `Fees = 2,368.63$` | `Fills = 55,146`.
+  3. **`u96_omni_alligator`:** **`4,881.45$ (+240.17%)`** | `MaxDD 694.85$` | `AC = 418` | `1 SL` (`D8 MUSDT`) | `Fees = 3,046.82$` | `Fills = 54,090`.
+  4. **`u96_omni_zenith13atr`:** **`4,233.10$ (+194.99%)`** | `MaxDD 1,036.03$` | `AC = 142` | `2 SL` (`D8 MUSDT`, `D18 OGNUSDT`) | `Fees = 1,692.69$` | `Fills = 43,372`.
+- **Сравнение с полным `2025-H2` (`0.01%` slip, `Spot=OFF`, отчёт `alpha_2025_h2_4way_nospot_1435_slip001.json`):** все 4 стратегии обнулились к `D13` (`u96: -121.13$`, `u96atr: -3.22$`, `alligator: -46.44$`, `u97: -175.32$`) на каскаде `6` пробоев `130% SHORT SL` (`D1 MYX`, `D5 AIOT`, `D9 XPL`, `D11 PLUME/FF/KGEN`, `D12 GIGGLE`, `D13 MON`). Единственный открытый блокер выживаемости — **`[TD-LIQ-2]`** (динамическая деэскалация `invest_size` при просадке депозита).
+
+
 
 
 
