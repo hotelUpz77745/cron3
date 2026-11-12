@@ -17,6 +17,7 @@ if str(_ROOT) not in sys.path:
 from consts import CACHE_DIR
 from c_log import UnifiedLogger
 from c_utils import Utils
+from CORE.SERVICES.auto_closer_state_store import AutoCloserStateStore
 
 logger = UnifiedLogger("DomeCloserExecutor")
 
@@ -51,6 +52,7 @@ class DomeCloserExecutor:
         is_emergency_stop: bool = False,
         emergency_details: Optional[Dict[str, Any]] = None,
         profit_transfer_fsm: Optional[Any] = None,
+        state_store: Optional[Any] = None,
     ) -> None:
         """Атомарно исполняет закрытие купола или глобального портфеля."""
         pt_fsm = profit_transfer_fsm or getattr(getattr(bot_core, "auto_closer", None), "profit_transfer_fsm", None)
@@ -97,9 +99,17 @@ class DomeCloserExecutor:
             EmergencyStopManager.set_active(emergency_details)
             logger.critical(f"[DOME_CLOSER_EXECUTOR][{strat_id}] 🛑 АВАРИЙНЫЙ СТОП-КРАН: Бот переведен на ХОЛОСТЫЕ (is_paused=True, auto_start=False)!")
 
-        # 2. Сброс трейлинг-храповика
-        if strat_id in trailing_ratchet_state:
-            trailing_ratchet_state[strat_id] = {}
+        # 2. Сброс трейлинг-храповика и персистентного кэша AutoCloser
+        if state_store is not None:
+            store = state_store
+        else:
+            cand_store = getattr(getattr(bot_core, "auto_closer", None), "_state_store", None)
+            store = (
+                cand_store
+                if isinstance(cand_store, AutoCloserStateStore)
+                else AutoCloserStateStore(state_file=CACHE_DIR / "auto_closer_state.json")
+            )
+        store.reset_strategy(strat_id, trailing_ratchet_state)
 
         # 3. Чтение свежих данных аналитики после закрытия ордеров
         fresh_analytics = Utils.read_json_file(stats_path) if stats_path.exists() else raw_analytics

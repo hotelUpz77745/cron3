@@ -27,31 +27,17 @@ from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 from c_log import UnifiedLogger
 from API.BINANCE.public import BinancePublic
+from CORE.STRATEGY.CPP.native_indicators import NATIVE_INDICATORS
 
 logger = UnifiedLogger("TrendSizeDepender")
 
 
 class NativeMath:
-    """Высокопроизводительный фасад низкоуровневых вычислений индикаторов."""
+    """Высокопроизводительный фасад низкоуровневых вычислений индикаторов (CPP/JIT)."""
 
     @staticmethod
     def fast_ema(prices: List[float] | np.ndarray, length: int) -> List[float]:
-        if not isinstance(prices, np.ndarray):
-            arr = np.asarray(prices, dtype=np.float64)
-        else:
-            arr = prices.astype(np.float64, copy=False)
-
-        n = len(arr)
-        if n < length:
-            return []
-
-        k = 2.0 / (length + 1.0)
-        out = [float(np.mean(arr[:length]))]
-        ema = out[0]
-        for p in arr[length:]:
-            ema = p * k + ema * (1.0 - k)
-            out.append(ema)
-        return out
+        return NATIVE_INDICATORS.fast_ema(prices, length)
 
 
 class TrendCalculator:

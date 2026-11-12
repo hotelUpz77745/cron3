@@ -205,24 +205,34 @@ class TestStrategySystem(unittest.TestCase):
         self.assertIn("u6_symbiosis_gamma_fortress35", strats)
         self.assertIn("u96_omni_zenith_apex", strats)
 
-        # 3. Кастомные списки монет и строковый mode для разных модификаций одной стратегии
+        # 3. Кастомные списки монет и режим автозакрытия исключительно через паспорта стратегий (SSOT)
+        import copy
+        proto_u16 = StrategyRegistry(active_strategies_cfg={}).universes_db["u16_chita"]
+        p_ratchet = copy.deepcopy(proto_u16)
+        p_ratchet["auto_closing"]["mode"] = "trailing_ratchet"
+        p_toxic = copy.deepcopy(proto_u16)
+        p_toxic["auto_closing"]["mode"] = "toxic"
         dual_mode_active = {
             "u16_chita__trailing_ratchet": {
-                "template": "u16_chita",
+                "template": "u16_chita_ratchet",
                 "enabled": True,
-                "auto_closing_mode": "trailing_ratchet",
                 "api_key_name": "API_KEY_ACC1",
                 "symbols": ["NEARUSDT", "BTCUSDT"]
             },
             "u16_chita__toxic": {
-                "template": "u16_chita",
+                "template": "u16_chita_toxic",
                 "enabled": True,
-                "auto_closing_mode": "toxic",
                 "api_key_name": "API_KEY_ACC2",
                 "symbols": ["ZROUSDT", "ETHUSDT"]
             }
         }
-        dual_reg = StrategyRegistry(active_strategies_cfg=dual_mode_active)
+        dual_reg = StrategyRegistry(
+            active_strategies_cfg=dual_mode_active,
+            universes_db={
+                "u16_chita_ratchet": p_ratchet,
+                "u16_chita_toxic": p_toxic,
+            },
+        )
         self.assertEqual(len(dual_reg.get_active_strategies()), 2)
         strat_ratchet = dual_reg.active_strategies["u16_chita__trailing_ratchet"]
         strat_toxic = dual_reg.active_strategies["u16_chita__toxic"]

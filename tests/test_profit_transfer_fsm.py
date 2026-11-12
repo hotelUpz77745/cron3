@@ -479,29 +479,45 @@ class TestProfitTransferFSM(unittest.TestCase):
             self.assertEqual(calls, [24.15, 8.0])
 
     def test_non_ratchet_and_manual_closes_never_arm_or_transfer(self):
-        """Ни стопы, ни Fixed/Toxic, ни ручной Close All, ни emergency cutoff не триггерят перевод на Spot."""
+        """Стопы, _off, ручной Close All и ротация НЕ триггерят Spot-перевод; все позитивные автоклозеры триггерят."""
         disallowed_types = [
             "NEGATIVE STOP",
             "BASKET EQUITY CUTOFF",
             "EMERGENCY STOP",
+            "OFF",
+            "u96_OFF",
+            "MANUAL CLOSE",
+            "ROTATION",
+        ]
+        allowed_positive_types = [
+            "TRAILING RATCHET",
+            "MA_CROSSOVER",
+            "SMOOTHED_DRAWDOWN",
+            "RATCHET_SMOOTHED_DRAWDOWN",
+            "REGIME_ADAPTIVE",
             "FIXED NET PROFIT",
             "TOXICITY ADAPTIVE",
             "STAGNATION RATCHET",
-            "MANUAL CLOSE",
-            "ROTATION",
         ]
         with tempfile.TemporaryDirectory() as tmp:
             tpath = Path(tmp)
             sdir = tpath / "STATS"
             strat_id = "u96_omni_zenith13__trailing_ratchet"
             strat_cfg = _make_strat_cfg(strat_id=strat_id)
-            fsm = ProfitTransferFSM(stats_dir=sdir, cache_dir=tpath)
 
             for idx, ctype in enumerate(disallowed_types, start=1):
-                with self.subTest(close_type=ctype):
+                with self.subTest(disallowed_close_type=ctype):
+                    fsm = ProfitTransferFSM(stats_dir=sdir, cache_dir=tpath / f"dis_{idx}")
                     armed = fsm.arm_on_ratchet_trigger(strat_id, strat_cfg, ctype, idx, idx + 1, 0.0, ready_at_ts=100.0)
                     self.assertFalse(armed)
                     self.assertEqual(fsm.get_state(strat_id), ProfitTransferState.IDLE)
+
+            for idx, ctype in enumerate(allowed_positive_types, start=1):
+                with self.subTest(allowed_close_type=ctype):
+                    fsm = ProfitTransferFSM(stats_dir=sdir, cache_dir=tpath / f"ok_{idx}")
+                    armed = fsm.arm_on_ratchet_trigger(strat_id, strat_cfg, ctype, idx, idx + 1, 0.0, ready_at_ts=100.0)
+                    self.assertTrue(armed, f"{ctype} must be eligible for Spot transfer when enabled")
+                    self.assertEqual(fsm.get_state(strat_id), ProfitTransferState.CLOSING_POSITIONS)
 
     def test_per_dome_isolation_and_multi_client_routing(self):
         """

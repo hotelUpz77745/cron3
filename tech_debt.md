@@ -1910,3 +1910,35 @@ CFG/universes/u96_omni_zenith13.json
 - **Новый режим `ma_crossover` (`CORE/STRATEGY/ma_crossover_closer.py`, 207 LOC):** класс `MaCrossoverCloser` считает простые арифметические средние `MA_fast <= MA_slow` с автоматическим масштабированием 5m-периодов (`reference_interval_sec=300`) к `sample_interval_sec=60` (`step_scale=5`, т.е. `MA3 -> 15`, `MA50 -> 250`, `MA100 -> 500`, `lookback=3 -> 15`), строго положительным порогом `min_profit_usdt * scale_money` (`20.0`), отключаемым фильтром не-роста `require_slow_ma_non_growing` (`false` по умолчанию) и `chronos_exit`.
 - **Интеграция и паспорта:** добавлен `chronos_exit` (`enabled=false`) во все 3 новые секции (`smoothed_drawdown`, `ratchet_smoothed_drawdown`, `ma_crossover`) в `u96_omni_zenith13.json` (`cron3` и `cron3TradeBacktest`), обновлены `auto_closing_builder.py`, `strategy_registry.py`, `auto_closer.py`, `portfolio_closer.py`, `leaderboard.py`, а также `ENGINE/auto_closing_evaluator.py`, `ENGINE/backtest_core.py`, `ENGINE/backtest_core_resources.py`, `ENGINE/multi_stream_engine.py` (`strategy_specs` / `extra_overrides`).
 - **Турнир и тесты:** создан раннер `cron3TradeBacktest/run_alpha_180d_autoclose_tournament.py` (15 вариаций автозакрытия на 180 дней с альфа-ротациями и промежуточным отчётом каждые 6 декад); пройдены юнит-тесты `cron3` (51/51 OK) и parity-тесты `cron3TradeBacktest` (46 run: 39 OK, 7 skipped legacy/optional, 0 failures).
+
+---
+
+### [2026-11-12] ADR-33: Единый источник истины (SSOT), Spot-перевод без белого списка, персистентность AutoCloser, синхронизация SuperGrid + DynamicATR, C++/Numba-ядро и HRON-4 `RegimeAdaptiveCloser`
+
+1. **Удаление белого списка `ELIGIBLE_CLOSE_TYPES` в Spot FSM (`profit_transfer_fsm.py`, `profit_transfer_service.py`, `backtest_risk_lifecycle.py`):**
+   - `ProfitTransferFSM` и сервис перевода прибыли на Spot больше не фильтруют события фиксации прибыли по белому списку названий режимов (`close_type`): при включённом автопереводе он применяется ко всем положительным режимам автозакрытия (`trailing_ratchet`, `smoothed_drawdown`, `ratchet_smoothed_drawdown`, `ma_crossover`, `regime_adaptive`), кроме `_off`.
+   - В `cron3TradeBacktest/ENGINE/backtest_risk_lifecycle.py` убран хардкод `close_type="TRAILING RATCHET"` — передаётся фактический режим автозакрытия из `auto_closing_cfg["mode"]`.
+
+2. **SSOT в паспортах стратегий — полный запрет суффиксов и переопределений (`auto_closing_builder.py`, `strategy_registry.py`, `strategy_config_parser.py`, `backtest_core_resources.py`):**
+   - Удалён парсинг суффиксов ID стратегии (`__trailing_ratchet`, `__off`, `__ma_crossover` и т.п.) и переопределение через `app.json`.
+   - Единственный источник истины (SSOT) параметров автозакрытия и стратегии — паспорт в `CFG/universes/*.json` (`StrategyRegistry`, валидация через `AutoClosingConfigBuilder.build_mode_auto_closing`).
+
+3. **Персистентность состояния автоклозера при рестарте (`auto_closer_state_store.py`, `auto_closer.py`, `portfolio_closer.py`, `dome_closer_executor.py`):**
+   - Внедрён `AutoCloserStateStore` (`load_all`, `maybe_persist`, `reset_strategy`, `hydrate_from_snapshots`, `_compute_signature`, `_resolve_interval_sec`), сохраняющий состояние бакетов `profit_history`, защёлки `Trailing Ratchet`, `chronos_exit` и состояние режима `RegimeAdaptiveCloser` (`regime`, `regime_entered_at_sec`, `regime_stress_state`) между рестартами с поддержкой холодной гидрации (`hydrate_from_snapshots`) и сбросом после закрытия цикла (`reset_strategy`).
+
+4. **Синхронизация композиции `super_grid` + `dynamic_atr_grid` (`volatility_manager.py`, `avg_manager.py`, `trailing_system.py`, `corridor_calculator.py`):**
+   - Устранена рассинхронизация шагов и активаций при одновременной работе `super_grid` и `dynamic_atr_grid` (также учтён расчёт границ активации/пола без разъезжания коридоров и выделен общий `BaseTrailingSystem.compute_ratchet_corridor_bounds`).
+
+5. **Интеграция нативных индикаторов (`CORE/STRATEGY/CPP/kernel_indicators.hpp`, `kernel_indicators_bridge.cpp`, `native_indicators.py`, `trend_size_depender.py`, `atr_provider.py`) и ускорение бэктестера (`native_stream_scanner.py`, `stream_block_scanner.py`, `stream_state_tracker.py`):**
+   - C++-ядро `kernel_indicators.hpp` подключено к Python-пайплайну через мост и обёртку `native_indicators.py` с едиными модулями `trend_size_depender.py` и `atr_provider.py`.
+   - В `cron3TradeBacktest` реализован Numba `@njit`-сканер безопасных тиков (`scan_safe_ticks_njit`) с классификацией пробуждений (`wake_flags`: `0=safe`, `1=eq_max_t only`, `2=full`), выборочным сбросом трекера (`flush_tracker`) и O(1) быстрым шагом сэмплирования бакетов `try_fast_bucket_step` с откатом при триггере закрытия.
+
+6. **Новый двухуровневый автоклозер HRON-4 `regime_adaptive` (`CORE/STRATEGY/regime_adaptive_closer.py`, `profit_closer_common.py`, `u96_omni_zenith13.json`):**
+   - Класс `RegimeAdaptiveCloser`:
+     - **`PEACE`:** плавное сопровождение через `MaCrossoverCloser` (Fast/Slow MA + опциональный `require_slow_ma_non_growing`).
+     - **`STRESS`:** защитный выход через `BaseTrailingSystem.evaluate_ratchet` + ускоренный `ChronosTimeForceEvaluator` (`stress.chronos_exit`), запускаемый при `max_active_level >= stress_level_gte`, `load_ratio >= stress_load_gte` или `iter_age_hours >= stress_age_hours_gte` при `max_active_level >= stress_age_level_gte`.
+     - **Гистерезис и непрерывность истории:** возврат `STRESS -> PEACE` разрешается только после удержания `min_stress_hold_minutes` и разгрузки до `recover_level_lte` и `recover_load_lte`; сэмплер `BucketedProfitHistorySampler` продолжает наполнять бакеты в обоих режимах; добавлены `Positive Profit Guard` (`iter_net > 0`) и общие коридоры `compute_corridor_bounds` / `BaseTrailingSystem.compute_ratchet_corridor_bounds`.
+     - Единый сбор контекста режима `RegimeAdaptiveCloser.extract_regime_context(...)` по `st.cur_step` и загрузке маржи (`current_grid_load_usdt`).
+
+7. **РЕЕСТР ТЕХДОЛГА — PERMANENT `WON'T DO`:**
+   - **`[TD-BACKTEST-FUNDING / WON'T DO — ЗАКРЫТО НАВСЕГДА]` Исторический 8h Funding Rate в `cron3TradeBacktest`:** сознательный отказ от моделирования 8-часовых ставок финансирования (`FUNDING_FEE`) в движке бэктестинга `cron3TradeBacktest` по архитектурному решению тимлида. Продовый `income_collector.py` продолжает учитывать `FUNDING_FEE` на реальном счету; в бэктесте этот фактор намеренно исключён — не поднимать задачу повторно.

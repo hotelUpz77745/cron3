@@ -49,11 +49,21 @@ def _build_zenith13_runtime(strat_id="u97_zenith13_hedge_shield", invest=1200.0)
 class TestCounterGridFrontload(unittest.TestCase):
     def test_u97_passport_parity_and_fail_fast(self):
         cfg_dir = CRON3_DIR / "CFG" / "universes"
+        tribute_dir = CRON3_DIR / "CFG" / "artifacts" / "classic_tribute"
         u96 = json.loads((cfg_dir / "u96_omni_zenith13.json").read_text(encoding="utf-8"))
-        u97 = json.loads((cfg_dir / "u97_zenith13_hedge_shield.json").read_text(encoding="utf-8"))
+        u97 = json.loads((tribute_dir / "u97_zenith13_hedge_shield.json").read_text(encoding="utf-8"))
 
         for k in u96:
-            if k in ("name", "description", "counter_grid_frontload"):
+            if k in ("name", "description", "counter_grid_frontload", "_auto_closing_modes_allowed"):
+                continue
+            if k == "auto_closing":
+                positive_u96 = {
+                    pk: pv
+                    for pk, pv in u96["auto_closing"]["positive"].items()
+                    if pk not in ("smoothed_drawdown", "ratchet_smoothed_drawdown", "ma_crossover", "regime_adaptive")
+                }
+                expected_ac = {**u96["auto_closing"], "positive": positive_u96}
+                self.assertEqual(u97["auto_closing"], expected_ac, "Core 'auto_closing' must match u96_omni_zenith13")
                 continue
             self.assertEqual(u97[k], u96[k], f"Field '{k}' must match u96_omni_zenith13 for clean comparison")
 
@@ -63,7 +73,7 @@ class TestCounterGridFrontload(unittest.TestCase):
         self.assertTrue(u96["counter_grid_frontload"]["preserve_l0_identity"])
 
         for extra_name in ("u96_omni_alligator.json", "u96_omni_zenith13atr.json"):
-            extra = json.loads((cfg_dir / extra_name).read_text(encoding="utf-8"))
+            extra = json.loads((tribute_dir / extra_name).read_text(encoding="utf-8"))
             self.assertIn("counter_grid_frontload", extra, f"{extra_name} must declare counter_grid_frontload for compat")
             self.assertFalse(extra["counter_grid_frontload"]["enabled"])
             self.assertEqual(extra["counter_grid_frontload"]["absorb_tiers"], {"==5": 1, "==6": 2, ">=7": 3})

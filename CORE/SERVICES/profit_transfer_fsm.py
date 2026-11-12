@@ -76,13 +76,6 @@ class ProfitTransferFSM:
          - расчетный баланс маржи купола строго выше стартового (net_profit_usdt - transferred_to_spot_usdt > 0).
     """
 
-    ELIGIBLE_CLOSE_TYPES = frozenset({
-        "TRAILING RATCHET",
-        "TRAILING_RATCHET",
-        "CLASSIC",
-        "ITER_NET_CLASSIC",
-    })
-
     def __init__(
         self,
         stats_dir: Path = ANALYTICS_STATS_DIR,
@@ -100,8 +93,8 @@ class ProfitTransferFSM:
 
     @classmethod
     def is_eligible_close_type(cls, close_type: str) -> bool:
-        c_upper = str(close_type or "").upper().strip()
-        return ("TRAILING RATCHET" in c_upper) or (c_upper in cls.ELIGIBLE_CLOSE_TYPES)
+        """Profit transfer applies to any positive autoclose mode except _off and emergency/manual stops."""
+        return ProfitTransferService.is_eligible_close_type(close_type)
 
     def get_state(self, strat_id: str) -> ProfitTransferState:
         job = self._pending.get(strat_id)

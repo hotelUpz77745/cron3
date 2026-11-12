@@ -38,7 +38,6 @@
         "log_to_console": false,
         "log_to_file": true
     },
-    "_available_suffixes_doc": "Available auto-closer mode suffixes: __off (no auto-closer), __trailing_ratchet (pure Fibo trailing ratchet), __fixed (flat net take), __toxic (institutional dynamic exit). Strategy configs are located in CFG/universes/*.json.",
     "active_strategies": {
         "_comment_invest_size_rules": "ПРАВИЛА НАСТРОЙКИ СТОРОН И ИНВЕСТИЦИЙ: 1) 'enabled': true/false на уровне стороны (LONG/SHORT) полностью включает/отключает вход в новые позиции по этой стороне. 2) 'default_invest_size' — базовый размер инвестиции в USDT для всех монет корзины. 3) 'invest_size': {} — словарь индивидуальных переопределений для конкретных монет. Если монета не указана в 'invest_size' (или словарь пуст {}), автоматически применяется 'default_invest_size'.",
         "u96_omni_zenith13__trailing_ratchet": {
@@ -47,13 +46,12 @@
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
-            "auto_closing_mode": "trailing_ratchet",
             "transfer_profit_to_spot": {
                 "enabled": false,
                 "transfer_profit_pct": 50.0,
                 "min_transfer_usdt": 1.0,
                 "asset": "USDT",
-                "_desc": "Автоматический перевод чистой прибыли закрытой итерации с USDⓈ-M Futures на Spot (UMFUTURE_MAIN) при срабатывании храповика trailing_ratchet. transfer_profit_pct задается в процентах от ста (например, 100.0 для перевода 100% профита итерации, 50.0 для 50%)."
+                "_desc": "Автоматический перевод чистой прибыли закрытой итерации с USDⓈ-M Futures на Spot (UMFUTURE_MAIN) при срабатывании любого позитивного автоклозера (кроме off). transfer_profit_pct задается в процентах от ста (например, 100.0 для перевода 100% профита итерации, 50.0 для 50%)."
             },
             "leverage": 20,
             "margin_type": "CROSSED",

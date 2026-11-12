@@ -148,6 +148,36 @@ class ProfitTransferService:
 
         return iter_profit, None
 
+    EXCLUDED_CLOSE_TYPES = frozenset({
+        "",
+        "OFF",
+        "DISABLED",
+        "NONE",
+        "NEGATIVE STOP",
+        "NEGATIVE",
+        "BASKET EQUITY CUTOFF",
+        "EMERGENCY",
+        "EMERGENCY STOP",
+        "MANUAL",
+        "ROTATION",
+        "STOP_LOSS",
+        "STOP LOSS",
+        "DELISTING",
+    })
+
+    @classmethod
+    def is_eligible_close_type(cls, close_type: str) -> bool:
+        """Any positive autoclose trigger is eligible unless explicitly off/stop/manual/rotation."""
+        c_upper = str(close_type or "").upper().strip()
+        if not c_upper or c_upper in cls.EXCLUDED_CLOSE_TYPES:
+            return False
+        excluded_markers = ("NEGATIVE", "EMERGENCY", "CUTOFF", "MANUAL", "ROTATION", "STOP_LOSS", "STOP LOSS", "DELIST")
+        if any(marker in c_upper for marker in excluded_markers):
+            return False
+        if c_upper in ("OFF", "DISABLED") or c_upper.endswith("_OFF") or c_upper.endswith(" OFF"):
+            return False
+        return True
+
     @classmethod
     async def execute_on_ratchet_close(
         cls,
@@ -163,12 +193,7 @@ class ProfitTransferService:
         """
         Исполняет SAPI перевод допустимого профита на Spot (без опроса fetch_balance).
         """
-        c_type_upper = str(close_type or "").upper().strip()
-        if "TRAILING RATCHET" not in c_type_upper and c_type_upper not in (
-            "TRAILING_RATCHET",
-            "CLASSIC",
-            "ITER_NET_CLASSIC",
-        ):
+        if not cls.is_eligible_close_type(close_type):
             return None
 
         cfg_source = strat_cfg

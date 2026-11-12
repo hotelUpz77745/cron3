@@ -21,6 +21,7 @@ from consts import GLOBAL_ANALYTICS_JSON
 from c_log import UnifiedLogger
 from CORE.STRATEGY.trailing_system import ToxicityEngine
 from CORE.STRATEGY.profit_closer_common import BucketedCloserRouter
+from CORE.STRATEGY.regime_adaptive_closer import RegimeAdaptiveCloser
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
 from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
@@ -89,6 +90,20 @@ class PortfolioCloser:
             r_state_g["iteration_index"] = iter_idx_g
         first_ts_g = analytics_data.get("iteration_start_ts", analytics_data.get("first_trade_ts", now_ms))
         iter_age_h_g = max(0.0, (now_ms - first_ts_g) / 3600000.0)
+        store_g = getattr(auto_closer_inst, "_state_store", None)
+        if store_g is not None and BucketedCloserRouter.is_supported(mode_g) and not r_state_g.get("profit_history"):
+            base_bal_g = analytics_data.get("start_balance_usdt")
+            iter_start_eq_g = (float(base_bal_g) + float(iter_start_net_g)) if base_bal_g is not None else None
+            store_g.hydrate_from_snapshots(
+                strat_id="__global__",
+                iter_idx=iter_idx_g,
+                mode=mode_g,
+                pos_cfg=pos_cfg,
+                state=r_state_g,
+                iter_start_ts_ms=int(first_ts_g or 0),
+                iter_start_equity=iter_start_eq_g,
+                now_ms=now_ms,
+            )
 
         if mode_g == "toxicity_adaptive":
             deposit_g = float(analytics_data.get("cur_balance_usdt", analytics_data.get("start_balance_usdt", 4000.0)))
@@ -160,9 +175,21 @@ class PortfolioCloser:
             scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
             if scale_money_g <= 0:
                 scale_money_g = 1.0
+            extra_ctx_g = None
+            if str(mode_g).lower().strip() == "regime_adaptive":
+                bot_core = getattr(auto_closer_inst, "bot_core", None)
+                fsm_mgr_g = getattr(bot_core, "runtime_manager", None)
+                fsm_states_g = getattr(fsm_mgr_g, "fsm_states", None) if fsm_mgr_g else getattr(bot_core, "position_states", None)
+                extra_ctx_g = RegimeAdaptiveCloser.extract_regime_context(
+                    fsm_states=fsm_states_g,
+                    analytics_dict=analytics_data,
+                    strat_cfg=None,
+                    allowed_symbols=None,
+                )
             sm_ok, sm_trig, sm_info = BucketedCloserRouter.evaluate(
                 mode=mode_g, pos_cfg=pos_cfg, iter_net=iter_net_g, now_sec=now_ms / 1000.0,
                 iter_age_hours=iter_age_h_g, state=r_state_g, scale_money=scale_money_g,
+                extra_context=extra_ctx_g,
             )
             if sm_ok and sm_trig is not None:
                 auto_closer_inst._is_closing = True
@@ -295,6 +322,9 @@ class PortfolioCloser:
             triggered = False
             auto_closer_inst._is_closing = False
 
+        if not triggered and store_g is not None:
+            store_g.maybe_persist("__global__", iter_idx_g, r_state_g)
+
         if triggered:
             try:
                 auto_closer_inst._last_close_ts["__global__"] = time.time()
@@ -315,6 +345,7 @@ class PortfolioCloser:
                     trailing_ratchet_state=auto_closer_inst._trailing_ratchet_state,
                     is_emergency_stop=is_emergency_stop_g,
                     emergency_details=emergency_details_g,
+                    state_store=store_g,
                 )
             except Exception as e:
                 logger.error(f"[AUTO_CLOSER] Error during portfolio auto-close: {e}")

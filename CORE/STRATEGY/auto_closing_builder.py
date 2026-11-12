@@ -9,20 +9,19 @@ ROLE: Построение нормализованной конфигураци
 
 import copy
 from typing import Dict, Any, Optional
-from consts import _CFG
 
 
 class AutoClosingConfigBuilder:
-    """Формирует конфигурацию auto_closing строго для целевого режима купола."""
+    """Формирует конфигурацию auto_closing строго для целевого режима купола из его паспорта."""
 
     @staticmethod
     def build_mode_auto_closing(mode: str, base_ac: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (или app.json)."""
+        """Формирует конфигурацию auto_closing строго для целевого режима из переданного base_ac (паспорт стратегии)."""
         mode = mode.lower().strip()
-        if base_ac is None:
-            base_ac = _CFG.get("auto_closing", {})
-        if not base_ac or not isinstance(base_ac, dict):
-            base_ac = {"positive": {}, "negative": {}}
+        if base_ac is None or not isinstance(base_ac, dict):
+            raise ValueError(
+                "[AutoClosingConfigBuilder] base_ac (секция auto_closing из паспорта стратегии) обязателен!"
+            )
 
         neg_cfg = copy.deepcopy(base_ac.get("negative") or {})
         pos_base = copy.deepcopy(base_ac.get("positive") or {})
@@ -101,6 +100,7 @@ class AutoClosingConfigBuilder:
                     ]
                 }
             pos_cfg = {
+                "mode": "trailing_ratchet",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "auto_scale_money": auto_scale_money,
@@ -167,8 +167,26 @@ class AutoClosingConfigBuilder:
                 "positive": pos_cfg,
                 "negative": neg_cfg,
             }
+        elif mode == "regime_adaptive":
+            ra_cfg = copy.deepcopy(pos_base["regime_adaptive"])
+            pos_cfg = {
+                "mode": "regime_adaptive",
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
+                "min_guaranteed_profit_usdt": pos_base.get("min_guaranteed_profit_usdt"),
+                "regime_adaptive": ra_cfg,
+            }
+            return {
+                "mode": "regime_adaptive",
+                "positive": pos_cfg,
+                "negative": neg_cfg,
+            }
         else:
             raise ValueError(
                 f"[AutoClosingConfigBuilder] Неизвестный режим автозакрытия '{mode}'! "
-                "Допустимые режимы: 'trailing_ratchet', 'smoothed_drawdown', 'ratchet_smoothed_drawdown', 'ma_crossover', 'toxic', 'fixed', 'off'."
+                "Допустимые режимы: 'trailing_ratchet', 'smoothed_drawdown', 'ratchet_smoothed_drawdown', 'ma_crossover', 'regime_adaptive', 'toxic', 'fixed', 'off'."
             )

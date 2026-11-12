@@ -30,6 +30,7 @@ class LeaderboardEngine:
         "smoothed_drawdown": "[SMOOTH_DD]",
         "ratchet_smoothed_drawdown": "[RATCHET_DD]",
         "ma_crossover": "[MA_CROSS]",
+        "regime_adaptive": "[REGIME]",
         "toxicity_adaptive": "[TOXIC]",
         "toxic": "[TOXIC]",
         "fixed_net": "[FIXED]",
@@ -110,68 +111,43 @@ class LeaderboardEngine:
         iteration_net = round(float(data.get("iteration_net_profit_usdt", net_profit)), 2)
         iteration_realized = round(float(data.get("iteration_realized_pnl_usdt", realized_pnl)), 2)
 
-        # Определение режима автозакрытия стратегии (4 режима: trailing_ratchet, toxic, fixed, off)
-        # Суффикс имени вселенной является высшим приоритетом
-        if universe_id.endswith("__off") or "__off" in universe_id:
-            mode = "off"
-            mode_badge = "[OFF]"
-        elif universe_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in universe_id:
+        # Единый источник истины режима автозакрытия: явные метаданные паспорта (без суффиксных эвристик по ID)
+        ac_block = meta.get("auto_closing")
+        raw_mode = (
+            (ac_block.get("mode") if isinstance(ac_block, dict) else None)
+            or ((ac_block.get("positive") or {}).get("mode") if isinstance(ac_block, dict) else None)
+            or meta.get("auto_closing_mode")
+            or meta.get("mode")
+        )
+        raw_mode_str = str(raw_mode).lower().strip() if isinstance(raw_mode, str) and raw_mode.strip() else "off"
+        if raw_mode_str in ("trailing_ratchet", "ratchet", "classic", "iter_net_classic"):
             mode = "trailing_ratchet"
             mode_badge = "[RATCHET]"
-        elif universe_id.endswith("__ratchet_smoothed_drawdown") or "__ratchet_smoothed_drawdown" in universe_id:
-            mode = "ratchet_smoothed_drawdown"
-            mode_badge = "[RATCHET_DD]"
-        elif universe_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in universe_id:
+        elif raw_mode_str == "smoothed_drawdown":
             mode = "smoothed_drawdown"
             mode_badge = "[SMOOTH_DD]"
-        elif universe_id.endswith("__ma_crossover") or "__ma_crossover" in universe_id:
+        elif raw_mode_str == "ratchet_smoothed_drawdown":
+            mode = "ratchet_smoothed_drawdown"
+            mode_badge = "[RATCHET_DD]"
+        elif raw_mode_str == "ma_crossover":
             mode = "ma_crossover"
             mode_badge = "[MA_CROSS]"
-        elif universe_id.endswith("__toxic") or "__toxic" in universe_id:
+        elif raw_mode_str == "regime_adaptive":
+            mode = "regime_adaptive"
+            mode_badge = "[REGIME]"
+        elif raw_mode_str in ("toxic", "toxicity_adaptive"):
             mode = "toxic"
             mode_badge = "[TOXIC]"
-        elif universe_id.endswith("__fixed") or "__fixed" in universe_id:
+        elif raw_mode_str in ("fixed", "fixed_net", "fixed_pnl"):
             mode = "fixed"
             target_val = (
-                ((meta.get("auto_closing") or {}).get("positive") or {}).get("fixed_net", {}).get("target_net_usdt")
-                or ((meta.get("override") or meta.get("overrides") or {}).get("auto_closing", {}).get("positive", {}).get("fixed_net", {}).get("target_net_usdt"))
+                ((ac_block or {}).get("positive") or {}).get("fixed_net", {}).get("target_net_usdt")
+                if isinstance(ac_block, dict) else None
             )
             mode_badge = f"[FIXED ${float(target_val):g}]" if target_val else "[FIXED]"
         else:
-            # Чтение режима из конфигурации стратегии (без скрытых дефолтов в toxic)
-            raw_mode = (
-                meta.get("auto_closing_mode")
-                or (meta.get("auto_closing") or {}).get("mode")
-                or ((meta.get("auto_closing") or {}).get("positive") or {}).get("mode")
-                or (meta.get("overrides", {}).get("auto_closing") or {}).get("mode")
-                or ((meta.get("overrides", {}).get("auto_closing") or {}).get("positive") or {}).get("mode")
-            )
-            raw_mode_str = str(raw_mode).lower().strip() if raw_mode else "off"
-            if raw_mode_str in ("trailing_ratchet", "ratchet"):
-                mode = "trailing_ratchet"
-                mode_badge = "[RATCHET]"
-            elif raw_mode_str == "smoothed_drawdown":
-                mode = "smoothed_drawdown"
-                mode_badge = "[SMOOTH_DD]"
-            elif raw_mode_str == "ratchet_smoothed_drawdown":
-                mode = "ratchet_smoothed_drawdown"
-                mode_badge = "[RATCHET_DD]"
-            elif raw_mode_str == "ma_crossover":
-                mode = "ma_crossover"
-                mode_badge = "[MA_CROSS]"
-            elif raw_mode_str in ("toxic", "toxicity_adaptive"):
-                mode = "toxic"
-                mode_badge = "[TOXIC]"
-            elif raw_mode_str in ("fixed", "fixed_net"):
-                mode = "fixed"
-                target_val = (
-                    ((meta.get("auto_closing") or {}).get("positive") or {}).get("fixed_net", {}).get("target_net_usdt")
-                    or ((meta.get("override") or meta.get("overrides") or {}).get("auto_closing", {}).get("positive", {}).get("fixed_net", {}).get("target_net_usdt"))
-                )
-                mode_badge = f"[FIXED ${float(target_val):g}]" if target_val else "[FIXED]"
-            else:
-                mode = "off"
-                mode_badge = "[OFF]"
+            mode = "off"
+            mode_badge = "[OFF]"
 
         # Источник истины для Toxic Defense: Ledger-First подход
         peel_events, peel_vol, peel_pnl = 0, 0.0, 0.0

@@ -242,7 +242,8 @@ class StrategyConfigParser:
             "enabled": True, "negative_threshold": -50.0, "positive_threshold": 100.0
         }
 
-        raw_ac = raw_meta.get("auto_closing") or active_settings.get("auto_closing") or _CFG.get("auto_closing", {})
+        passport_ac = raw_meta.get("auto_closing")
+        raw_ac = passport_ac if isinstance(passport_ac, dict) else (active_settings.get("auto_closing") or {})
         base_ac = copy.deepcopy(raw_ac)
         override_ac = (
             active_settings.get("override", {}).get("auto_closing")
@@ -250,27 +251,42 @@ class StrategyConfigParser:
             or active_settings.get("auto_closing")
             or overrides.get("auto_closing")
         )
-        if override_ac and isinstance(override_ac, dict) and override_ac != base_ac:
-            base_ac = deep_merge_dict(base_ac, override_ac)
-        auto_closing_cfg = base_ac
-
-        mode_val = (
-            active_settings.get("auto_closing_mode")
-            or active_settings.get("mode")
+        passport_mode_val = (
+            (passport_ac.get("mode") if isinstance(passport_ac, dict) else None)
+            or ((passport_ac.get("positive") or {}).get("mode") if isinstance(passport_ac, dict) and isinstance(passport_ac.get("positive"), dict) else None)
             or raw_meta.get("auto_closing_mode")
             or raw_meta.get("mode")
-            or overrides.get("auto_closing_mode")
-            or overrides.get("mode")
         )
-        if not mode_val and active_settings.get("modes"):
+        settings_mode_val = active_settings.get("auto_closing_mode") or active_settings.get("mode")
+        if not settings_mode_val and active_settings.get("modes"):
             legacy_m = active_settings.get("modes")
-            mode_val = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
+            settings_mode_val = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
 
-        if mode_val and isinstance(mode_val, str):
-            clean_m = mode_val.lower().strip()
-            mode = "trailing_ratchet" if clean_m == "classic" else clean_m
+        if passport_mode_val and isinstance(passport_mode_val, str):
+            clean_p = passport_mode_val.lower().strip()
+            mode = "trailing_ratchet" if clean_p in ("classic", "iter_net_classic") else clean_p
+            if settings_mode_val and isinstance(settings_mode_val, str):
+                clean_s = settings_mode_val.lower().strip()
+                norm_s = "trailing_ratchet" if clean_s in ("classic", "iter_net_classic") else clean_s
+                if norm_s != mode:
+                    raise ValueError(
+                        f"[StrategyConfigParser] Нарушение SSOT: активный конфиг ('{settings_mode_val}') "
+                        f"пытается переопределить режим паспорта стратегии ('{mode}')!"
+                    )
         else:
-            mode = "off"
+            if override_ac and isinstance(override_ac, dict) and override_ac != base_ac:
+                base_ac = deep_merge_dict(base_ac, override_ac)
+            if settings_mode_val and isinstance(settings_mode_val, str):
+                clean_m = settings_mode_val.lower().strip()
+                mode = "trailing_ratchet" if clean_m in ("classic", "iter_net_classic") else clean_m
+            else:
+                ovr_mode = overrides.get("auto_closing_mode") or overrides.get("mode")
+                if ovr_mode and isinstance(ovr_mode, str):
+                    clean_o = ovr_mode.lower().strip()
+                    mode = "trailing_ratchet" if clean_o in ("classic", "iter_net_classic") else clean_o
+                else:
+                    mode = "off"
+        auto_closing_cfg = base_ac
 
         return {
             "start_balance_usdt": start_balance_usdt,

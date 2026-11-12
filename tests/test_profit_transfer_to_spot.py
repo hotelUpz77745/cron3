@@ -36,7 +36,9 @@ class TestProfitTransferToSpot(unittest.TestCase):
     def test_universe_templates_have_transfer_enabled_by_default(self):
         """Проверяет SSOT: transfer_profit_to_spot НЕ дублируется в CFG/universes/*.json и задан (50%) строго в app.active_strategies."""
         universes_dir = _ROOT / "CFG" / "universes"
-        for tpl_name in ("u96_omni_zenith13", "u96_omni_zenith13atr", "u96_omni_alligator", "u97_zenith13_hedge_shield", "u98_zenith13_compact_sl100"):
+        active_tpls = [p.stem for p in sorted(universes_dir.glob("*.json")) if not p.stem.startswith("_")]
+        self.assertIn("u96_omni_zenith13", active_tpls)
+        for tpl_name in active_tpls:
             tpl_path = universes_dir / f"{tpl_name}.json"
             self.assertTrue(tpl_path.exists(), f"Missing template {tpl_path}")
             raw_text = tpl_path.read_text(encoding="utf-8")

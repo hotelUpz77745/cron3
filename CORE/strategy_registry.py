@@ -32,11 +32,17 @@ class StrategyRegistry:
         self,
         active_strategies_cfg: Optional[Dict[str, Any]] = None,
         universes_path: Optional[Path] = None,
-        modes: Optional[List[str]] = None
+        modes: Optional[List[str]] = None,
+        universes_db: Optional[Dict[str, Dict[str, Any]]] = None,
     ):
         self.universes_path: Path = universes_path or (DATA_DIR / "universes.json")
         self.modes: List[str] = modes or _CFG.get("modes") or ["off"]
-        self.universes_db: Dict[str, Dict[str, Any]] = self._load_universes_db()
+        self._loaded_from_disk_app_cfg: bool = active_strategies_cfg is None
+        if universes_db is not None:
+            self.common_defaults: Dict[str, Any] = {}
+            self.universes_db: Dict[str, Dict[str, Any]] = copy.deepcopy(universes_db)
+        else:
+            self.universes_db: Dict[str, Dict[str, Any]] = self._load_universes_db()
 
         # Чтение конфигурации активных стратегий строго напрямую (Правило 2)
         if active_strategies_cfg is not None:
@@ -351,55 +357,59 @@ class StrategyRegistry:
                     )
             template_id = resolved_template
 
-            # Определяем целевой строковый режим автозакрытия
-            raw_mode = strat_settings.get("auto_closing_mode") or strat_settings.get("mode")
-            if raw_mode is None and "modes" in strat_settings:
-                legacy_m = strat_settings["modes"]
-                raw_mode = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
-
-            if raw_mode:
-                clean_m = str(raw_mode).lower().strip()
-                target_mode = "trailing_ratchet" if clean_m == "classic" else clean_m
-            elif "__trailing_ratchet" in strat_id:
-                target_mode = "trailing_ratchet"
-            elif "__ratchet_smoothed_drawdown" in strat_id:
-                target_mode = "ratchet_smoothed_drawdown"
-            elif "__smoothed_drawdown" in strat_id:
-                target_mode = "smoothed_drawdown"
-            elif "__ma_crossover" in strat_id:
-                target_mode = "ma_crossover"
-            elif "__fixed" in strat_id:
-                target_mode = "fixed"
-            elif "__classic" in strat_id:
-                target_mode = "trailing_ratchet"
-            elif "__toxic" in strat_id:
-                target_mode = "toxic"
-            elif "__off" in strat_id:
-                target_mode = "off"
-            else:
-                target_mode = "off"
-
-            # Слияние метаданных: universes/<template>.json -> strat_settings (override)
+            # Слияние базовых метаданных и паспорта стратегии (SSOT для auto_closing и торговых правил)
             base_meta = copy.deepcopy(getattr(self, "common_defaults", {}))
             template_meta = copy.deepcopy(self.universes_db[template_id])
             raw_meta = deep_merge_dict(base_meta, template_meta)
 
             dome_override = strat_settings.get("override") or strat_settings.get("overrides") or {}
+            passport_ac = raw_meta.get("auto_closing")
+            passport_mode_raw = (
+                (passport_ac.get("mode") if isinstance(passport_ac, dict) else None)
+                or raw_meta.get("auto_closing_mode")
+            )
+
+            if passport_mode_raw:
+                clean_p = str(passport_mode_raw).lower().strip()
+                target_mode = "trailing_ratchet" if clean_p in ("classic", "iter_net_classic") else clean_p
+                if "auto_closing" in strat_settings or (isinstance(dome_override, dict) and "auto_closing" in dome_override):
+                    raise ValueError(
+                        f"[StrategyRegistry] Нарушение SSOT для '{strat_id}': секция 'auto_closing' задаётся "
+                        f"исключительно в паспорте стратегии '{template_id}', переопределение в active_strategies запрещено!"
+                    )
+                settings_mode_raw = strat_settings.get("auto_closing_mode") or strat_settings.get("mode")
+                if settings_mode_raw is None and "modes" in strat_settings:
+                    legacy_m = strat_settings["modes"]
+                    settings_mode_raw = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
+                if settings_mode_raw:
+                    clean_s = str(settings_mode_raw).lower().strip()
+                    norm_s = "trailing_ratchet" if clean_s in ("classic", "iter_net_classic") else clean_s
+                    if self._loaded_from_disk_app_cfg or norm_s != target_mode:
+                        raise ValueError(
+                            f"[StrategyRegistry] Нарушение SSOT для '{strat_id}': режим автозакрытия '{target_mode}' "
+                            f"уже задан в паспорте '{template_id}', переопределение из app.json/active_strategies "
+                            f"('{settings_mode_raw}') запрещено!"
+                        )
+            else:
+                # Архивные tribute-шаблоны без поля mode внутри auto_closing (без эвристик по суффиксу ID)
+                raw_mode = strat_settings.get("auto_closing_mode") or strat_settings.get("mode")
+                if raw_mode is None and "modes" in strat_settings:
+                    legacy_m = strat_settings["modes"]
+                    raw_mode = legacy_m[0] if isinstance(legacy_m, list) and legacy_m else str(legacy_m)
+                if raw_mode:
+                    clean_m = str(raw_mode).lower().strip()
+                    target_mode = "trailing_ratchet" if clean_m in ("classic", "iter_net_classic") else clean_m
+                else:
+                    target_mode = "off"
+
             if dome_override and isinstance(dome_override, dict):
                 raw_meta = deep_merge_dict(raw_meta, dome_override)
 
-            # Накладываем автозакрытие строго под целевой строковый режим купола
-            ac_base = copy.deepcopy(
-                raw_meta.get("auto_closing")
-                or getattr(self, "common_defaults", {}).get("auto_closing")
-                or _CFG.get("auto_closing", {})
-            )
+            # Нормализуем блок auto_closing строго из паспорта стратегии
+            ac_base = copy.deepcopy(raw_meta.get("auto_closing") or {"positive": {}, "negative": {}})
             ac_block = self._build_mode_auto_closing(target_mode, base_ac=ac_base)
             raw_meta["auto_closing"] = ac_block
             raw_meta["auto_closing_mode"] = target_mode
-            if "overrides" not in raw_meta or not isinstance(raw_meta["overrides"], dict):
-                raw_meta["overrides"] = {}
-            raw_meta["overrides"]["auto_closing"] = ac_block
 
             # Прямое чтение списка монет купола (Правило 2):
             # Если symbols не задан явно, единым источником истины являются ключи per-symbol invest_size

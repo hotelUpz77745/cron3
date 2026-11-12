@@ -25,6 +25,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
 from CORE.STRATEGY.profit_closer_common import BucketedCloserRouter
+from CORE.STRATEGY.regime_adaptive_closer import RegimeAdaptiveCloser
 from CORE.SERVICES.stagnation_evaluator import StagnationEvaluator
 from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
@@ -32,6 +33,7 @@ from CORE.SERVICES.portfolio_closer import PortfolioCloser
 from CORE.SERVICES.trailing_ratchet_analytics import TrailingRatchetAnalytics
 from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 from CORE.SERVICES.profit_transfer_fsm import ProfitTransferFSM
+from CORE.SERVICES.auto_closer_state_store import AutoCloserStateStore
 
 logger = UnifiedLogger("AutoCloser")
 
@@ -45,11 +47,12 @@ class AutoCloser:
     - Аварийный ручник риск-системы (Miami Profit Take / Risk Stop).
     """
 
-    def __init__(self, bot_core):
+    def __init__(self, bot_core, state_store: Optional[AutoCloserStateStore] = None):
         self.bot_core = bot_core
         self._is_closing = False
         self._last_close_ts: dict[str, float] = {}
-        self._trailing_ratchet_state: dict[str, dict] = {}
+        self._state_store = state_store or AutoCloserStateStore(state_file=CACHE_DIR / "auto_closer_state.json")
+        self._trailing_ratchet_state: dict[str, dict] = self._state_store.load_all()
         self.ratchet_analytics: dict[str, TrailingRatchetAnalytics] = {}
         self.profit_transfer_fsm = ProfitTransferFSM(stats_dir=ANALYTICS_STATS_DIR, cache_dir=CACHE_DIR)
 
@@ -172,49 +175,46 @@ class AutoCloser:
             if now_sec - self._last_close_ts.get(strat_id, 0.0) < CLOSE_COOLDOWN_SEC:
                 continue
 
-            # Определение режима автозакрытия (4 режима: classic, toxic, fixed, off)
-            strat_app_cfg = app_data.get("active_strategies", {}).get(strat_id, {})
-            strat_auto_cfg = strat_app_cfg.get("auto_closing") or getattr(strat_cfg, "auto_closing_cfg", {})
+            # Единственный источник истины автозакрытия — скомпилированный паспорт стратегии (StrategyConfig)
+            strat_auto_cfg = getattr(strat_cfg, "auto_closing_cfg", None)
+            if not isinstance(strat_auto_cfg, dict):
+                strat_auto_cfg = {}
 
-            if strat_id.endswith("__off") or "__off" in strat_id:
-                mode = "off"
-            elif strat_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in strat_id:
+            raw_m = strat_auto_cfg.get("mode")
+            if raw_m is None:
+                pos_sub = strat_auto_cfg.get("positive")
+                if isinstance(pos_sub, dict):
+                    raw_m = pos_sub.get("mode")
+            if raw_m is None:
+                attr_ac_mode = getattr(strat_cfg, "auto_closing_mode", None)
+                if isinstance(attr_ac_mode, str):
+                    raw_m = attr_ac_mode
+            if raw_m is None:
+                attr_mode = getattr(strat_cfg, "mode", None)
+                if isinstance(attr_mode, str):
+                    raw_m = attr_mode
+
+            raw_m_str = str(raw_m).lower().strip() if isinstance(raw_m, str) and raw_m.strip() else "off"
+            if raw_m_str in ("trailing_ratchet", "classic", "iter_net_classic"):
                 mode = "trailing_ratchet"
-            elif strat_id.endswith("__ratchet_smoothed_drawdown") or "__ratchet_smoothed_drawdown" in strat_id:
-                mode = "ratchet_smoothed_drawdown"
-            elif strat_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in strat_id:
-                mode = "smoothed_drawdown"
-            elif strat_id.endswith("__ma_crossover") or "__ma_crossover" in strat_id:
-                mode = "ma_crossover"
-            elif strat_id.endswith("__classic") or "__classic" in strat_id:
-                mode = "trailing_ratchet"
-            elif strat_id.endswith("__toxic") or "__toxic" in strat_id:
+            elif BucketedCloserRouter.is_supported(raw_m_str):
+                mode = raw_m_str
+            elif raw_m_str in ("toxic", "toxicity_adaptive"):
                 mode = "toxic"
-            elif strat_id.endswith("__fixed") or "__fixed" in strat_id:
+            elif raw_m_str in ("fixed", "fixed_net", "fixed_pnl"):
                 mode = "fixed"
+            elif raw_m_str in ("off", "disabled", "none"):
+                mode = "off"
             else:
-                raw_m = (
-                    strat_app_cfg.get("auto_closing_mode")
-                    or strat_app_cfg.get("mode")
-                    or getattr(strat_cfg, "auto_closing_mode", None)
-                    or getattr(strat_cfg, "mode", None)
-                    or (strat_app_cfg.get("modes")[0] if isinstance(strat_app_cfg.get("modes"), list) and strat_app_cfg.get("modes") else None)
-                    or ((strat_auto_cfg or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
-                    or (((strat_auto_cfg or {}).get("positive") or {}).get("mode") if isinstance(strat_auto_cfg, dict) else None)
-                )
-                raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
-                if raw_m_str in ("trailing_ratchet", "classic", "iter_net_classic"):
-                    mode = "trailing_ratchet"
-                elif BucketedCloserRouter.is_supported(raw_m_str):
-                    mode = raw_m_str
-                elif raw_m_str in ("toxic", "toxicity_adaptive"):
-                    mode = "toxic"
-                elif raw_m_str in ("fixed", "fixed_net"):
-                    mode = "fixed"
-                else:
-                    mode = "off"
+                logger.warning(f"[AUTO_CLOSER][{strat_id}] Unknown auto_closing mode '{raw_m_str}', treating positive closer as 'off'.")
+                mode = "off"
 
-            if mode == "off":
+            neg_preview = strat_auto_cfg.get("negative")
+            has_neg_stop = isinstance(neg_preview, dict) and (
+                neg_preview.get("max_drawdown_from_start_pct") is not None
+                or neg_preview.get("threshold") is not None
+            )
+            if mode == "off" and not has_neg_stop:
                 continue
 
             strat_stats_path = ANALYTICS_STATS_DIR / f"analytics_{strat_id}.json"
@@ -317,6 +317,22 @@ class AutoCloser:
                     r_state["iteration_index"] = iter_idx
                 first_ts = strat_analytics.get("iteration_start_ts", strat_analytics.get("first_trade_ts", now_ms))
                 iter_age_h = max(0.0, (now_ms - first_ts) / 3600000.0)
+                store = getattr(self, "_state_store", None)
+                if store is not None and BucketedCloserRouter.is_supported(mode) and not r_state.get("profit_history"):
+                    base_bal = strat_analytics.get("start_balance_usdt")
+                    if base_bal is None and hasattr(strat_cfg, "start_balance_usdt"):
+                        base_bal = getattr(strat_cfg, "start_balance_usdt", None)
+                    iter_start_eq = (float(base_bal) + float(iter_start_net)) if base_bal is not None else None
+                    store.hydrate_from_snapshots(
+                        strat_id=strat_id,
+                        iter_idx=iter_idx,
+                        mode=mode,
+                        pos_cfg=pos_cfg,
+                        state=r_state,
+                        iter_start_ts_ms=int(first_ts or 0),
+                        iter_start_equity=iter_start_eq,
+                        now_ms=now_ms,
+                    )
 
                 # -------------------------------------------------------------
                 # РЕЖИМ 2: TOXICITY ADAPTIVE (Институциональный адаптивный скор)
@@ -386,6 +402,18 @@ class AutoCloser:
                         )
 
                 elif BucketedCloserRouter.is_supported(mode):
+                    extra_ctx = None
+                    if mode == "regime_adaptive":
+                        fsm_mgr = getattr(self.bot_core, "runtime_manager", None)
+                        fsm_states = getattr(fsm_mgr, "fsm_states", None) if fsm_mgr else getattr(self.bot_core, "position_states", None)
+                        raw_syms = getattr(strat_cfg, "symbols", None)
+                        allowed_syms = {str(s).upper() for s in raw_syms} if raw_syms else None
+                        extra_ctx = RegimeAdaptiveCloser.extract_regime_context(
+                            fsm_states=fsm_states,
+                            analytics_dict=strat_analytics,
+                            strat_cfg=strat_cfg,
+                            allowed_symbols=allowed_syms,
+                        )
                     sm_ok, sm_trig, sm_info = BucketedCloserRouter.evaluate(
                         mode=mode,
                         pos_cfg=pos_cfg,
@@ -394,6 +422,7 @@ class AutoCloser:
                         iter_age_hours=iter_age_h,
                         state=r_state,
                         scale_money=scale_money,
+                        extra_context=extra_ctx,
                     )
                     if sm_ok and sm_trig is not None:
                         strat_triggered = True
@@ -536,6 +565,10 @@ class AutoCloser:
                 )
                 strat_triggered = False
 
+            store = getattr(self, "_state_store", None)
+            if mode != "off" and not strat_triggered and store is not None:
+                store.maybe_persist(strat_id, iter_idx, r_state)
+
             if strat_triggered:
                 try:
                     self._is_closing = True
@@ -558,6 +591,7 @@ class AutoCloser:
                         is_emergency_stop=is_emergency_stop,
                         emergency_details=emergency_details,
                         profit_transfer_fsm=getattr(self, "profit_transfer_fsm", None),
+                        state_store=store,
                     )
                 except Exception as e:
                     logger.error(f"[AUTO_CLOSER][{strat_id}] Error in strategy auto-close: {e}")

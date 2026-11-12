@@ -159,6 +159,7 @@
         "off"
     ],
     "auto_closing": {
+        "mode": "trailing_ratchet",
         "positive": {
             "scale_money": 2.0,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",

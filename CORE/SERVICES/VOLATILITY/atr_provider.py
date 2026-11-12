@@ -91,26 +91,16 @@ class ATRProvider:
                     )
                     return fallback_atr_pct
 
-                trs = []
-                for i in range(1, len(klines)):
-                    h = float(klines[i].get("high", 0.0))
-                    l = float(klines[i].get("low", 0.0))
-                    prev_c = float(klines[i - 1].get("close", 0.0))
-                    if h <= 0 or l <= 0 or prev_c <= 0:
-                        continue
-                    tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
-                    trs.append(tr)
+                highs = [float(k.get("high", 0.0)) for k in klines]
+                lows = [float(k.get("low", 0.0)) for k in klines]
+                closes = [float(k.get("close", 0.0)) for k in klines]
 
-                if len(trs) < period:
+                from CORE.STRATEGY.CPP.native_indicators import NATIVE_INDICATORS
+                raw_atr_pct = NATIVE_INDICATORS.atr_pct_sma(highs, lows, closes, period)
+                if raw_atr_pct is None:
                     return fallback_atr_pct
 
-                target_trs = trs[-period:]
-                atr_val = sum(target_trs) / len(target_trs)
-                cur_price = float(klines[-1].get("close", 0.0))
-                if cur_price <= 0:
-                    return fallback_atr_pct
-
-                atr_pct = round((atr_val / cur_price) * 100.0, 4)
+                atr_pct = round(float(raw_atr_pct), 4)
                 if not is_sim:
                     cls._cache[cache_key] = (atr_pct, now)
                 return atr_pct

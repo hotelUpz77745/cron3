@@ -202,22 +202,30 @@ class VolatilityManager:
                         # Apply to all elements in grid
                         for idx, el in grid.items():
                             is_lvl_enabled = el.get("enabled", True) is not False
-                            raw_ind = el.get("indent")
+                            raw_ind = el.get("_base_indent", el.get("indent"))
+                            raw_act = el.get("_base_activation", el.get("activation"))
 
                             if is_advanced and is_lvl_enabled and raw_ind is not None:
                                 try:
                                     orig_indent = float(raw_ind)
                                     new_indent = orig_indent * ratio
                                     el["super_indent"] = round(new_indent, 4)
+                                    el["super_activation"] = (
+                                        round(float(raw_act) * ratio, 4) if raw_act is not None else None
+                                    )
                                     if not el.get("is_active", False):
                                         el["price"] = None
+                                        el["activation_price"] = None
                                 except (ValueError, TypeError):
                                     el["super_indent"] = None
+                                    el["super_activation"] = None
                             else:
-                                if el.get("super_indent") is not None:
+                                if el.get("super_indent") is not None or el.get("super_activation") is not None:
                                     el["super_indent"] = None
+                                    el["super_activation"] = None
                                     if not el.get("is_active", False):
                                         el["price"] = None
+                                        el["activation_price"] = None
                                         
                         modified = True
                         
@@ -256,9 +264,11 @@ class VolatilityManager:
                                 for lvl_str, lvl_data in state.grid.items():
                                     if lvl_str in fresh_grid:
                                         lvl_data["super_indent"] = fresh_grid[lvl_str].get("super_indent")
-                                        
+                                        lvl_data["super_activation"] = fresh_grid[lvl_str].get("super_activation")
+
                                     if state.in_position and not lvl_data.get("is_active"):
                                         lvl_data["price"] = None
+                                        lvl_data["activation_price"] = None
                                 
                                 if state.in_position:
                                     state.next_avg_price = None

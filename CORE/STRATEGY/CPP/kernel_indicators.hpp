@@ -124,4 +124,91 @@ extern "C" {
     ) {
         return hron::kernel::estimate_at_bar(prices, length, weights, window_size);
     }
+
+    inline int c_compute_ema(
+        const double* prices,
+        int length,
+        int period,
+        double* out_ema
+    ) {
+        if (!prices || !out_ema || length <= 0 || period <= 0) return 0;
+        out_ema[0] = prices[0];
+        double alpha = 2.0 / (static_cast<double>(period) + 1.0);
+        double ema = out_ema[0];
+        for (int i = 1; i < length; ++i) {
+            ema = alpha * prices[i] + (1.0 - alpha) * ema;
+            out_ema[i] = ema;
+        }
+        return length;
+    }
+
+    inline int c_compute_ema_sma_seeded(
+        const double* prices,
+        int length,
+        int period,
+        double* out_ema
+    ) {
+        if (!prices || !out_ema || length <= 0 || period <= 0 || length < period) return 0;
+        double sum = 0.0;
+        for (int i = 0; i < period; ++i) sum += prices[i];
+        double ema = sum / static_cast<double>(period);
+        out_ema[0] = ema;
+        double alpha = 2.0 / (static_cast<double>(period) + 1.0);
+        int out_idx = 1;
+        for (int i = period; i < length; ++i) {
+            ema = prices[i] * alpha + ema * (1.0 - alpha);
+            out_ema[out_idx++] = ema;
+        }
+        return out_idx;
+    }
+
+    inline int c_compute_atr(
+        const double* highs,
+        const double* lows,
+        const double* closes,
+        int length,
+        int period,
+        double* out_atr
+    ) {
+        if (!highs || !lows || !closes || !out_atr || length <= 0 || period <= 0) return 0;
+        double prev_atr = highs[0] - lows[0];
+        out_atr[0] = prev_atr;
+        for (int i = 1; i < length; ++i) {
+            double tr1 = highs[i] - lows[i];
+            double tr2 = std::abs(highs[i] - closes[i - 1]);
+            double tr3 = std::abs(lows[i] - closes[i - 1]);
+            double tr = std::max({tr1, tr2, tr3});
+            prev_atr = (prev_atr * (period - 1) + tr) / static_cast<double>(period);
+            out_atr[i] = prev_atr;
+        }
+        return length;
+    }
+
+    inline double c_compute_atr_pct_sma(
+        const double* highs,
+        const double* lows,
+        const double* closes,
+        int length,
+        int period
+    ) {
+        if (!highs || !lows || !closes || length <= 1 || period <= 0) return -1.0;
+        std::vector<double> trs;
+        trs.reserve(static_cast<size_t>(length));
+        for (int i = 1; i < length; ++i) {
+            double h = highs[i];
+            double l = lows[i];
+            double pc = closes[i - 1];
+            if (h <= 0.0 || l <= 0.0 || pc <= 0.0) continue;
+            double tr = std::max({h - l, std::abs(h - pc), std::abs(l - pc)});
+            trs.push_back(tr);
+        }
+        if (static_cast<int>(trs.size()) < period) return -1.0;
+        double tr_sum = 0.0;
+        size_t start = trs.size() - static_cast<size_t>(period);
+        for (size_t i = start; i < trs.size(); ++i) tr_sum += trs[i];
+        double cur_close = closes[length - 1];
+        if (cur_close <= 0.0) return -1.0;
+        double atr_val = tr_sum / static_cast<double>(period);
+        return (atr_val / cur_close) * 100.0;
+    }
 }

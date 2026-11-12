@@ -99,6 +99,17 @@ class AverageManager:
                 cfg=atr_grid_cfg
             )
             
+        is_sg_enabled = False
+        if getattr(runtime_manager, "strategy_registry", None):
+            try:
+                strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
+                is_sg_enabled = bool(strat.super_grid_enabled)
+            except Exception:
+                is_sg_enabled = False
+        elif "super_grid" in _CFG:
+            sg_val = _CFG["super_grid"]
+            is_sg_enabled = bool(sg_val.get("enabled", False)) if isinstance(sg_val, dict) else bool(sg_val)
+
         needs_save = False
         for level_str, level_data in grid.items():
             if level_data.get("enabled", True) is False or (level_str != "0" and level_data.get("indent") is None):
@@ -117,63 +128,69 @@ class AverageManager:
                     level_data["timestamp"] = int(act_time * 1000)
                     needs_save = True
             else:
-                if level_data.get("price") is None:
-                    # Сохраняем базовый отступ для возможности сброса
-                    if "_base_indent" not in level_data and "indent" in level_data:
-                        level_data["_base_indent"] = level_data["indent"]
-                    if "_base_activation" not in level_data and "activation" in level_data:
-                        level_data["_base_activation"] = level_data["activation"]
+                if "_base_indent" not in level_data and "indent" in level_data:
+                    level_data["_base_indent"] = level_data["indent"]
+                if "_base_activation" not in level_data and "activation" in level_data:
+                    level_data["_base_activation"] = level_data["activation"]
 
-                    base_indent = level_data.get("_base_indent", level_data.get("indent"))
-                    if base_indent is not None:
-                        is_sg_enabled = False
-                        if getattr(runtime_manager, "strategy_registry", None):
-                            try:
-                                strat = runtime_manager.strategy_registry.get_strategy_for_symbol(symbol)
-                                is_sg_enabled = strat.super_grid_enabled
-                            except Exception:
-                                is_sg_enabled = False
-                        elif "super_grid" in _CFG:
-                            sg_val = _CFG["super_grid"]
-                            is_sg_enabled = bool(sg_val.get("enabled", False)) if isinstance(sg_val, dict) else bool(sg_val)
+                try:
+                    lvl_idx = int(level_str)
+                except Exception:
+                    lvl_idx = 1
 
-                        indent_pct = base_indent
-                        if is_sg_enabled and level_data.get("super_indent") is not None:
-                            indent_pct = level_data["super_indent"]
-                            
-                        # Динамическое масштабирование шага сетки через ATR (с защитой от резинового метода)
-                        try:
-                            lvl_idx = int(level_str)
-                        except Exception:
-                            lvl_idx = 1
-                        eff_indent = DynamicAtrGridManager.calculate_effective_indent(
-                            base_indent=float(indent_pct),
-                            level_index=lvl_idx,
-                            atr_mult=atr_mult,
-                            cfg=atr_grid_cfg
-                        )
-                        level_data["indent"] = eff_indent
-                        level_data["effective_indent"] = eff_indent
-                        level_data["atr_mult"] = atr_mult
+                base_indent = level_data.get("_base_indent", level_data.get("indent"))
+                sg_indent = (
+                    level_data["super_indent"]
+                    if (is_sg_enabled and level_data.get("super_indent") is not None)
+                    else base_indent
+                )
+                eff_indent = None
+                if sg_indent is not None:
+                    eff_indent = DynamicAtrGridManager.calculate_effective_indent(
+                        base_indent=float(sg_indent),
+                        level_index=lvl_idx,
+                        atr_mult=atr_mult,
+                        cfg=atr_grid_cfg,
+                    )
 
-                        price = TradeMath.calculate_grid_price(initial_price, eff_indent, side, spec_data, symbol)
-                        level_data["price"] = price
-                        needs_save = True
+                if level_data.get("price") is None and eff_indent is not None:
+                    level_data["indent"] = eff_indent
+                    level_data["effective_indent"] = eff_indent
+                    level_data["atr_mult"] = atr_mult
 
-                # Расчет цены активации (курка) при наличии activation
+                    price = TradeMath.calculate_grid_price(initial_price, eff_indent, side, spec_data, symbol)
+                    level_data["price"] = price
+                    needs_save = True
+
+                # Синхронизированный расчёт цены активации (курка): base -> super_grid -> dynamic_atr_grid
                 if level_data.get("activation_price") is None:
                     base_act = level_data.get("_base_activation", level_data.get("activation"))
                     if base_act is not None:
-                        try:
-                            lvl_idx = int(level_str)
-                        except Exception:
-                            lvl_idx = 1
-                        eff_act = DynamicAtrGridManager.calculate_effective_indent(
-                            base_indent=float(base_act),
-                            level_index=lvl_idx,
-                            atr_mult=atr_mult,
-                            cfg=atr_grid_cfg
-                        )
+                        if is_sg_enabled and level_data.get("super_activation") is not None:
+                            sg_act = float(level_data["super_activation"])
+                        elif (
+                            is_sg_enabled
+                            and level_data.get("super_indent") is not None
+                            and base_indent is not None
+                            and float(base_indent) != 0.0
+                        ):
+                            sg_ratio = float(level_data["super_indent"]) / float(base_indent)
+                            sg_act = round(float(base_act) * sg_ratio, 4)
+                        else:
+                            sg_act = float(base_act)
+
+                        if eff_indent is not None and sg_indent is not None and float(sg_indent) != 0.0:
+                            # Сохраняем пропорцию ширины коридора activation/indent относительно результата dynamic_atr_grid
+                            atr_scale = float(eff_indent) / float(sg_indent)
+                            eff_act = round(sg_act * atr_scale, 4)
+                        else:
+                            eff_act = DynamicAtrGridManager.calculate_effective_indent(
+                                base_indent=float(sg_act),
+                                level_index=lvl_idx,
+                                atr_mult=atr_mult,
+                                cfg=atr_grid_cfg,
+                            )
+
                         level_data["activation"] = eff_act
                         level_data["effective_activation"] = eff_act
                         act_price = TradeMath.calculate_grid_price(initial_price, eff_act, side, spec_data, symbol)
@@ -232,8 +249,16 @@ class AverageManager:
         newly_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys()) - prev_armed
         for lvl in sorted(newly_armed, key=lambda x: int(x) if x.isdigit() else x):
             lvl_d = grid.get(lvl, {})
-            raw_act = lvl_d.get("activation")
-            raw_flr = lvl_d.get("super_indent") or lvl_d.get("indent")
+            raw_act = (
+                lvl_d.get("effective_activation")
+                if lvl_d.get("effective_activation") is not None
+                else (lvl_d.get("super_activation") if lvl_d.get("super_activation") is not None else lvl_d.get("activation"))
+            )
+            raw_flr = (
+                lvl_d.get("effective_indent")
+                if lvl_d.get("effective_indent") is not None
+                else (lvl_d.get("super_indent") if lvl_d.get("super_indent") is not None else lvl_d.get("indent"))
+            )
             logger.info(
                 f"[{symbol}] {side} ⚡ [GRID TRIGGER ARMED] Level {lvl}: "
                 f"Drawdown {dd_pct:.2f}% >= Trigger {raw_act}% (Waiting for rebound to <= {raw_flr}%)"

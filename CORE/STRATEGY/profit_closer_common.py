@@ -49,7 +49,10 @@ class BucketedProfitHistorySampler:
     def resolve_sample_interval_sec(mode: str, pos_cfg: Dict[str, Any]) -> int:
         """Возвращает шаг дискретизации sample_interval_sec строго из конфига режима."""
         mode_norm = str(mode).lower().strip()
-        interval = int(pos_cfg[mode_norm]["sample_interval_sec"])
+        if mode_norm == "regime_adaptive":
+            interval = int(pos_cfg["regime_adaptive"]["peace"]["sample_interval_sec"])
+        else:
+            interval = int(pos_cfg[mode_norm]["sample_interval_sec"])
         if interval <= 0:
             raise ValueError(f"sample_interval_sec must be > 0, got {interval}")
         return interval
@@ -183,6 +186,7 @@ class BucketedCloserRouter:
         "smoothed_drawdown",
         "ratchet_smoothed_drawdown",
         "ma_crossover",
+        "regime_adaptive",
     )
 
     @classmethod
@@ -199,8 +203,21 @@ class BucketedCloserRouter:
         iter_age_hours: float,
         state: Dict[str, Any],
         scale_money: float,
+        extra_context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[bool, Optional[float], str]:
         mode_norm = str(mode).lower().strip()
+        if mode_norm == "regime_adaptive":
+            from CORE.STRATEGY.regime_adaptive_closer import RegimeAdaptiveCloser
+
+            return RegimeAdaptiveCloser.evaluate_mode(
+                pos_cfg=pos_cfg,
+                iter_net=iter_net,
+                now_sec=now_sec,
+                iter_age_hours=iter_age_hours,
+                state=state,
+                scale_money=scale_money,
+                extra_context=extra_context,
+            )
         if mode_norm == "ma_crossover":
             from CORE.STRATEGY.ma_crossover_closer import MaCrossoverCloser
 
@@ -238,9 +255,24 @@ class BucketedCloserRouter:
         state: Dict[str, Any],
         cutoff_wake: float,
         scale_money: float,
+        extra_context: Optional[Dict[str, Any]] = None,
     ) -> Tuple[float, float, float, bool]:
         """Единый расчёт [eq_low, eq_high, max_valid_t, tracks_peak] с учётом бакета и chronos_exit."""
         mode_norm = str(mode).lower().strip()
+        if mode_norm == "regime_adaptive":
+            from CORE.STRATEGY.regime_adaptive_closer import RegimeAdaptiveCloser
+
+            return RegimeAdaptiveCloser.compute_corridor_bounds(
+                pos_cfg=pos_cfg,
+                cur_equity=cur_equity,
+                iter_start_equity=iter_start_equity,
+                current_sim_time=current_sim_time,
+                iter_start_time=iter_start_time,
+                state=state,
+                cutoff_wake=cutoff_wake,
+                scale_money=scale_money,
+                extra_context=extra_context,
+            )
         mode_cfg = pos_cfg.get(mode_norm)
         if not mode_cfg or not mode_cfg.get("enabled", True):
             return cutoff_wake, float("inf"), float("inf"), False

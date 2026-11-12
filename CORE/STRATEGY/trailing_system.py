@@ -141,6 +141,107 @@ class BaseTrailingSystem:
         return False, armed_floor, info, is_stag
 
     @classmethod
+    def compute_ratchet_corridor_bounds(
+        cls,
+        ratchet_cfg: Optional[Dict[str, Any]],
+        cur_equity: float,
+        iter_start_equity: float,
+        current_sim_time: float,
+        iter_start_time: float,
+        scale_money: float,
+        ratchet_state: Dict[str, Any],
+        cutoff_wake: float = float("-inf"),
+    ) -> Tuple[float, float, float, bool]:
+        """
+        Вычисляет безопасный коридор [eq_low, eq_high, max_valid_t, tracks_peak]
+        для ступенчатого Trailing Ratchet (переиспользуется BacktestAutoClosingEvaluator и RegimeAdaptiveCloser).
+        """
+        if not ratchet_cfg or not ratchet_cfg.get("enabled", True):
+            return cutoff_wake, float("inf"), float("inf"), False
+        levels = ratchet_cfg.get("levels", [])
+        if not levels:
+            return cutoff_wake, float("inf"), float("inf"), False
+        if iter_start_time <= 0.0:
+            return float("inf"), float("-inf"), 0.0, True
+
+        iter_net = cur_equity - iter_start_equity
+        iter_age_hours = (current_sim_time - iter_start_time) / 3600.0
+        eff_scale = float(scale_money) if scale_money and float(scale_money) > 0.0 else 1.0
+
+        max_valid_t = float("inf")
+        active_levels = []
+        for lvl in levels:
+            if not lvl.get("enabled", True):
+                continue
+            min_age = float(lvl.get("min_age_hours") or 0.0)
+            if iter_age_hours < min_age:
+                wake_t = iter_start_time + min_age * 3600.0 - 0.001
+                if wake_t <= current_sim_time:
+                    return float("inf"), float("-inf"), 0.0, True
+                if wake_t < max_valid_t:
+                    max_valid_t = wake_t
+            else:
+                active_levels.append(lvl)
+
+        armed_floor = ratchet_state.get("armed_floor")
+        highest_net = float(ratchet_state.get("highest_net", 0.0) or 0.0)
+
+        if iter_net <= 0.0:
+            if armed_floor is not None or highest_net > 0.0:
+                return float("inf"), float("-inf"), 0.0, True
+            if active_levels:
+                min_act = min(float(lvl["activation"]) * eff_scale for lvl in active_levels)
+                eq_high = iter_start_equity + max(0.0, min_act) - 1e-6
+            else:
+                eq_high = float("inf")
+            if cutoff_wake >= cur_equity or cur_equity >= eq_high:
+                return float("inf"), float("-inf"), 0.0, True
+            return cutoff_wake, eq_high, max_valid_t, True
+
+        upper_targets = []
+        for lvl in active_levels:
+            act_val = float(lvl["activation"]) * eff_scale
+            floor_val = float(lvl["floor"]) * eff_scale
+            if iter_net >= act_val and (armed_floor is None or floor_val > armed_floor):
+                return float("inf"), float("-inf"), 0.0, True
+            if armed_floor is None or floor_val > armed_floor:
+                upper_targets.append(act_val)
+
+        if armed_floor is None:
+            eq_low = max(cutoff_wake, iter_start_equity + 1e-6)
+            eq_high = (iter_start_equity + min(upper_targets) - 1e-6) if upper_targets else float("inf")
+        else:
+            idx = int(ratchet_state.get("active_level_idx", 0))
+            if idx < len(levels):
+                act_threshold = float(levels[idx]["activation"]) * eff_scale
+                if act_threshold <= armed_floor:
+                    if iter_net >= act_threshold:
+                        return float("inf"), float("-inf"), 0.0, True
+                    upper_targets.append(act_threshold)
+
+            min_profit_floor = float(ratchet_cfg.get("min_guaranteed_profit_usdt") or 0.0)
+            if min_profit_floor <= 0.0:
+                first_step_floor = float(levels[0].get("floor", 5.0)) * eff_scale if levels else 5.0
+                effective_min_profit = max(0.01, 0.5 * first_step_floor)
+            else:
+                effective_min_profit = min_profit_floor
+
+            if iter_net < effective_min_profit:
+                eq_low = max(cutoff_wake, iter_start_equity + 1e-6)
+                if effective_min_profit <= armed_floor:
+                    upper_targets.append(effective_min_profit)
+                eq_high = (iter_start_equity + min(upper_targets) - 1e-6) if upper_targets else float("inf")
+            else:
+                if iter_net <= armed_floor:
+                    return float("inf"), float("-inf"), 0.0, True
+                eq_low = max(cutoff_wake, iter_start_equity + max(0.0, armed_floor) + 1e-6)
+                eq_high = (iter_start_equity + min(upper_targets) - 1e-6) if upper_targets else float("inf")
+
+        if eq_low >= cur_equity or cur_equity >= eq_high:
+            return float("inf"), float("-inf"), 0.0, True
+        return eq_low, eq_high, max_valid_t, True
+
+    @classmethod
     def evaluate_trailing_tp(
         cls,
         gain_pct: float,
@@ -239,6 +340,22 @@ class BaseTrailingSystem:
         info = f"[ARMED TP L{active_lvl}: Floor {armed_floor:.2f}% | Gain {gain_pct:.2f}%]"
         return False, armed_floor, info
 
+    @staticmethod
+    def _resolve_level_floor(lvl_data: dict) -> Any:
+        if lvl_data.get("effective_indent") is not None:
+            return lvl_data["effective_indent"]
+        if lvl_data.get("super_indent") is not None:
+            return lvl_data["super_indent"]
+        return lvl_data.get("indent")
+
+    @staticmethod
+    def _resolve_level_activation(lvl_data: dict) -> Any:
+        if lvl_data.get("effective_activation") is not None:
+            return lvl_data["effective_activation"]
+        if lvl_data.get("super_activation") is not None:
+            return lvl_data["super_activation"]
+        return lvl_data.get("activation")
+
     @classmethod
     def evaluate_trailing_grid(
         cls,
@@ -276,7 +393,11 @@ class BaseTrailingSystem:
             and isinstance(grid.get(lvl_str), dict)
             and not grid[lvl_str].get("is_active")
             and grid[lvl_str].get("enabled", True) is not False
-            and (grid[lvl_str].get("super_indent") is not None or grid[lvl_str].get("indent") is not None)
+            and (
+                grid[lvl_str].get("effective_indent") is not None
+                or grid[lvl_str].get("super_indent") is not None
+                or grid[lvl_str].get("indent") is not None
+            )
         ]
 
         if not unexecuted_levels:
@@ -285,7 +406,7 @@ class BaseTrailingSystem:
         # 1. Проверяем взведение курков для уровней с трейлингом
         for lvl_str in unexecuted_levels:
             lvl_data = grid[lvl_str]
-            raw_act = lvl_data.get("activation")
+            raw_act = cls._resolve_level_activation(lvl_data)
             if raw_act is not None:
                 act_val = cls.normalize_abs(raw_act)
                 if drawdown_pct >= act_val:
@@ -310,12 +431,12 @@ class BaseTrailingSystem:
         candidate_level = None
         for lvl_str in sorted(unexecuted_levels, key=lambda x: int(x) if x.isdigit() else x, reverse=True):
             lvl_data = grid[lvl_str]
-            raw_floor = lvl_data.get("super_indent") or lvl_data.get("indent")
+            raw_floor = cls._resolve_level_floor(lvl_data)
             if raw_floor is None:
                 continue
             floor_val = cls.normalize_abs(raw_floor)
 
-            raw_act = lvl_data.get("activation")
+            raw_act = cls._resolve_level_activation(lvl_data)
             if raw_act is not None:
                 act_val = cls.normalize_abs(raw_act)
                 # Трейлинг-уровень: должен быть взведен
@@ -336,9 +457,9 @@ class BaseTrailingSystem:
         if candidate_level is None:
             for lvl_str in sorted(unexecuted_levels, key=lambda x: int(x) if x.isdigit() else x):
                 lvl_data = grid[lvl_str]
-                raw_act = lvl_data.get("activation")
+                raw_act = cls._resolve_level_activation(lvl_data)
                 if raw_act is None:
-                    raw_floor = lvl_data.get("super_indent") or lvl_data.get("indent")
+                    raw_floor = cls._resolve_level_floor(lvl_data)
                     if raw_floor is None:
                         continue
                     floor_val = cls.normalize_abs(raw_floor)
@@ -366,7 +487,7 @@ class BaseTrailingSystem:
             if sk in grid and isinstance(grid[sk], dict):
                 grid[sk]["is_armed"] = False
 
-        raw_floor = grid[candidate_level].get("super_indent") or grid[candidate_level].get("indent")
+        raw_floor = cls._resolve_level_floor(grid[candidate_level])
         floor_val = cls.normalize_abs(raw_floor)
         info = (
             f"[GRID TRIGGER L{candidate_level}: DD {drawdown_pct:.2f}% | Floor {floor_val:.2f}% | "
