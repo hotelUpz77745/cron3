@@ -40,6 +40,7 @@ class AutoClosingConfigBuilder:
 
         if mode == "off":
             return {
+                "mode": "off",
                 "positive": {},
                 "negative": neg_cfg
             }
@@ -48,6 +49,7 @@ class AutoClosingConfigBuilder:
             if "target_net_usdt" not in fixed_net:
                 fixed_net["target_net_usdt"] = 15.0
             pos_cfg = {
+                "mode": "fixed",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "auto_scale_money": auto_scale_money,
@@ -57,6 +59,7 @@ class AutoClosingConfigBuilder:
                 "fixed_net": fixed_net
             }
             return {
+                "mode": "fixed",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
@@ -71,6 +74,7 @@ class AutoClosingConfigBuilder:
                 "min_moderate_recovery": 0.20,
             })
             pos_cfg = {
+                "mode": "toxic",
                 "scale_money": scale_money,
                 "_desc_scale_money": desc_scale_money,
                 "auto_scale_money": auto_scale_money,
@@ -80,6 +84,7 @@ class AutoClosingConfigBuilder:
                 "toxicity_adaptive": toxicity_cfg
             }
             return {
+                "mode": "toxic",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
