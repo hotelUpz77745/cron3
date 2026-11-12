@@ -274,7 +274,7 @@ class BucketedCloserRouter:
                 extra_context=extra_context,
             )
         mode_cfg = pos_cfg.get(mode_norm)
-        if not mode_cfg or not mode_cfg.get("enabled", True):
+        if not mode_cfg:
             return cutoff_wake, float("inf"), float("inf"), False
         if mode_norm == "ratchet_smoothed_drawdown" and not (pos_cfg.get("trailing_ratchet") or {}).get("levels"):
             return cutoff_wake, float("inf"), float("inf"), False

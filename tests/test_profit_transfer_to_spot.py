@@ -50,7 +50,6 @@ class TestProfitTransferToSpot(unittest.TestCase):
                 raw_meta=raw_meta,
                 symbols=["ERAUSDT", "ZECUSDT"],
                 active_settings={
-                    "auto_closing_mode": "trailing_ratchet",
                     "default_invest_size": 1200,
                     "transfer_profit_to_spot": {
                         "enabled": True,
@@ -88,7 +87,6 @@ class TestProfitTransferToSpot(unittest.TestCase):
             raw_meta=raw_meta,
             symbols=["ERAUSDT"],
             active_settings={
-                "auto_closing_mode": "trailing_ratchet",
                 "default_invest_size": 1200,
                 "transfer_profit_to_spot": False,
             },
@@ -101,7 +99,6 @@ class TestProfitTransferToSpot(unittest.TestCase):
             raw_meta=raw_meta,
             symbols=["ERAUSDT"],
             active_settings={
-                "auto_closing_mode": "trailing_ratchet",
                 "default_invest_size": 1200,
                 "auto_closing": {
                     "positive": {

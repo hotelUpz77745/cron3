@@ -25,7 +25,6 @@ class SmoothedProfitDrawdownCloser:
     """
 
     def __init__(self, cfg: Dict[str, Any]):
-        self.enabled: bool = bool(cfg["enabled"])
         self.sample_interval_sec: int = int(cfg["sample_interval_sec"])
         self.min_samples: int = int(cfg["min_samples"])
         self.ma_window_samples: int = int(cfg["ma_window_samples"])
@@ -143,9 +142,6 @@ class SmoothedProfitDrawdownCloser:
         Выполняет 1-минутное сэмплирование и оценку режима smoothed_drawdown / ratchet_smoothed_drawdown.
         Возвращает (should_close, eff_min_or_trigger, info).
         """
-        if not self.enabled:
-            return False, None, ""
-
         ch_ok, ch_floor, ch_info = self.chronos.evaluate(
             iter_net=iter_net,
             iter_age_hours=iter_age_hours,

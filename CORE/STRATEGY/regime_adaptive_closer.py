@@ -28,7 +28,6 @@ class RegimeAdaptiveCloser:
         if not isinstance(cfg, dict):
             raise ValueError("regime_adaptive config must be a dict")
         self.cfg = cfg
-        self.enabled = bool(cfg.get("enabled", True))
         self.min_guaranteed_profit_usdt = float(min_guaranteed_profit_usdt or 0.0)
 
         sw = cfg["switch"]
@@ -126,9 +125,6 @@ class RegimeAdaptiveCloser:
         load_ratio: float = 0.0,
     ) -> Tuple[bool, Optional[float], str]:
         """Оценивает режим PEACE/STRESS и применяет соответствующую логику автозакрытия."""
-        if not self.enabled:
-            return False, None, ""
-
         eff_scale = float(scale_money) if scale_money and float(scale_money) > 0.0 else 1.0
         regime, reason = self._update_regime(
             now_sec=now_sec,
@@ -247,7 +243,7 @@ class RegimeAdaptiveCloser:
         для ускоренного сканера бэктеста без потери бит-в-бит идентичности.
         """
         ra_cfg = pos_cfg.get("regime_adaptive")
-        if not ra_cfg or not ra_cfg.get("enabled", True):
+        if not ra_cfg:
             return cutoff_wake, float("inf"), float("inf"), False
         if iter_start_time <= 0.0:
             return float("inf"), float("-inf"), 0.0, False

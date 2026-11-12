@@ -153,17 +153,17 @@
         "stagnation_min_step": null
     },
     "_auto_closing_modes_allowed": [
+        "regime_adaptive",
         "trailing_ratchet",
         "smoothed_drawdown",
         "ratchet_smoothed_drawdown",
         "ma_crossover",
-        "regime_adaptive",
         "toxic",
         "fixed",
         "off"
     ],
     "auto_closing": {
-        "mode": "trailing_ratchet",
+        "mode": "regime_adaptive",
         "positive": {
             "scale_money": 2.0,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
@@ -246,7 +246,6 @@
                 ]
             },
             "smoothed_drawdown": {
-                "enabled": true,
                 "sample_interval_sec": 60,
                 "min_samples": 180,
                 "ma_window_samples": 15,
@@ -266,7 +265,6 @@
                 "_desc_max_drawdown_ratio": "Допустимый откат MA от пика профита в долях от 1 (например, 0.22 = 22% откат от пика)."
             },
             "ratchet_smoothed_drawdown": {
-                "enabled": true,
                 "sample_interval_sec": 60,
                 "min_samples": 180,
                 "ma_window_samples": 15,
@@ -281,7 +279,6 @@
                 "_desc": "Сглаженный MA-трейлинг с динамическим min_profit по карте trailing_ratchet.levels (Вариант А: максимальный floor уровней с activation*scale <= peak_profit; до первого достижения ориентир равен минимальному active activation*scale)."
             },
             "ma_crossover": {
-                "enabled": true,
                 "sample_interval_sec": 60,
                 "reference_interval_sec": 300,
                 "min_periods": 50,
@@ -307,19 +304,17 @@
                 "_desc_require_slow_ma_non_growing": "Флаг защиты от флэта на хаях: при true фиксирует MA_fast <= MA_slow только если сама MA_slow перестала расти (MA_slow <= MA_slow_prev). По умолчанию отключено (false)."
             },
             "regime_adaptive": {
-                "enabled": true,
-                "_desc": "HRON-4 Двухуровневый адаптивный автозакрыватель: PEACE (MA3/MA50) <-> STRESS (быстрый Ratchet + Chronos 48h).",
+                "_desc": "HRON-4 Двухуровневый адаптивный автозакрыватель (лидер турнира Early-Stress): PEACE (MA3/MA50) <-> STRESS (быстрый Ratchet $8->$5..$89->$55 + Chronos 36h/+$4).",
                 "switch": {
-                    "stress_level_gte": 5,
-                    "stress_load_gte": 2.8,
-                    "stress_age_hours_gte": 60.0,
-                    "stress_age_level_gte": 3,
-                    "min_stress_hold_minutes": 60.0,
-                    "recover_level_lte": 2,
-                    "recover_load_lte": 1.8
+                    "stress_level_gte": 4,
+                    "stress_load_gte": 2.2,
+                    "stress_age_hours_gte": 36.0,
+                    "stress_age_level_gte": 2,
+                    "min_stress_hold_minutes": 45.0,
+                    "recover_level_lte": 1,
+                    "recover_load_lte": 1.5
                 },
                 "peace": {
-                    "enabled": true,
                     "sample_interval_sec": 60,
                     "reference_interval_sec": 300,
                     "min_periods": 50,
@@ -338,22 +333,21 @@
                 },
                 "stress": {
                     "trailing_ratchet": {
-                        "enabled": true,
                         "levels": [
-                            {"activation": 13.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L0: $13 -> $8"},
-                            {"activation": 21.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L1: $21 -> $13"},
-                            {"activation": 34.0, "floor": 21.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L2: $34 -> $21"},
-                            {"activation": 55.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L3: $55 -> $34"},
-                            {"activation": 89.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L4: $89 -> $55"},
-                            {"activation": 144.0, "floor": 144.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L5: $144 instant"}
+                            {"activation": 8.0, "floor": 5.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L0: $8 -> $5"},
+                            {"activation": 13.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L1: $13 -> $8"},
+                            {"activation": 21.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L2: $21 -> $13"},
+                            {"activation": 34.0, "floor": 21.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L3: $34 -> $21"},
+                            {"activation": 55.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L4: $55 -> $34"},
+                            {"activation": 89.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L5: $89 -> $55"}
                         ]
                     },
                     "chronos_exit": {
-                        "activation": 6.0,
-                        "floor": 6.0,
-                        "min_age_hours": 48.0,
+                        "activation": 4.0,
+                        "floor": 4.0,
+                        "min_age_hours": 36.0,
                         "enabled": true,
-                        "_desc": "STRESS Chronos 48h+: мгновенная эвакуация при +$6 * scale_money"
+                        "_desc": "STRESS Chronos 36h+: мгновенная эвакуация при +$4 * scale_money"
                     }
                 }
             }

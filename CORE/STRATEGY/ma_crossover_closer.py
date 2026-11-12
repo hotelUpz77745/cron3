@@ -24,7 +24,6 @@ class MaCrossoverCloser:
     """
 
     def __init__(self, cfg: Dict[str, Any]):
-        self.enabled: bool = bool(cfg["enabled"])
         self.sample_interval_sec: int = int(cfg["sample_interval_sec"])
         self.reference_interval_sec: int = int(cfg["reference_interval_sec"])
         self.min_periods: int = int(cfg["min_periods"])
@@ -127,9 +126,6 @@ class MaCrossoverCloser:
         iter_age_hours: float = 0.0,
     ) -> Tuple[bool, Optional[float], str]:
         """Оценивает Chronos-форсаж (если включен) и MA-пересечение по закрытому бакету."""
-        if not self.enabled:
-            return False, None, ""
-
         ch_ok, ch_floor, ch_info = self.chronos.evaluate(
             iter_net=iter_net,
             iter_age_hours=iter_age_hours,
@@ -205,3 +201,4 @@ class MaCrossoverCloser:
             scale_money=scale_money,
             iter_age_hours=iter_age_hours,
         )
+
