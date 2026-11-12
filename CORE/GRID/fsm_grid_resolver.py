@@ -98,6 +98,10 @@ class FSMGridResolver:
             lvl_cfg = grid[lvl_key]
             if not isinstance(lvl_cfg, dict):
                 continue
+            if lvl_cfg.get("enabled", True) is False:
+                lvl_cfg["is_active"] = False
+                lvl_cfg["is_armed"] = False
+                continue
             raw_vol = lvl_cfg.get("volume")
             if raw_vol is None and lvl_key == "0":
                 regime_cfg = (
@@ -238,6 +242,10 @@ class FSMGridResolver:
             lvl_cfg = grid[lvl_key]
             if not isinstance(lvl_cfg, dict):
                 continue
+            if lvl_cfg.get("enabled", True) is False:
+                lvl_cfg["is_active"] = False
+                lvl_cfg["is_armed"] = False
+                continue
             raw_vol = lvl_cfg.get("volume")
             if raw_vol is None and lvl_key == "0":
                 regime_cfg = (
@@ -290,8 +298,14 @@ class FSMGridResolver:
                             )
                             updated = True
 
-        active_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and grid[k].get("is_active")]
-        unexecuted_lvls = [k for k in sorted_keys if isinstance(grid.get(k), dict) and not grid[k].get("is_active")]
+        active_lvls = [
+            k for k in sorted_keys
+            if isinstance(grid.get(k), dict) and grid[k].get("enabled", True) is not False and grid[k].get("is_active")
+        ]
+        unexecuted_lvls = [
+            k for k in sorted_keys
+            if isinstance(grid.get(k), dict) and grid[k].get("enabled", True) is not False and not grid[k].get("is_active")
+        ]
         if updated:
             logger.info(
                 f"[POSITION_RESTORER] [{sym_name}] {side_name}: Синхронизация сетки завершена! "
