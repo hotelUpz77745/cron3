@@ -1892,3 +1892,15 @@ CFG/universes/u96_omni_zenith13.json
 
 
 
+
+---
+
+### [2026-11-12] Внедрены режимы автозакрытия `smoothed_drawdown` и `ratchet_smoothed_drawdown` (`u96_omni_zenith13`)
+- **Модуль и класс (ООП/SRP):** `CORE/STRATEGY/smoothed_profit_closer.py` (`SmoothedProfitDrawdownCloser`, 254 LOC) — публичный чистый метод `should_take_profit`, буферизация закрытых 1m бакетов (`sample_interval_sec=60`, `min_samples=180` = 3 часа, `ma_window_samples=15` = 15 мин, `max_drawdown_ratio=0.22`), чтение конфига строго через `['']`.
+- **Варианты логики:**
+  1. `smoothed_drawdown`: базовый порог `min_profit_usdt * scale_money` (`20.0 * scale_money`), жёсткий запрет закрытия при `ma_val <= eff_min_profit` или `peak_profit <= eff_min_profit` (Вариант II).
+  2. `ratchet_smoothed_drawdown`: Вариант A (подход 2B без защёлки курка) — выбор максимального достигнутого `floor * scale_money` из `trailing_ratchet.levels`, где `peak_profit >= activation * scale_money` и `iter_age_hours >= min_age_hours` (при отсутствии достигнутых уровней ориентир равен минимальному активному `activation * scale_money`).
+- **Интеграция и Spot-переводы:**
+  - `cron3`: обновлены `CFG/universes/u96_omni_zenith13.json`, `CORE/STRATEGY/auto_closing_builder.py`, `CORE/strategy_registry.py`, `CORE/SERVICES/auto_closer.py`, `CORE/SERVICES/portfolio_closer.py`, `ANALYTICS/leaderboard.py` (commit `6781414`).
+  - `cron3TradeBacktest`: интегрировано в `ENGINE/backtest_core_resources.py`, `ENGINE/auto_closing_evaluator.py`, `ENGINE/backtest_risk_lifecycle.py` (снято ограничение whitelist только на `trailing_ratchet` для `ProfitTransferService` — теперь работает на всех положительных режимах автозакрытия), `ENGINE/multi_stream_engine.py`, добавлен parity-тест `test_smoothed_drawdown_modes_raw_vs_multi_bit_for_bit_parity` в `tests/test_combat_parity_v3.py` (commit `ae8aaac`).
+- **Верификация:** `cron3` unit-тесты (45/45 OK) и `cron3TradeBacktest` parity-тесты (45 run: 38 OK, 7 skipped legacy/optional, 0 failures).
