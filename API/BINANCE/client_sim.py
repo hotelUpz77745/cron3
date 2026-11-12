@@ -5,14 +5,13 @@
 
 from __future__ import annotations
 
-import json
-import time
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Any, Tuple
 
 from c_log import UnifiedLogger
 from API.BINANCE.validator import APIResponse
+from API.BINANCE.sim_history_store import SimHistoricalDataStore
+from API.BINANCE.sim_liquidation import BacktestExecutionConfigLoader, CrossMarginLiquidationGuard
 
 logger = UnifiedLogger("SimulatedBinanceClient")
 
@@ -66,6 +65,8 @@ class SimulatedBinanceClient:
         leverage: int = 20,
         maker_fee_rate: float = 0.0002,  # 0.02% Maker для лимитных ордеров (Take-Profit)
         slippage_rate: float = 0.0001,  # 0.01% (1 bps) реалистичное проскальзывание на всех MARKET-ордерах (вход и выход)
+        liquidation_guard_enabled: Optional[bool] = None,
+        maint_margin_rate: Optional[float] = None,
     ):
         self.initial_balance = float(start_balance_usdt)
         self.balance = float(start_balance_usdt)
@@ -74,12 +75,24 @@ class SimulatedBinanceClient:
         self.slippage_rate = max(0.0, float(slippage_rate))
         self.default_leverage = int(leverage)
 
+        liq_enabled, mmr = BacktestExecutionConfigLoader.resolve_liquidation_params(
+            liquidation_guard_enabled, maint_margin_rate
+        )
+        self.liquidation_guard_enabled: bool = liq_enabled
+        self.maint_margin_rate: float = mmr
+        self.liquidation_guard = CrossMarginLiquidationGuard(enabled=liq_enabled, maint_margin_rate=mmr)
+        self.is_liquidated: bool = False
+        self.liquidation_details: Optional[Dict[str, Any]] = None
+        self._has_active_positions: bool = False
+
         self._next_order_id = 100000
         self.positions: Dict[Tuple[str, str], SimPosition] = {}
         self.open_orders: Dict[int, SimOrder] = {}
         self.order_history: List[SimOrder] = []
         self.current_prices: Dict[str, float] = {}
         self.current_sim_time: int = 0
+        self._completed_hourly_bars: Dict[str, List[Tuple[int, float]]] = {}
+        self._cur_hour_bar: Dict[str, Tuple[int, float]] = {}
 
         # Статистика портфеля
         self.total_fees_paid: float = 0.0
@@ -205,6 +218,8 @@ class SimulatedBinanceClient:
         market_type: str = "MARKET", price: Optional[float] = None,
         reduce_only: bool = False, concurrent_mode: bool = False
     ) -> APIResponse:
+        if self.is_liquidated:
+            return APIResponse(success=False, error_code=-2010, error_msg="Account liquidated")
         sym_u, side_u, pos_side_u, qty_abs = symbol.upper(), side.upper(), position_side.upper(), abs(float(qty))
         if qty_abs <= 0:
             return APIResponse(success=False, error_code=-1013, error_msg="Filter failure: LOT_SIZE qty <= 0")
@@ -218,8 +233,10 @@ class SimulatedBinanceClient:
         )
 
         if market_type.upper() == "MARKET":
-            # Базовая цена: явно переданная (например, триггер SL/AutoClose) либо текущая рыночная, с единым slippage_rate для всех MARKET-ордеров
-            base_price = order.price if order.price > 0 else (self.current_prices.get(sym_u, 0.0) or 100.0)
+            # Базовая цена: явно переданная (например, триггер SL/AutoClose) либо текущая рыночная, с единым slippage_rate
+            base_price = order.price if order.price > 0 else float(self.current_prices.get(sym_u, 0.0) or 0.0)
+            if base_price <= 0.0:
+                return APIResponse(success=False, error_code=-1013, error_msg=f"Missing market price for {sym_u}")
             fill_price = self._apply_market_slippage(base_price, side_u)
             success, err = self._execute_fill(order, fill_price=fill_price, fill_ts=self.current_sim_time)
             if not success:
@@ -236,89 +253,32 @@ class SimulatedBinanceClient:
                 data={"orderId": oid, "symbol": sym_u, "status": "NEW", "price": str(order.price), "origQty": str(qty_abs)}
             )
 
-    _historical_klines_loaded = False
-    _warmup_1h: Dict[str, List[float]] = {}
-    _warmup_4h: Dict[str, List[float]] = {}
-    _warmup_1d: Dict[str, List[float]] = {}
-    _sim_1h: Dict[str, List[Dict[str, Any]]] = {}
-    _precomputed_trends: Dict[str, str] = {}
-    _precomputed_atr: Dict[str, float] = {}
-
     @classmethod
     def _ensure_historical_klines(cls):
-        if cls._historical_klines_loaded:
-            return
-        cls._historical_klines_loaded = True
-        backtest_data = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA"
-        for name, target in [
-            ("warmup_klines_1h.json", "_warmup_1h"),
-            ("warmup_4h.json", "_warmup_4h"),
-            ("warmup_klines_4h.json", "_warmup_4h"),
-            ("warmup_1d.json", "_warmup_1d"),
-            ("warmup_klines_1d.json", "_warmup_1d"),
-            ("sim_klines_1h.json", "_sim_1h"),
-            ("precomputed_ema_trends.json", "_precomputed_trends"),
-            ("precomputed_atr.json", "_precomputed_atr"),
-        ]:
-            p = backtest_data / name
-            if p.exists():
-                try:
-                    with open(p, "r", encoding="utf-8") as f:
-                        data = json.load(f)
-                        curr = getattr(cls, target, {})
-                        if isinstance(curr, dict) and isinstance(data, dict) and curr:
-                            for k, v in data.items():
-                                curr[k] = v
-                        else:
-                            setattr(cls, target, data)
-                except Exception as e:
-                    logger.warning(f"[SimulatedBinanceClient] Error loading {name}: {e}")
+        SimHistoricalDataStore.ensure_loaded()
+
+    def has_sim_hourly_bars(self, symbol: str) -> bool:
+        return SimHistoricalDataStore.has_sim_hourly_bars(symbol)
 
     def get_precomputed_atr(self, symbol: str, timeframe: str = "1h", period: int = 14) -> Optional[float]:
-        self._ensure_historical_klines()
-        if not self._precomputed_atr:
-            return None
-        cur_ts = int(self.current_sim_time)
-        if not cur_ts:
-            return None
-        tf = str(timeframe).lower().strip()
-        bucket_ts = (cur_ts // 3600000) * 3600000
-        sym_u = symbol.upper().strip()
-        key_p = f"{sym_u}|{tf}_{period}|{bucket_ts}"
-        if key_p in self._precomputed_atr:
-            return float(self._precomputed_atr[key_p])
-        key_s = f"{sym_u}|{tf}|{bucket_ts}"
-        val = self._precomputed_atr.get(key_s)
-        return float(val) if val is not None else None
+        return SimHistoricalDataStore.get_precomputed_atr(
+            symbol=symbol,
+            cur_sim_time_ms=int(self.current_sim_time),
+            timeframe=timeframe,
+            period=period,
+        )
 
     async def get_klines(self, symbol: str, interval: str, limit: int = 35) -> List[Dict[str, Any]]:
-        """Возвращает исторические свечи (OHLCV) строго на виртуальное время симуляции."""
-        self._ensure_historical_klines()
-        sym_u, cur_ts, cur_p = symbol.upper().strip(), int(self.current_sim_time), self.current_prices.get(symbol.upper().strip(), 0.0)
-        dyn_bars = getattr(self, "_completed_hourly_bars", {}).get(sym_u, [])
-        file_bars = [
-            (int(b.get("open_time", 0)), float(b["close"]))
-            for b in self._sim_1h.get(sym_u, [])
-            if int(b.get("open_time", 0)) + 3600000 <= cur_ts
-        ] if self._sim_1h.get(sym_u) else []
-        sim_bars = file_bars if file_bars else dyn_bars
-
-        interval_str = str(interval).lower().strip()
-        use_warmup = cur_ts >= 1775000000000
-        if interval_str == "1h":
-            w1 = list(self._warmup_1h.get(sym_u, [])) if use_warmup else []
-            closes = w1 + [b[1] for b in sim_bars]
-        elif interval_str == "4h":
-            w4 = list(self._warmup_4h.get(sym_u, [])) if use_warmup else []
-            closes = w4 + [b[1] for b in sim_bars if (b[0] + 3600000) % 14400000 == 0]
-        elif interval_str in ("1d", "d"):
-            w1d = list(self._warmup_1d.get(sym_u, [])) if use_warmup else []
-            closes = w1d + [b[1] for b in sim_bars if (b[0] + 3600000) % 86400000 == 0]
-        else:
-            return []
-        if cur_p > 0:
-            closes.append(cur_p)
-        return [{"close": float(c)} for c in closes[-limit:]]
+        """Возвращает исторические свечи (OHLCV) строго на виртуальное время симуляции за O(log N)."""
+        sym_u = symbol.upper().strip()
+        return SimHistoricalDataStore.get_klines(
+            symbol=sym_u,
+            interval=interval,
+            cur_ts_ms=int(self.current_sim_time),
+            cur_price=float(self.current_prices.get(sym_u, 0.0) or 0.0),
+            limit=limit,
+            dyn_bars=self._completed_hourly_bars.get(sym_u),
+        )
 
     # ==================================================
     # MATCH ENGINE & TICK INGESTION
@@ -330,16 +290,12 @@ class SimulatedBinanceClient:
         1. Обновление текущей цены и времени.
         2. Формирование закрытых часовых баров на лету.
         3. Матчинг активных лимитных ордеров (Take-Profit / DCA Limit).
-        4. Обновление плавающей прибыли и просадки.
+        4. Контроль ликвидации кросс-маржи и пересчет пика эквити/просадки.
         """
         sym_u = symbol.upper()
         self.current_prices[sym_u] = price
         self.current_sim_time = timestamp_ms
 
-        # Формирование часовых баров
-        if not hasattr(self, "_completed_hourly_bars"):
-            self._completed_hourly_bars = {}
-            self._cur_hour_bar = {}
         hour_ts = (timestamp_ms // 3600000) * 3600000
         chb = self._cur_hour_bar.get(sym_u)
         if chb is None:
@@ -352,39 +308,41 @@ class SimulatedBinanceClient:
         else:
             self._cur_hour_bar[sym_u] = (chb[0], price)
 
-        if not self.open_orders:
+        if not self.open_orders and not self._has_active_positions:
             return
 
-        for oid, order in list(self.open_orders.items()):
-            if order.symbol != sym_u:
-                continue
+        if self.open_orders:
+            for oid, order in list(self.open_orders.items()):
+                if order.symbol != sym_u:
+                    continue
 
-            # Проверка условий исполнения лимитного ордера
-            is_hit = False
-            if order.side == "BUY" and price <= order.price:
-                is_hit = True
-            elif order.side == "SELL" and price >= order.price:
-                is_hit = True
+                is_hit = (order.side == "BUY" and price <= order.price) or (order.side == "SELL" and price >= order.price)
+                if is_hit:
+                    success, _ = self._execute_fill(order, fill_price=order.price, fill_ts=timestamp_ms)
+                    if success or order.reduce_only:
+                        # При успехе филл выполнен; зависший reduce_only без позиции также снимается
+                        if oid in self.open_orders:
+                            del self.open_orders[oid]
 
-            if is_hit:
-                # Лимитка коснулась цены -> исполнение
-                success, _ = self._execute_fill(order, fill_price=order.price, fill_ts=timestamp_ms)
-                if success:
-                    del self.open_orders[oid]
+        if self.liquidation_guard_enabled and self._has_active_positions:
+            self.liquidation_guard.evaluate_and_liquidate(self, timestamp_ms)
 
-        # Непрерывный мониторинг пика эквити и максимальной просадки (с учетом выведенного на спот профита)
-        cur_total_equity = self.get_total_equity()
-        if cur_total_equity > self.peak_balance:
-            self.peak_balance = cur_total_equity
-        dd = self.peak_balance - cur_total_equity
-        if dd > self.max_drawdown_usdt:
-            self.max_drawdown_usdt = dd
+        if self.open_orders or self._has_active_positions:
+            cur_total_equity = self.get_total_equity()
+            if cur_total_equity > self.peak_balance:
+                self.peak_balance = cur_total_equity
+            dd = self.peak_balance - cur_total_equity
+            if dd > self.max_drawdown_usdt:
+                self.max_drawdown_usdt = dd
 
     def _execute_fill(self, order: SimOrder, fill_price: float, fill_ts: int) -> Tuple[bool, Optional[str]]:
         pos = self._get_position(order.symbol, order.position_side)
         notional = order.qty * fill_price
 
         is_opening = (pos.position_side == "LONG" and order.side == "BUY") or (pos.position_side == "SHORT" and order.side == "SELL")
+
+        if not is_opening and pos.qty <= 1e-8:
+            return False, f"No open {pos.position_side} position on {pos.symbol} to reduce"
 
         # Лимитные ордера закрытия позиции (Take-Profit / ReduceOnly) рассчитываются по ставке Maker (0.02%),
         # рыночные ордера (Market входы, аварийный AutoCloser, срез ротации) — по ставке Taker (0.05%).
@@ -397,32 +355,29 @@ class SimulatedBinanceClient:
 
         if is_opening:
             req_margin = notional / pos.leverage
-            # Проверка доступной маржи
             free_margin = self.get_free_margin()
             if free_margin < req_margin:
                 return False, f"Margin is insufficient (required {req_margin:.2f}, free {free_margin:.2f})"
 
-            # Добор позиции
             new_qty = pos.qty + order.qty
             pos.entry_price = ((pos.entry_price * pos.qty) + notional) / new_qty
             pos.qty = new_qty
+            self._has_active_positions = True
         else:
-            # Закрытие или частичное закрытие
             close_qty = min(pos.qty, order.qty)
-            if close_qty > 0:
-                if pos.position_side == "LONG":
-                    realized = (fill_price - pos.entry_price) * close_qty
-                else:
-                    realized = (pos.entry_price - fill_price) * close_qty
+            if pos.position_side == "LONG":
+                realized = (fill_price - pos.entry_price) * close_qty
+            else:
+                realized = (pos.entry_price - fill_price) * close_qty
 
-                pos.realized_pnl += realized
-                self.balance += realized
-                pos.qty = max(0.0, pos.qty - close_qty)
-                if pos.qty <= 1e-8:
-                    pos.qty = 0.0
-                    pos.entry_price = 0.0
+            pos.realized_pnl += realized
+            self.balance += realized
+            pos.qty = max(0.0, pos.qty - close_qty)
+            if pos.qty <= 1e-8:
+                pos.qty = 0.0
+                pos.entry_price = 0.0
+            self._has_active_positions = any(p.qty > 1e-8 for p in self.positions.values())
 
-        # Списание комиссии
         self.balance -= fee
         pos.total_fee += fee
         self.total_fees_paid += fee
@@ -440,7 +395,6 @@ class SimulatedBinanceClient:
             except Exception as e:
                 logger.error(f"[SimulatedBinanceClient] on_fill_callback error: {e}")
 
-        # Обновление пика баланса и просадки (с учетом выведенного на спот профита)
         cur_total_equity = self.get_total_equity()
         if cur_total_equity > self.peak_balance:
             self.peak_balance = cur_total_equity
@@ -564,29 +518,20 @@ class SimulatedBinanceClient:
             "last_recovery": last_recovery,
             "total_fees_paid": round(self.total_fees_paid, 2),
             "trade_fills_count": self.trade_fills_count,
+            "is_liquidated": self.is_liquidated,
+            "liquidation_details": self.liquidation_details,
         }
-
-    _precomputed_trends_db: Optional[Dict[str, str]] = None
 
     def get_precomputed_trend(
         self, symbol: str, timeframe: str = "4h", sma_fast: int = 10, sma_slow: int = 30
     ) -> Optional[str]:
-        """Мгновенный O(1) доступ к предрасчитанным EMA трендам для сверхбыстрого макро-шлюза в бэктестере."""
-        if SimulatedBinanceClient._precomputed_trends_db is None:
-            trends_path = Path(__file__).resolve().parent.parent.parent.parent / "cron3TradeBacktest" / "DATA" / "precomputed_ema_trends.json"
-            try:
-                SimulatedBinanceClient._precomputed_trends_db = json.loads(trends_path.read_text(encoding="utf-8")) if trends_path.exists() else {}
-            except Exception:
-                SimulatedBinanceClient._precomputed_trends_db = {}
-
-        if self.current_sim_time <= 0:
-            return None
-        ts_ms = int(self.current_sim_time) if self.current_sim_time > 1e11 else int(self.current_sim_time * 1000)
-        tf = timeframe.lower()
-        bin_ms = 86400000 if "1d" in tf else (14400000 if "4h" in tf else 3600000)
-        bin_ts = (ts_ms // bin_ms) * bin_ms
-        suffix = "_7_25" if (sma_fast == 7 and sma_slow == 25) else ""
-        key = f"{symbol.upper().strip()}|{timeframe}{suffix}|{bin_ts}"
-        return SimulatedBinanceClient._precomputed_trends_db.get(key)
+        """Мгновенный O(1) доступ к предрасчитанным EMA трендам через SimHistoricalDataStore."""
+        return SimHistoricalDataStore.get_precomputed_trend(
+            symbol=symbol,
+            cur_sim_time=self.current_sim_time,
+            timeframe=timeframe,
+            sma_fast=sma_fast,
+            sma_slow=sma_slow,
+        )
 
 
