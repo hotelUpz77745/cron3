@@ -155,6 +155,26 @@ class PortfolioCloser:
                     detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
                 )
 
+        elif mode_g in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
+            from CORE.STRATEGY.smoothed_profit_closer import SmoothedProfitDrawdownCloser
+            scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
+            if scale_money_g <= 0:
+                scale_money_g = 1.0
+            sm_ok, sm_trig, sm_info = SmoothedProfitDrawdownCloser.evaluate_mode(
+                mode=mode_g, pos_cfg=pos_cfg, iter_net=iter_net_g, now_sec=now_ms / 1000.0,
+                iter_age_hours=iter_age_h_g, state=r_state_g, scale_money=scale_money_g,
+            )
+            if sm_ok and sm_trig is not None:
+                auto_closer_inst._is_closing = True
+                triggered = True
+                logger.info(f"[AUTO_CLOSER] Portfolio Iteration #{iter_idx_g} {sm_info}. Auto-closing portfolio!")
+                action_msg = auto_closer_inst._build_close_msg(
+                    name="ПОРТФЕЛЯ", symbols_str="", iter_idx=iter_idx_g, next_iter_idx=next_iter_idx_g,
+                    iter_net=iter_net_g, strat_net=net_usdt, new_iter_start_net=new_iter_start_net_g,
+                    close_type=mode_g.upper(),
+                    detail_info=f"Зафиксирована прибыль: <b>+{iter_net_g:.2f} USDT</b> (Триггер MA: <b>{sm_trig:.2f} USDT</b>).\nСобытие: {sm_info}."
+                )
+
         elif mode_g == "fixed_net":
             scale_money_g = float(pos_cfg.get("scale_money", auto_cfg.get("scale_money", 1.0)))
             if scale_money_g <= 0:

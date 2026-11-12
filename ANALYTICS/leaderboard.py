@@ -27,6 +27,8 @@ class LeaderboardEngine:
     MODE_BADGES = {
         "trailing_ratchet": "[RATCHET]",
         "ratchet": "[RATCHET]",
+        "smoothed_drawdown": "[SMOOTH_DD]",
+        "ratchet_smoothed_drawdown": "[RATCHET_DD]",
         "toxicity_adaptive": "[TOXIC]",
         "toxic": "[TOXIC]",
         "fixed_net": "[FIXED]",
@@ -115,6 +117,12 @@ class LeaderboardEngine:
         elif universe_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in universe_id:
             mode = "trailing_ratchet"
             mode_badge = "[RATCHET]"
+        elif universe_id.endswith("__ratchet_smoothed_drawdown") or "__ratchet_smoothed_drawdown" in universe_id:
+            mode = "ratchet_smoothed_drawdown"
+            mode_badge = "[RATCHET_DD]"
+        elif universe_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in universe_id:
+            mode = "smoothed_drawdown"
+            mode_badge = "[SMOOTH_DD]"
         elif universe_id.endswith("__toxic") or "__toxic" in universe_id:
             mode = "toxic"
             mode_badge = "[TOXIC]"
@@ -138,6 +146,12 @@ class LeaderboardEngine:
             if raw_mode_str in ("trailing_ratchet", "ratchet"):
                 mode = "trailing_ratchet"
                 mode_badge = "[RATCHET]"
+            elif raw_mode_str == "smoothed_drawdown":
+                mode = "smoothed_drawdown"
+                mode_badge = "[SMOOTH_DD]"
+            elif raw_mode_str == "ratchet_smoothed_drawdown":
+                mode = "ratchet_smoothed_drawdown"
+                mode_badge = "[RATCHET_DD]"
             elif raw_mode_str in ("toxic", "toxicity_adaptive"):
                 mode = "toxic"
                 mode_badge = "[TOXIC]"

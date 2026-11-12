@@ -105,8 +105,48 @@ class AutoClosingConfigBuilder:
                 "trailing_ratchet": copy.deepcopy(ratchet_cfg)
             }
             return {
+                "mode": "trailing_ratchet",
                 "positive": pos_cfg,
                 "negative": neg_cfg
             }
+        elif mode == "smoothed_drawdown":
+            sm_cfg = copy.deepcopy(pos_base["smoothed_drawdown"])
+            pos_cfg = {
+                "mode": "smoothed_drawdown",
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
+                "smoothed_drawdown": sm_cfg,
+            }
+            return {
+                "mode": "smoothed_drawdown",
+                "positive": pos_cfg,
+                "negative": neg_cfg,
+            }
+        elif mode == "ratchet_smoothed_drawdown":
+            rsm_cfg = copy.deepcopy(pos_base["ratchet_smoothed_drawdown"])
+            tr_cfg = copy.deepcopy(pos_base["trailing_ratchet"])
+            pos_cfg = {
+                "mode": "ratchet_smoothed_drawdown",
+                "scale_money": scale_money,
+                "_desc_scale_money": desc_scale_money,
+                "auto_scale_money": auto_scale_money,
+                "mode_scale": mode_scale,
+                "inverted_notional": inverted_notional,
+                "margin_relative": margin_relative,
+                "ratchet_smoothed_drawdown": rsm_cfg,
+                "trailing_ratchet": tr_cfg,
+            }
+            return {
+                "mode": "ratchet_smoothed_drawdown",
+                "positive": pos_cfg,
+                "negative": neg_cfg,
+            }
         else:
-            raise ValueError(f"[AutoClosingConfigBuilder] Неизвестный режим автозакрытия '{mode}'! Допустимые режимы: 'trailing_ratchet', 'toxic', 'fixed', 'off'.")
+            raise ValueError(
+                f"[AutoClosingConfigBuilder] Неизвестный режим автозакрытия '{mode}'! "
+                "Допустимые режимы: 'trailing_ratchet', 'smoothed_drawdown', 'ratchet_smoothed_drawdown', 'toxic', 'fixed', 'off'."
+            )

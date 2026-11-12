@@ -154,6 +154,8 @@
     },
     "_auto_closing_modes_allowed": [
         "trailing_ratchet",
+        "smoothed_drawdown",
+        "ratchet_smoothed_drawdown",
         "toxic",
         "fixed",
         "off"
@@ -239,6 +241,27 @@
                         "_desc": "E1: Chronos 36h — instant +$8 evacuation of stale dome"
                     }
                 ]
+            },
+            "smoothed_drawdown": {
+                "enabled": true,
+                "sample_interval_sec": 60,
+                "min_samples": 180,
+                "ma_window_samples": 15,
+                "min_profit_usdt": 20.0,
+                "max_drawdown_ratio": 0.22,
+                "_desc_sample_interval_sec": "Длительность 1 бакета сэмплирования profit_history в секундах (60 = ровно 1 минута).",
+                "_desc_min_samples": "Минимум сэмплов перед активацией трала (180 * 60с = ровно 3 часа).",
+                "_desc_ma_window_samples": "Окно скользящей средней MA в сэмплах (15 * 60с = 15 минут сглаживания).",
+                "_desc_min_profit_usdt": "Базовый минимальный профит в USDT при scale_money=1.0 (итоговый порог = min_profit_usdt * scale_money; например 20.0 * 2.0 = 40.0$). Жестко запрещено закрытие при MA <= порога.",
+                "_desc_max_drawdown_ratio": "Допустимый откат MA от пика профита в долях от 1 (например, 0.22 = 22% откат от пика)."
+            },
+            "ratchet_smoothed_drawdown": {
+                "enabled": true,
+                "sample_interval_sec": 60,
+                "min_samples": 180,
+                "ma_window_samples": 15,
+                "max_drawdown_ratio": 0.22,
+                "_desc": "Сглаженный MA-трейлинг с динамическим min_profit по карте trailing_ratchet.levels (Вариант А: максимальный floor уровней с activation*scale <= peak_profit; до первого достижения ориентир равен минимальному active activation*scale)."
             }
         },
         "negative": {

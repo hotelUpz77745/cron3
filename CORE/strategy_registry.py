@@ -327,7 +327,15 @@ class StrategyRegistry:
                     )
             else:
                 clean_id = strat_id
-                for sfx in ("__off", "__trailing_ratchet", "__classic", "__fixed", "__toxic"):
+                for sfx in (
+                    "__off",
+                    "__trailing_ratchet",
+                    "__ratchet_smoothed_drawdown",
+                    "__smoothed_drawdown",
+                    "__classic",
+                    "__fixed",
+                    "__toxic",
+                ):
                     if clean_id.endswith(sfx):
                         clean_id = clean_id[:-len(sfx)]
                         break
@@ -353,6 +361,10 @@ class StrategyRegistry:
                 target_mode = "trailing_ratchet" if clean_m == "classic" else clean_m
             elif "__trailing_ratchet" in strat_id:
                 target_mode = "trailing_ratchet"
+            elif "__ratchet_smoothed_drawdown" in strat_id:
+                target_mode = "ratchet_smoothed_drawdown"
+            elif "__smoothed_drawdown" in strat_id:
+                target_mode = "smoothed_drawdown"
             elif "__fixed" in strat_id:
                 target_mode = "fixed"
             elif "__classic" in strat_id:

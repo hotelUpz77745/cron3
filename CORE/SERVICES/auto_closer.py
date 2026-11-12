@@ -24,6 +24,7 @@ from consts import DATA_DIR, ANALYTICS_STATS_DIR, GLOBAL_ANALYTICS_JSON, CACHE_D
 from c_log import UnifiedLogger
 from c_utils import Utils
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem, ToxicityEngine
+from CORE.STRATEGY.smoothed_profit_closer import SmoothedProfitDrawdownCloser
 from CORE.SERVICES.stagnation_evaluator import StagnationEvaluator
 from CORE.SERVICES.toxicity_extractor import ToxicityMetricsExtractor
 from CORE.SERVICES.dome_closer_executor import DomeCloserExecutor
@@ -179,6 +180,10 @@ class AutoCloser:
                 mode = "off"
             elif strat_id.endswith("__trailing_ratchet") or "__trailing_ratchet" in strat_id:
                 mode = "trailing_ratchet"
+            elif strat_id.endswith("__ratchet_smoothed_drawdown") or "__ratchet_smoothed_drawdown" in strat_id:
+                mode = "ratchet_smoothed_drawdown"
+            elif strat_id.endswith("__smoothed_drawdown") or "__smoothed_drawdown" in strat_id:
+                mode = "smoothed_drawdown"
             elif strat_id.endswith("__classic") or "__classic" in strat_id:
                 mode = "trailing_ratchet"
             elif strat_id.endswith("__toxic") or "__toxic" in strat_id:
@@ -198,6 +203,8 @@ class AutoCloser:
                 raw_m_str = str(raw_m).lower().strip() if raw_m else "off"
                 if raw_m_str in ("trailing_ratchet", "classic", "iter_net_classic"):
                     mode = "trailing_ratchet"
+                elif raw_m_str in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
+                    mode = raw_m_str
                 elif raw_m_str in ("toxic", "toxicity_adaptive"):
                     mode = "toxic"
                 elif raw_m_str in ("fixed", "fixed_net"):
@@ -374,6 +381,43 @@ class AutoCloser:
                             iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
                             new_iter_start_net=0.0, close_type="TRAILING RATCHET",
                             detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Floor: <b>{trig_floor:.2f} USDT</b>).\nСобытие: {r_info}."
+                        )
+
+                elif mode in ("smoothed_drawdown", "ratchet_smoothed_drawdown"):
+                    sm_ok, sm_trig, sm_info = SmoothedProfitDrawdownCloser.evaluate_mode(
+                        mode=mode,
+                        pos_cfg=pos_cfg,
+                        iter_net=iter_net,
+                        now_sec=now_sec,
+                        iter_age_hours=iter_age_h,
+                        state=r_state,
+                        scale_money=scale_money,
+                    )
+                    if sm_ok and sm_trig is not None:
+                        strat_triggered = True
+                        self._last_matched_rule = mode
+                        if strat_id not in self.ratchet_analytics:
+                            self.ratchet_analytics[strat_id] = TrailingRatchetAnalytics(strategy_id=strat_id)
+                        lvl_idx = int(r_state.get("active_level_idx", 0))
+                        lvl_desc = str(r_state.get("armed_level_desc", mode.upper()))
+                        self.ratchet_analytics[strat_id].record_close(
+                            level_idx=lvl_idx,
+                            level_desc=lvl_desc,
+                            armed_floor=sm_trig,
+                            iter_net=iter_net,
+                            highest_net=float(r_state.get("peak_profit", iter_net)),
+                            iter_age_hours=iter_age_h,
+                            strategy_id=strat_id,
+                            info=sm_info,
+                            timestamp=time.time(),
+                        )
+                        logger.info(f"[AUTO_CLOSER][{strat_id}] Iteration #{iter_idx} {sm_info}. Auto-closing dome!")
+                        strat_msg = self._build_close_msg(
+                            name=f"КУПОЛА [{strat_cfg.name}]",
+                            symbols_str=", ".join(strat_cfg.symbols) if hasattr(strat_cfg, "symbols") else "",
+                            iter_idx=iter_idx, next_iter_idx=next_iter_idx, iter_net=iter_net, strat_net=strat_net,
+                            new_iter_start_net=0.0, close_type=mode.upper(),
+                            detail_info=f"Зафиксирована прибыль: <b>+{iter_net:.2f} USDT</b> (Триггер MA: <b>{sm_trig:.2f} USDT</b>).\nСобытие: {sm_info}."
                         )
 
                 # -------------------------------------------------------------
