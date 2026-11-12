@@ -65,7 +65,7 @@ class SimulatedBinanceClient:
         fee_rate: float = 0.0005,  # 0.05% Taker по регламенту лаборатории
         leverage: int = 20,
         maker_fee_rate: float = 0.0002,  # 0.02% Maker для лимитных ордеров (Take-Profit)
-        slippage_rate: float = 0.0002,  # 0.02% проскальзывание на всех MARKET-ордерах (вход и выход)
+        slippage_rate: float = 0.0001,  # 0.01% (1 bps) реалистичное проскальзывание на всех MARKET-ордерах (вход и выход)
     ):
         self.initial_balance = float(start_balance_usdt)
         self.balance = float(start_balance_usdt)
