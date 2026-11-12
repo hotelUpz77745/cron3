@@ -231,13 +231,6 @@
                         "min_age_hours": 36.0,
                         "enabled": true,
                         "_desc": "E1: Chronos 36h — instant +$8 evacuation of stale dome"
-                    },
-                    {
-                        "activation": 5.0,
-                        "floor": 5.0,
-                        "min_age_hours": 72.0,
-                        "enabled": true,
-                        "_desc": "E2: Chronos 72h — instant +$5 (MinGuard) evacuation of stale dome"
                     }
                 ]
             }

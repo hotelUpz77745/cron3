@@ -1,6 +1,6 @@
 {
     "name": "🥉 U96: Omni Zenith 13 [Min TP 1.0% | Multiplied TPs x1.3 | L3+ 50% Recycler | Chronos 36h Evacuation]",
-    "description": "Омен-96 с укрупненными тейк-профитами (min_tp 1.0%, отступы 1.3x) и интеллектуальной возрастной эвакуацией Chronos (E1: 36ч / +$8, E2: 72ч / +$5).",
+    "description": "Омен-96 с укрупненными тейк-профитами (min_tp 1.0%, отступы 1.3x) и интеллектуальной возрастной эвакуацией Chronos (E1: 36ч / +$8).",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",
     "_tp_purpose_modes": {
@@ -237,13 +237,6 @@
                         "min_age_hours": 36.0,
                         "enabled": true,
                         "_desc": "E1: Chronos 36h — instant +$8 evacuation of stale dome"
-                    },
-                    {
-                        "activation": 5.0,
-                        "floor": 5.0,
-                        "min_age_hours": 72.0,
-                        "enabled": true,
-                        "_desc": "E2: Chronos 72h — instant +$5 (MinGuard) evacuation of stale dome"
                     }
                 ]
             }
