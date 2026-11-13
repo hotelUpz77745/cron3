@@ -166,6 +166,8 @@ class DomeCloserExecutor:
 
         # 5. Оповещение FSM
         fsm = getattr(getattr(bot_core, "analytics", None), "fsm", None)
+        strat_start_bal = float(fresh_analytics.get("start_balance_usdt", 0.0) or 0.0)
+        settled_balance = round(strat_start_bal + settled_net, 4) if strat_start_bal > 0.0 else settled_net
         if fsm:
             c_type = "PORTFOLIO AUTO-CLOSE" if is_global else close_type_parsed
             fsm_details: Dict[str, Any] = {
@@ -173,12 +175,26 @@ class DomeCloserExecutor:
                 "iter_net": iter_net,
                 "strat_net": settled_net,
                 "settled_realized": settled_realized,
+                "balance": settled_balance,
+                "equity": settled_balance,
             }
             fsm.mark_iteration_closed(
                 strat_id=strat_id,
                 iter_idx=iter_idx,
                 details=fsm_details,
             )
+
+        # 5.1 Форсированная фиксация слепка эквити в момент автозакрытия для графика
+        try:
+            from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
+            DEFAULT_SNAPSHOT_STORE.record_snapshot(
+                scope_id=strat_id,
+                current_equity=settled_balance,
+                now_ms=now_ms,
+                force=True,
+            )
+        except Exception as se:
+            logger.debug(f"[DOME_CLOSER_EXECUTOR][{strat_id}] Snapshot store record notice: {se}")
 
         # 5.1 Перевод автомата автоперевода в ожидание чистой аналитики + нового цикла сердцебиения
         if pt_fsm is not None and not is_emergency_stop and not is_global:

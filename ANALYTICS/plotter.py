@@ -7,7 +7,7 @@ import csv
 import json
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, List, Dict, Any, Tuple
 
 from ANALYTICS.equity_trajectory import DEFAULT_SNAPSHOT_STORE
 
@@ -27,12 +27,14 @@ try:
         ANALYTICS_LEDGERS_DIR,
         ANALYTICS_START_BALANCE_USDT,
         FLOAT_ZERO_EPSILON,
+        CACHE_DIR,
         _CFG,
     )
 except ImportError:
     ANALYTICS_DIR = Path(__file__).resolve().parent
     ANALYTICS_STATS_DIR = ANALYTICS_DIR / "STATS"
     ANALYTICS_LEDGERS_DIR = ANALYTICS_DIR / "LEDGERS"
+    CACHE_DIR = ANALYTICS_DIR.parent / "CACHE"
     ANALYTICS_START_BALANCE_USDT = 0.0
     FLOAT_ZERO_EPSILON = 1e-6
     _CFG = {}
@@ -95,6 +97,137 @@ def _resolve_paths(universe_id: Optional[str] = None):
                 csv_path = CSV_FILE
 
     return json_path, csv_path
+
+
+def _load_autoclose_events(
+    universe_id: Optional[str] = None,
+    start_balance: float = 0.0,
+    history_file: Optional[Path] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Загружает историю фиксаций автоклозера из CACHE/auto_close_history.json.
+    Возвращает хронологический список событий фиксации с отметками времени и эквити/баланса.
+    """
+    h_file = history_file if history_file is not None else (CACHE_DIR / "auto_close_history.json")
+    if not h_file.exists():
+        return []
+
+    try:
+        raw_history = json.loads(h_file.read_text(encoding="utf-8"))
+        if not isinstance(raw_history, dict):
+            return []
+    except Exception:
+        return []
+
+    u_target = str(universe_id or "ALL").strip()
+    matching_records: List[Dict[str, Any]] = []
+
+    for strat_key, records in raw_history.items():
+        if not isinstance(records, list):
+            continue
+        # Фильтрация по universe_id
+        if u_target != "ALL":
+            if not (
+                strat_key == u_target
+                or strat_key.startswith(u_target)
+                or u_target.startswith(strat_key)
+                or strat_key == "ALL"
+            ):
+                continue
+
+        for r in records:
+            if not isinstance(r, dict):
+                continue
+
+            dt = None
+            if "timestamp_ms" in r and r["timestamp_ms"]:
+                try:
+                    dt = datetime.fromtimestamp(float(r["timestamp_ms"]) / 1000.0, tz=timezone.utc).replace(tzinfo=None)
+                except Exception:
+                    pass
+            if dt is None and "closed_at" in r and r["closed_at"]:
+                c_str = str(r["closed_at"]).replace(" UTC", "").strip()
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S"):
+                    try:
+                        dt = datetime.strptime(c_str, fmt)
+                        break
+                    except ValueError:
+                        pass
+            if dt is None:
+                continue
+
+            strat_net = float(r.get("strat_net", r.get("settled_realized", 0.0)) or 0.0)
+            if "balance" in r and r["balance"] is not None:
+                bal = float(r["balance"])
+            elif "equity" in r and r["equity"] is not None:
+                bal = float(r["equity"])
+            else:
+                bal = round(start_balance + strat_net, 4)
+
+            matching_records.append({
+                "datetime": dt,
+                "balance": bal,
+                "net_profit": strat_net,
+                "iter_net": float(r.get("iter_net", 0.0) or 0.0),
+                "close_type": str(r.get("close_type", "AUTO-CLOSE")).strip(),
+                "iteration_index": int(r.get("iteration_index", 0) or 0),
+            })
+
+    matching_records.sort(key=lambda x: x["datetime"])
+    return matching_records
+
+
+def _load_armed_target_floor(
+    universe_id: Optional[str] = None,
+    start_balance: float = 0.0,
+    state_file: Optional[Path] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Проверяет, вооружен ли сейчас порог автоклозера в CACHE/auto_closer_state.json
+    (уровень, где будет происходить фиксация при достижении/откате).
+    """
+    s_file = state_file if state_file is not None else (CACHE_DIR / "auto_closer_state.json")
+    if not s_file.exists():
+        return None
+
+    try:
+        raw_state = json.loads(s_file.read_text(encoding="utf-8"))
+        if not isinstance(raw_state, dict):
+            return None
+    except Exception:
+        return None
+
+    u_target = str(universe_id or "ALL").strip()
+    for strat_key, entry in raw_state.items():
+        if not isinstance(entry, dict):
+            continue
+        if u_target != "ALL":
+            if not (
+                strat_key == u_target
+                or strat_key.startswith(u_target)
+                or u_target.startswith(strat_key)
+            ):
+                continue
+
+        armed_f = entry.get("armed_floor")
+        chronos_f = entry.get("chronos_armed_floor")
+        stress_st = entry.get("regime_stress_state")
+        if isinstance(stress_st, dict):
+            if armed_f is None:
+                armed_f = stress_st.get("armed_floor")
+            if chronos_f is None:
+                chronos_f = stress_st.get("chronos_armed_floor")
+
+        target_floor = armed_f if armed_f is not None else chronos_f
+        if target_floor is not None:
+            fl_val = float(target_floor)
+            t_eq = round(start_balance + fl_val, 4)
+            return {
+                "target_floor": fl_val,
+                "target_equity": t_eq,
+                "label": f"Порог автоклозера ({t_eq:.2f} $)",
+            }
+    return None
 
 
 def generate_equity_curve(universe_id: Optional[str] = None) -> str:
@@ -217,6 +350,70 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         ax1.fill_between(times, b_arr, start_balance, where=(b_arr >= start_balance), color="#00D26A", alpha=0.18, interpolate=True)
         ax1.fill_between(times, b_arr, start_balance, where=(b_arr < start_balance), color="#FF5252", alpha=0.18, interpolate=True)
 
+    # Отметки моментов фиксации автоклозером (красные точки с ценами/эквити)
+    ac_events = _load_autoclose_events(universe_id=universe_id, start_balance=start_balance)
+    armed_target = _load_armed_target_floor(universe_id=universe_id, start_balance=start_balance)
+
+    valid_ac_events = []
+    if times and ac_events:
+        t_min = times[0] - timedelta(minutes=15)
+        t_max = times[-1] + timedelta(minutes=15)
+        for ev in ac_events:
+            if t_min <= ev["datetime"] <= t_max:
+                valid_ac_events.append(ev)
+    elif ac_events:
+        valid_ac_events = list(ac_events)
+
+    if valid_ac_events:
+        ac_dts = [e["datetime"] for e in valid_ac_events]
+        ac_bals = [e["balance"] for e in valid_ac_events]
+        ax1.scatter(
+            ac_dts,
+            ac_bals,
+            color="#FF1744",
+            s=80,
+            zorder=7,
+            edgecolors="#FFFFFF",
+            linewidths=1.5,
+            label="Фиксация автоклозером",
+        )
+        for idx, ev in enumerate(valid_ac_events):
+            ac_dt = ev["datetime"]
+            ac_bal = ev["balance"]
+            it_net = ev["iter_net"]
+            it_sign = "+" if it_net >= 0 else ""
+            if abs(it_net) > 1e-4:
+                lbl = f"{ac_bal:.2f} $\n({it_sign}{it_net:.2f}$)"
+            else:
+                lbl = f"{ac_bal:.2f} $"
+            y_offset = 14 if idx % 2 == 0 else 24
+            ax1.annotate(
+                lbl,
+                xy=(ac_dt, ac_bal),
+                xytext=(0, y_offset),
+                textcoords="offset points",
+                ha="center",
+                va="bottom",
+                fontsize=8.5,
+                fontweight="bold",
+                color="#FFCDD2",
+                bbox=dict(boxstyle="round,pad=0.25", fc="#2A1215", ec="#FF1744", alpha=0.9, lw=0.9),
+                arrowprops=dict(arrowstyle="->", color="#FF1744", lw=1.1, shrinkA=0, shrinkB=2),
+                zorder=8,
+            )
+
+    # Линия порога автоклозера (где будет происходить следующая фиксация)
+    if armed_target:
+        ax1.axhline(
+            armed_target["target_equity"],
+            color="#FF9100",
+            linestyle=":",
+            linewidth=1.3,
+            alpha=0.85,
+            label=armed_target["label"],
+            zorder=3,
+        )
+
     # Финальная точка с плашкой значения
     end_color = "#00D26A" if net_profit_final >= 0 else "#FF5252"
     ax1.scatter([times[-1]], [balances[-1]], color=end_color, s=60, zorder=6, edgecolors="white", linewidths=1.5)
@@ -234,11 +431,16 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
         arrowprops=dict(arrowstyle="->", connectionstyle="arc3,rad=0.2", color=end_color, lw=1.2)
     )
 
-    # Границы шкалы
-    min_b = min(balances)
-    max_b = max(balances)
+    # Границы шкалы с учетом отметок автоклозера и порога
+    all_b_vals = list(balances)
+    if valid_ac_events:
+        all_b_vals.extend(e["balance"] for e in valid_ac_events)
+    if armed_target:
+        all_b_vals.append(armed_target["target_equity"])
+    min_b = min(all_b_vals)
+    max_b = max(all_b_vals)
     span = max_b - min_b
-    pad = max(2.0, span * 0.15)
+    pad = max(2.0, span * 0.18)
     ax1.set_ylim(min_b - pad, max_b + pad)
 
     # Вторичная правая шкала: Чистый Net Profit
@@ -255,14 +457,17 @@ def generate_equity_curve(universe_id: Optional[str] = None) -> str:
     ax1.grid(True, linestyle=":", alpha=0.25, color="#CFD8DC")
     ax1.tick_params(axis="x", rotation=30, labelsize=9, colors="#B0BEC5")
     ax1.tick_params(axis="y", labelsize=9, colors="#ECEFF1")
+    ax1.legend(loc="lower left", facecolor="#161B24", edgecolor="#37474F", fontsize=8.5, labelcolor="#ECEFF1")
 
     # Информационный блок в углу
+    ac_stat_line = f"\n• Автозакрытий: {len(valid_ac_events)}" if (valid_ac_events or ac_events) else ""
     stats_box = (
         f"ИТОГИ:\n"
         f"• Чистый Net Profit: {net_profit_final:+.2f} USDT\n"
         f"• Реализованный Net: {realized_net:+.2f} USDT\n"
         f"• Плавающий PnL (Float): {unrealized:+.2f} USDT\n"
         f"• Баланс: {cur_balance:.2f} $ (Старт: {start_balance:.2f} $)"
+        f"{ac_stat_line}"
     )
     ax1.text(
         0.02, 0.95, stats_box,
