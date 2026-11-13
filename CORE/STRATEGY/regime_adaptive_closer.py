@@ -170,14 +170,6 @@ class RegimeAdaptiveCloser:
                 return True, trig, f"[REGIME:PEACE] {info}"
             return False, trig, (f"[REGIME:PEACE] {info}" if info else "")
 
-        # STRESS regime: непрерывно сэмплируем бакет для MA-истории на случай отката в PEACE
-        BucketedProfitHistorySampler.sample_bucket(
-            state=state,
-            iter_net=iter_net,
-            now_sec=now_sec,
-            sample_interval_sec=self.peace_closer.sample_interval_sec,
-        )
-
         stress_state = state.setdefault("regime_stress_state", {})
         ch_ok, ch_floor, ch_info = self.stress_chronos.evaluate(
             iter_net=iter_net,
@@ -208,6 +200,14 @@ class RegimeAdaptiveCloser:
                     return False, None, f"[REGIME:STRESS({reason}) SMOOTHED BLOCKED: Net {iter_net:+.2f} <= 0]"
                 return True, r_floor, f"[REGIME:STRESS({reason})] {r_info}"
             return False, r_floor, (f"[REGIME:STRESS({reason})] {r_info}" if r_info else "")
+
+        # STRESS regime (trailing_ratchet): непрерывно сэмплируем бакет для MA-истории на случай отката в PEACE
+        BucketedProfitHistorySampler.sample_bucket(
+            state=state,
+            iter_net=iter_net,
+            now_sec=now_sec,
+            sample_interval_sec=self.peace_closer.sample_interval_sec,
+        )
 
         eff_ratchet_cfg = dict(self.stress_ratchet_cfg)
         eff_ratchet_cfg["scale_money"] = eff_scale
