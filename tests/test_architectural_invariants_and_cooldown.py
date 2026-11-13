@@ -319,7 +319,10 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         if not u17_path.exists():
             u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
         u17_data = Utils.read_json_file(u17_path)
-        u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
+        u96_path = UNIVERSES_DIR / "u96_omni_zenith_apex.json"
+        if not u96_path.exists():
+            u96_path = CFG_DIR / "artifacts" / "classic_tribute" / "u96_omni_zenith_apex.json"
+        u96_data = Utils.read_json_file(u96_path)
 
         # 1. Отсутствие leverage и notifications в паспортах
         self.assertNotIn("leverage", u17_data, "leverage должен быть strictly client-side в app.json")
@@ -370,7 +373,10 @@ class TestArchitecturalInvariantsAndCooldown(unittest.IsolatedAsyncioTestCase):
         if not u17_path.exists():
             u17_path = CFG_DIR / "artifacts" / "classic_tribute" / "u17_stephensonE.json"
         u17_data = Utils.read_json_file(u17_path)
-        u96_data = Utils.read_json_file(UNIVERSES_DIR / "u96_omni_zenith_apex.json")
+        u96_path = UNIVERSES_DIR / "u96_omni_zenith_apex.json"
+        if not u96_path.exists():
+            u96_path = CFG_DIR / "artifacts" / "classic_tribute" / "u96_omni_zenith_apex.json"
+        u96_data = Utils.read_json_file(u96_path)
 
         self.assertTrue(u17_data["first_order_weight_regime"]["enabled"])
         self.assertFalse(u96_data["first_order_weight_regime"]["enabled"])

@@ -1,6 +1,6 @@
 # ==============================================================================
-# Path: tests/test_u96_omni_zenith13_sg16.py
-# Role: Юнит-тесты паспорта стратегии u96_omni_zenith13_sg16 (тейки как у Zenith-13, super_grid 1.6x, dynamic_atr_grid, ma_crossover)
+# Path: tests/test_u96_omni_major13.py
+# Role: Юнит-тесты паспорта стратегии u96_omni_major13 (тейки Zenith-13, super_grid 1.6x, dynamic_atr_grid, ma_crossover)
 # ==============================================================================
 
 import json
@@ -15,21 +15,19 @@ _ROOT = Path(__file__).resolve().parent.parent
 _BT_ROOT = _ROOT.parent / "cron3TradeBacktest"
 
 
-class TestU96OmniZenith13Sg16Passport(unittest.TestCase):
+class TestU96OmniMajor13Passport(unittest.TestCase):
     def setUp(self):
-        self.strat_path = _ROOT / "CFG" / "universes" / "u96_omni_zenith13_sg16.json"
-        self.strat_bt_path = _BT_ROOT / "CFG" / "universes" / "u96_omni_zenith13_sg16.json"
+        self.strat_path = _ROOT / "CFG" / "universes" / "u96_omni_major13.json"
+        self.strat_bt_path = _BT_ROOT / "CFG" / "universes" / "u96_omni_major13.json"
         self.zenith13_path = _ROOT / "CFG" / "universes" / "u96_omni_zenith13.json"
-        self.major_path = _ROOT / "CFG" / "universes" / "u96_omni_major.json"
 
-        self.assertTrue(self.strat_path.exists(), "u96_omni_zenith13_sg16.json отсутствует в cron3!")
-        self.assertTrue(self.strat_bt_path.exists(), "u96_omni_zenith13_sg16.json отсутствует в cron3TradeBacktest!")
+        self.assertTrue(self.strat_path.exists(), "u96_omni_major13.json отсутствует в cron3!")
+        self.assertTrue(self.strat_bt_path.exists(), "u96_omni_major13.json отсутствует в cron3TradeBacktest!")
         self.assertTrue(self.zenith13_path.exists(), "u96_omni_zenith13.json отсутствует в cron3!")
 
         self.strat_data = json.loads(self.strat_path.read_text(encoding="utf-8"))
         self.strat_bt_data = json.loads(self.strat_bt_path.read_text(encoding="utf-8"))
         self.z13_data = json.loads(self.zenith13_path.read_text(encoding="utf-8"))
-        self.major_data = json.loads(self.major_path.read_text(encoding="utf-8"))
 
     def test_parity_between_cron3_and_backtest(self):
         """Паспорта стратегии в cron3 и cron3TradeBacktest должны быть побитово идентичны."""
@@ -60,21 +58,21 @@ class TestU96OmniZenith13Sg16Passport(unittest.TestCase):
             self.assertEqual(strat_tp, z13_tp)
 
     def test_strategy_registry_and_applicator(self):
-        """Проверка загрузки u96_omni_zenith13_sg16 в StrategyRegistry и сборки сайд-конфигов."""
+        """Проверка загрузки u96_omni_major13 в StrategyRegistry и сборки сайд-конфигов."""
         test_symbols = ["ARBUSDT", "OPUSDT", "ETHUSDT"]
         reg = StrategyRegistry(
             active_strategies_cfg={
-                "u96_omni_zenith13_sg16__live": {
-                    "template": "u96_omni_zenith13_sg16",
+                "u96_omni_major13__live": {
+                    "template": "u96_omni_major13",
                     "enabled": True,
                     "symbols": test_symbols,
                     "default_invest_size": 1200.0,
                 }
             },
-            universes_db={"u96_omni_zenith13_sg16": self.strat_data},
+            universes_db={"u96_omni_major13": self.strat_data},
         )
-        self.assertIn("u96_omni_zenith13_sg16__live", reg.active_strategies)
-        strat = reg.active_strategies["u96_omni_zenith13_sg16__live"]
+        self.assertIn("u96_omni_major13__live", reg.active_strategies)
+        strat = reg.active_strategies["u96_omni_major13__live"]
 
         self.assertEqual(strat.auto_closing_mode, "ma_crossover")
         self.assertTrue(strat.super_grid_enabled)
@@ -89,7 +87,6 @@ class TestU96OmniZenith13Sg16Passport(unittest.TestCase):
             self.assertIn("SHORT", side_cfgs)
             self.assertEqual(side_cfgs["LONG"]["tp_map"]["0"]["indent"], 2.34)
             self.assertEqual(side_cfgs["SHORT"]["tp_map"]["0"]["indent"], 2.34)
-            # Level 4 is clamped to min_tp_indent (1.0) by SideConfigBuilder
             self.assertEqual(side_cfgs["LONG"]["tp_map"]["4"]["indent"], 1.0)
             self.assertEqual(side_cfgs["SHORT"]["tp_map"]["4"]["indent"], 1.0)
 

@@ -1,5 +1,5 @@
 {
-    "name": "🥉 U96: Omni Zenith-13 SG-1.6 [Classic TPs | SuperGrid 1.6x | Dynamic ATR Grid | MA Cross 50]",
+    "name": "🥉 U96: Omni Major-13 [Classic TPs | SuperGrid 1.6x | Dynamic ATR Grid | MA Cross 50]",
     "description": "Паспорт стратегии U96: классические тейки Zenith-13, активный super_grid (multiplier=1.6) и dynamic_atr_grid, режим автозакрытия ma_crossover (ma_cross_50).",
     "signal_heartbeat_tfr": "5m",
     "tp_purpose": "self",

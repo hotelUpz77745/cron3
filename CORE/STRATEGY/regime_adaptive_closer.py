@@ -43,9 +43,27 @@ class RegimeAdaptiveCloser:
         self.peace_closer = MaCrossoverCloser(self.peace_cfg)
 
         stress = cfg["stress"]
-        self.stress_ratchet_cfg = dict(stress["trailing_ratchet"])
-        self.stress_chronos_cfg = dict(stress["chronos_exit"])
+        self.stress_mode: str = str(stress.get("mode", "trailing_ratchet")).lower().strip()
+        self.stress_ratchet_cfg = dict(stress.get("trailing_ratchet", {})) if "trailing_ratchet" in stress else {}
+        self.stress_chronos_cfg = dict(stress.get("chronos_exit", {})) if "chronos_exit" in stress else {}
         self.stress_chronos = ChronosTimeForceEvaluator(self.stress_chronos_cfg)
+
+        self.stress_smoothed_closer = None
+        if self.stress_mode in ("ratchet_smoothed_drawdown", "smoothed_drawdown"):
+            from CORE.STRATEGY.smoothed_profit_closer import SmoothedProfitDrawdownCloser
+            sm_cfg = stress.get("ratchet_smoothed_drawdown") or stress.get("smoothed_drawdown") or {
+                "sample_interval_sec": 60,
+                "min_samples": 180,
+                "ma_window_samples": 15,
+                "max_drawdown_ratio": 0.22,
+                "chronos_exit": {
+                    "enabled": False,
+                    "activation": 8.0,
+                    "floor": 8.0,
+                    "min_age_hours": 36.0,
+                },
+            }
+            self.stress_smoothed_closer = SmoothedProfitDrawdownCloser(sm_cfg)
 
     def _detect_stress_reason(
         self,
@@ -174,6 +192,23 @@ class RegimeAdaptiveCloser:
             state["armed_level_desc"] = "REGIME_STRESS_CHRONOS"
             return True, ch_floor, f"[REGIME:STRESS({reason})] {ch_info}"
 
+        if self.stress_mode in ("ratchet_smoothed_drawdown", "smoothed_drawdown"):
+            levels = self.stress_ratchet_cfg.get("levels")
+            r_ok, r_floor, r_info = self.stress_smoothed_closer.evaluate(
+                iter_net=iter_net,
+                now_sec=now_sec,
+                state=state,
+                scale_money=eff_scale,
+                iter_age_hours=iter_age_hours,
+                ratchet_levels=levels if self.stress_mode == "ratchet_smoothed_drawdown" else None,
+            )
+            state["armed_level_desc"] = f"STRESS:{state.get('armed_level_desc', 'SMOOTHED')}"
+            if r_ok and r_floor is not None:
+                if iter_net <= 0.0:
+                    return False, None, f"[REGIME:STRESS({reason}) SMOOTHED BLOCKED: Net {iter_net:+.2f} <= 0]"
+                return True, r_floor, f"[REGIME:STRESS({reason})] {r_info}"
+            return False, r_floor, (f"[REGIME:STRESS({reason})] {r_info}" if r_info else "")
+
         eff_ratchet_cfg = dict(self.stress_ratchet_cfg)
         eff_ratchet_cfg["scale_money"] = eff_scale
         if "min_guaranteed_profit_usdt" not in eff_ratchet_cfg and self.min_guaranteed_profit_usdt > 0.0:
@@ -214,7 +249,15 @@ class RegimeAdaptiveCloser:
         max_lvl = int(ctx.get("max_active_level") or 0)
         load_ratio = float(ctx.get("load_ratio") or 0.0)
         min_guard = float(pos_cfg.get("min_guaranteed_profit_usdt") or 0.0)
-        closer = cls(pos_cfg["regime_adaptive"], min_guaranteed_profit_usdt=min_guard)
+        ra_cfg = dict(pos_cfg["regime_adaptive"])
+        stress = dict(ra_cfg.get("stress", {}))
+        if stress.get("mode") in ("ratchet_smoothed_drawdown", "smoothed_drawdown"):
+            if "trailing_ratchet" not in stress and "trailing_ratchet" in pos_cfg:
+                stress["trailing_ratchet"] = pos_cfg["trailing_ratchet"]
+            if "ratchet_smoothed_drawdown" not in stress and "ratchet_smoothed_drawdown" in pos_cfg:
+                stress["ratchet_smoothed_drawdown"] = pos_cfg["ratchet_smoothed_drawdown"]
+            ra_cfg["stress"] = stress
+        closer = cls(ra_cfg, min_guaranteed_profit_usdt=min_guard)
         return closer.evaluate(
             iter_net=iter_net,
             now_sec=now_sec,
@@ -249,7 +292,15 @@ class RegimeAdaptiveCloser:
             return float("inf"), float("-inf"), 0.0, False
 
         min_guard = float(pos_cfg.get("min_guaranteed_profit_usdt") or 0.0)
-        closer = cls(ra_cfg, min_guaranteed_profit_usdt=min_guard)
+        ra_cfg_copy = dict(ra_cfg)
+        stress_cfg_copy = dict(ra_cfg_copy.get("stress", {}))
+        if stress_cfg_copy.get("mode") in ("ratchet_smoothed_drawdown", "smoothed_drawdown"):
+            if "trailing_ratchet" not in stress_cfg_copy and "trailing_ratchet" in pos_cfg:
+                stress_cfg_copy["trailing_ratchet"] = pos_cfg["trailing_ratchet"]
+            if "ratchet_smoothed_drawdown" not in stress_cfg_copy and "ratchet_smoothed_drawdown" in pos_cfg:
+                stress_cfg_copy["ratchet_smoothed_drawdown"] = pos_cfg["ratchet_smoothed_drawdown"]
+            ra_cfg_copy["stress"] = stress_cfg_copy
+        closer = cls(ra_cfg_copy, min_guaranteed_profit_usdt=min_guard)
         eff_scale = float(scale_money) if scale_money and float(scale_money) > 0.0 else 1.0
 
         ctx = extra_context or {}
@@ -327,6 +378,24 @@ class RegimeAdaptiveCloser:
         )
         if force_wake:
             return float("inf"), float("-inf"), 0.0, False
+
+        if closer.stress_mode in ("ratchet_smoothed_drawdown", "smoothed_drawdown"):
+            t_recover = float("inf")
+            if (
+                not stress_reason_now
+                and max_lvl <= closer.recover_level_lte
+                and load_ratio <= closer.recover_load_lte
+            ):
+                t_recover = entered_at + closer.min_stress_hold_minutes * 60.0 - 0.001
+                if t_recover <= current_sim_time:
+                    return float("inf"), float("-inf"), 0.0, False
+
+            eq_low = max(cutoff_wake, ch_eq_low)
+            eq_high = ch_eq_high
+            max_valid_t = min(next_bucket_ts, ch_max_t, t_recover)
+            if max_valid_t <= current_sim_time or eq_low >= cur_equity or cur_equity >= eq_high:
+                return float("inf"), float("-inf"), 0.0, False
+            return eq_low, eq_high, max_valid_t, False
 
         eff_ratchet_cfg = dict(closer.stress_ratchet_cfg)
         if "min_guaranteed_profit_usdt" not in eff_ratchet_cfg and min_guard > 0.0:
