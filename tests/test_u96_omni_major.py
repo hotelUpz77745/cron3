@@ -34,10 +34,10 @@ class TestU96OmniMajorPassport(unittest.TestCase):
         self.assertEqual(self.major_data, self.major_bt_data)
 
     def test_super_grid_and_dynamic_atr_enabled(self):
-        """Проверка: super_grid включен (1.6x), dynamic_atr_grid включен."""
+        """Проверка: super_grid включен (2.0x), dynamic_atr_grid включен."""
         sg = self.major_data["super_grid"]
         self.assertTrue(sg["enabled"], "super_grid должен быть включен")
-        self.assertEqual(sg["multiplier"], 1.6, "multiplier super_grid должен быть ровно 1.6")
+        self.assertEqual(sg["multiplier"], 2.0, "multiplier super_grid должен быть ровно 2.0")
 
         dag = self.major_data["dynamic_atr_grid"]
         self.assertTrue(dag["enabled"], "dynamic_atr_grid должен быть включен")
@@ -95,9 +95,9 @@ class TestU96OmniMajorPassport(unittest.TestCase):
         self.assertIn("u96_omni_major__live", reg.active_strategies)
         strat = reg.active_strategies["u96_omni_major__live"]
 
-        self.assertEqual(strat.auto_closing_mode, "regime_adaptive")
+        self.assertEqual(strat.auto_closing_mode, "ma_crossover")
         self.assertTrue(strat.super_grid_enabled)
-        self.assertEqual(strat.super_grid_cfg["multiplier"], 1.6)
+        self.assertEqual(strat.super_grid_cfg["multiplier"], 2.0)
         self.assertTrue(strat.dynamic_atr_grid_cfg.get("enabled"))
         self.assertEqual(strat.min_tp_indent, 0.62)
 
