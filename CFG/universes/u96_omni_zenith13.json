@@ -165,7 +165,7 @@
     "auto_closing": {
         "mode": "regime_adaptive",
         "positive": {
-            "scale_money": 2.0,
+            "scale_money": 1.0,
             "_desc_scale_money": "Масштаб 1.0 рассчитан на матожидание системы — 400 USDT на сторону.",
             "min_guaranteed_profit_usdt": 5.0,
             "_desc_min_guaranteed_profit_usdt": "Минимальный гарантированный порог чистой прибыли в USDT для срабатывания положительной секции AutoCloser (защита от закрытия в микроплюс или микроминус из-за комиссий, проскальзываний и от ложных срабатываний трейлинга).",
@@ -334,20 +334,56 @@
                 "stress": {
                     "trailing_ratchet": {
                         "levels": [
-                            {"activation": 8.0, "floor": 5.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L0: $8 -> $5"},
-                            {"activation": 13.0, "floor": 8.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L1: $13 -> $8"},
-                            {"activation": 21.0, "floor": 13.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L2: $21 -> $13"},
-                            {"activation": 34.0, "floor": 21.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L3: $34 -> $21"},
-                            {"activation": 55.0, "floor": 34.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L4: $55 -> $34"},
-                            {"activation": 89.0, "floor": 55.0, "min_age_hours": 0.0, "enabled": true, "_desc": "STRESS L5: $89 -> $55"}
+                            {
+                                "activation": 8.0,
+                                "floor": 5.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L0: $8 -> $5"
+                            },
+                            {
+                                "activation": 13.0,
+                                "floor": 8.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L1: $13 -> $8"
+                            },
+                            {
+                                "activation": 21.0,
+                                "floor": 13.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L2: $21 -> $13"
+                            },
+                            {
+                                "activation": 34.0,
+                                "floor": 21.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L3: $34 -> $21"
+                            },
+                            {
+                                "activation": 55.0,
+                                "floor": 34.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L4: $55 -> $34"
+                            },
+                            {
+                                "activation": 89.0,
+                                "floor": 55.0,
+                                "min_age_hours": 0.0,
+                                "enabled": true,
+                                "_desc": "STRESS L5: $89 -> $55"
+                            }
                         ]
                     },
                     "chronos_exit": {
-                        "activation": 4.0,
-                        "floor": 4.0,
+                        "activation": 8.0,
+                        "floor": 8.0,
                         "min_age_hours": 36.0,
                         "enabled": true,
-                        "_desc": "STRESS Chronos 36h+: мгновенная эвакуация при +$4 * scale_money"
+                        "_desc": "STRESS Chronos 36h+: мгновенная эвакуация при +$8 * scale_money"
                     }
                 }
             }

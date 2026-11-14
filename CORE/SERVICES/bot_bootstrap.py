@@ -5,6 +5,7 @@
 
 import asyncio
 import contextlib
+import inspect
 import time
 from typing import TYPE_CHECKING, List, Dict
 
@@ -215,8 +216,11 @@ class BotBootstrapService:
         bot_core.analytics.start_realtime_tracker(bot_core.client)
 
         # Монитор делистингов Binance для активной обоймы (no-op в бэктесте)
-        if getattr(bot_core, "delisting_detector", None):
-            await bot_core.delisting_detector.start()
+        dd = getattr(bot_core, "delisting_detector", None)
+        if dd and hasattr(dd, "start"):
+            res = dd.start()
+            if inspect.isawaitable(res):
+                await res
 
     @classmethod
     async def shutdown_game_loop(cls, bot_core: "BotCore") -> None:
@@ -237,8 +241,11 @@ class BotBootstrapService:
         if getattr(bot_core, "analytics", None):
             bot_core.analytics.stop_realtime_tracker()
 
-        if getattr(bot_core, "delisting_detector", None):
-            await bot_core.delisting_detector.stop()
+        dd = getattr(bot_core, "delisting_detector", None)
+        if dd and hasattr(dd, "stop"):
+            res = dd.stop()
+            if inspect.isawaitable(res):
+                await res
 
         pt_fsm = getattr(getattr(bot_core, "auto_closer", None), "profit_transfer_fsm", None)
         if pt_fsm is not None and hasattr(pt_fsm, "wait_for_pending_tasks"):

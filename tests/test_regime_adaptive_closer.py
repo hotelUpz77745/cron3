@@ -174,9 +174,9 @@ class TestRegimeAdaptiveCloser(unittest.TestCase):
         self.assertEqual(floor_val, 16.0)
         self.assertIn("STRESS", info)
 
-        # Chronos 36h+ / +$4 * scale = +$8
+        # Chronos 36h+ / +$8 * scale = +$8 (при scale_money=1.0)
         st_ch = {}
-        ok_ch, ch_fl, ch_info = closer.evaluate(8.2, t0, st_ch, scale_money=2.0, iter_age_hours=36.5, max_active_level=4, load_ratio=1.0)
+        ok_ch, ch_fl, ch_info = closer.evaluate(8.2, t0, st_ch, scale_money=1.0, iter_age_hours=36.5, max_active_level=4, load_ratio=1.0)
         self.assertTrue(ok_ch)
         self.assertEqual(ch_fl, 8.0)
         self.assertIn("STRESS", ch_info)

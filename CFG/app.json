@@ -20,7 +20,7 @@
         "price_stream_ready_timeout_sec": 10.0,
         "price_stream_snapshot_timeout_sec": 5.0,
         "pos_stream_connect_timeout_sec": 5.0,
-        "auto_start": true
+        "auto_start": false
     },
     "paths": {
         "shared_api_dir": "./API"
@@ -62,29 +62,25 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 1200,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "BEAMXUSDT": 1200,
-                    "ERAUSDT": 1200,
-                    "LITUSDT": 1200,
-                    "MERLUSDT": 1200,
-                    "VVVUSDT": 1200,
-                    "ZECUSDT": 1200
+                    "BEAMXUSDT": 600.0,
+                    "LITUSDT": 600.0,
+                    "VVVUSDT": 600.0,
+                    "ZROUSDT": 600.0
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 1200,
+                "default_invest_size": 400.0,
                 "invest_size": {
-                    "BEAMXUSDT": 1200,
-                    "ERAUSDT": 1200,
-                    "LITUSDT": 1200,
-                    "MERLUSDT": 1200,
-                    "VVVUSDT": 1200,
-                    "ZECUSDT": 1200
+                    "BEAMXUSDT": 600.0,
+                    "LITUSDT": 600.0,
+                    "VVVUSDT": 600.0,
+                    "ZROUSDT": 600.0
                 }
             },
-            "start_balance_usdt": 1435.0
+            "start_balance_usdt": 505.0
         }
     },
     "telegram": {
@@ -241,7 +237,10 @@
         "_desc_notify_telegram": "Telegram-уведомления о предупреждениях и закрытиях. Пример: true | false.",
         "quote_asset": "USDT",
         "_desc_quote_asset": "Котируемый актив инструментов бота. Пример: \"USDT\". Используется для сборки тикеров из новостных токенов.",
-        "exchange_active_statuses": ["TRADING", "PENDING_TRADING"],
+        "exchange_active_statuses": [
+            "TRADING",
+            "PENDING_TRADING"
+        ],
         "_desc_exchange_active_statuses": "Статусы exchangeInfo, при которых монета считается торгуемой. Любой статус вне списка — немедленная Фаза 2. Пример: [\"TRADING\", \"PENDING_TRADING\"].",
         "news_catalog_id": 161,
         "_desc_news_catalog_id": "ID каталога новостных анонсов Binance CMS. Пример: 161 (объявления по фьючерсам/делистингу). Путь и хост запроса заданы в API-адаптере BinancePublic.",
@@ -251,11 +250,37 @@
         "_desc_news_page_size": "Размер страницы каталога анонсов. Пример: 15.",
         "news_http_timeout_sec": 10,
         "_desc_news_http_timeout_sec": "Таймаут HTTP-запроса к CMS Binance, секунды. Пример: 10.",
-        "news_keywords": ["futures", "perpetual"],
+        "news_keywords": [
+            "futures",
+            "perpetual"
+        ],
         "_desc_news_keywords": "Ключевые слова (нижний регистр) в заголовке анонса для признания его релевантным фьючерсам. Пример: [\"futures\", \"perpetual\"].",
         "news_ticker_regex": "\\b[A-Z0-9]{2,15}\\b",
         "_desc_news_ticker_regex": "Регэксп выделения тикеров из текста анонса. Пример: \\b[A-Z0-9]{2,15}\\b.",
-        "news_ticker_stopwords": ["UTC", "THE", "AND", "FOR", "BINANCE", "SPOT", "FUTURES", "NOTICE", "DELIST", "DELISTING", "REMOVAL", "MARGIN", "LOAN", "CONTRACT", "PERPETUAL", "WITH", "USD", "USDT", "FDUSD", "BUSD", "USDC", "API"],
+        "news_ticker_stopwords": [
+            "UTC",
+            "THE",
+            "AND",
+            "FOR",
+            "BINANCE",
+            "SPOT",
+            "FUTURES",
+            "NOTICE",
+            "DELIST",
+            "DELISTING",
+            "REMOVAL",
+            "MARGIN",
+            "LOAN",
+            "CONTRACT",
+            "PERPETUAL",
+            "WITH",
+            "USD",
+            "USDT",
+            "FDUSD",
+            "BUSD",
+            "USDC",
+            "API"
+        ],
         "_desc_news_ticker_stopwords": "Стоп-слова: токены, которые не считаются тикерами монет. Пример: [\"USDT\", \"BUSD\", \"FDUSD\"]."
     },
     "fsm_level_resolution": {
