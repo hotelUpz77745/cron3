@@ -67,7 +67,7 @@
                     "BEAMXUSDT": 600.0,
                     "LITUSDT": 600.0,
                     "VVVUSDT": 600.0,
-                    "ZROUSDT": 600.0
+                    "ZROUSDT": 400.0
                 }
             },
             "SHORT": {
@@ -77,7 +77,7 @@
                     "BEAMXUSDT": 600.0,
                     "LITUSDT": 600.0,
                     "VVVUSDT": 600.0,
-                    "ZROUSDT": 600.0
+                    "ZROUSDT": 400.0
                 }
             },
             "start_balance_usdt": 505.0
