@@ -54,13 +54,32 @@ class PerCoinStopLossManager:
             return None
 
     @classmethod
-    def extract_config(cls, strat_cfg: Any) -> Tuple[Optional[float], Optional[float], bool]:
+    def calculate_scaled_threshold(
+        cls,
+        base_threshold: Optional[float],
+        ratio: Optional[float],
+        super_grid_scale: bool = False
+    ) -> Optional[float]:
+        """
+        Вычисляет эффективный порог стоп-лосса с учетом динамического масштабирования Super Grid:
+        - Если base_threshold is None или <= 0: возвращает None.
+        - Если super_grid_scale is False или ratio is None или ratio <= 0: возвращает base_threshold.
+        - Если super_grid_scale is True и ratio > 0: возвращает round(base_threshold * float(ratio), 4).
+        """
+        if base_threshold is None or base_threshold <= 0.0:
+            return None
+        if not super_grid_scale or ratio is None or float(ratio) <= 0.0:
+            return base_threshold
+        return round(float(base_threshold) * float(ratio), 4)
+
+    @classmethod
+    def extract_config(cls, strat_cfg: Any) -> Tuple[Optional[float], Optional[float], bool, bool]:
         """
         Извлекает и нормализует параметры per_coin_stop_loss из конфигурации стратегии.
-        Возвращает: (max_adverse_short_pct, max_adverse_long_pct, notify_telegram).
+        Возвращает: (max_adverse_short_pct, max_adverse_long_pct, notify_telegram, super_grid_scale).
         """
         if not strat_cfg:
-            return None, None, True
+            return None, None, True, False
 
         cfg_dict: Dict[str, Any] = {}
         # Проверяем возможные места хранения в StrategyConfig / raw_meta / overrides
@@ -74,7 +93,7 @@ class PerCoinStopLossManager:
             cfg_dict = strat_cfg.get("per_coin_stop_loss") or strat_cfg
 
         if not isinstance(cfg_dict, dict):
-            return None, None, True
+            return None, None, True, False
 
         raw_legacy = cfg_dict.get("max_adverse_from_entry_pct")
         raw_short = cfg_dict.get("max_adverse_short_pct", raw_legacy)
@@ -91,7 +110,8 @@ class PerCoinStopLossManager:
                 long_thresh = norm_leg
 
         notify = bool(cfg_dict.get("notify_telegram", True))
-        return short_thresh, long_thresh, notify
+        super_grid_scale = bool(cfg_dict.get("super_grid_scale", False))
+        return short_thresh, long_thresh, notify, super_grid_scale
 
     @classmethod
     def evaluate_symbol(
@@ -264,7 +284,7 @@ class PerCoinStopLossManager:
         liquidated_symbols = []
 
         for strat_id, strat_cfg in active_strats.items():
-            short_thresh, long_thresh, notify = cls.extract_config(strat_cfg)
+            short_thresh, long_thresh, notify, super_grid_scale = cls.extract_config(strat_cfg)
             if short_thresh is None and long_thresh is None:
                 continue
 
@@ -281,12 +301,23 @@ class PerCoinStopLossManager:
                 if not hasattr(bot_core, "fsm_states") or sym_u not in bot_core.fsm_states:
                     continue
 
+                # Расчет коэффициента Super Grid для динамического масштабирования стоп-лосса
+                ratio = 1.0
+                if super_grid_scale:
+                    if hasattr(bot_core, "volatility_manager") and hasattr(bot_core.volatility_manager, "get_ratio"):
+                        ratio = bot_core.volatility_manager.get_ratio(sym_u)
+                    elif hasattr(bot_core, "volatility_ratios") and isinstance(bot_core.volatility_ratios, dict):
+                        ratio = bot_core.volatility_ratios.get(sym_u, 1.0)
+
+                eff_short_thresh = cls.calculate_scaled_threshold(short_thresh, ratio, super_grid_scale)
+                eff_long_thresh = cls.calculate_scaled_threshold(long_thresh, ratio, super_grid_scale)
+
                 for side in ("LONG", "SHORT"):
                     fsm_state = bot_core.fsm_states[sym_u].get(side)
                     if not fsm_state or not getattr(fsm_state, "in_position", False):
                         continue
 
-                    side_threshold = long_thresh if side == "LONG" else short_thresh
+                    side_threshold = eff_long_thresh if side == "LONG" else eff_short_thresh
                     if side_threshold is None or side_threshold <= 0.0:
                         continue
 

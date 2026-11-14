@@ -399,7 +399,9 @@
     "per_coin_stop_loss": {
         "max_adverse_short_pct": 130.0,
         "max_adverse_long_pct": null,
+        "super_grid_scale": true,
         "notify_telegram": true,
+        "_desc_super_grid_scale": "Динамическое масштабирование стоп-лосса: если true и super_grid.enabled=true, порог max_adverse_short_pct (и long если задан) масштабируется пропорционально волатильности монеты (ratio = adjusted_vol / last_indent), синхронно с сеткой усреднения.",
         "_desc_short": "Индивидуальный стоп-лосс для SHORT: аварийный срез ракет при откате >= 130.0% от входа L0 (entry0).",
         "_desc_long": "Индивидуальный стоп-лосс для LONG: отключен (null), давая тяжелому якорю L8 (-89.0%, 19.95%) вытягивать глубокие проливы.",
         "_protocol": "ЕДИНЫЙ ПРОТОКОЛ PER-COIN STOP-LOSS (см. ENTITY_PROTOCOL.md §3): 1) Расчет отклонения строго от цены первого входа L0 (entry0), НЕ от средней цены. 2) При пробое ЛЮБОЙ активной стороны (SHORT >= 130.0% или LONG если не null) принудительно закрываются ОБЕ открытые стороны (LONG И SHORT) рыночными ордерами MARKET (market_slippage 0.01% на сторону в бэктесте). 3) Снимаются ВСЕ лимитные ордера монеты по обоим направлениям, сбрасываются PositionState и очереди усреднений по обеим сторонам (в аналитике фиксируется цикл STOP_LOSS). 4) УДАЛЕНИЕ МОНЕТЫ: на ПРОДЕ монета полностью удаляется из торгового списка CFG/app.json, из StrategyRegistry, FSM, WebSocket-стримов и с диска (runtime_dir) через SymbolLifecycleManager.delete_symbol(sym); в БЭКТЕСТЕ монета навсегда выбывает из активного пула до конца текущей декады (до следующей плановой ротации). 5) CorridorCalculator обязан включать SL-границы entry0 * (1 ± pct/100) без пропуска тиков."

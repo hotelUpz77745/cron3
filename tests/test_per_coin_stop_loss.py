@@ -46,23 +46,26 @@ class TestPerCoinStopLoss(unittest.IsolatedAsyncioTestCase):
                 "notify_telegram": True,
             }
         }
-        short_th, long_th, notify = PerCoinStopLossManager.extract_config(strat_dict)
+        short_th, long_th, notify, sg_scale = PerCoinStopLossManager.extract_config(strat_dict)
         self.assertEqual(short_th, 100.0)
         self.assertIsNone(long_th)  # 100.0 >= 100 -> long disabled
         self.assertTrue(notify)
+        self.assertFalse(sg_scale)
 
-        # Раздельные пороги для SHORT и LONG
+        # Раздельные пороги для SHORT и LONG + super_grid_scale: True
         strat_asym = {
             "per_coin_stop_loss": {
                 "max_adverse_short_pct": 120.0,
                 "max_adverse_long_pct": 85.0,
+                "super_grid_scale": True,
                 "notify_telegram": True,
             }
         }
-        s_th, l_th, n = PerCoinStopLossManager.extract_config(strat_asym)
+        s_th, l_th, n, sg_s = PerCoinStopLossManager.extract_config(strat_asym)
         self.assertEqual(s_th, 120.0)
         self.assertEqual(l_th, 85.0)
         self.assertTrue(n)
+        self.assertTrue(sg_s)
 
         # Отключенный стоп-лосс
         strat_disabled = {
@@ -71,10 +74,35 @@ class TestPerCoinStopLoss(unittest.IsolatedAsyncioTestCase):
                 "notify_telegram": False,
             }
         }
-        thresh2_s, thresh2_l, notify2 = PerCoinStopLossManager.extract_config(strat_disabled)
+        thresh2_s, thresh2_l, notify2, sg_scale2 = PerCoinStopLossManager.extract_config(strat_disabled)
         self.assertIsNone(thresh2_s)
         self.assertIsNone(thresh2_l)
         self.assertFalse(notify2)
+        self.assertFalse(sg_scale2)
+
+    def test_calculate_scaled_threshold(self):
+        """Проверка динамического масштабирования порога через Super Grid ratio."""
+        # 1. Порог None или 0
+        self.assertIsNone(PerCoinStopLossManager.calculate_scaled_threshold(None, 1.5, True))
+        self.assertIsNone(PerCoinStopLossManager.calculate_scaled_threshold(0.0, 1.5, True))
+        self.assertIsNone(PerCoinStopLossManager.calculate_scaled_threshold(-10.0, 1.5, True))
+
+        # 2. super_grid_scale = False -> всегда базовый порог
+        self.assertEqual(PerCoinStopLossManager.calculate_scaled_threshold(130.0, 0.47, False), 130.0)
+        self.assertEqual(PerCoinStopLossManager.calculate_scaled_threshold(130.0, 1.6, False), 130.0)
+
+        # 3. Некорректный ratio (None, <=0) -> базовый порог
+        self.assertEqual(PerCoinStopLossManager.calculate_scaled_threshold(130.0, None, True), 130.0)
+        self.assertEqual(PerCoinStopLossManager.calculate_scaled_threshold(130.0, 0.0, True), 130.0)
+        self.assertEqual(PerCoinStopLossManager.calculate_scaled_threshold(130.0, -1.0, True), 130.0)
+
+        # 4. Сжатие сетки при низкой волатильности (ratio = 0.47)
+        scaled_low = PerCoinStopLossManager.calculate_scaled_threshold(130.0, 0.47, True)
+        self.assertAlmostEqual(scaled_low, 61.1, places=2)
+
+        # 5. Расширение сетки при высокой волатильности (ratio = 1.6)
+        scaled_high = PerCoinStopLossManager.calculate_scaled_threshold(130.0, 1.6, True)
+        self.assertAlmostEqual(scaled_high, 208.0, places=2)
 
     def test_evaluate_symbol_long(self):
         """Проверка расчета отклонения для позиции LONG."""
@@ -244,6 +272,89 @@ class TestPerCoinStopLoss(unittest.IsolatedAsyncioTestCase):
         # Ликвидирован ТОЛЬКО PUMPUSDT
         self.assertEqual(liquidated, ["PUMPUSDT"])
         mock_bot.delete_symbol.assert_called_once_with("PUMPUSDT")
+
+    async def test_check_per_coin_stop_loss_with_super_grid_scale(self):
+        """Проверка динамического масштабирования стоп-лосса при super_grid_scale: True."""
+        mock_bot = MagicMock()
+        mock_client = AsyncMock()
+        mock_bot.get_client_for_symbol.return_value = mock_client
+        mock_bot.client = mock_client
+        mock_client.cancel_all_orders = AsyncMock()
+        mock_client.fetch_positions = AsyncMock(return_value=[
+            {"symbol": "VOLUSDT", "positionAmt": "-10.0", "positionSide": "SHORT"}
+        ])
+        mock_client.make_order = AsyncMock()
+        mock_bot.delete_symbol = AsyncMock(return_value=True)
+        mock_bot.notifier = MagicMock()
+        mock_bot.notifier.send_alert = AsyncMock()
+
+        # Базовый порог 100%, но ratio = 1.5 -> эффективный порог = 150.0%
+        mock_vol_mgr = MagicMock()
+        mock_vol_mgr.get_ratio.return_value = 1.5
+        mock_bot.volatility_manager = mock_vol_mgr
+
+        st_vol = PositionState(symbol="VOLUSDT", side="SHORT")
+        st_vol.in_position = True
+        st_vol.initial_entry_price = 10.0
+        st_vol.total_volume = -10.0
+
+        mock_bot.fsm_states = {
+            "VOLUSDT": {"SHORT": st_vol, "LONG": PositionState()},
+        }
+
+        strat_cfg = MagicMock()
+        strat_cfg.symbols = ["VOLUSDT"]
+        strat_cfg.name = "Test SuperGrid Strategy"
+        strat_cfg.per_coin_stop_loss_cfg = {
+            "max_adverse_short_pct": 100.0,
+            "max_adverse_long_pct": None,
+            "super_grid_scale": True,
+            "notify_telegram": True,
+        }
+
+        mock_bot.strategy_registry = MagicMock()
+        mock_bot.strategy_registry.active_strategies = {"test_sg_strat": strat_cfg}
+
+        # Шаг 1: Цена 22.0 -> откат +120.0%. Без масштабирования (100%) был бы стоп-аут,
+        # но с учетом scale (150%) стоп-аута НЕ должно быть!
+        mock_bot.prices = {"VOLUSDT": (22.0, 1000.0)}
+        liquidated_step1 = await PerCoinStopLossManager.check_per_coin_stop_loss(mock_bot)
+        self.assertEqual(liquidated_step1, [])
+        mock_bot.delete_symbol.assert_not_called()
+
+        # Шаг 2: Цена взлетает до 26.0 -> откат +160.0% >= 150.0% -> теперь СТОП-АУТ
+        mock_bot.prices = {"VOLUSDT": (26.0, 1000.0)}
+        liquidated_step2 = await PerCoinStopLossManager.check_per_coin_stop_loss(mock_bot)
+        self.assertEqual(liquidated_step2, ["VOLUSDT"])
+        mock_bot.delete_symbol.assert_called_once_with("VOLUSDT")
+
+    def test_volatility_manager_get_ratio(self):
+        """Проверка работы метода get_ratio в VolatilityManager."""
+        from CORE.SERVICES.VOLATILITY.volatility_manager import VolatilityManager
+        mock_bot = MagicMock()
+        vm = VolatilityManager(mock_bot)
+
+        # 1. По умолчанию ratio = 1.0
+        self.assertEqual(vm.get_ratio("BTCUSDT"), 1.0)
+
+        # 2. Прямое значение из symbol_ratios
+        vm.symbol_ratios["ETHUSDT"] = 1.6
+        self.assertEqual(vm.get_ratio("ETHUSDT"), 1.6)
+        self.assertEqual(vm.get_ratio("ethusdt"), 1.6)  # case-insensitive
+
+        # 3. Fallback на caches: super_indent 178.0 / base_indent 89.0 = 2.0
+        mock_bot.runtime_manager = MagicMock()
+        mock_bot.runtime_manager.caches = {
+            "SOLUSDT": {
+                "SHORT": {
+                    "grid": {
+                        "8": {"indent": 89.0, "_base_indent": 89.0, "super_indent": 178.0}
+                    }
+                }
+            }
+        }
+        self.assertAlmostEqual(vm.get_ratio("SOLUSDT"), 2.0)
+        self.assertAlmostEqual(vm.symbol_ratios["SOLUSDT"], 2.0)
 
 
 if __name__ == "__main__":

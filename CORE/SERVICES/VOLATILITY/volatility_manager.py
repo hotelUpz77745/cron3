@@ -13,6 +13,7 @@ import json
 import pickle
 import sys
 from pathlib import Path
+from typing import Dict, Any, Optional
 from c_log import UnifiedLogger
 from consts import DATA_DIR, _CFG
 from c_utils import Utils
@@ -27,6 +28,34 @@ class VolatilityManager:
         self.client = bot_core.client
         self._task = None
         self.is_running = False
+        self.symbol_ratios: Dict[str, float] = {}
+
+    def get_ratio(self, symbol: str) -> float:
+        """
+        Возвращает текущий коэффициент масштабирования Super Grid для символа (по умолчанию 1.0).
+        Если кэш symbol_ratios еще пуст, пробует вычислить ratio из runtime кэша (super_indent / base_indent).
+        """
+        sym_u = symbol.upper()
+        if sym_u in self.symbol_ratios:
+            return self.symbol_ratios[sym_u]
+        if hasattr(self.bot_core, "runtime_manager") and hasattr(self.bot_core.runtime_manager, "caches"):
+            rt = self.bot_core.runtime_manager.caches.get(sym_u) or self.bot_core.runtime_manager.caches.get(symbol.lower())
+            if rt and isinstance(rt, dict):
+                for side in ("LONG", "SHORT"):
+                    grid = rt.get(side, {}).get("grid", {})
+                    for lvl in grid.values():
+                        si = lvl.get("super_indent")
+                        bi = lvl.get("_base_indent", lvl.get("indent"))
+                        if si is not None and bi is not None:
+                            try:
+                                bi_f = float(bi)
+                                if bi_f > 0:
+                                    ratio = float(si) / bi_f
+                                    self.symbol_ratios[sym_u] = ratio
+                                    return ratio
+                            except (ValueError, TypeError):
+                                pass
+        return 1.0
 
     def start(self):
         if self._task is None or self._task.done():
@@ -247,6 +276,11 @@ class VolatilityManager:
                     else:
                         logger.debug(f"[VolatilityManager] [{symbol}] Сетка сброшена на стандартные настройки (super_indent удален).")
                         
+                    current_ratio = float(ratio) if is_advanced else 1.0
+                    self.symbol_ratios[symbol.upper()] = current_ratio
+                    if hasattr(self.bot_core, "volatility_ratios") and isinstance(self.bot_core.volatility_ratios, dict):
+                        self.bot_core.volatility_ratios[symbol.upper()] = current_ratio
+
                     stats_output[symbol] = {
                         "is_advanced": is_advanced,
                         "timeframe": timeframe,
