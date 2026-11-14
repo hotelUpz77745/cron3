@@ -652,7 +652,8 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
         }
 
         # Run recalculation
-        engine.update_strategies_stats(global_data)
+        with patch("ANALYTICS.equity_trajectory.DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity", return_value=None):
+            engine.update_strategies_stats(global_data)
 
         # Check healed file on disk
         healed_data = json.loads(strat_file.read_text(encoding="utf-8"))
@@ -683,11 +684,12 @@ class TestPositiveProfitGuard(unittest.IsolatedAsyncioTestCase):
                 "iteration_index": 4,
             }), encoding="utf-8")
 
-            text, buttons = BigBoardFormatter.render_universe_analytics_card(
-                stats_dir=stats_d,
-                current_uid=strat_id,
-                univ_name="Omni Zenith 13",
-            )
+            with patch("ANALYTICS.equity_trajectory.DEFAULT_SNAPSHOT_STORE.get_max_recorded_equity", return_value=None):
+                text, buttons = BigBoardFormatter.render_universe_analytics_card(
+                    stats_dir=stats_d,
+                    current_uid=strat_id,
+                    univ_name="Omni Zenith 13",
+                )
             self.assertNotIn("524.33$", text, "BigBoardFormatter must NOT display corrupted $524.33 ATH")
             self.assertIn("474.46$", text)
 

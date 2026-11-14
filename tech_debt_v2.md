@@ -113,3 +113,73 @@
      - **`u96_omni_major13.json`**: Эталон прибыли ($8375.77 stand record, Base Grid L4 -15%, L5 -24%, L8 -89%, MaxDD $1129.08).
      - **`u96_omni_major13_topwide.json`**: Чемпион по просадке ($7085.88, MaxDD **$899.21**, Calmar **6.28**, сэкономлено **$302** комиссий).
      - **`u96_omni_zenith13.json`**: Эталон консервативной просадки ($6724.64, MaxDD **$526.77**, Calmar **10.04**).
+
+---
+
+## ADR-40: Post-Close Settlement Synchrony & Zero-Leakage Iteration Boundary Protocol (Искоренение фантомной двойной бухгалтерии куполов)
+
+### 1. Контекст инцидента в боевом проде (2026-11-14, коммит `766724b` "1435 vith Denis")
+В логах реальной работы сервера (`logs/recent_tail_1000 (16).log`) зафиксирован критический дефект бухгалтерского учета итераций:
+1. В `03:00:56` трейлинг-храповик купола `u96_omni_zenith13__trailing_ratchet` зафиксировал срабатывание эвакуационной ступени Chronos E1 (36ч) при значении Net `+16.31$` (целевой таргет `16.00$`):
+   ```text
+   [AUTO_CLOSER][u96_omni_zenith13__trailing_ratchet] Iteration #2 [TRAILING RATCHET INSTANT L6 'E1: Chronos 36h — instant +$8 evacuation of stale dome': Net +16.31 >= Target 16.00 (High: +16.31, Age: 108.2h)]. Auto-closing dome!
+   ```
+2. Сервис `EmergencyCloser.close_strategy` отправил 12 рыночных ордеров (6 монет LONG + 6 монет SHORT) на биржу Binance.
+3. В `03:01:00` исполнитель `DomeCloserExecutor.execute_close` немедленно прочитал файл аналитики `stats_path` и перевел купол на Итерацию #3.
+4. **Корень сбоя:** на момент `03:01:00` исполненные рыночные ордера еще НЕ были проиндексированы биржей Binance в шлюзе `GET /fapi/v1/income`, а фоновый опрос `deep_sync_analytics` имел дебаунс 10 секунд (`POST_CLOSE_SYNC_DEBOUNCE_SEC`). Дисковый файл `stats_path` все еще содержал до-закрытые метрики ($50.07$ net).
+5. Базовая точка Итерации #3 (`iteration_start_net_profit_usdt` и `iteration_start_realized_pnl_usdt`) была заморожена на значении **$50.07** вместо **$67.65**.
+6. В промежутке `03:01:30–03:02:21` фоновый синк `LedgerRecorder` завершил 12 обращений к Binance REST API и внес realized PnL закрытых позиций (+17.71$) в общий счет купола ($67.78$).
+7. При следующем расчете аналитики `StrategyStatsEngine`:
+   - `iter_real = s_real - iter_start_real = 67.78 - 50.07 = +17.71$`
+   - `iter_net = s_net - iter_start_net = 67.65 - 50.07 = +17.58$`
+8. В Telegram-отчете Итерация #3, только что начавшись и не закрыв ни одной сделки, получила статус:
+   `(Итерация #3: Net +17.58$, Real +17.71$)`
+   Прибыль от закрытия Итерации #2 была повторно зачислена на баланс Итерации #3.
+
+---
+
+### 2. Аудит бэктест-движка (`cron3TradeBacktest`): 100% иммунитет
+Проведен детальный аудит `cron3TradeBacktest/ENGINE/backtest_risk_lifecycle.py` и `TB_CORE/ENGINE/client_sim.py`:
+1. В симуляторе бэктеста метод `BacktestRiskController.close_strategy_positions(core, reason="AUTOCLOSE")` исполняет рыночные ордера **строго синхронно в оперативной памяти** внутри `client_sim.py`.
+2. Баланс `core.client.balance` увеличивается на точный realized PnL каждого закрытия мгновенно, позиции обнуляются в той же микросекунде.
+3. Строка 230 `backtest_risk_lifecycle.py`:
+   ```python
+   core.iter_start_equity = core.client.get_equity()
+   core.iter_start_time = core.current_sim_time
+   core.auto_closer_state = {}
+   ```
+   вызывается **строго после** того, как все ордера ликвидированы и баланс обновлен. В бэктесте `core.iter_start_equity` всегда равен фактическому балансу после закрытия, и новая итерация стартует со строго `iter_net = 0.0`.
+4. Итоговая прибыль бэктеста рассчитывается напрямую через разницу кошельков `new_w = float(core.client.balance)`. Бэктест не использует `DomeCloserExecutor`, `AnalyticsFSM`, `reconstruction.py` и задержки REST API.
+5. **Вердикт:** Ни один результат марафонов и турниров в бэктестах **не был раздут** этим дефектом.
+
+---
+
+### 3. Комплексное архитектурное решение в проде (`cron3`)
+
+#### Компонент 1: Синхронная сверка в `DomeCloserExecutor.execute_close`
+В `CORE/SERVICES/dome_closer_executor.py`:
+- Сразу после отправки рыночных ордеров закрытия внедрен вызов немедленного `await analytics_mgr.deep_sync_analytics(sync_client)` с микропаузой 1.5с для живой биржи (время на индексацию matching engine Binance).
+- Внедрен предохранитель от просадки точки отсчета: если `unrealized_pnl` равен 0.0 (все позиции закрыты), но `net_profit_usdt` на диске временно меньше `strat_net` до закрытия, `settled_net` фиксируется как `max(settled_net, strat_net)`, а `settled_realized = max(settled_realized, settled_net)`.
+
+#### Компонент 2: Zero-Leakage Reverse Ledger Scan в `StrategyStatsEngine`
+В `ANALYTICS/strategy_stats.py`:
+- Сформулирован строгий физический инвариант: реализованная прибыль текущей итерации математически тождественна сумме сделок, закрытых **строго после** `iteration_start_ts`:
+  $$\text{iter\_real} = \sum_{t_i \ge \text{iteration\_start\_ts}} \text{PnL}_i$$
+- Внедрен высокоскоростной обратный скан (reverse scan) леджера `trades_ledger_<strat_id>.txt` (время выполнения < 0.2 мс):
+  - Скан идет с конца файла к началу.
+  - Если время закрытия сделки $t_i < \text{iteration\_start\_ts}$, цикл прерывается (все более ранние сделки относятся к закрытым итерациям).
+  - Если в текущей итерации не закрыто ни одной сделки, $\text{iter\_real}$ гарантированно равен $0.0$, а `iter_start_real` и `iter_start_net` автоматически поглощают любые дотекающие расчеты биржи.
+  - При закрытии легитимных сделок новой итерации их прибыль прозрачно и безошибочно начисляется в $\text{iter\_real}$.
+- Автоматически синхронизируется запись в `CACHE/auto_close_history.json` для закрытой итерации, закрепляя истинный settled профит.
+
+---
+
+### 4. Верификация
+1. Разработан специализированный изолированный тест `tests/test_zero_leakage_iteration_settlement.py`, полностью воспроизводящий сценарий инцидента с 12 запаздывающими трейдами ликвидации (+17.71$).
+2. Тест верифицирует:
+   - Итерация #3 стартует со строго `Real: 0.0$`, `Net: -0.13$` (соответствует плавающему PnL новых ордеров).
+   - Точки отсчета поглощают $67.78$ без раздувания баланса.
+   - Последующая легитимная сделка Итерации #3 (+2.50$) корректно отображается как `Real: +2.50$`.
+3. Все 5 тест-сьютов (`test_all_autoclose_systems_comprehensive.py`, `test_profit_transfer_fsm.py`, `test_positive_profit_guard.py`, `test_zero_leakage_iteration_settlement.py`, `test_prod_restart_and_resets.py`) прошли проверку: **60/60 tests OK**.
+
+

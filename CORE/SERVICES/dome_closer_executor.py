@@ -3,6 +3,8 @@
 # ROLE: Atomic execution of dome and portfolio auto-closes (positions, cache, analytics, alerts)
 # ============================================================
 
+import asyncio
+import inspect
 import json
 import sys
 import time
@@ -85,6 +87,24 @@ class DomeCloserExecutor:
         else:
             await bot_core.close_strategy_positions(strat_id)
 
+        # 1.2 Немедленная синхронная сверка аналитики после закрытия ордеров (Zero-Leakage Settlement)
+        analytics_mgr = getattr(bot_core, "analytics", None)
+        if analytics_mgr and hasattr(analytics_mgr, "deep_sync_analytics"):
+            sync_client = (
+                bot_core.get_client_for_strategy(strat_id)
+                if hasattr(bot_core, "get_client_for_strategy")
+                else getattr(bot_core, "client", None)
+            )
+            if sync_client:
+                if not getattr(sync_client, "is_simulated", False):
+                    await asyncio.sleep(1.5)  # Задержка на индексацию закрывающих трейдов Binance
+                try:
+                    res = analytics_mgr.deep_sync_analytics(sync_client, getattr(bot_core, "prices", None))
+                    if inspect.isawaitable(res):
+                        await res
+                except Exception as sync_err:
+                    logger.error(f"[DOME_CLOSER_EXECUTOR][{strat_id}] Error in post-close deep_sync: {sync_err}")
+
         # 1.1 Перевод на холостые при аварийном стоп-кране (Basket Equity Cutoff)
         if is_emergency_stop:
             bot_core.is_paused = True
@@ -114,8 +134,16 @@ class DomeCloserExecutor:
         # 3. Чтение свежих данных аналитики после закрытия ордеров
         fresh_analytics = Utils.read_json_file(stats_path) if stats_path.exists() else raw_analytics
         settled_net = round(float(fresh_analytics.get("net_profit_usdt", strat_net)), 4)
-        # При закрытии всех позиций купола плавающий PnL фиксируется, поэтому стартовый realized равен стартовому net
-        settled_realized = settled_net
+        if settled_net < strat_net and abs(float(fresh_analytics.get("unrealized_pnl_usdt", 0.0) or 0.0)) < 1e-4:
+            # Если плавающий PnL уже обнулился на бирже, но закрывающие трейды еще не оприходованы в s_real
+            settled_net = round(float(strat_net), 4)
+
+        settled_realized = round(
+            float(fresh_analytics.get("realized_pnl_net_usdt", fresh_analytics.get("realized_pnl_usdt", settled_net))),
+            4
+        )
+        if settled_realized < settled_net:
+            settled_realized = settled_net
 
         now_ms = int(time.time() * 1000)
         fresh_analytics["iteration_index"] = next_iter_idx

@@ -11,9 +11,11 @@ import csv
 import json
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Dict, Any, Optional
 
 from consts import (
+    ANALYTICS_LEDGERS_DIR,
     ANALYTICS_START_BALANCE_USDT,
     CACHE_DIR,
     FLOAT_ZERO_EPSILON,
@@ -334,9 +336,82 @@ class StrategyStatsEngine:
             fsm_base = float(raw_base) if isinstance(raw_base, (int, float)) else 0.0
             cached_start = float(strat_data.get("iteration_start_net_profit_usdt", iter_cache.get("iteration_start_net_profit_usdt", 0.0)))
             iter_start_net = 0.0 if iter_idx == 1 else max(cached_start, fsm_base)
-
-            iter_net = round(s_net - iter_start_net, 4)
             iter_start_ts = strat_data.get("iteration_start_ts") or iter_cache.get("iteration_start_ts") or first_ts_s
+
+            # --------------------------------------------------------------------------
+            # Zero-Leakage Iteration Settlement Guard:
+            # Предотвращает утечку закрывающих трейдов предыдущей итерации в новую итерацию.
+            # Если сделки в леджере закрыты до iteration_start_ts, они принадлежат прошлой итерации.
+            # --------------------------------------------------------------------------
+            if iter_idx == 1:
+                iter_start_real = 0.0
+                iter_real = s_real
+                iter_net = round(s_net - iter_start_net, 4)
+            else:
+                raw_start_real = strat_data.get("iteration_start_realized_pnl_usdt")
+                if raw_start_real is None:
+                    raw_start_real = iter_cache.get("iteration_start_realized_pnl_usdt")
+
+                current_iter_real = 0.0
+                has_ledger_records = False
+                ledgers_dir = getattr(self.manager, "ledgers_dir", ANALYTICS_LEDGERS_DIR)
+                strat_ledger = ledgers_dir / f"trades_ledger_{strat_id}.txt"
+                target_ledgers = [strat_ledger] if strat_ledger.exists() else [getattr(self.manager, "txt_file", None)]
+
+                for lf in target_ledgers:
+                    if lf and Path(lf).exists():
+                        try:
+                            with open(lf, "r", encoding="utf-8") as f:
+                                lines = [line.strip() for line in f if line.strip()]
+                            if len(lines) > 1:
+                                has_ledger_records = True
+                                for line in reversed(lines[1:]):
+                                    parts = line.split(";")
+                                    if len(parts) >= 6:
+                                        if len(parts) >= 7 and lf != strat_ledger:
+                                            sym = parts[1].strip().upper()
+                                            if sym not in strat_symbols:
+                                                continue
+                                        close_time_str = parts[4].strip() if len(parts) > 6 else parts[3].strip()
+                                        try:
+                                            c_ts = datetime.strptime(close_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc).timestamp() * 1000
+                                        except Exception:
+                                            continue
+                                        if iter_start_ts and c_ts < iter_start_ts:
+                                            break
+                                        pnl_idx = 5 if len(parts) > 6 else 4
+                                        try:
+                                            current_iter_real += float(parts[pnl_idx])
+                                        except (ValueError, TypeError):
+                                            pass
+                                break
+                        except Exception as le_err:
+                            logger.debug(f"[STRATEGY_STATS][{strat_id}] Error scanning ledger: {le_err}")
+
+                if has_ledger_records:
+                    current_iter_real = round(current_iter_real, 4)
+                    iter_real = current_iter_real
+                    iter_start_real = round(s_real - current_iter_real, 4)
+                    iter_net = round(current_iter_real + s_unreal, 4)
+                    iter_start_net = round(s_net - iter_net, 4)
+                    if fsm_obj and hasattr(fsm_obj, "_auto_close_history") and isinstance(fsm_obj._auto_close_history, dict):
+                        hist = fsm_obj._auto_close_history.get(strat_id, [])
+                        for rec in reversed(hist):
+                            if isinstance(rec, dict) and rec.get("iteration_index") == iter_idx - 1:
+                                if rec.get("strat_net") is None or abs(float(rec.get("strat_net", 0.0)) - iter_start_net) > 1e-4:
+                                    rec["strat_net"] = iter_start_net
+                                    rec["settled_realized"] = iter_start_real
+                                break
+                else:
+                    if raw_start_real is None or (float(raw_start_real) > s_real and iter_start_net > 0 and float(raw_start_real) > iter_start_net + 1e-4):
+                        iter_start_real = iter_start_net
+                    else:
+                        iter_start_real = float(raw_start_real)
+                    iter_real = round(s_real - iter_start_real, 4)
+                    iter_net = round(s_net - iter_start_net, 4)
+
+            strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
+            strat_data["iteration_realized_pnl_usdt"] = iter_real
 
             iter_peak_net = float(
                 strat_data.get("iteration_peak_net_profit_usdt")
@@ -358,26 +433,6 @@ class StrategyStatsEngine:
 
             iter_active_h = max(0.05, (now_ms - iter_start_ts) / 3600000.0)
             strat_data["iteration_net_velocity"] = round(iter_net / iter_active_h, 2)
-
-            # Iteration Realized PnL
-            if iter_idx == 1:
-                iter_start_real = 0.0
-            else:
-                raw_start_real = strat_data.get("iteration_start_realized_pnl_usdt")
-                if raw_start_real is None:
-                    raw_start_real = iter_cache.get("iteration_start_realized_pnl_usdt")
-
-                # Защита от десинхронизации: если базовая точка realized PnL отсутствует,
-                # либо превышает текущий s_real из-за закрытия позиций старой итерации,
-                # выравниваем базовую точку по iter_start_net
-                if raw_start_real is None or (float(raw_start_real) > s_real and iter_start_net > 0 and float(raw_start_real) > iter_start_net + 1e-4):
-                    iter_start_real = iter_start_net
-                else:
-                    iter_start_real = float(raw_start_real)
-
-            iter_real = round(s_real - iter_start_real, 4)
-            strat_data["iteration_start_realized_pnl_usdt"] = round(iter_start_real, 4)
-            strat_data["iteration_realized_pnl_usdt"] = iter_real
 
             cur_peak = strat_data.get("peak_net_profit_usdt", 0.0)
             if cur_peak > hist_peak and can_update_strat_peak:
