@@ -39,12 +39,14 @@ class FallbackTpManager:
             return
 
         # 1. Трейлинг Тейк-Профит: проверяем наличие условий трейлинга в tp_map (наличие activation/trailing) или взведенный пол
-        tp_map_vals = (getattr(state, "tp_map", {}) or {}).values()
-        has_trailing_tp = (
-            bool(getattr(state, "trailing_tp_state", {}).get("armed_floor"))
-            or any(isinstance(v, dict) and ("activation" in v or "trailing" in v) for v in tp_map_vals)
-        )
-        if has_trailing_tp:
+        has_trailing_tp = getattr(state, "_has_trailing_tp_cfg", None)
+        if has_trailing_tp is None:
+            tp_map_vals = (getattr(state, "tp_map", {}) or {}).values()
+            has_trailing_tp = any(isinstance(v, dict) and ("activation" in v or "trailing" in v) for v in tp_map_vals)
+            state._has_trailing_tp_cfg = has_trailing_tp
+
+        is_armed_tp = bool(getattr(state, "trailing_tp_state", {}).get("armed_floor"))
+        if is_armed_tp or has_trailing_tp:
             gain_pct = ((current_price - state.avg_entry_price) / state.avg_entry_price * 100.0) if side == "LONG" else ((state.avg_entry_price - current_price) / state.avg_entry_price * 100.0)
             
             active_grid_lvl = RiskCalculatingUtils.get_current_grid_level(state.grid)

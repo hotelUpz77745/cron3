@@ -14,12 +14,14 @@ from consts import _CFG, DEFAULT_GRID_VOLUME_TOLERANCE_PCT
 from CORE.GRID.dynamic_atr_grid import DynamicAtrGridManager
 from CORE.STRATEGY.trailing_system import BaseTrailingSystem
 from CORE.STRATEGY.peeling_manager import PeelingManager
+from CORE.GRID.smart_avg_manager import SmartAvgManager
 
 logger = UnifiedLogger("AvgManager")
 
 class AverageManager:
-    def __init__(self, peeling_manager: Optional[Any] = None):
+    def __init__(self, peeling_manager: Optional[Any] = None, smart_avg_manager: Optional[Any] = None):
         self.peeling_manager = peeling_manager if peeling_manager is not None else PeelingManager()
+        self.smart_avg_manager = smart_avg_manager if smart_avg_manager is not None else SmartAvgManager()
 
     async def process_peel(
         self,
@@ -67,6 +69,21 @@ class AverageManager:
 
         if initial_price <= 0:
             return False # Еще нет цены для расчета
+
+        prices_populated = (
+            getattr(state, "_grid_prices_initialized_for", None) == initial_price
+            and initial_price > 0
+            and all(
+                lvl_d.get("price") is not None
+                for lvl_k, lvl_d in grid.items()
+                if lvl_k != "0"
+                and isinstance(lvl_d, dict)
+                and lvl_d.get("enabled", True) is not False
+                and not lvl_d.get("is_active", False)
+            )
+        )
+        if prices_populated:
+            return True
 
         # 0. Разрешение конфигурации dynamic_atr_grid
         atr_grid_cfg = None
@@ -201,6 +218,7 @@ class AverageManager:
             # Не вызываем save_cache здесь, это будет сделано в sync_with_fsm
             pass
             
+        state._grid_prices_initialized_for = initial_price
         return True # Расчет проведен
 
     async def process(self, client, runtime_manager, symbol: str, side: str, state, opposite_state, current_price: float, spec_data: dict, tp_manager):
@@ -231,7 +249,7 @@ class AverageManager:
 
         # Санитизация взведенных уровней: исполненные (is_active=True) или отключенные (enabled=False) уровни никогда не могут быть взведены
         armed_dict = state.trailing_grid_state.get("armed_levels", {})
-        if isinstance(armed_dict, dict):
+        if isinstance(armed_dict, dict) and armed_dict:
             for lvl_k, lvl_d in grid.items():
                 if isinstance(lvl_d, dict):
                     if lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None or lvl_d.get("is_active"):
@@ -242,31 +260,39 @@ class AverageManager:
                             armed_dict.pop(lvl_k, None)
 
         # 3. Трейлинг оценка сетки через BaseTrailingSystem
-        prev_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys())
+        armed_map = state.trailing_grid_state.get("armed_levels", {}) if hasattr(state, "trailing_grid_state") and isinstance(state.trailing_grid_state, dict) else {}
+        prev_armed = set(armed_map.keys()) if armed_map else None
         candidate_level, skipped_levels, info = BaseTrailingSystem.evaluate_trailing_grid(
             dd_pct, grid, state.trailing_grid_state
         )
-        newly_armed = set(state.trailing_grid_state.get("armed_levels", {}).keys()) - prev_armed
-        for lvl in sorted(newly_armed, key=lambda x: int(x) if x.isdigit() else x):
-            lvl_d = grid.get(lvl, {})
-            raw_act = (
-                lvl_d.get("effective_activation")
-                if lvl_d.get("effective_activation") is not None
-                else (lvl_d.get("super_activation") if lvl_d.get("super_activation") is not None else lvl_d.get("activation"))
-            )
-            raw_flr = (
-                lvl_d.get("effective_indent")
-                if lvl_d.get("effective_indent") is not None
-                else (lvl_d.get("super_indent") if lvl_d.get("super_indent") is not None else lvl_d.get("indent"))
-            )
-            logger.info(
-                f"[{symbol}] {side} ⚡ [GRID TRIGGER ARMED] Level {lvl}: "
-                f"Drawdown {dd_pct:.2f}% >= Trigger {raw_act}% (Waiting for rebound to <= {raw_flr}%)"
-            )
+        curr_armed_map = state.trailing_grid_state.get("armed_levels", {}) if hasattr(state, "trailing_grid_state") and isinstance(state.trailing_grid_state, dict) else {}
+        if curr_armed_map:
+            newly_armed = set(curr_armed_map.keys()) - (prev_armed or set())
+            if newly_armed:
+                for lvl in sorted(newly_armed, key=lambda x: int(x) if x.isdigit() else x):
+                    lvl_d = grid.get(lvl, {})
+                    raw_act = (
+                        lvl_d.get("effective_activation")
+                        if lvl_d.get("effective_activation") is not None
+                        else (lvl_d.get("super_activation") if lvl_d.get("super_activation") is not None else lvl_d.get("activation"))
+                    )
+                    raw_flr = (
+                        lvl_d.get("effective_indent")
+                        if lvl_d.get("effective_indent") is not None
+                        else (lvl_d.get("super_indent") if lvl_d.get("super_indent") is not None else lvl_d.get("indent"))
+                    )
+                    logger.info(
+                        f"[{symbol}] {side} ⚡ [GRID TRIGGER ARMED] Level {lvl}: "
+                        f"Drawdown {dd_pct:.2f}% >= Trigger {raw_act}% (Waiting for rebound to <= {raw_flr}%)"
+                    )
 
         if not candidate_level:
             # Обновляем ориентировочную next_avg_price для мониторинга
-            for lvl_str in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
+            sorted_keys = getattr(state, "_cached_grid_keys", None)
+            if sorted_keys is None or len(sorted_keys) != len(grid):
+                sorted_keys = tuple(sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x))
+                state._cached_grid_keys = sorted_keys
+            for lvl_str in sorted_keys:
                 if lvl_str == "0":
                     continue
                 data = grid[lvl_str]
@@ -277,33 +303,85 @@ class AverageManager:
                     break
             return
 
-        level_data = grid[candidate_level]
         now_sec = self._current_time(runtime_manager)
-        # Защитный кулдаун: если прошлый ордер отклонен (например, Margin Insufficient), не долбим биржу каждую миллисекунду
+
+        level_data = grid[candidate_level]
+        # Защитный кулдаун: если прошлый ордер отклонен или заблокирован Smaragd, не долбим биржу и фильтр на каждом микротике
         if level_data.get("failed_cooldown_until", 0) > now_sec:
             return
 
+        # 3.5. Проверка макро-фильтра Smaragd (Smart Avg)
+        if self.smart_avg_manager:
+            is_blocked, block_reason, trend_val = await self.smart_avg_manager.should_block_averaging(
+                symbol=symbol,
+                side=side,
+                candidate_level=candidate_level,
+                state=state,
+                runtime_manager=runtime_manager,
+                client=client
+            )
+            if is_blocked:
+                # Восстанавливаем статус взведения в trailing_grid_state только для трейлинговых ступеней (activation != None)
+                armed_dict = state.trailing_grid_state.setdefault("armed_levels", {})
+                if candidate_level in grid and isinstance(grid[candidate_level], dict):
+                    if grid[candidate_level].get("activation") is not None:
+                        grid[candidate_level]["is_armed"] = True
+                        armed_dict[candidate_level] = {
+                            "armed_at_drawdown": grid[candidate_level].get("armed_at_drawdown", dd_pct),
+                            "deepest_drawdown": max(grid[candidate_level].get("armed_at_drawdown", dd_pct), dd_pct),
+                        }
+                    # Защитный кулдаун (60 сек): исключает холостой микротиковый цикл при неизменном дневном тренде
+                    grid[candidate_level]["failed_cooldown_until"] = now_sec + 60.0
+                for sk in skipped_levels:
+                    if sk in grid and isinstance(grid[sk], dict):
+                        if grid[sk].get("activation") is not None:
+                            grid[sk]["is_armed"] = True
+                            armed_dict[sk] = {
+                                "armed_at_drawdown": grid[sk].get("armed_at_drawdown", dd_pct),
+                                "deepest_drawdown": max(grid[sk].get("armed_at_drawdown", dd_pct), dd_pct),
+                            }
+                        grid[sk]["failed_cooldown_until"] = now_sec + 60.0
+                sm_cfg = self.smart_avg_manager._resolve_cfg(symbol, side, state, runtime_manager)
+                actual_set = self.smart_avg_manager.parse_actual_levels(sm_cfg.get("actual_levels", "L3-L8") if isinstance(sm_cfg, dict) else "L3-L8")
+                for lk, ld in grid.items():
+                    if str(lk).isdigit() and int(lk) in actual_set and isinstance(ld, dict) and not ld.get("is_active"):
+                        ld["failed_cooldown_until"] = now_sec + 60.0
+                state.next_avg_price = grid.get(candidate_level, {}).get("price")
+                return
+
         # 4. Обработка пропущенных уровней (avg_free_volume_behavior)
         if skipped_levels:
-            behavior = getattr(state, "avg_free_volume_behavior", "distribute_remaining")
+            raw_behavior = getattr(state, "avg_free_volume_behavior", "distribute_skip")
+            if not raw_behavior:
+                raw_behavior = "distribute_skip"
+
+            if raw_behavior in ("distribute_skip", "mark_executed", "skip"):
+                behavior = "mark_executed"
+            elif raw_behavior in ("distribute_nearest", "accumulate_current", "merge"):
+                behavior = "accumulate_current"
+            elif raw_behavior in ("distribute_remaining", "distribute_within_zone"):
+                behavior = "distribute_remaining"
+            else:
+                behavior = raw_behavior
+
             skipped_vol = sum(float(grid[sk].get("volume") or 0.0) for sk in skipped_levels if isinstance(grid.get(sk), dict) and grid[sk].get("enabled", True) is not False)
             for sk in skipped_levels:
                 grid[sk]["is_active"] = True
                 grid[sk]["activated_at"] = now_sec
                 grid[sk]["timestamp"] = int(now_sec * 1000)
                 grid[sk]["_skipped"] = True
-                grid[sk]["_skip_policy"] = behavior
+                grid[sk]["_skip_policy"] = raw_behavior
                 grid[sk]["_skipped_by_level"] = str(candidate_level)
                 if behavior == "mark_executed":
                     grid[sk]["_skip_status"] = "burnt"
                     grid[sk]["_skip_desc"] = (
-                        f"Пропущен и сожжен по политике mark_executed при сработке L{candidate_level} "
+                        f"Пропущен и сожжен по политике mark_executed/distribute_skip при сработке L{candidate_level} "
                         f"(объем сгорел без маржинальной нагрузки)"
                     )
                 elif behavior == "accumulate_current":
                     grid[sk]["_skip_status"] = f"accumulated_into_L{candidate_level}"
                     grid[sk]["_skip_desc"] = (
-                        f"Пропущен, объем перенесен в колено L{candidate_level} (политика accumulate_current)"
+                        f"Пропущен, объем перенесен в колено L{candidate_level} (политика accumulate_current/distribute_nearest)"
                     )
                 elif behavior in ("distribute_remaining", "distribute_within_zone"):
                     grid[sk]["_skip_status"] = "distributed_remaining"
@@ -313,11 +391,11 @@ class AverageManager:
 
             level_data["_skipped_levels_handled"] = list(skipped_levels)
 
-            # Режим 2: accumulate_current — вливаем весь пропущенный объем в ближайший сработавший уровень
+            # Режим 2: accumulate_current (distribute_nearest) — вливаем весь пропущенный объем в ближайший сработавший уровень
             if behavior == "accumulate_current":
                 level_data["volume"] = round(float(level_data.get("volume") or 0.0) + skipped_vol, 4)
                 logger.info(
-                    f"[{symbol}] {side} 📦 [VOLUME ACCUMULATED] "
+                    f"[{symbol}] {side} 📦 [VOLUME ACCUMULATED: distribute_nearest] "
                     f"Added {skipped_vol:.2f}% from skipped levels {skipped_levels} into triggered level {candidate_level} "
                     f"(new vol: {level_data['volume']:.2f}%)"
                 )
@@ -336,7 +414,7 @@ class AverageManager:
                     for rem_lvl in remaining:
                         grid[rem_lvl]["volume"] = round(float(grid[rem_lvl].get("volume") or 0.0) + vol_share, 4)
                     logger.info(
-                        f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: {behavior}] "
+                        f"[{symbol}] {side} 📦 [VOLUME DISTRIBUTED: {raw_behavior}] "
                         f"Distributed {skipped_vol:.2f}% from skipped levels {skipped_levels} across remaining {remaining} "
                         f"(+{vol_share:.2f}% each)"
                     )
@@ -345,10 +423,10 @@ class AverageManager:
                         f"[{symbol}] {side} 📦 [VOLUME CEILING REACHED] "
                         f"Skipped {skipped_levels} at grid ceiling, remaining volume ignored."
                     )
-            # Режим 3: mark_executed — аннулирование объема (пропущенные уровни помечаются исполненными без редистрибуции)
+            # Режим 3: mark_executed (distribute_skip) — аннулирование объема (пропущенные уровни помечаются исполненными без редистрибуции)
             elif behavior == "mark_executed":
                 logger.info(
-                    f"[{symbol}] {side} 📦 [VOLUME BURNT: mark_executed] "
+                    f"[{symbol}] {side} 📦 [VOLUME BURNT: distribute_skip] "
                     f"Skipped levels {skipped_levels} marked executed (volume burnt, no redistribution)."
                 )
 

@@ -174,6 +174,7 @@ class PositionState:
     tp_map: dict = field(default_factory=dict)
     tp_purpose: Optional[str] = None
     avg_free_volume_behavior: Optional[str] = None
+    smaragd: dict = field(default_factory=dict)
     trailing_tp_state: dict = field(default_factory=dict)
     trailing_grid_state: dict = field(default_factory=dict)
     recent_closes: list = field(default_factory=list)
@@ -292,6 +293,7 @@ class PositionState:
             "tp_map": copy.deepcopy(self.tp_map),
             "tp_purpose": self.tp_purpose,
             "avg_free_volume_behavior": getattr(self, "avg_free_volume_behavior", "distribute_remaining"),
+            "smaragd": copy.deepcopy(getattr(self, "smaragd", {})),
             "trailing_tp_state": copy.deepcopy(getattr(self, "trailing_tp_state", {})),
             "trailing_grid_state": copy.deepcopy(getattr(self, "trailing_grid_state", {})),
             "recent_closes": list(getattr(self, "recent_closes", [])),
@@ -339,6 +341,8 @@ class PositionState:
             self.tp_map = copy.deepcopy(data["tp_map"])
         self.tp_purpose = data.get("tp_purpose", "self")
         self.avg_free_volume_behavior = data.get("avg_free_volume_behavior", "distribute_remaining")
+        if "smaragd" in data and isinstance(data["smaragd"], dict):
+            self.smaragd = copy.deepcopy(data["smaragd"])
         if "trailing_tp_state" in data and isinstance(data["trailing_tp_state"], dict):
             self.trailing_tp_state = copy.deepcopy(data["trailing_tp_state"])
         if "trailing_grid_state" in data and isinstance(data["trailing_grid_state"], dict):
@@ -402,6 +406,7 @@ class PositionState:
         self._last_resolved_vol = None
         self._last_resolved_price = None
         self._pending_absorbed_levels = []
+        self._grid_prices_initialized_for = None
         
         # Сбрасываем только рантаймовские поля сетки (price, is_active), сохраняя пользовательские настройки
         for k, v in self.grid.items():
@@ -431,6 +436,7 @@ class PositionState:
             v.pop("_skipped_by_level", None)
             v.pop("_skipped_levels_handled", None)
             v.pop("_absorbed_to_l0", None)
+            v.pop("failed_cooldown_until", None)
             
         # Аналогично для тейк-профитов
         for k, v in self.tp_map.items():

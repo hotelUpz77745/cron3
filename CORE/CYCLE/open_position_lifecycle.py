@@ -42,7 +42,10 @@ class OpenPositionLifecycleHandler:
         sym_client = bot.get_client_for_symbol(symbol)
 
         # 1. Subgrid Peeling
-        has_peel = any(isinstance(v, dict) and v.get("peel_tp_pct") for v in getattr(state, "grid", {}).values())
+        has_peel = getattr(state, "_has_peel_cached", None)
+        if has_peel is None:
+            has_peel = any(isinstance(v, dict) and v.get("peel_tp_pct") for v in getattr(state, "grid", {}).values())
+            state._has_peel_cached = has_peel
         peeled = False
         peel_mgr = getattr(bot, "peeling_manager", None) or getattr(bot.avg_manager, "peeling_manager", None)
         if has_peel and peel_mgr:
@@ -54,13 +57,16 @@ class OpenPositionLifecycleHandler:
         if not peeled:
             # Directional Trend-Gate: Пассивный режим при диспозиции к тренду (заморозка усреднения)
             freeze_averaging = False
-            rm = getattr(bot, "runtime_manager", None)
-            strat = None
-            if rm and getattr(rm, "strategy_registry", None):
-                try:
-                    strat = rm.strategy_registry.get_strategy_for_symbol(symbol)
-                except Exception:
-                    strat = None
+            strat = getattr(state, "_cached_strat", None)
+            if strat is None:
+                rm = getattr(bot, "runtime_manager", None)
+                if rm and getattr(rm, "strategy_registry", None):
+                    try:
+                        strat = rm.strategy_registry.get_strategy_for_symbol(symbol)
+                    except Exception:
+                        strat = None
+                if strat is not None:
+                    state._cached_strat = strat
 
             gate_cfg = getattr(strat, "directional_trend_gate", None) if strat else None
             if gate_cfg and isinstance(gate_cfg, dict) and gate_cfg.get("enabled"):

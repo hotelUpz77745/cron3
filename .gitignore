@@ -22,3 +22,6 @@ CACHE/backups/
 CACHE/equity_snapshots_cache.json
 pyrefly.toml
 
+ANALYTICS/LEDGERS/
+ANALYTICS/STATS/
+

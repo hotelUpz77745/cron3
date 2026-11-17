@@ -414,7 +414,17 @@ class SimulatedBinanceClient:
             return (pos.entry_price - cur_p) * pos.qty
 
     def get_equity(self) -> float:
-        unrealized = sum(self._calc_unrealized_pnl(p) for p in self.positions.values())
+        if not self.positions:
+            return self.balance
+        unrealized = 0.0
+        cur_prices = self.current_prices
+        for pos in self.positions.values():
+            q = pos.qty
+            if q > 0:
+                ep = pos.entry_price
+                if ep > 0:
+                    cp = cur_prices.get(pos.symbol, ep)
+                    unrealized += (cp - ep) * q if pos.position_side == "LONG" else (ep - cp) * q
         return self.balance + unrealized
 
     def get_total_equity(self) -> float:

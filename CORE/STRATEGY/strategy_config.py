@@ -146,6 +146,26 @@ class StrategyConfig:
         self.api_key_name: Optional[str] = rec_res["api_key_name"]
         self.api_secret_name: Optional[str] = rec_res["api_secret_name"]
 
+        # 7. Разрешение Smaragd (Smart Avg) и avg_free_volume_behavior
+        raw_sm = (
+            self.active_settings.get("smaragd")
+            or self.raw_meta.get("smaragd")
+            or self.overrides.get("smaragd")
+            or self.raw_meta.get("smart_avg")
+            or self.overrides.get("smart_avg")
+            or {}
+        )
+        self.smaragd_cfg: Dict[str, Any] = copy.deepcopy(raw_sm) if isinstance(raw_sm, dict) else {}
+
+        raw_vol_beh = (
+            self.active_settings.get("avg_free_volume_behavior")
+            or (self.smaragd_cfg.get("avg_free_volume_behavior") if isinstance(self.smaragd_cfg, dict) else None)
+            or self.raw_meta.get("avg_free_volume_behavior")
+            or self.overrides.get("avg_free_volume_behavior")
+            or "distribute_skip"
+        )
+        self.avg_free_volume_behavior: str = str(raw_vol_beh).strip()
+
     def get_api_credentials(self) -> tuple[str, str]:
         """
         Возвращает (api_key, api_secret) для аккаунта данной стратегии.

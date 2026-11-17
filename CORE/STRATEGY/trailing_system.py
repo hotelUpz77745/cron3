@@ -387,8 +387,13 @@ class BaseTrailingSystem:
         state_trailing["max_drawdown"] = max(state_trailing.get("max_drawdown", 0.0), drawdown_pct)
 
         # Сортируем неисполненные уровни (исключая начальный уровень 0 и отключенные уровни enabled=False)
+        sorted_keys = state_trailing.get("_cached_grid_keys")
+        if sorted_keys is None or len(sorted_keys) != len(grid):
+            sorted_keys = tuple(sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x))
+            state_trailing["_cached_grid_keys"] = sorted_keys
+
         unexecuted_levels = [
-            lvl_str for lvl_str in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x)
+            lvl_str for lvl_str in sorted_keys
             if lvl_str != "0"
             and isinstance(grid.get(lvl_str), dict)
             and not grid[lvl_str].get("is_active")
@@ -429,7 +434,7 @@ class BaseTrailingSystem:
         # Если несколько уровней взведены и готовы, приоритет отдается уровню с более глубоким исполнением
         # (или уровню с наибольшим индексом), чтобы захватить более глубокую просадку.
         candidate_level = None
-        for lvl_str in sorted(unexecuted_levels, key=lambda x: int(x) if x.isdigit() else x, reverse=True):
+        for lvl_str in reversed(unexecuted_levels):
             lvl_data = grid[lvl_str]
             raw_floor = cls._resolve_level_floor(lvl_data)
             if raw_floor is None:
@@ -455,7 +460,7 @@ class BaseTrailingSystem:
 
         # Если трейлинговый отскок не найден, проверяем обычные нетрейлинговые уровни
         if candidate_level is None:
-            for lvl_str in sorted(unexecuted_levels, key=lambda x: int(x) if x.isdigit() else x):
+            for lvl_str in unexecuted_levels:
                 lvl_data = grid[lvl_str]
                 raw_act = cls._resolve_level_activation(lvl_data)
                 if raw_act is None:

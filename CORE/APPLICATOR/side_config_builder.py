@@ -267,10 +267,24 @@ class SideConfigBuilder:
             # 9. Применение avg_free_volume_behavior
             if "avg_free_volume_behavior" in side_dict:
                 side_data["avg_free_volume_behavior"] = side_dict["avg_free_volume_behavior"]
+            elif hasattr(strategy, "avg_free_volume_behavior") and strategy.avg_free_volume_behavior:
+                side_data["avg_free_volume_behavior"] = strategy.avg_free_volume_behavior
             elif hasattr(strategy, "raw_meta") and "avg_free_volume_behavior" in strategy.raw_meta:
                 side_data["avg_free_volume_behavior"] = strategy.raw_meta["avg_free_volume_behavior"]
             elif hasattr(strategy, "overrides") and "avg_free_volume_behavior" in strategy.overrides:
                 side_data["avg_free_volume_behavior"] = strategy.overrides["avg_free_volume_behavior"]
+
+            # 10. Применение smaragd (smart_avg)
+            sm_cfg = (
+                side_dict.get("smaragd")
+                or (getattr(strategy, "raw_meta", {}) or {}).get("smaragd")
+                or (getattr(strategy, "overrides", {}) or {}).get("smaragd")
+                or getattr(strategy, "smaragd_cfg", None)
+                or side_dict.get("smart_avg")
+                or (getattr(strategy, "raw_meta", {}) or {}).get("smart_avg")
+            )
+            if sm_cfg and isinstance(sm_cfg, dict):
+                side_data["smaragd"] = copy.deepcopy(sm_cfg)
 
             side_cfgs[side] = side_data
 

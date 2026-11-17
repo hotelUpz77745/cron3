@@ -178,18 +178,37 @@ class Utils:
 
         return sym
 
-    @staticmethod
-    def get_spec_precisions(symbol_info, symbol):
+    _SPEC_PRECISIONS_CACHE: Dict[str, Optional[Tuple[int, int]]] = {}
+
+    @classmethod
+    def get_spec_precisions(cls, symbol_info, symbol):
+        if not symbol:
+            return None
+        cached = cls._SPEC_PRECISIONS_CACHE.get(symbol)
+        if cached is not None:
+            return cached
         if not symbol_info or not isinstance(symbol_info, dict) or "symbols" not in symbol_info:
             return None
             
-        symbol_data = next((item for item in symbol_info.get("symbols", []) if item.get('symbol') == symbol), None)
+        symbol_data = None
+        for item in symbol_info.get("symbols", []):
+            if item.get('symbol') == symbol:
+                symbol_data = item
+                break
         if not symbol_data:
             return None
 
         filters = symbol_data.get("filters", [])
-        lot_size_filter = next((f for f in filters if f.get("filterType") == "LOT_SIZE"), None)
-        price_filter = next((f for f in filters if f.get("filterType") == "PRICE_FILTER"), None)
+        lot_size_filter = None
+        price_filter = None
+        for f in filters:
+            ft = f.get("filterType")
+            if ft == "LOT_SIZE":
+                lot_size_filter = f
+            elif ft == "PRICE_FILTER":
+                price_filter = f
+            if lot_size_filter and price_filter:
+                break
 
         def count_decimal_places(number_str):
             if number_str and '.' in str(number_str):
@@ -206,7 +225,9 @@ class Utils:
         else:
             price_precision = int(symbol_data.get("pricePrecision", 2))
 
-        return qty_precision, price_precision
+        res = (qty_precision, price_precision)
+        cls._SPEC_PRECISIONS_CACHE[symbol] = res
+        return res
 
     @staticmethod
     def deep_merge(base: dict, update: dict) -> dict:
