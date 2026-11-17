@@ -291,13 +291,33 @@ class BaseRouterHandler:
                             lines.append(f"    ├ Invest: {sz}$ | Lev: {lev}x | {margin}")
                             grid = cfg.get("grid") or {}
                             indents = []
+                            has_super = False
+                            sg_ratio = None
                             for k in sorted(grid.keys(), key=lambda x: int(x) if x.isdigit() else x):
                                 lvl_d = grid[k]
                                 if isinstance(lvl_d, dict) and (lvl_d.get("enabled", True) is False or lvl_d.get("indent") is None):
                                     indents.append("off")
                                 else:
-                                    indents.append(str(lvl_d.get("indent") if isinstance(lvl_d, dict) else lvl_d))
-                            lines.append(f"    ├ Grid: [{', '.join(indents)}]")
+                                    if isinstance(lvl_d, dict):
+                                        s_ind = lvl_d.get("super_indent")
+                                        b_ind = lvl_d.get("indent")
+                                        if s_ind is not None:
+                                            has_super = True
+                                            indents.append(str(round(float(s_ind), 2)))
+                                            if sg_ratio is None and b_ind not in (None, 0, 0.0):
+                                                try:
+                                                    sg_ratio = float(s_ind) / float(b_ind)
+                                                except (ValueError, TypeError, ZeroDivisionError):
+                                                    pass
+                                        else:
+                                            indents.append(str(b_ind))
+                                    else:
+                                        indents.append(str(lvl_d))
+                            if has_super:
+                                ratio_str = f" (x{sg_ratio:.2f})" if sg_ratio is not None else ""
+                                lines.append(f"    ├ ⚡ SuperGrid{ratio_str}: [{', '.join(indents)}]")
+                            else:
+                                lines.append(f"    ├ Grid: [{', '.join(indents)}]")
 
                             tp_map = cfg.get("tp_map") or {}
                             tps = []

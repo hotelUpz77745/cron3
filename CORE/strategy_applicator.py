@@ -274,10 +274,17 @@ class StrategyApplicator:
                     "eff_invest": 0.0
                 })
                 if "grid" in new_side and isinstance(new_side["grid"], dict):
-                    for grid_cfg in new_side["grid"].values():
+                    exist_grid = exist_side.get("grid", {}) if isinstance(exist_side, dict) else {}
+                    preserve_sg = bool(getattr(strategy, "super_grid_enabled", False)) and isinstance(exist_grid, dict)
+                    for g_idx, grid_cfg in new_side["grid"].items():
                         if isinstance(grid_cfg, dict):
                             grid_cfg["is_active"] = False
                             grid_cfg["is_armed"] = False
+                            if preserve_sg and g_idx in exist_grid and isinstance(exist_grid[g_idx], dict):
+                                old_lvl = exist_grid[g_idx]
+                                if old_lvl.get("indent") == grid_cfg.get("indent") and old_lvl.get("super_indent") is not None:
+                                    grid_cfg["super_indent"] = old_lvl.get("super_indent")
+                                    grid_cfg["super_activation"] = old_lvl.get("super_activation")
                             grid_cfg["price"] = None
                             grid_cfg["activated_at"] = None
                             grid_cfg["timestamp"] = None

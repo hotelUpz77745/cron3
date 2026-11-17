@@ -57,38 +57,45 @@ class VolatilityManager:
                                 pass
         return 1.0
 
-    def start(self):
+    def start(self, skip_initial: bool = False):
         if self._task is None or self._task.done():
             self.is_running = True
-            self._task = asyncio.create_task(self._loop())
+            self._task = asyncio.create_task(self._loop(skip_initial=skip_initial))
 
     def stop(self):
         self.is_running = False
         if self._task and not self._task.done():
             self._task.cancel()
 
-    async def _loop(self):
+    def _get_wait_sec(self) -> float:
+        hours_list = []
+        if hasattr(self.bot_core, "strategy_registry"):
+            for scfg in self.bot_core.strategy_registry.active_strategies.values():
+                if scfg.super_grid_enabled:
+                    hours_list.append(scfg.super_grid_cfg.get("update_interval_hours", 24))
+        app_data = Utils.read_json_file(DATA_DIR / "app.json")
+        if app_data and "super_grid" in app_data:
+            hours_list.append(app_data["super_grid"].get("update_interval_hours", 24))
+        interval_hours = min(hours_list) if hours_list else 24
+        return max(3600, interval_hours * 3600)
+
+    async def _loop(self, skip_initial: bool = False):
         logger.info("[VolatilityManager] Started background loop.")
+        first_run = True
         while self.is_running:
+            if first_run and skip_initial:
+                first_run = False
+                await asyncio.sleep(self._get_wait_sec())
+                continue
+            first_run = False
             try:
                 await self.process_all()
             except Exception as e:
                 logger.error(f"[VolatilityManager] Error in loop: {e}")
-            
-            # Wait for next update interval from strategy domes
-            hours_list = []
-            if hasattr(self.bot_core, "strategy_registry"):
-                for scfg in self.bot_core.strategy_registry.active_strategies.values():
-                    if scfg.super_grid_enabled:
-                        hours_list.append(scfg.super_grid_cfg.get("update_interval_hours", 24))
-            app_data = Utils.read_json_file(DATA_DIR / "app.json")
-            if "super_grid" in app_data:
-                hours_list.append(app_data["super_grid"].get("update_interval_hours", 24))
-            interval_hours = min(hours_list) if hours_list else 24
-            wait_sec = max(3600, interval_hours * 3600)
-            await asyncio.sleep(wait_sec)
 
-    async def process_all(self):
+            await asyncio.sleep(self._get_wait_sec())
+
+    async def process_all(self, force: bool = False):
         app_data = Utils.read_json_file(DATA_DIR / "app.json")
         symbols = list(self.bot_core.symbols)
         if not symbols:
@@ -97,7 +104,7 @@ class VolatilityManager:
         stats_output = {}
 
         for symbol in symbols:
-            if not self.is_running:
+            if not force and not self.is_running:
                 break
 
             # Resolve super_grid config for this coin's strategy dome

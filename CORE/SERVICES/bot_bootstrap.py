@@ -63,19 +63,20 @@ class BotBootstrapService:
         if created_new and not TG_ENABLED:
             prompt_runtime_check()
 
-        # Первый расчет волатильности
-        if bot_core.volatility_manager:
-            try:
-                await bot_core.volatility_manager.process_all()
-            except Exception as e:
-                logger.error(f"Error during initial VolatilityManager process_all: {e}")
-            bot_core.volatility_manager.start()
-
+        # Синхронизация рантаймов с боевым паспортом ДО расчета SuperGrid
         if bot_core.strategy_registry:
             try:
                 StrategyApplicator().build_all_runtimes(bot_core.strategy_registry)
             except Exception as e:
                 logger.warning(f"[BotBootstrap] Startup StrategyApplicator sync warning: {e}")
+
+        # Первый расчет волатильности (SuperGrid super_indent) строго ДО старта торгов и чтения кэшей
+        if bot_core.volatility_manager:
+            try:
+                await bot_core.volatility_manager.process_all(force=True)
+            except Exception as e:
+                logger.error(f"Error during initial VolatilityManager process_all: {e}")
+            bot_core.volatility_manager.start(skip_initial=True)
 
         bot_core.runtime_manager.load_initial_caches(bot_core.symbols)
         bot_core.runtime_configs = bot_core.runtime_manager.caches
