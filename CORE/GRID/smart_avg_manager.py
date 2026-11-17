@@ -171,22 +171,23 @@ class SmartAvgManager:
 
         side_u = str(side).upper().strip()
         trend_u = str(trend_state).upper().strip()
+        tf = str(trend_cfg.get("timeframe", "1d")).strip()
 
         # Применение матрицы решений
         if side_u == "SHORT":
             if trend_u == "UP":
-                self._record_block(symbol, side_u, lvl_idx, trend_u)
-                return True, f"SHORT averaging L{lvl_idx} blocked by hostile 1d EMA trend ({trend_u})", trend_u
+                self._record_block(symbol, side_u, lvl_idx, trend_u, tf)
+                return True, f"SHORT averaging L{lvl_idx} blocked by hostile {tf} EMA trend ({trend_u})", trend_u
             return False, f"SHORT averaging L{lvl_idx} allowed on {trend_u} trend", trend_u
         elif side_u == "LONG":
             if trend_u == "DOWN":
-                self._record_block(symbol, side_u, lvl_idx, trend_u)
-                return True, f"LONG averaging L{lvl_idx} blocked by hostile 1d EMA trend ({trend_u})", trend_u
+                self._record_block(symbol, side_u, lvl_idx, trend_u, tf)
+                return True, f"LONG averaging L{lvl_idx} blocked by hostile {tf} EMA trend ({trend_u})", trend_u
             return False, f"LONG averaging L{lvl_idx} allowed on {trend_u} trend", trend_u
 
         return False, f"unknown_side_{side_u}", trend_u
 
-    def _record_block(self, symbol: str, side: str, lvl_idx: int, trend_u: str) -> None:
+    def _record_block(self, symbol: str, side: str, lvl_idx: int, trend_u: str, tf: str = "1d") -> None:
         """Регистрирует статистику блокировки и логирует с троттлингом (не чаще 1 раза в минуту)."""
         self.stats["total_blocks"] += 1
         sym_key = f"{symbol}:{side}"
@@ -201,7 +202,7 @@ class SmartAvgManager:
             self._last_logged[throttle_key] = now_ts
             logger.info(
                 f"[{symbol}] {side} 🛑 [SMARAGD BLOCKED] Averaging L{lvl_idx} suppressed "
-                f"by hostile 1d EMA trend ({trend_u})"
+                f"by hostile {tf} EMA trend ({trend_u})"
             )
 
     def get_telemetry(self) -> Dict[str, Any]:

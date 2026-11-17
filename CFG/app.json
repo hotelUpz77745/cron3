@@ -41,8 +41,8 @@
     "active_strategies": {
         "_comment_invest_size_rules": "ПРАВИЛА НАСТРОЙКИ СТОРОН И ИНВЕСТИЦИЙ: 1) 'enabled': true/false на уровне стороны (LONG/SHORT) полностью включает/отключает вход в новые позиции по этой стороне. 2) 'default_invest_size' — базовый размер инвестиции в USDT для всех монет корзины. 3) 'invest_size': {} — словарь индивидуальных переопределений для конкретных монет. Если монета не указана в 'invest_size' (или словарь пуст {}), автоматически применяется 'default_invest_size'.",
         "u96_omni_zenith13__trailing_ratchet": {
-            "_comment_alias": "🥉 U96: Omni Zenith 13 [Min TP 1.0% | Multiplied TPs x1.3 | L3+ 50% Recycler | Trailing Ratchet]",
-            "template": "u96_omni_zenith13",
+            "_comment_alias": "🥇 U96: Omni Major-13 [Classic TPs | SuperGrid 1.6x | ATR ON | Recycler V2 | Smaragd 1h Rem]",
+            "template": "u96_omni_major13",
             "enabled": true,
             "api_key_name": "API_KEY",
             "api_secret_name": "API_SECRET",
@@ -62,25 +62,27 @@
             },
             "LONG": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 1000.0,
                 "invest_size": {
-                    "BEAMXUSDT": 600.0,
-                    "LITUSDT": 600.0,
-                    "VVVUSDT": 600.0,
-                    "ZROUSDT": 400.0
+                    "BEAMXUSDT": 1000.0,
+                    "JUPUSDT": 1000.0,
+                    "LITUSDT": 1000.0,
+                    "VVVUSDT": 700.0,
+                    "ZROUSDT": 1000.0
                 }
             },
             "SHORT": {
                 "enabled": true,
-                "default_invest_size": 400.0,
+                "default_invest_size": 1000.0,
                 "invest_size": {
-                    "BEAMXUSDT": 600.0,
-                    "LITUSDT": 600.0,
-                    "VVVUSDT": 600.0,
-                    "ZROUSDT": 400.0
+                    "BEAMXUSDT": 1000.0,
+                    "JUPUSDT": 1000.0,
+                    "LITUSDT": 1000.0,
+                    "VVVUSDT": 700.0,
+                    "ZROUSDT": 1000.0
                 }
             },
-            "start_balance_usdt": 505.0
+            "start_balance_usdt": 1050.0
         }
     },
     "telegram": {
