@@ -404,3 +404,17 @@
    * Проверить поведение `BacktestVolatilityManager.update_daily()` для молодых монет (менее 12 недель истории перед `anchor_ts`), таймзонные сдвиги UTC vs local time при вычислении границ суток и пересчёт уровней сетки, если позиция перешла через полночь.
 6. **Жёсткая ротация в 100% кэш vs непрерывный мульти-декадный портфель ([`select_180d_quants.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CACHE/select_180d_quants.py) / [`run_alpha_180d_marathon.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/run_alpha_180d_marathon.py)):**
    * Проверка «эффекта обнуления на ротации»: принудительная ликвидация всех позиций в кэш каждые 10 дней скрывает риск затяжного переноса токсичных монет через месяц (как в живом непрерывном боте без жёсткой ротации) и создаёт искусственные точки закрытия. Нужно прогнать контрольный тест с **мягкой ротацией (доведение открытых позиций без новых входов)** + добавить стресс-прогон `slippage = 0.05%–0.10%`.
+
+---
+
+### 7. Перетест `Smaragd 1d` (Zero-Lookahead, 180 дней, `chronos_exit = 8.0`) — 2026-11-18
+* **Отчёт:** [`alpha_180d_zero_lookahead_smaragd_1d.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_smaragd_1d.json) (`18` декад, `72` монеты, старт `$1,435.0`, инвест `$1,200.0`, `20x`, `slippage = 0.01%`, `shift_interval_sec = 13`).
+* **Результаты (vs `1h` Smaragd из [`alpha_180d_zero_lookahead_3way.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_3way.json)):**
+  * `major13_smaragd725_1d`: **$7,144.75** (`+$5,709.75`, `+397.9%`), MaxDD **$720.01**, Calmar **7.93x**, `14/18` плюс, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18). Против `1h` (`$4,158.91`, MaxDD `$1,990.53`, Calmar `1.37x`) — кратный рост прибыли и снижение просадки в ~2.8 раза.
+  * `major13_smaragd1030_1d`: **$6,925.47** (`+$5,490.47`, `+382.6%`), MaxDD **$706.41**, Calmar **7.77x**, `15/18` плюс, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18).
+  * `zenith13_clean_baseline` (Clean, Smaragd OFF, `chronos_exit = 8.0`): **$6,885.76** (`+$5,450.76`, `+379.8%`), MaxDD **$526.77**, Calmar **10.35x**, `15/18` плюс, **0 SL-130%** (выше чем при `chronos_exit = 4.0`: `$6,724.64` / MaxDD `$526.77`).
+  * `zenith13_smaragd725_1d`: **$5,341.39** (`+$3,906.39`, `+272.2%`), MaxDD **$527.27**, Calmar **7.41x**, `15/18` плюс, **1 SL-130%** (`OGNUSDT` D18).
+  * `zenith13_smaragd1030_1d`: **$5,187.21** (`+$3,752.21`, `+261.5%`), MaxDD **$568.01**, Calmar **6.61x**, `16/18` плюс, **1 SL-130%** (`OGNUSDT` D18). (Против `1h` `$3,460.10`, MaxDD `$1,236.44`, Calmar `1.64x`).
+* **Инженерный вывод:**
+  1. На `Zenith-13` подключение `Smaragd 1d` (как `7/25`, так и `10/30`) по-прежнему **ухудшает итог** на `~$1.54k–$1.70k`, снижает Calmar (`7.41x`/`6.61x` против **10.35x**) и приносит `1` SL-130% против `0` у чистого `Zenith-13`. Решение держать `smaragd.enabled = false` на прод-ветке Zenith-13 полностью подтверждено.
+  2. На `Major-13` переход на `Smaragd 1d` радикально лечит поведение против `1h` и слегка обходит чистый `Zenith-13` по абсолютному балансу (`$7,144.75` vs `$6,885.76`), но ценой более глубокой просадки (`$720.01` vs `$526.77`), худшего Calmar (`7.93x` vs `10.35x`) и **2 стоп-лоссов `-130%`** (`MUSDT`, `OGNUSDT`).
