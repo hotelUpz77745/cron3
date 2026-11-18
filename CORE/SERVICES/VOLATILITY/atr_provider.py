@@ -94,6 +94,12 @@ class ATRProvider:
                 highs = [float(k.get("high", 0.0)) for k in klines]
                 lows = [float(k.get("low", 0.0)) for k in klines]
                 closes = [float(k.get("close", 0.0)) for k in klines]
+                if not any(h > 0.0 for h in highs) or not any(l > 0.0 for l in lows):
+                    logger.debug(
+                        f"[ATRProvider] [{symbol}] Close-only klines without OHLC high/low, "
+                        f"using fallback {fallback_atr_pct:.2f}%"
+                    )
+                    return fallback_atr_pct
 
                 from CORE.STRATEGY.CPP.native_indicators import NATIVE_INDICATORS
                 raw_atr_pct = NATIVE_INDICATORS.atr_pct_sma(highs, lows, closes, period)

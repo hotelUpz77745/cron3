@@ -5,7 +5,7 @@
 
 import asyncio
 import time
-from typing import Optional, Any
+from typing import Optional, Any, Dict
 from c_log import UnifiedLogger
 from CORE._utils import TradeMath
 from c_utils import Utils
@@ -350,7 +350,11 @@ class AverageManager:
                 return
 
         # 4. Обработка пропущенных уровней (avg_free_volume_behavior)
+        pre_skip_snapshot: Optional[Dict[str, Dict[str, Any]]] = None
         if skipped_levels:
+            pre_skip_snapshot = {
+                str(k): dict(v) for k, v in grid.items() if isinstance(v, dict)
+            }
             raw_behavior = getattr(state, "avg_free_volume_behavior", "distribute_skip")
             if not raw_behavior:
                 raw_behavior = "distribute_skip"
@@ -503,19 +507,39 @@ class AverageManager:
         # 6. Асинхронно ставим ордер и ждем завершения полного пайплайна
         try:
             await self._execute_averaging_order(
-                client, runtime_manager, symbol, side, candidate_level, level_data, current_price, spec_data, state, opposite_state, tp_manager
+                client, runtime_manager, symbol, side, candidate_level, level_data, current_price, spec_data, state, opposite_state, tp_manager,
+                pre_skip_snapshot=pre_skip_snapshot, grid=grid,
             )
         except Exception as e:
             logger.error(f"[{symbol}] {side} Critical error during averaging execution: {e}", exc_info=True)
-            level_data["is_active"] = False
-            level_data["timestamp"] = None
-            level_data["failed_cooldown_until"] = self._current_time(runtime_manager) + 30.0
+            self._rollback_failed_grid_step(grid, level_data, pre_skip_snapshot, self._current_time(runtime_manager))
             raise
         finally:
             state.pending_avg = False
             state.next_avg_price = None
 
-    async def _execute_averaging_order(self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager):
+    @staticmethod
+    def _rollback_failed_grid_step(
+        grid: Optional[Dict[str, Any]],
+        level_data: Dict[str, Any],
+        pre_skip_snapshot: Optional[Dict[str, Dict[str, Any]]],
+        now_sec: float,
+    ) -> None:
+        """Откатывает мутации пропущенных уровней и объемов при сбое маржинального ордера."""
+        if pre_skip_snapshot and isinstance(grid, dict):
+            for lvl_k, snap_v in pre_skip_snapshot.items():
+                if lvl_k in grid and isinstance(grid[lvl_k], dict):
+                    grid[lvl_k].clear()
+                    grid[lvl_k].update(snap_v)
+        level_data["is_active"] = False
+        level_data["timestamp"] = None
+        level_data["failed_cooldown_until"] = now_sec + 30.0
+
+    async def _execute_averaging_order(
+        self, client, runtime_manager, symbol, side, level_str, level_data, current_price, spec_data, state, opposite_state, tp_manager,
+        pre_skip_snapshot: Optional[Dict[str, Dict[str, Any]]] = None,
+        grid: Optional[Dict[str, Any]] = None,
+    ):
         side_c = {}
         if runtime_manager and hasattr(runtime_manager, "caches") and symbol in runtime_manager.caches:
             side_c = runtime_manager.caches[symbol].get(side, {})
@@ -555,11 +579,9 @@ class AverageManager:
         if not res.success:
             logger.error(f"[{symbol}] Failed to open {side} averaging position: {res.error_msg}")
             # Rollback in case of failure
-            level_data["is_active"] = False
-            level_data["timestamp"] = None
+            self._rollback_failed_grid_step(grid, level_data, pre_skip_snapshot, self._current_time(runtime_manager))
             state.pending_avg = False
             state.next_avg_price = None
-            level_data["failed_cooldown_until"] = self._current_time(runtime_manager) + 30.0
             return
 
         level_data.pop("failed_cooldown_until", None)

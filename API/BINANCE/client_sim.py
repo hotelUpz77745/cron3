@@ -97,6 +97,7 @@ class SimulatedBinanceClient:
         # Статистика портфеля
         self.total_fees_paid: float = 0.0
         self.peak_balance: float = float(start_balance_usdt)
+        self.lowest_total_equity: float = float(start_balance_usdt)
         self.max_drawdown_usdt: float = 0.0
         self.trade_fills_count: int = 0
         self.spot_balance: float = 0.0
@@ -328,12 +329,18 @@ class SimulatedBinanceClient:
             self.liquidation_guard.evaluate_and_liquidate(self, timestamp_ms)
 
         if self.open_orders or self._has_active_positions:
-            cur_total_equity = self.get_total_equity()
-            if cur_total_equity > self.peak_balance:
-                self.peak_balance = cur_total_equity
-            dd = self.peak_balance - cur_total_equity
-            if dd > self.max_drawdown_usdt:
-                self.max_drawdown_usdt = dd
+            self._update_equity_watermark()
+
+    def _update_equity_watermark(self) -> float:
+        cur_total_equity = self.get_total_equity()
+        if cur_total_equity > self.peak_balance:
+            self.peak_balance = cur_total_equity
+        if cur_total_equity < self.lowest_total_equity:
+            self.lowest_total_equity = cur_total_equity
+        dd = self.peak_balance - cur_total_equity
+        if dd > self.max_drawdown_usdt:
+            self.max_drawdown_usdt = dd
+        return cur_total_equity
 
     def _execute_fill(self, order: SimOrder, fill_price: float, fill_ts: int) -> Tuple[bool, Optional[str]]:
         pos = self._get_position(order.symbol, order.position_side)
@@ -395,13 +402,7 @@ class SimulatedBinanceClient:
             except Exception as e:
                 logger.error(f"[SimulatedBinanceClient] on_fill_callback error: {e}")
 
-        cur_total_equity = self.get_total_equity()
-        if cur_total_equity > self.peak_balance:
-            self.peak_balance = cur_total_equity
-        dd = self.peak_balance - cur_total_equity
-        if dd > self.max_drawdown_usdt:
-            self.max_drawdown_usdt = dd
-
+        self._update_equity_watermark()
         return True, None
 
     def _calc_unrealized_pnl(self, pos: SimPosition) -> float:
@@ -500,8 +501,8 @@ class SimulatedBinanceClient:
         )
 
     def get_performance_stats(self) -> Dict[str, Any]:
+        total_equity = self._update_equity_watermark()
         futures_equity = self.get_equity()
-        total_equity = self.get_total_equity()
         realized_pnl = (self.balance + self.spot_balance) - self.initial_balance
         floating_pnl = futures_equity - self.balance
         net_profit = total_equity - self.initial_balance
@@ -521,6 +522,7 @@ class SimulatedBinanceClient:
             "equity": round(total_equity, 2),
             "futures_equity": round(futures_equity, 2),
             "peak_balance": round(self.peak_balance, 2),
+            "lowest_equity": round(self.lowest_total_equity, 4),
             "net_profit": round(net_profit, 2),
             "roi_pct": round(roi_pct, 2),
             "max_drawdown_usdt": round(self.max_drawdown_usdt, 2),

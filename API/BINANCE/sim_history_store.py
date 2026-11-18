@@ -119,7 +119,8 @@ class SimHistoricalDataStore:
         if not cls._precomputed_atr or not cur_sim_time_ms:
             return None
         tf = str(timeframe).lower().strip()
-        bucket_ts = (int(cur_sim_time_ms) // 3600000) * 3600000
+        # Look up the last COMPLETED closed 1h bar strictly before cur_sim_time_ms (Zero-Lookahead).
+        bucket_ts = ((int(cur_sim_time_ms) // 3600000) * 3600000) - 3600000
         sym_u = symbol.upper().strip()
 
         key_p = f"{sym_u}|{tf}_{period}|{bucket_ts}"
@@ -143,7 +144,8 @@ class SimHistoricalDataStore:
         ts_ms = int(cur_sim_time) if cur_sim_time > 1e11 else int(cur_sim_time * 1000)
         tf = timeframe.lower()
         bin_ms = 86400000 if "1d" in tf else (14400000 if "4h" in tf else 3600000)
-        bin_ts = (ts_ms // bin_ms) * bin_ms
+        # Look up the last COMPLETED closed bar strictly before ts_ms (Zero-Lookahead).
+        bin_ts = ((ts_ms // bin_ms) * bin_ms) - bin_ms
         suffix = "_7_25" if (sma_fast == 7 and sma_slow == 25) else ""
         key = f"{symbol.upper().strip()}|{timeframe}{suffix}|{bin_ts}"
         return cls._precomputed_trends.get(key)

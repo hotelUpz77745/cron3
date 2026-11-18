@@ -300,4 +300,74 @@
 | **Нагрузка на API и ордера** | **42,948 сделок** | 56,611 ... 61,360 сделок | 🥇 **Major-13** (-18,000 лишних сделок) |
 | **Адаптивность к рынку** | **Динамическая** (ATR + Recycler v2) | Статическая | 🥇 **Major-13** |
 
-> **Финальное резюме:** Разница в просадке между ними составляет всего **~$178** (при капитале $1,435 и сайзе $1,200 обе стратегии абсолютно безопасны и далеки от ликвидации). Но взамен этой символической дельты риска **Major-13 приносит на +$1,516 больше чистых денег**, делает на 18 тысяч меньше сделок и сберегает более $600 на комиссиях. **Major-13 — флагман №1.**
+> **⚠️ ВНИМАНИЕ (Аудит 2026-11-18):** Таблицы и выводы разделов 1–5 выше получены **ДО** исправления багов бэктестера (в т.ч. lookahead-подглядывания на +1h/+4h/+24h и сброса сквозной MaxDD между декадами) и **требуют пересчета** на исправленном движке Zero-Lookahead!
+
+---
+
+## 🔍 Форензик-аудит бэктестера и исправленные баги (2026-11-18)
+
+Поводом стал разбор таблицы `Classic (zenith13 + Smaragd 10/30)` (18/18 плюсовых декад, худшая `+$18.26`, при общей `Max DD $610.95`):
+* **Декада 10** в [`alpha_180d_smaragd1030_matrix.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_smaragd1030_matrix.json): старт `$4,370.19` → пик `$4,534.83` → просадка внутри `$184.05` → закрытие 10-го дня `$4,388.44` (`+$18.26`).
+* **Декада 18**: старт `$6,956.05` → пик `$7,112.64` → плавающая просадка внутри декады `-$610.95` (8.8% от раздутого депозита при фиксированном сайзе `$1,200`) → отскок к закрытию в `+$136.58`.
+* **Главная причина неправдоподобного «безубыточного» результата 18/18:** баги симулятора (в первую очередь **Lookahead Bias** в прекомпиляторе трендов/ATR) + фикс-сайз на выросшем капитале без пересчета риска.
+
+### 1. Исправленные кодовые баги (5 фиксов)
+
+1. **[КРИТИЧНЫЙ] Lookahead Bias в `get_precomputed_trend()` (+1h / +4h / +24h в будущее)**
+   * **Файл:** [`sim_history_store.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/sim_history_store.py#L134-L152) и [`indicator_precomputer.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/TB_CORE/DATA/indicator_precomputer.py#L212-L298).
+   * **Причина:** `IndicatorPrecomputer` считал EMA/ATR с использованием `close` (и `high`/`low`) свечи, но сохранял под ключом `open_time`. При чтении `get_precomputed_trend()` вычислял `bin_ts = (ts_ms // bin_ms) * bin_ms` без сдвига на прошлую закрытую свечу. В `10:00:01` Smaragd 1h видел тренд закрытия `10:59:59`, а 1d — закрытие суток `23:59:59`.
+   * **Исправление:** `bin_ts = ((ts_ms // bin_ms) * bin_ms) - bin_ms` — чтение строго **последней полностью закрытой свечи**.
+   * *Примечание:* чистый `u96_omni_zenith13` (`smaragd=false`, `dynamic_atr=false`, `super_grid=false`) этим багом затронут не был (у него 3 минусовые декады D4/D9/D10 и MaxDD `$526.77`).
+
+2. **[КРИТИЧНЫЙ] Lookahead Bias в `get_precomputed_atr()` (+1h) и баг close-only fallback в `ATRProvider`**
+   * **Файлы:** [`sim_history_store.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/sim_history_store.py#L112-L132), [`atr_provider.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/SERVICES/VOLATILITY/atr_provider.py#L94-L103).
+   * **Причина:** аналогичное чтение незакрытой 1h-свечи без `- 3600000`; при кэш-миссе (например, 1-й час декады) `SimHistoricalDataStore.get_klines` возвращал свечи только с `close` (без `high`/`low`), и `ATRProvider` подставлял `0.0`, получая ложный ATR ~100%.
+   * **Исправление:** сдвиг `bucket_ts = ((cur_sim_time_ms // 3600000) * 3600000) - 3600000`; в `ATRProvider` добавлен явный guard на close-only свечи → безопасный возврат `fallback_atr_pct`.
+
+3. **[ВЫСОКИЙ] Сброс глобального пика Max Drawdown на границах декад**
+   * **Файлы:** [`client_sim.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/client_sim.py#L97-L102), [`run_alpha_180d_marathon.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/run_alpha_180d_marathon.py#L438-L450).
+   * **Причина:** `c_stat["max_drawdown_usdt"] = max(dec_dd)` сбрасывал `peak_balance` в начале каждой 10-дневной декады до стартового баланса этой декады, скрывая сквозную просадку через 2+ подряд идущих слабых декад (например, у `zenith13` на стыке D8→D10 сквозная просадка достигала ~$476 при по-декадных ~$315/$276).
+   * **Исправление:** `SimulatedBinanceClient` отслеживает `lowest_total_equity` (`_update_equity_watermark()`) на каждом тике, филле и закрытии; марафон ведет точный `global_peak_wealth` с учетом спот-выводов (`cumulative_spot`) и считает `max(dec_dd, prev_global_peak - dec_low_wealth)`.
+
+4. **[СРЕДНИЙ] Пропуск полуночного обновления SuperGrid внутри ценового коридора**
+   * **Файл:** [`corridor_calculator.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/ENGINE/corridor_calculator.py#L250-L261).
+   * **Причина:** при `has_sim_hourly_bars=True` и включенном `super_grid_enabled=True` сканер коридоров не ограничивал `max_valid_t` следующими сутками UTC `00:00`, поэтому пересчет дневной волатильности мог откладываться до выхода цены из коридора.
+   * **Исправление:** добавлено ограничение `next_day_t = ((int(now) // 86400) + 1) * 86400.0` при `super_grid_enabled=True`.
+
+5. **[СРЕДНИЙ] Неполный откат пропущенных уровней сетки в `AverageManager` при ошибке маржинального ордера**
+   * **Файл:** [`avg_manager.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/GRID/avg_manager.py#L352-L590).
+   * **Причина:** при `distribute_remaining` / `accumulate_current` (и `distribute_skip`) мутации `skipped_levels` и редистрибуция объемов применялись до вызова `client.make_order()`, а при отказе (`Insufficient margin` / exception) сбрасывался только целевой уровень `level_data["is_active"] = False` без отката пропущенных ступеней и объемов (повторная попытка дважды накидывала объем).
+   * **Исправление:** добавлен снимок `pre_skip_snapshot` и метод `_rollback_failed_grid_step`, полностью восстанавливающий состояние сетки при `not res.success` или исключении.
+
+### 2. Системные допущения симулятора (учитывать при интерпретации)
+* **Отсутствие Funding Rate (8h):** удержание зависших позиций по несколько суток не списывает/не начисляет фандинг Binance Futures (на мем/альт-коинах при экстремальном перекосе это может давать ±0.1–0.5% в сутки).
+* **Исполнение лимиток по касанию (`order.price`) без очереди стакана (`L1/L2`):** Maker Take-Profit (0.02%) считается исполненным в момент касания первого тика на 100% объема без частичных заливок.
+* **Низкое дефолтное проскальзывание `MARKET` (0.01% = 1 bps):** для щиткоинов с тонким стаканом (`BEAMX`, `VVV`, `SIREN`) реальный спред + проскальзывание на пачке ордеров часто выше (`0.05%–0.15%`).
+* **Фиксированный сайз `$1,200` без компаундинга:** просадка в долларах на $7k баланса в поздних декадах в % выглядит существенно меньше стартового риска (`$526 / $1,435 = 36.7%`).
+* **0 мс сетевой задержки и идеализированная ротация в кэш** раз в 10 дней.
+
+### 3. Уборка и статус боевого прода
+* В `cron3TradeBacktest/REPORTS/` удалены **112 старых отчетов** со временем изменения до `2026-11-05` (оставлены **155 актуальных файлов** от `2026-11-05` и новее — старые матрицы сохранены как архив с пометкой Pre-Zero-Lookahead до завершения перетестов).
+* **Прод (`cron3`, ветка `stivenson`, коммит `0e08c1c`):** по [`app.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/app.json#L43-L88) + [`u96_omni_zenith13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_zenith13.json#L856-L875) запущена стратегия **`u96_omni_zenith13`** (`super_grid: false`, `dynamic_atr_grid: false`, `shift_interval_sec: [11, 15]`), **НО** с коммита `183796a` (`smaragd true`) в ней **включен `smaragd.enabled: true`** (`1h EMA 10/30`, `L3–L8`).
+  * Технически: боевой клиент `client_prod.py` не использует `SimHistoricalDataStore` и не заглядывает в будущее (`MomentumEngine` запрашивает живые свечи биржи).
+  * Фикс неполного отката в [`avg_manager.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/GRID/avg_manager.py#L522-L586) защищает от двойного накопления объема пропущенных ступеней при отказе маржинального ордера; для доставки фикса на прод потребуется плановый перезапуск.
+  * **Стратегически важно:** так как `smaragd.enabled: true` включался на проде по результатам прежних тестов (содержавших +1h lookahead-баг), решение оставить `smaragd: true` или выключить его нужно проверить честным Zero-Lookahead перетестом (`zenith13 + Smaragd 10/30 1h` vs чистый `zenith13`).
+* **Перед перетестом `u96_omni_major13`:** синхронизировать зеркало [`cron3TradeBacktest/CFG/universes/u96_omni_major13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CFG/universes/u96_omni_major13.json) с [`cron3/CFG/universes/u96_omni_major13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_major13.json) (отличаются по `shift_interval_sec`: `[11, 15]` vs `13`).
+* **Регрессионный тест:** добавлен [`test_backtest_bugfixes_zero_lookahead.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/tests/test_backtest_bugfixes_zero_lookahead.py) (6/6 OK).
+
+---
+
+### 4. Честный перетест Zero-Lookahead (180 дней, 72 монеты, 18 декад)
+
+Полный прогон (отчёт: [`alpha_180d_zero_lookahead_3way.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_3way.json), старт `$1,435.0`, инвест `$1,200.0`, 20x, slippage `0.01%`, `shift_interval_sec = 13`):
+
+| Стратегия | Итог Wallet | Чистая приб. | ROI | Сквозная Max DD | Calmar | Плюс. декад | Худшая декада | SL (130%) | Комиссии | Сделок |
+|---|---:|---:|---:|---:|---:|:---:|---:|:---:|---:|---:|
+| 🥇 **`zenith13_clean`** (`smaragd: false`) | **`$6,724.64`** | **`+$5,289.64`** | **+368.6%** | **`$526.77`** | **10.04** | **15 / 18** | **-$158.66** (D9) | **0** | `$2,510.59` | 61,360 |
+| 🥈 **`major13_smaragd725`** (`Smaragd 7/25 + DynATR + SG`) | `$4,158.91` | `+$2,723.91` | +189.8% | `$1,990.53` | 1.37 | 13 / 18 | -$616.89 (D3) | 2 | `$1,752.81` | 40,509 |
+| 🥉 **`zenith13_smaragd1030_prod`** (`Smaragd 10/30` — текущий прод) | `$3,460.10` | `+$2,025.10` | +141.1% | `$1,236.44` | 1.64 | 12 / 18 | -$428.19 (D16) | 2 | `$2,047.43` | 50,563 |
+
+**Ключевой вывод Zero-Lookahead аудита:**
+* Вся «сверхприбыль и безубыточность 18/18» у `Smaragd` (`+$6,806` у Major-13 и `18/18 / +$18.26` у Zenith + Smaragd 10/30) была **нарисована +1h lookahead-багом**.
+* Без подглядывания в будущее **`Smaragd` на 1h EMA при сквизах блокирует нужные усреднения L3+, уводит позиции в глубокую просадку и стоп-лоссы**, режа чистую прибыль в **2–2.6 раза** (`+$2,025` и `+$2,724` против **`+$5,289.64`** у чистого `u96_omni_zenith13`).
+* На исправленном движке безоговорочный №1 — **чистый `u96_omni_zenith13` (`smaragd: false`)**. Рекомендуется немедленно выключить `smaragd.enabled: false` в боевом [`u96_omni_zenith13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_zenith13.json#L856-L857) и перезапустить прод.
