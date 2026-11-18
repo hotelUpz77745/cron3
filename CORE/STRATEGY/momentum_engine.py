@@ -65,7 +65,9 @@ class MomentumEngine:
         now = (sim_ts / 1000.0) if sim_ts > 1000000000 else time.time()
 
         # 0. Instant O(1) Precomputed Trend Lookup for Backtests
-        if client and hasattr(client, "get_precomputed_trend"):
+        req_rising = bool(cfg.get("require_rising", True))
+        expected_conf = 5 if "4h" in timeframe else 3
+        if client and hasattr(client, "get_precomputed_trend") and req_rising and confirmation == expected_conf:
             try:
                 p_trend = client.get_precomputed_trend(symbol, timeframe, sma_fast, sma_slow)
             except TypeError:

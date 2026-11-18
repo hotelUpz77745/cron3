@@ -407,14 +407,31 @@
 
 ---
 
-### 7. Перетест `Smaragd 1d` (Zero-Lookahead, 180 дней, `chronos_exit = 8.0`) — 2026-11-18
+### 7. Перетест `Smaragd 1d` + чистый `Major-13` (Zero-Lookahead, 6 стратегий, 180 дней, `chronos_exit = 8.0`) — 2026-11-18
 * **Отчёт:** [`alpha_180d_zero_lookahead_smaragd_1d.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_smaragd_1d.json) (`18` декад, `72` монеты, старт `$1,435.0`, инвест `$1,200.0`, `20x`, `slippage = 0.01%`, `shift_interval_sec = 13`).
 * **Результаты (vs `1h` Smaragd из [`alpha_180d_zero_lookahead_3way.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_3way.json)):**
-  * `major13_smaragd725_1d`: **$7,144.75** (`+$5,709.75`, `+397.9%`), MaxDD **$720.01**, Calmar **7.93x**, `14/18` плюс, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18). Против `1h` (`$4,158.91`, MaxDD `$1,990.53`, Calmar `1.37x`) — кратный рост прибыли и снижение просадки в ~2.8 раза.
-  * `major13_smaragd1030_1d`: **$6,925.47** (`+$5,490.47`, `+382.6%`), MaxDD **$706.41**, Calmar **7.77x**, `15/18` плюс, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18).
-  * `zenith13_clean_baseline` (Clean, Smaragd OFF, `chronos_exit = 8.0`): **$6,885.76** (`+$5,450.76`, `+379.8%`), MaxDD **$526.77**, Calmar **10.35x**, `15/18` плюс, **0 SL-130%** (выше чем при `chronos_exit = 4.0`: `$6,724.64` / MaxDD `$526.77`).
-  * `zenith13_smaragd725_1d`: **$5,341.39** (`+$3,906.39`, `+272.2%`), MaxDD **$527.27**, Calmar **7.41x**, `15/18` плюс, **1 SL-130%** (`OGNUSDT` D18).
-  * `zenith13_smaragd1030_1d`: **$5,187.21** (`+$3,752.21`, `+261.5%`), MaxDD **$568.01**, Calmar **6.61x**, `16/18` плюс, **1 SL-130%** (`OGNUSDT` D18). (Против `1h` `$3,460.10`, MaxDD `$1,236.44`, Calmar `1.64x`).
+  * `major13_clean_baseline` (Clean, Smaragd OFF): **$7,849.78** (`+$6,414.78`, `+447.0%`), MaxDD **$1,140.80**, Calmar **5.62x**, `15/18` плюс, `45,739` сделок, **2 SL-130%**.
+  * `major13_smaragd725_1d`: **$7,144.75** (`+$5,709.75`, `+397.9%`), MaxDD **$720.01**, Calmar **7.93x**, `14/18` плюс, `40,762` сделок, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18). Против `1h` (`$4,158.91`, MaxDD `$1,990.53`, Calmar `1.37x`) — кратный рост прибыли и снижение просадки в ~2.8 раза.
+  * `major13_smaragd1030_1d`: **$6,925.47** (`+$5,490.47`, `+382.6%`), MaxDD **$706.41**, Calmar **7.77x**, `15/18` плюс, `40,421` сделок, **2 SL-130%** (`MUSDT` D8, `OGNUSDT` D18).
+  * `zenith13_clean_baseline` (Clean, Smaragd OFF, `chronos_exit = 8.0`): **$6,885.76** (`+$5,450.76`, `+379.8%`), MaxDD **$526.77**, Calmar **10.35x**, `15/18` плюс, `61,016` сделок, **0 SL-130%** (выше чем при `chronos_exit = 4.0`: `$6,724.64` / MaxDD `$526.77`).
+  * `zenith13_smaragd725_1d`: **$5,341.39** (`+$3,906.39`, `+272.2%`), MaxDD **$527.27**, Calmar **7.41x**, `15/18` плюс, `52,684` сделок, **1 SL-130%** (`OGNUSDT` D18).
+  * `zenith13_smaragd1030_1d`: **$5,187.21** (`+$3,752.21`, `+261.5%`), MaxDD **$568.01**, Calmar **6.61x**, `16/18` плюс, `53,147` сделок, **1 SL-130%** (`OGNUSDT` D18). (Против `1h` `$3,460.10`, MaxDD `$1,236.44`, Calmar `1.64x`).
 * **Инженерный вывод:**
   1. На `Zenith-13` подключение `Smaragd 1d` (как `7/25`, так и `10/30`) по-прежнему **ухудшает итог** на `~$1.54k–$1.70k`, снижает Calmar (`7.41x`/`6.61x` против **10.35x**) и приносит `1` SL-130% против `0` у чистого `Zenith-13`. Решение держать `smaragd.enabled = false` на прод-ветке Zenith-13 полностью подтверждено.
-  2. На `Major-13` переход на `Smaragd 1d` радикально лечит поведение против `1h` и слегка обходит чистый `Zenith-13` по абсолютному балансу (`$7,144.75` vs `$6,885.76`), но ценой более глубокой просадки (`$720.01` vs `$526.77`), худшего Calmar (`7.93x` vs `10.35x`) и **2 стоп-лоссов `-130%`** (`MUSDT`, `OGNUSDT`).
+  2. На `Major-13` чистый вариант делает **+$6,414.78** (`$7,849.78`), но с просадкой `$1,140.80` (`Calmar 5.62x`). Подключение `Smaragd 1d` режет просадку на `37%` (`$720.01`/`$706.41`) и поднимает Calmar до `7.93x`, но всё равно остаётся ниже `zenith13_clean_baseline` (`Calmar 10.35x`, `0` SL-130%).
+
+---
+
+### 8. Итоги глубокого форензик-аудита бэктестера — 2026-11-18
+* **Природа `+380%..+447%` за 180 дней:** `invest_size = $1,200` × `10` монет × `2` стороны = **`$24,000`** выделенной номинальной ёмкости при стартовом кошельке `$1,435` (`16.7x` от старта). Бот совершает `~112` циклов/день (`20,222` у `zenith13_clean`), зарабатывая в среднем всего **`$0.27` за цикл** (`~3.5%/мес` на выделенный номинал `$24k`).
+* **Бухгалтерия и кэши:** расхождение баланса по всем сделкам Декады 1 равно **`$0.000000`**; подбор монет [`select_180d_quants.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CACHE/select_180d_quants.py) (15m до `anchor_ts`), [`generate_super_grid_volatility.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/DATA/generate_super_grid_volatility.py) (`< day_ms`) и `IndicatorPrecomputer` проверены на отсутствие lookahead-смещения и пропусков (`72/72` монеты покрыты).
+* **Стресс-тест реализма исполнения на Декаде 1 (`37.3M` тиков, старт `$1,435`):**
+  * **Strict Cross LIMIT TP (`</>` вместо касания `<=/>=`, `1 bps`):** `zenith13_clean` просел с `+$449.79` до `+$208.02` (`-54%`), `major13_smaragd725_1d` — `+$1,392.90` (устойчив).
+  * **Enforced `MIN_NOTIONAL >= $5` (`-4164` Binance):** пыль `<$5` составляла `<0.8%` сделок (`46/5941` у Zenith, `13/4409` у Major); блокировка дала `+$493.23` (Zenith) и `+$1,366.61` (Major).
+  * **Жёсткий пакет (`5 bps` MARKET slip + `< / >` LIMIT + `>= $5` + оценка 8h funding `1 bp`):** Zenith `+$395.96` (`MaxDD $556.30`, funding drag `~$4.42`), Major `Smaragd 1d` `+$1,409.73` (`MaxDD $459.44`, funding `~$4.41`), Major Clean `+$1,415.97` (`MaxDD $412.76`, funding `~$4.27`).
+  * **Экстремальный пакет (`10 bps` MARKET slip + `< / >` + `>= $5`):** Zenith `+$183.03` (`-59%`), Major `Smaragd 1d` `+$1,022.79` (`-24%`), Major Clean `+$1,637.44`.
+* **Найденные и устранённые баги в коде (закрыты регрессионными юнит-тестами [`test_backtest_bugfixes_zero_lookahead.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/tests/test_backtest_bugfixes_zero_lookahead.py), `12/12 OK`):**
+  1. [`stream_block_scanner.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/ENGINE/stream_block_scanner.py#L129-L143): исправлена опечатка `_last_vol_update_count -> _last_vol_count` для полной пересинхронизации `global_bounds` всех монет после полуночного `SuperGrid` ресайза в JIT-режиме.
+  2. [`sim_history_store.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/sim_history_store.py#L149-L155): возврат `None` для любых SMA кроме `(7, 25)` и `(10, 30)` вместо скрытой подстановки тренда `10/30`.
+  3. [`momentum_engine.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/momentum_engine.py#L68-L74): обход `get_precomputed_trend()` при нестандартных `require_rising=False` или `confirmation_candles`.
+

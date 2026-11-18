@@ -146,7 +146,12 @@ class SimHistoricalDataStore:
         bin_ms = 86400000 if "1d" in tf else (14400000 if "4h" in tf else 3600000)
         # Look up the last COMPLETED closed bar strictly before ts_ms (Zero-Lookahead).
         bin_ts = ((ts_ms // bin_ms) * bin_ms) - bin_ms
-        suffix = "_7_25" if (sma_fast == 7 and sma_slow == 25) else ""
+        if (sma_fast, sma_slow) == (7, 25):
+            suffix = "_7_25"
+        elif (sma_fast, sma_slow) == (10, 30):
+            suffix = ""
+        else:
+            return None
         key = f"{symbol.upper().strip()}|{timeframe}{suffix}|{bin_ts}"
         return cls._precomputed_trends.get(key)
 
