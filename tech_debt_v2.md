@@ -435,3 +435,16 @@
   2. [`sim_history_store.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/sim_history_store.py#L149-L155): возврат `None` для любых SMA кроме `(7, 25)` и `(10, 30)` вместо скрытой подстановки тренда `10/30`.
   3. [`momentum_engine.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CORE/STRATEGY/momentum_engine.py#L68-L74): обход `get_precomputed_trend()` при нестандартных `require_rising=False` или `confirmation_candles`.
 
+---
+
+### 9. Тест боевого паспорта `u96_omni_major13_adaptive` (`regime_adaptive` + `Smaragd 1d 7/25 L4–L8`) — 2026-11-18
+* **Паспорт:** [`u96_omni_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_major13_adaptive.json) (и зеркало в [`cron3TradeBacktest/CFG/universes/u96_omni_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CFG/universes/u96_omni_major13_adaptive.json)).
+* **Отчёт:** [`alpha_180d_zero_lookahead_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_major13_adaptive.json) (180 дней, старт `$1,435.0`, инвест `$1,200.0`, `chronos_exit = 8.0`).
+* **Результаты (vs базовый `Major-13 1d 7/25 L3–L8 ma_crossover`):**
+  * `major13_smaragd725_1d` *(эталон Major-13: `ma_crossover` + `1d 7/25 L3–L8`)*: **$7,144.75** (`+$5,709.75`), MaxDD **$720.01**, Calmar **7.93x**, `87` AC, `2` SL.
+  * `major13_ma_sm1d_l4l8` *(`ma_crossover` + `1d 7/25 L4–L8`)*: **$7,321.73** (`+$5,886.73`), MaxDD **$808.54**, Calmar **7.28x**, `83` AC, `2` SL.
+  * `u96_omni_major13_adaptive` *(`regime_adaptive` + `1d 7/25 L4–L8`)*: **$5,622.62** (`+$4,187.62`), MaxDD **$738.25**, Calmar **5.67x**, `237` AC, `2` SL.
+  * `major13_ra_sm1d_l3l8` *(`regime_adaptive` + `1d 7/25 L3–L8`)*: **$4,227.59** (`+$2,792.59`), MaxDD **$877.47**, Calmar **3.18x**, `282` AC, `2` SL.
+* **Вывод:** Перевод `Major-13` (с `SuperGrid 1.6x + DynamicATR`) на `regime_adaptive` режет Calmar вдвое (`7.93x -> 3.18x` / `5.67x`), так как `STRESS`-ветка закрывает корзину `237–282` раз (против `83–87` у `ma_crossover`), выбивая растянутые циклы до отскока. Сдвиг Smaragd на `L4–L8` при `ma_crossover` добавляет `+$177` прибыли (`$7,321.73`), но расширяет MaxDD до `$808.54` (`Calmar 7.28x`). Лучшим конфигом для `Major-13` остаётся **`ma_crossover` + `Smaragd 1d 7/25 L3–L8`** (**Calmar `7.93x`**), а для максимального Calmar на всём турнире — **`zenith13_clean_baseline`** (**Calmar `10.35x`, `0 SL`**).
+
+
