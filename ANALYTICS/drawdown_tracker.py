@@ -510,7 +510,6 @@ class DrawdownTracker:
                 if hasattr(self.manager, "fsm") and self.manager.fsm:
                     self.manager.fsm.transition_to_autocloser_ready()
                 try:
-                    self.manager._update_strategies_stats(data)
                     if getattr(self.manager, "strategy_registry", None):
                         universes_meta = {
                             sid: {

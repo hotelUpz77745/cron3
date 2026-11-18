@@ -36,6 +36,15 @@ class StrategyStatsEngine:
 
     def __init__(self, manager):
         self.manager = manager
+        self._peak_guard_warn_ts: Dict[tuple, float] = {}
+
+    def _warn_peak_guard(self, strat_id: str, reason: str, message: str, cooldown_sec: float = 300.0) -> None:
+        """Логирует предупреждение Peak guard не чаще раза в cooldown_sec на причину и стратегию."""
+        now = time.time()
+        key = (strat_id, reason)
+        if now - self._peak_guard_warn_ts.get(key, 0.0) >= cooldown_sec:
+            self._peak_guard_warn_ts[key] = now
+            logger.warning(message)
 
     @property
     def cache_dir(self):
@@ -248,16 +257,20 @@ class StrategyStatsEngine:
             can_update_strat_peak = True
             if strat_has_sync_locks:
                 can_update_strat_peak = False
-                logger.warning(
+                self._warn_peak_guard(
+                    strat_id,
+                    "sync_locks",
                     f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: pending income sync locks exist "
-                    f"for strategy symbols. Blocking peak balance update."
+                    f"for strategy symbols. Blocking peak balance update.",
                 )
 
             if has_active_positions and abs(s_unreal) < 1e-5:
                 can_update_strat_peak = False
-                logger.warning(
+                self._warn_peak_guard(
+                    strat_id,
+                    "zero_unreal",
                     f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: active position(s) exist, "
-                    f"but s_unreal is 0.0. Blocking peak balance update."
+                    f"but s_unreal is 0.0. Blocking peak balance update.",
                 )
 
             has_unconfirmed_coin_dd = any(
@@ -267,9 +280,11 @@ class StrategyStatsEngine:
             )
             if has_unconfirmed_coin_dd:
                 can_update_strat_peak = False
-                logger.warning(
+                self._warn_peak_guard(
+                    strat_id,
+                    "zero_coin_dd",
                     f"[STRATEGY_STATS][{strat_id}] Peak guard triggered: coin with active position has 0.0 drawdown. "
-                    f"Blocking peak balance update."
+                    f"Blocking peak balance update.",
                 )
 
             if s_cur > s_peak and can_update_strat_peak:

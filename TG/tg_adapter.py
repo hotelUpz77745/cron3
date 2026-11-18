@@ -9,6 +9,7 @@ import asyncio
 import datetime
 import json
 import os
+import socket
 import sys
 import urllib.request
 from typing import Optional, List, Dict, Any, Union
@@ -89,7 +90,12 @@ class TelegramAdapter:
         async with self._session_lock:
             if self._session is not None and not self._session.closed:
                 return self._session
-            self._session = aiohttp.ClientSession()
+            connector = aiohttp.TCPConnector(
+                family=socket.AF_INET,
+                ttl_dns_cache=300,
+                enable_cleanup_closed=True,
+            )
+            self._session = aiohttp.ClientSession(connector=connector)
             return self._session
 
     async def aclose(self) -> None:
@@ -99,6 +105,10 @@ class TelegramAdapter:
             except Exception:
                 pass
         self._session = None
+
+    async def _reset_session(self) -> None:
+        """Закрывает залипшую HTTP-сессию после сетевого сбоя или таймаута."""
+        await self.aclose()
 
     async def send_message(
         self,
@@ -133,7 +143,8 @@ class TelegramAdapter:
                 logger.error(f"Failed to send TG message to {chat_id}: status={resp.status}, err={err_text}")
                 return False
         except Exception as e:
-            logger.error(f"Error sending TG message to {chat_id}: {e}")
+            logger.error(f"Error sending TG message to {chat_id}: {type(e).__name__}: {e}")
+            await self._reset_session()
             return False
 
     async def send_alert(self, msg: str, logger: Optional[Any] = None) -> None:
@@ -154,9 +165,9 @@ class TelegramAdapter:
             return
 
         try:
-            session = await self._get_session()
             for chat_id in chat_ids:
                 try:
+                    session = await self._get_session()
                     payload = {"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}
                     async with session.post(
                         self.send_message_url,
@@ -166,10 +177,12 @@ class TelegramAdapter:
                         pass
                 except Exception as e:
                     if log:
-                        log.error(f"[TELEGRAM] Failed to send alert to {chat_id}: {e}")
+                        log.error(f"[TELEGRAM] Failed to send alert to {chat_id}: {type(e).__name__}: {e}")
+                    await self._reset_session()
         except Exception as e:
             if log:
-                log.error(f"[TELEGRAM] Session error sending alert: {e}")
+                log.error(f"[TELEGRAM] Session error sending alert: {type(e).__name__}: {e}")
+            await self._reset_session()
 
     async def send_alert_with_keyboard(
         self, text: str, reply_markup: Dict[str, Any], logger: Optional[Any] = None
@@ -182,9 +195,9 @@ class TelegramAdapter:
         if not chat_ids:
             return
 
-        session = await self._get_session()
         for uid in chat_ids:
             try:
+                session = await self._get_session()
                 payload = {
                     "chat_id": uid,
                     "text": text,
@@ -202,7 +215,8 @@ class TelegramAdapter:
                             log.error(f"[TELEGRAM] Failed to send TG alert with keyboard to {uid}: {err_text}")
             except Exception as e:
                 if log:
-                    log.error(f"[TELEGRAM] Error sending TG alert with keyboard to {uid}: {e}")
+                    log.error(f"[TELEGRAM] Error sending TG alert with keyboard to {uid}: {type(e).__name__}: {e}")
+                await self._reset_session()
 
     async def send_or_update_heartbeat(
         self, server_name: str, autodelete_sec: int = 180, logger: Optional[Any] = None
@@ -278,7 +292,8 @@ class TelegramAdapter:
 
         except Exception as e:
             if log:
-                log.error(f"[TELEGRAM] Failed to send heartbeat: {e}")
+                log.error(f"[TELEGRAM] Failed to send heartbeat: {type(e).__name__}: {e}")
+            await self._reset_session()
 
     async def send_document(
         self,
@@ -320,7 +335,8 @@ class TelegramAdapter:
                 ) as resp:
                     return resp.status == 200
         except Exception as e:
-            logger.error(f"[TELEGRAM] Failed to send document to {chat_id}: {e}")
+            logger.error(f"[TELEGRAM] Failed to send document to {chat_id}: {type(e).__name__}: {e}")
+            await self._reset_session()
             return False
 
     def send_fatal_error(self, msg: str) -> None:

@@ -4,10 +4,12 @@
 # ==============================================================================
 
 import asyncio
+import socket
 from pathlib import Path
 from typing import Any, Optional, Tuple
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.exceptions import TelegramNetworkError, TelegramServerError, TelegramRetryAfter
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup, ErrorEvent
@@ -44,6 +46,25 @@ from TG.HANDLERS.universe_router import get_universe_router
 logger = UnifiedLogger("TGReceiver")
 
 
+class ResilientAiohttpSession(AiohttpSession):
+    """
+    Telegram HTTP-сессия с принудительным IPv4 (AF_INET) и автосбросом
+    зависшего коннектора при сетевых таймаутах и ошибках транспорта.
+    """
+
+    def __init__(self, timeout: float = 30.0, **kwargs: Any) -> None:
+        super().__init__(timeout=timeout, **kwargs)
+        self._connector_init["family"] = socket.AF_INET
+        self._connector_init["enable_cleanup_closed"] = True
+
+    async def make_request(self, bot: Bot, method: Any, timeout: Optional[int] = None) -> Any:
+        try:
+            return await super().make_request(bot, method, timeout=timeout)
+        except (TelegramNetworkError, asyncio.TimeoutError):
+            self._should_reset_connector = True
+            raise
+
+
 class TelegramReceiver:
     """
     Главный оркестратор Telegram-интерфейса.
@@ -52,9 +73,13 @@ class TelegramReceiver:
     а расчет метрик и графиков — в домен ANALYTICS.
     """
 
+    @staticmethod
+    def _build_bot() -> Bot:
+        return Bot(token=TG_TOKEN, session=ResilientAiohttpSession())
+
     def __init__(self, bot_core: Any):
         self.bot_core = bot_core
-        self.bot = Bot(token=TG_TOKEN)
+        self.bot = self._build_bot()
         self.dp = Dispatcher(storage=MemoryStorage())
         self.template_manager = TemplateManager(bot_core=self.bot_core)
         self._lock = asyncio.Lock()
@@ -209,7 +234,7 @@ class TelegramReceiver:
             try:
                 if self.bot is None:
                     logger.info("Initializing Telegram Bot instance with a fresh session...")
-                    self.bot = Bot(token=TG_TOKEN)
+                    self.bot = self._build_bot()
 
                 await self.dp.start_polling(self.bot, handle_signals=False)
                 break
