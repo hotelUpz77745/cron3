@@ -437,8 +437,8 @@
 
 ---
 
-### 9. Тест боевого паспорта `u96_omni_major13_adaptive` (`regime_adaptive` + `Smaragd 1d 7/25 L4–L8`) — 2026-11-18
-* **Паспорт:** [`u96_omni_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_major13_adaptive.json) (и зеркало в [`cron3TradeBacktest/CFG/universes/u96_omni_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CFG/universes/u96_omni_major13_adaptive.json)).
+### 9. Тест боевого паспорта `u96_omni_major13_adaptive` (`regime_adaptive` + `Smaragd 1d 7/25 L4–L8`) — 2026-11-18 *(паспорт удалён)*
+* **Паспорт:** `u96_omni_major13_adaptive.json` **удалён** из обоих репозиториев (`cron3` и `cron3TradeBacktest`) после провала на честном 180-дневном прогоне.
 * **Отчёт:** [`alpha_180d_zero_lookahead_major13_adaptive.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/alpha_180d_zero_lookahead_major13_adaptive.json) (180 дней, старт `$1,435.0`, инвест `$1,200.0`, `chronos_exit = 8.0`).
 * **Результаты (vs базовый `Major-13 1d 7/25 L3–L8 ma_crossover`):**
   * `major13_smaragd725_1d` *(эталон Major-13: `ma_crossover` + `1d 7/25 L3–L8`)*: **$7,144.75** (`+$5,709.75`), MaxDD **$720.01**, Calmar **7.93x**, `87` AC, `2` SL.
@@ -447,4 +447,14 @@
   * `major13_ra_sm1d_l3l8` *(`regime_adaptive` + `1d 7/25 L3–L8`)*: **$4,227.59** (`+$2,792.59`), MaxDD **$877.47**, Calmar **3.18x**, `282` AC, `2` SL.
 * **Вывод:** Перевод `Major-13` (с `SuperGrid 1.6x + DynamicATR`) на `regime_adaptive` режет Calmar вдвое (`7.93x -> 3.18x` / `5.67x`), так как `STRESS`-ветка закрывает корзину `237–282` раз (против `83–87` у `ma_crossover`), выбивая растянутые циклы до отскока. Сдвиг Smaragd на `L4–L8` при `ma_crossover` добавляет `+$177` прибыли (`$7,321.73`), но расширяет MaxDD до `$808.54` (`Calmar 7.28x`). Лучшим конфигом для `Major-13` остаётся **`ma_crossover` + `Smaragd 1d 7/25 L3–L8`** (**Calmar `7.93x`**), а для максимального Calmar на всём турнире — **`zenith13_clean_baseline`** (**Calmar `10.35x`, `0 SL`**).
 
+---
+
+### 10. Фиксация «золотого бейзлайна» (`stivenson`) и план следующего этапа R&D — 2026-11-18
+* **Боевой бейзлайн 1-в-1 синхронизирован:** [`u96_omni_zenith13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_zenith13.json) (`Calmar 10.35x`, `MaxDD $526.77`, `+$5,450.76`, `0` SL, `chronos_exit=8.0`, `smaragd=false`) и [`u96_omni_major13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_major13.json) (`ma_crossover` + `Smaragd 1d 7/25 L3–L8`, `Calmar 7.93x`, `MaxDD $720.01`, `+$5,709.75`, `chronos_exit=8.0`) идентичны в `cron3` и `cron3TradeBacktest`.
+* **Отклонённое направление (закрыто навсегда):** LIFO-пилинг крайних колен (`peel_tp_pct`, везде `null`) **окончательно отброшен** — признан непригодным («дно»), подтверждено практикой; к нему не возвращаемся.
+* **Этап A (контрольный марафон существующих отключённых модулей на 180d Zero-Lookahead, без переписывания ядра):**
+  * `directional_trend_gate` (`1d`, `allow_flat=true/false`, `freeze_averaging_on_disposition=true`) — проверка жёсткого/мягкого допуска по тренду;
+  * `dynamic_atr_tp` (`1h`, period 14) + `smart_tp.trend_determ="ema_trend"` + `smart_size.trend_determ="ema_trend"` — увеличение средней прибыли на цикл и снижение чувствительности к проскальзыванию;
+  * `first_order_weight_regime` (`mode="auto_ema"`) + `counter_grid_frontload` — асимметрия стартового «кулака» (крупнее по тренду / легче против тренда) при сохранении двусторонней подпитки `CrossSideProfitRecycler`.
+* **Этап B (новая ветка после `stivenson`):** принципиально новая механика ядра — отказ от heartbeat-входа в пользу сигнального входа (например, пересечение скользящих средних), направленная односторонняя/асимметричная сетка с минимальным indent-уровнем, усреднениями и закрытием тейка по встречному сигналу.
 

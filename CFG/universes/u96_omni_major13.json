@@ -869,13 +869,13 @@
       "L8"
     ],
     "trend_ema": {
-      "timeframe": "1h",
+      "timeframe": "1d",
       "sma_fast": 7,
       "sma_slow": 25,
       "confirmation_candles": 3,
       "require_rising": true,
       "trend_positive": true,
-      "_desc": "Макро-фильтр усреднения по свечам 1h: 7 EMA vs 25 EMA."
+      "_desc": "Макро-фильтр усреднения по свечам 1d: 7 EMA vs 25 EMA."
     }
   }
 }
