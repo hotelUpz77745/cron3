@@ -82,6 +82,17 @@ class TelegramAdapter:
 
         return chat_ids
 
+    @staticmethod
+    def create_ipv4_session(timeout_sec: Optional[float] = None) -> aiohttp.ClientSession:
+        """Создает aiohttp.ClientSession с принудительным IPv4 и без залипших keep-alive сокетов."""
+        connector = aiohttp.TCPConnector(
+            family=socket.AF_INET,
+            ttl_dns_cache=300,
+            force_close=True,
+        )
+        timeout = aiohttp.ClientTimeout(total=timeout_sec) if timeout_sec is not None else aiohttp.ClientTimeout(total=30)
+        return aiohttp.ClientSession(connector=connector, timeout=timeout)
+
     async def _get_session(self) -> aiohttp.ClientSession:
         if self._session is not None and not self._session.closed:
             return self._session
@@ -90,12 +101,7 @@ class TelegramAdapter:
         async with self._session_lock:
             if self._session is not None and not self._session.closed:
                 return self._session
-            connector = aiohttp.TCPConnector(
-                family=socket.AF_INET,
-                ttl_dns_cache=300,
-                enable_cleanup_closed=True,
-            )
-            self._session = aiohttp.ClientSession(connector=connector)
+            self._session = self.create_ipv4_session()
             return self._session
 
     async def aclose(self) -> None:

@@ -9,7 +9,7 @@ import json
 import os
 import pickle
 import zipfile
-from typing import Any
+from typing import Any, Dict, Optional
 
 from aiogram import F, Router
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter, TelegramServerError
@@ -29,7 +29,7 @@ from c_log import UnifiedLogger
 from c_utils import Utils
 from TG.keyboards import get_confirm_start_keyboard, get_main_keyboard
 from TG.template_manager import TemplateManager
-from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer
+from TG.ui_utils import safe_edit_text, safe_edit_callback, safe_answer, safe_callback_answer
 from CORE.SERVICES.runtime_backup_service import RuntimeBackupService
 from CORE.SERVICES.emergency_stop_manager import EmergencyStopManager
 
@@ -493,10 +493,44 @@ class BaseRouterHandler:
             logger.error(f"Failed to extract log tail: {e}")
             return False
 
+    @staticmethod
+    async def _send_document_with_retry(
+        callback: CallbackQuery,
+        file_path: str,
+        filename: str,
+        caption: str,
+        reply_markup: Optional[InlineKeyboardMarkup] = None,
+        retries: int = 2,
+    ) -> None:
+        """Отправляет документ в TG с 1 автоматическим повтором при разрыве/таймауте сети."""
+        last_err: Optional[Exception] = None
+        for attempt in range(retries):
+            try:
+                kwargs: Dict[str, Any] = {
+                    "caption": caption,
+                    "parse_mode": "HTML",
+                    "request_timeout": 60,
+                }
+                if reply_markup is not None:
+                    kwargs["reply_markup"] = reply_markup
+                await callback.message.answer_document(
+                    FSInputFile(file_path, filename=filename),
+                    **kwargs,
+                )
+                return
+            except Exception as e:
+                last_err = e
+                if isinstance(e, (TelegramNetworkError, asyncio.TimeoutError)) and attempt + 1 < retries:
+                    await asyncio.sleep(1.0)
+                    continue
+                raise
+        if last_err is not None:
+            raise last_err
+
     async def on_get_part_tail(self, callback: CallbackQuery, state: FSMContext):
         """Отправка только легкого текстового среза последних 1000 строк."""
         await state.clear()
-        await callback.answer("⏳ Извлечение последних 1000 строк...")
+        await safe_callback_answer(callback, "⏳ Извлечение последних 1000 строк...")
         log_path = os.path.join("logs", "all.log")
         if not os.path.exists(log_path):
             await callback.message.answer("⚠️ Файл logs/all.log не найден.")
@@ -507,13 +541,27 @@ class BaseRouterHandler:
         if success and os.path.exists(tail_path):
             try:
                 t_size = os.path.getsize(tail_path) / 1024.0
-                await callback.message.answer_document(
-                    FSInputFile(tail_path, filename="recent_tail_1000.log"),
+                await self._send_document_with_retry(
+                    callback,
+                    tail_path,
+                    filename="recent_tail_1000.log",
                     caption=f"📄 <b>Срез лога (последние 1000 строк)</b>\nРазмер: {t_size:.1f} KB. Удобно читать с телефона в Telegram.",
-                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error sending tail log: {e}")
+                zip_tail_path = os.path.join("logs", "recent_tail_1000.zip")
+                if self._create_zip([tail_path], zip_tail_path) and os.path.exists(zip_tail_path):
+                    try:
+                        z_size = os.path.getsize(zip_tail_path) / 1024.0
+                        await self._send_document_with_retry(
+                            callback,
+                            zip_tail_path,
+                            filename="recent_tail_1000.zip",
+                            caption=f"📦 <b>Срез лога в ZIP (последние 1000 строк)</b>\nСжат до {z_size:.1f} KB (резервная отправка после сбоя сети).",
+                        )
+                        return
+                    except Exception as ze:
+                        logger.error(f"Error sending zipped tail log: {ze}")
                 await callback.message.answer(f"❌ Ошибка отправки среза логов: {e}")
         else:
             await callback.message.answer("❌ Не удалось извлечь срез лога.")
@@ -521,7 +569,7 @@ class BaseRouterHandler:
     async def on_get_current_zip(self, callback: CallbackQuery, state: FSMContext):
         """Отправка текущего лога до 5000 строк в сверхкомпактном ZIP-архиве."""
         await state.clear()
-        await callback.answer("⏳ Упаковка текущего лога в ZIP...")
+        await safe_callback_answer(callback, "⏳ Упаковка текущего лога в ZIP...")
         log_path = os.path.join("logs", "all.log")
         if not os.path.exists(log_path):
             await callback.message.answer("⚠️ Файл logs/all.log не найден.")
@@ -532,12 +580,13 @@ class BaseRouterHandler:
             try:
                 z_size = os.path.getsize(zip_path) / 1024.0
                 f_size = os.path.getsize(log_path) / 1024.0
-                await callback.message.answer_document(
-                    FSInputFile(zip_path, filename="current_all_log.zip"),
+                await self._send_document_with_retry(
+                    callback,
+                    zip_path,
+                    filename="current_all_log.zip",
                     caption=f"📦 <b>Текущий лог цикла в ZIP</b> (до 5000 строк)\n"
                             f"Исходный размер: <code>{f_size:.1f} KB</code>, архив: <code>{z_size:.1f} KB</code>\n"
                             f"<i>100% запас прочности от сетевых таймаутов</i>",
-                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error sending current zip: {e}")
@@ -548,7 +597,7 @@ class BaseRouterHandler:
     async def on_get_all_archives(self, callback: CallbackQuery, state: FSMContext):
         """Отправка всех ротированных архивов логов в едином архиве."""
         await state.clear()
-        await callback.answer("⏳ Упаковка всех ротаций логов...")
+        await safe_callback_answer(callback, "⏳ Упаковка всех ротаций логов...")
         log_files = sorted(glob.glob(os.path.join("logs", "all.log*")))
         if not log_files:
             await callback.message.answer("⚠️ Файлы логов logs/all.log* не найдены.")
@@ -560,13 +609,14 @@ class BaseRouterHandler:
                 z_size = os.path.getsize(zip_path) / 1024.0
                 total_orig = sum(os.path.getsize(f) for f in log_files) / 1024.0
                 files_list = ", ".join(os.path.basename(f) for f in log_files)
-                await callback.message.answer_document(
-                    FSInputFile(zip_path, filename="all_rotations_history.zip"),
+                await self._send_document_with_retry(
+                    callback,
+                    zip_path,
+                    filename="all_rotations_history.zip",
                     caption=f"📚 <b>Полный архив всех ротаций логов</b>\n"
                             f"Файлы: <code>{files_list}</code>\n"
                             f"Размер: <code>{total_orig:.1f} KB</code> сжат до <code>{z_size:.1f} KB</code>\n"
                             f"<i>Включает историю ротированных файлов по 5000 строк</i>",
-                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error sending all archives zip: {e}")
@@ -577,7 +627,7 @@ class BaseRouterHandler:
     async def on_get_logs(self, callback: CallbackQuery, state: FSMContext):
         """Отправка логов частями с запасом прочности: срез 1000 строк + сжатый ZIP до 5000 строк."""
         await state.clear()
-        await callback.answer("⏳ Подготовка и отправка логов по частям...")
+        await safe_callback_answer(callback, "⏳ Подготовка и отправка логов по частям...")
         log_path = os.path.join("logs", "all.log")
         if not os.path.exists(log_path):
             await callback.message.answer("Global log file not found.")
@@ -588,11 +638,12 @@ class BaseRouterHandler:
         if self._extract_log_tail(log_path, tail_path, max_lines=1000) and os.path.exists(tail_path):
             try:
                 t_size = os.path.getsize(tail_path) / 1024.0
-                await callback.message.answer_document(
-                    FSInputFile(tail_path, filename="recent_tail_1000.log"),
+                await self._send_document_with_retry(
+                    callback,
+                    tail_path,
+                    filename="recent_tail_1000.log",
                     caption=f"📄 <b>Часть 1/2: Срез лога (последние 1000 строк)</b>\n"
                             f"Размер: {t_size:.1f} KB. Читается прямо в мобильном Telegram.",
-                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error sending part 1 tail log: {e}")
@@ -613,13 +664,14 @@ class BaseRouterHandler:
                         [InlineKeyboardButton(text=f"📚 Скачать все {len(rot_files) + 1} ротаций (.zip)", callback_data="logs_part_all_zip")],
                     ])
 
-                await callback.message.answer_document(
-                    FSInputFile(zip_path, filename="current_all_log.zip"),
+                await self._send_document_with_retry(
+                    callback,
+                    zip_path,
+                    filename="current_all_log.zip",
                     caption=f"📦 <b>Часть 2/2: Полный лог цикла в ZIP</b> (до 5000 строк)\n"
                             f"Файл: <code>all.log</code> ({f_size:.1f} KB → {z_size:.1f} KB)\n"
                             f"100% запас прочности от разрыва соединения.",
                     reply_markup=rot_kb,
-                    parse_mode="HTML",
                 )
             except Exception as e:
                 logger.error(f"Error sending part 2 zip log: {e}")
@@ -627,7 +679,7 @@ class BaseRouterHandler:
 
     async def on_get_runtime_backup(self, callback: CallbackQuery, state: FSMContext):
         await state.clear()
-        await callback.answer("⏳ Создание бэкапа рантайма...")
+        await safe_callback_answer(callback, "⏳ Создание бэкапа рантайма...")
         try:
             res = await RuntimeBackupService.export_and_send(self.bot_core, chat_ids=[callback.message.chat.id])
             p = res.get("file")

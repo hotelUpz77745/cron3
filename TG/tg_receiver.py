@@ -52,10 +52,10 @@ class ResilientAiohttpSession(AiohttpSession):
     зависшего коннектора при сетевых таймаутах и ошибках транспорта.
     """
 
-    def __init__(self, timeout: float = 30.0, **kwargs: Any) -> None:
+    def __init__(self, timeout: float = 45.0, **kwargs: Any) -> None:
         super().__init__(timeout=timeout, **kwargs)
         self._connector_init["family"] = socket.AF_INET
-        self._connector_init["enable_cleanup_closed"] = True
+        self._connector_init["force_close"] = True
 
     async def make_request(self, bot: Bot, method: Any, timeout: Optional[int] = None) -> Any:
         try:

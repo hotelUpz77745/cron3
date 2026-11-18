@@ -199,17 +199,18 @@ class NotifierManager:
             return
             
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        
-        async with aiohttp.ClientSession() as session:
+        from TG.tg_adapter import TelegramAdapter
+
+        async with TelegramAdapter.create_ipv4_session(timeout_sec=5) as session:
             for uid in chat_ids:
                 try:
                     payload = {"chat_id": uid, "text": text, "parse_mode": "HTML"}
-                    async with session.post(url, json=payload, timeout=5) as response:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as response:
                         if response.status != 200:
                             err_text = await response.text()
                             logger.error(f"[NOTIFIER] Failed to send TG alert to {uid}: {err_text}")
                 except Exception as e:
-                    logger.error(f"[NOTIFIER] Error sending TG alert to {uid}: {e}")
+                    logger.error(f"[NOTIFIER] Error sending TG alert to {uid}: {type(e).__name__}: {e}")
 
     async def send_alert_with_keyboard(self, text: str, reply_markup: dict):
         if os.getenv("CRON3_BACKTEST") == "1":
@@ -223,17 +224,18 @@ class NotifierManager:
             return
             
         url = f"https://api.telegram.org/bot{token}/sendMessage"
-        
-        async with aiohttp.ClientSession() as session:
+        from TG.tg_adapter import TelegramAdapter
+
+        async with TelegramAdapter.create_ipv4_session(timeout_sec=5) as session:
             for uid in chat_ids:
                 try:
                     payload = {"chat_id": uid, "text": text, "parse_mode": "HTML", "reply_markup": reply_markup}
-                    async with session.post(url, json=payload, timeout=5) as response:
+                    async with session.post(url, json=payload, timeout=aiohttp.ClientTimeout(total=5)) as response:
                         if response.status != 200:
                             err_text = await response.text()
                             logger.error(f"[NOTIFIER] Failed to send TG alert with keyboard to {uid}: {err_text}")
                 except Exception as e:
-                    logger.error(f"[NOTIFIER] Error sending TG alert with keyboard to {uid}: {e}")
+                    logger.error(f"[NOTIFIER] Error sending TG alert with keyboard to {uid}: {type(e).__name__}: {e}")
 
     def reset_flags(self):
         self.neg_flag = False

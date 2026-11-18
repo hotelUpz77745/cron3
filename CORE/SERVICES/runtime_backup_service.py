@@ -165,8 +165,9 @@ class RuntimeBackupService:
 
         url = f"https://api.telegram.org/bot{token}/sendDocument"
         success = False
+        from TG.tg_adapter import TelegramAdapter
 
-        async with aiohttp.ClientSession() as session:
+        async with TelegramAdapter.create_ipv4_session(timeout_sec=30) as session:
             for uid in targets:
                 try:
                     with open(json_path, "rb") as fp:
@@ -176,7 +177,7 @@ class RuntimeBackupService:
                         form.add_field("parse_mode", "HTML")
                         form.add_field("document", fp, filename=json_path.name, content_type="application/json")
                         
-                        async with session.post(url, data=form, timeout=30) as resp:
+                        async with session.post(url, data=form, timeout=aiohttp.ClientTimeout(total=30)) as resp:
                             if resp.status == 200:
                                 logger.info(f"Successfully sent backup document to Telegram chat {uid}")
                                 success = True
@@ -184,7 +185,7 @@ class RuntimeBackupService:
                                 err_text = await resp.text()
                                 logger.error(f"Failed to send backup to {uid}: {resp.status} - {err_text}")
                 except Exception as e:
-                    logger.error(f"Error sending backup document to {uid}: {e}")
+                    logger.error(f"Error sending backup document to {uid}: {type(e).__name__}: {e}")
 
         return success
 
