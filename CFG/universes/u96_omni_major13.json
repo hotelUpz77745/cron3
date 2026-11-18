@@ -382,11 +382,11 @@
             ]
           },
           "chronos_exit": {
-            "activation": 4.0,
-            "floor": 4.0,
+            "activation": 8.0,
+            "floor": 8.0,
             "min_age_hours": 36.0,
             "enabled": true,
-            "_desc": "STRESS Chronos 36h+: мгновенная эвакуация при +$4 * scale_money"
+            "_desc": "STRESS Chronos 36h+: мгновенная эвакуация при +$8 * scale_money"
           }
         }
       }
