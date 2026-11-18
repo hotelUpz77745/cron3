@@ -79,7 +79,7 @@ class TelegramReceiver:
 
     def __init__(self, bot_core: Any):
         self.bot_core = bot_core
-        self.bot = self._build_bot()
+        self.bot: Optional[Bot] = self._build_bot()
         self.dp = Dispatcher(storage=MemoryStorage())
         self.template_manager = TemplateManager(bot_core=self.bot_core)
         self._lock = asyncio.Lock()
