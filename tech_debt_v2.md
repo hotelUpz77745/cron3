@@ -371,3 +371,36 @@
 * Вся «сверхприбыль и безубыточность 18/18» у `Smaragd` (`+$6,806` у Major-13 и `18/18 / +$18.26` у Zenith + Smaragd 10/30) была **нарисована +1h lookahead-багом**.
 * Без подглядывания в будущее **`Smaragd` на 1h EMA при сквизах блокирует нужные усреднения L3+, уводит позиции в глубокую просадку и стоп-лоссы**, режа чистую прибыль в **2–2.6 раза** (`+$2,025` и `+$2,724` против **`+$5,289.64`** у чистого `u96_omni_zenith13`).
 * На исправленном движке безоговорочный №1 — **чистый `u96_omni_zenith13` (`smaragd: false`)**. В паспорте [`u96_omni_zenith13.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CFG/universes/u96_omni_zenith13.json#L381-L387) отключён `smaragd.enabled: false` (L857) и восстановлен пользовательский порог `stress.chronos_exit = 8.0 / 8.0` (L382-383; 180d прогон выше выполнен при `4.0`, как было зафиксировано в `d02ac6a`..`0e08c1c`).
+
+---
+
+### 5. Инцидент 2026-11-18: Ложный «грааль» бэктеста и маркировка старых отчётов
+
+* **Суть инцидента:** в публичной сводке перед инвестором фигурировал результат `Classic (zenith13 + Smaragd 10/30)` с показателями **18/18 плюсовых декад (худшая `+$18.26`) при общей `Max DD $610.95`**, а также рекордный `Major-13` с **`+$6,806` (+474%)**.
+* **Корневая причина:** комбо из **+1h/+4h/+24h Lookahead Bias** в прекомпиляторе EMA/ATR (бот знал закрытие текущего бара в начале часа/суток) + сброс пика MaxDD на стыках декад + визуальное смешение фикс-сайза `$1,200` на выросшем `$7k` балансе без процента риска.
+* **Последствие для прода:** коммит `183796a` успел временно включить `smaragd.enabled: true` на продовом `u96_omni_zenith13`; после форензик-аудита и перетеста вскрылось, что реальный `Smaragd 10/30` **хуже чистого Зенита в 2.6 раза** (`+$2,025` против `+$5,289`) и собирает 2 стоп-лосса вместо 0 — фильтр немедленно отключён.
+* **Маркировка всех старых отчётов (`cron3TradeBacktest/REPORTS/`):**
+  * Все прежние отчёты до финального теста `alpha_180d_zero_lookahead_3way.json` переименованы с префиксом **`UNVERIFIED__`** и помечены изнутри (`"_audit_status": "UNVERIFIED_OR_ERRONEOUS_PRE_2026_11_18_FIXES"` / текстовый баннер `[WARNING: UNVERIFIED / ERRONEOUS PRE-ZERO-LOOKAHEAD REPORT]`), плюс добавлен реестр [`AUDIT_STATUS_README.md`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/REPORTS/AUDIT_STATUS_README.md).
+  * Запрещено принимать какие-либо решения по результатам `UNVERIFIED__*` без перепрогона на исправленном движке.
+
+---
+
+### 6. Векторы дальнейшего поиска багов в бэктестере (Roadmap аудита)
+
+Ниже — 6 конкретных зон риска, которые ещё не закрыты полностью или требуют отдельной стресс-проверки:
+
+1. **Реализм стакана, частичных заливок и Funding Rate ([`client_sim.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/client_sim.py#L235-L360)):**
+   * *LIMIT TP по первому касанию (`L319`):* лимитный тейк-профит исполняется на 100% объёма при `price <= / >= order.price`, даже если в ленте `aggTrades` по этой цене прошёл микро-трейд на $5 без пробития уровня и без учёта очереди стакана.
+   * *Отсутствие Multi-level Sweep Slippage:* `MARKET` ордера на тонких альтах берут цену 1-го тика + `0.01%` вместо пробоя стакана и лага REST/WS (реально `0.05%–0.15%+`).
+   * *Отсутствие 8h Funding Rate:* длинные зависания позиций (40–200ч) не платят и не получают фандинг Binance Futures.
+2. **Валидация биржевого `MIN_NOTIONAL` (`-4164`) и актуальности [`specifications.json`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/CACHE/specifications.json):**
+   * *`MIN_NOTIONAL` в [`client_sim.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/client_sim.py#L224):* симулятор отклоняет только `qty <= 0`, не проверяя минимальный номинал ордера (`< 5–7 USDT`). При `invest_size = $600–$1,200` мелкие доли (рециклинг, первые колена) в симуляции исполняются, хотя Binance Prod вернёт `-4164`.
+   * *Lookahead в `specifications.json`:* `tickSize` и `stepSize` берутся из сегодняшнего кэша биржи, а не исторических значений на дату декады (после пампов/сплитов Binance меняет точность шага цены).
+3. **Кросс-валидация Numba JIT-сканера vs Raw Tick Loop ([`native_stream_scanner.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/ENGINE/native_stream_scanner.py#L22-L110) / `stream_block_scanner.py`):**
+   * Нужны расширенные бит-в-бит parity-тесты (`RAW == JIT_STREAM`) именно для сложных границ: пересчёт `super_grid` ровно в `00:00 UTC`, изменение `DynamicATR`, переключение `regime_adaptive` (`PEACE <-> STRESS`) вплотную к `eq_max_t` и маржинальная ликвидация внутри пропущенного коридора.
+4. **Деградация `get_klines()` и окно прогрева на стыках декад ([`sim_history_store.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3/API/BINANCE/sim_history_store.py#L157-L219)):**
+   * `SimHistoricalDataStore.get_klines()` отдаёт упрощённые словари `[{"close": c}]` без `high/low/volume` и при пустом окне на границе 1-го часа декады может возвращать короткий срез. Проверить *всех* потребителей `get_klines()` (кроме уже защищённого `ATRProvider`) — например `MomentumEngine` и фоллбеки расчёта волатильности.
+5. **Граничные случаи `DynamicAtrGridManager` и `VolatilityManager` ([`backtest_core.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/ENGINE/backtest_core.py#L251)):**
+   * Проверить поведение `BacktestVolatilityManager.update_daily()` для молодых монет (менее 12 недель истории перед `anchor_ts`), таймзонные сдвиги UTC vs local time при вычислении границ суток и пересчёт уровней сетки, если позиция перешла через полночь.
+6. **Жёсткая ротация в 100% кэш vs непрерывный мульти-декадный портфель ([`select_180d_quants.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/CACHE/select_180d_quants.py) / [`run_alpha_180d_marathon.py`](file:///c:/Users/user/Desktop/My_Pro/HP_EliteBook_735_old/MY/HRON_3/cron3TradeBacktest/run_alpha_180d_marathon.py)):**
+   * Проверка «эффекта обнуления на ротации»: принудительная ликвидация всех позиций в кэш каждые 10 дней скрывает риск затяжного переноса токсичных монет через месяц (как в живом непрерывном боте без жёсткой ротации) и создаёт искусственные точки закрытия. Нужно прогнать контрольный тест с **мягкой ротацией (доведение открытых позиций без новых входов)** + добавить стресс-прогон `slippage = 0.05%–0.10%`.
